@@ -1,0 +1,1042 @@
+import {
+  useEffect,
+  useState,
+  type FormEvent,
+} from 'react'
+import { supabase } from './supabase'
+import NuevaObra from './NuevaObra'
+import InformeObra from './InformeObra'
+
+type EstadoObra =
+  | 'Pendiente'
+  | 'En ejecución'
+  | 'Pausada'
+  | 'Finalizada'
+
+type Obra = {
+  id: number
+  cliente_id: number
+  nombre_obra: string
+  direccion: string | null
+  localidad: string | null
+  estado: EstadoObra | null
+  fecha_inicio: string | null
+  fecha_fin_estimada: string | null
+  descripcion: string | null
+  porcentaje_avance: number
+  activo: boolean
+}
+
+type Cliente = {
+  id: number
+  nombre: string
+  apellido: string | null
+  direccion: string | null
+  localidad: string | null
+}
+
+type AvanceObra = {
+  id: number
+  created_at: string
+  obra_id: number
+  fecha: string
+  titulo: string
+  descripcion: string | null
+  estado: EstadoObra
+  porcentaje: number
+}
+
+type ImagenObra = {
+  id: number
+  storage_path: string
+  tipo: string
+  descripcion: string | null
+  created_at: string
+  url?: string
+}
+
+type FiltroEstado = 'todos' | EstadoObra
+
+const avanceInicial = {
+  fecha: new Date().toISOString().slice(0, 10),
+  titulo: '',
+  descripcion: '',
+  estado: 'Pendiente' as EstadoObra,
+  porcentaje: 0,
+}
+
+function Obras() {
+  const [obras, setObras] = useState<Obra[]>([])
+  const [informeObra, setInformeObra] = useState<Obra | null>(null)
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [cargando, setCargando] = useState(true)
+  const [error, setError] = useState('')
+  const [busqueda, setBusqueda] = useState('')
+  const [filtroEstado, setFiltroEstado] =
+    useState<FiltroEstado>('todos')
+  const [mostrarFormulario, setMostrarFormulario] =
+    useState(false)
+  const [obraEditando, setObraEditando] =
+    useState<Obra | null>(null)
+  const [actualizacion, setActualizacion] = useState(0)
+
+  const [obraSeguimiento, setObraSeguimiento] =
+    useState<Obra | null>(null)
+  const [avances, setAvances] = useState<AvanceObra[]>([])
+  const [cargandoAvances, setCargandoAvances] =
+    useState(false)
+  const [errorAvances, setErrorAvances] = useState('')
+  const [mostrarNuevoAvance, setMostrarNuevoAvance] =
+    useState(false)
+  const [guardandoAvance, setGuardandoAvance] =
+    useState(false)
+  const [formularioAvance, setFormularioAvance] =
+    useState(avanceInicial)
+  const [imagenes, setImagenes] = useState<ImagenObra[]>([])
+  const [subiendoImagen, setSubiendoImagen] = useState(false)
+  const [tipoImagen, setTipoImagen] = useState('avance')
+  const [descripcionImagen, setDescripcionImagen] = useState('')
+
+  useEffect(() => {
+    async function cargarDatos() {
+      setCargando(true)
+      setError('')
+
+      const [resultadoObras, resultadoClientes] =
+        await Promise.all([
+          supabase
+            .from('obras')
+            .select(`
+              id,
+              cliente_id,
+              nombre_obra,
+              direccion,
+              localidad,
+              estado,
+              fecha_inicio,
+              fecha_fin_estimada,
+              descripcion,
+              porcentaje_avance,
+              activo
+            `)
+            .order('created_at', { ascending: false }),
+
+          supabase
+            .from('Clientes')
+            .select(
+              'id, nombre, apellido, direccion, localidad',
+            )
+            .order('nombre', { ascending: true }),
+        ])
+
+      if (resultadoObras.error || resultadoClientes.error) {
+        console.error(
+          resultadoObras.error || resultadoClientes.error,
+        )
+        setError('No se pudieron cargar las obras.')
+      } else {
+        setObras((resultadoObras.data ?? []) as Obra[])
+        setClientes(resultadoClientes.data ?? [])
+      }
+
+      setCargando(false)
+    }
+
+    cargarDatos()
+  }, [actualizacion])
+
+  function obtenerCliente(clienteId: number) {
+    const cliente = clientes.find(
+      (item) => item.id === clienteId,
+    )
+
+    if (!cliente) return 'Cliente no disponible'
+
+    return `${cliente.nombre} ${
+      cliente.apellido ?? ''
+    }`.trim()
+  }
+
+  function formatearFecha(fecha: string | null) {
+    if (!fecha) return 'Sin fecha'
+
+    return new Date(`${fecha.slice(0, 10)}T00:00:00`)
+      .toLocaleDateString('es-AR')
+  }
+
+  function etiquetaEstado(estado: EstadoObra | null) {
+    return estado === 'Pendiente'
+      ? 'Aceptada para ejecutar'
+      : estado || 'Aceptada para ejecutar'
+  }
+
+  function claseEstado(estado: EstadoObra | null) {
+    if (estado === 'Finalizada') return 'finalizada'
+    if (estado === 'En ejecución') return 'ejecucion'
+    if (estado === 'Pausada') return 'pausada'
+    return 'pendiente'
+  }
+
+  function cerrarFormulario() {
+    setMostrarFormulario(false)
+    setObraEditando(null)
+  }
+
+  function obraGuardada() {
+    cerrarFormulario()
+    setActualizacion((valor) => valor + 1)
+  }
+
+  async function cargarAvances(obraId: number) {
+    setCargandoAvances(true)
+    setErrorAvances('')
+
+    const { data, error: errorCarga } = await supabase
+      .from('obra_avances')
+      .select(`
+        id,
+        created_at,
+        obra_id,
+        fecha,
+        titulo,
+        descripcion,
+        estado,
+        porcentaje
+      `)
+      .eq('obra_id', obraId)
+      .order('fecha', { ascending: false })
+      .order('created_at', { ascending: false })
+
+    if (errorCarga) {
+      console.error(errorCarga)
+      setErrorAvances('No se pudo cargar el seguimiento.')
+    } else {
+      setAvances((data ?? []) as AvanceObra[])
+    }
+
+    setCargandoAvances(false)
+  }
+
+  async function cargarImagenes(obraId: number) {
+    const { data, error: errorCarga } = await supabase
+      .from('obra_imagenes')
+      .select('id, storage_path, tipo, descripcion, created_at')
+      .eq('obra_id', obraId)
+      .order('created_at', { ascending: false })
+
+    if (errorCarga) {
+      console.error(errorCarga)
+      setErrorAvances('No se pudieron cargar las fotografías.')
+      return
+    }
+
+    const conUrls = await Promise.all(
+      ((data ?? []) as ImagenObra[]).map(async (imagen) => {
+        const { data: url } = await supabase.storage
+          .from('obras')
+          .createSignedUrl(imagen.storage_path, 3600)
+        return { ...imagen, url: url?.signedUrl }
+      }),
+    )
+    setImagenes(conUrls)
+  }
+
+  function abrirSeguimiento(obra: Obra) {
+    setObraSeguimiento(obra)
+    setMostrarNuevoAvance(false)
+    setFormularioAvance({
+      ...avanceInicial,
+      fecha: new Date().toISOString().slice(0, 10),
+      estado: obra.estado ?? 'Pendiente',
+      porcentaje: Number(obra.porcentaje_avance || 0),
+    })
+    cargarAvances(obra.id)
+    cargarImagenes(obra.id)
+  }
+
+  function cerrarSeguimiento() {
+    setObraSeguimiento(null)
+    setAvances([])
+    setImagenes([])
+    setMostrarNuevoAvance(false)
+    setErrorAvances('')
+  }
+
+  function actualizarAvance(
+    campo: keyof typeof formularioAvance,
+    valor: string | number,
+  ) {
+    setFormularioAvance((anterior) => ({
+      ...anterior,
+      [campo]: valor,
+    }))
+  }
+
+  function cambiarEstadoAvance(estado: EstadoObra) {
+    setFormularioAvance((anterior) => ({
+      ...anterior,
+      estado,
+      porcentaje:
+        estado === 'Finalizada' ? 100 : anterior.porcentaje,
+    }))
+  }
+
+  async function guardarAvance(
+    evento: FormEvent<HTMLFormElement>,
+  ) {
+    evento.preventDefault()
+
+    if (!obraSeguimiento) return
+
+    if (!formularioAvance.titulo.trim()) {
+      setErrorAvances('Ingresá un título para el avance.')
+      return
+    }
+
+    setGuardandoAvance(true)
+    setErrorAvances('')
+
+    const { error: errorGuardar } = await supabase
+      .from('obra_avances')
+      .insert({
+        obra_id: obraSeguimiento.id,
+        fecha: formularioAvance.fecha,
+        titulo: formularioAvance.titulo.trim(),
+        descripcion:
+          formularioAvance.descripcion.trim() || null,
+        estado: formularioAvance.estado,
+        porcentaje: Number(formularioAvance.porcentaje),
+      })
+
+    if (errorGuardar) {
+      console.error(errorGuardar)
+      setErrorAvances('No se pudo guardar el avance.')
+      setGuardandoAvance(false)
+      return
+    }
+
+    const obraActualizada = {
+      ...obraSeguimiento,
+      estado: formularioAvance.estado,
+      porcentaje_avance: Number(formularioAvance.porcentaje),
+    }
+
+    setObraSeguimiento(obraActualizada)
+    setMostrarNuevoAvance(false)
+    setFormularioAvance({
+      ...avanceInicial,
+      fecha: new Date().toISOString().slice(0, 10),
+      estado: formularioAvance.estado,
+      porcentaje: Number(formularioAvance.porcentaje),
+    })
+    setGuardandoAvance(false)
+    setActualizacion((valor) => valor + 1)
+    cargarAvances(obraSeguimiento.id)
+  }
+
+  async function subirImagen(
+    evento: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    const archivo = evento.target.files?.[0]
+    if (!archivo || !obraSeguimiento) return
+
+    setSubiendoImagen(true)
+    setErrorAvances('')
+    const nombreSeguro = archivo.name.replace(
+      /[^a-zA-Z0-9._-]/g,
+      '_',
+    )
+    const ruta = `${obraSeguimiento.id}/${Date.now()}-${nombreSeguro}`
+    const subida = await supabase.storage
+      .from('obras')
+      .upload(ruta, archivo)
+
+    if (subida.error) {
+      console.error(subida.error)
+      setErrorAvances('No se pudo subir la fotografía.')
+      setSubiendoImagen(false)
+      return
+    }
+
+    const registro = await supabase.from('obra_imagenes').insert({
+      obra_id: obraSeguimiento.id,
+      storage_path: ruta,
+      tipo: tipoImagen,
+      descripcion: descripcionImagen.trim() || null,
+    })
+
+    if (registro.error) {
+      console.error(registro.error)
+      setErrorAvances('La foto subió, pero no pudo registrarse.')
+    } else {
+      setDescripcionImagen('')
+      await cargarImagenes(obraSeguimiento.id)
+    }
+
+    evento.target.value = ''
+    setSubiendoImagen(false)
+  }
+
+  const obrasFiltradas = obras.filter((obra) => {
+    const texto = `
+      ${obra.nombre_obra}
+      ${obra.direccion ?? ''}
+      ${obra.localidad ?? ''}
+      ${obra.estado ?? ''}
+      ${obtenerCliente(obra.cliente_id)}
+    `.toLowerCase()
+
+    const coincideBusqueda = texto.includes(
+      busqueda.toLowerCase().trim(),
+    )
+
+    const coincideEstado =
+      filtroEstado === 'todos' ||
+      obra.estado === filtroEstado
+
+    return coincideBusqueda && coincideEstado
+  })
+
+  return (
+    <div className="obrasPage">
+      <div className="pageHeader">
+        <div>
+          <p className="subtitle">GESTIÓN DE TRABAJOS</p>
+          <h2>Obras</h2>
+          <p className="welcome">
+            Seguimiento de trabajos y proyectos
+          </p>
+        </div>
+
+        <button
+          className="newButton"
+          onClick={() => {
+            setObraEditando(null)
+            setMostrarFormulario(true)
+          }}
+        >
+          + Nueva obra
+        </button>
+      </div>
+
+      <div className="clientesToolbar">
+        <input
+          type="search"
+          placeholder="Buscar obra, cliente o localidad..."
+          value={busqueda}
+          onChange={(evento) =>
+            setBusqueda(evento.target.value)
+          }
+        />
+
+        <select
+          value={filtroEstado}
+          onChange={(evento) =>
+            setFiltroEstado(
+              evento.target.value as FiltroEstado,
+            )
+          }
+        >
+          <option value="todos">Todos los estados</option>
+          <option value="Pendiente">
+            Aceptadas para ejecutar
+          </option>
+          <option value="En ejecución">En ejecución</option>
+          <option value="Pausada">Pausadas</option>
+          <option value="Finalizada">Finalizadas</option>
+        </select>
+      </div>
+
+      <div className="obrasGrid">
+        {cargando && <p>Cargando obras...</p>}
+
+        {error && <p className="loginError">{error}</p>}
+
+        {!cargando && !error && obrasFiltradas.length === 0 && (
+          <div className="empty obrasEmpty">
+            <span>🏠</span>
+            <h3>No encontramos obras</h3>
+            <p>
+              Probá con otra búsqueda o cambiá el filtro.
+            </p>
+          </div>
+        )}
+
+        {!cargando &&
+          obrasFiltradas.map((obra) => (
+            <div className="obraCard" key={obra.id}>
+              <div className="obraCardHeader">
+                <span className="obraIcon">🏠</span>
+
+                <span
+                  className={`obraEstadoBadge ${claseEstado(
+                    obra.estado,
+                  )}`}
+                >
+                  {etiquetaEstado(obra.estado)}
+                </span>
+              </div>
+
+              <h3>{obra.nombre_obra}</h3>
+
+              <p className="obraCliente">
+                {obtenerCliente(obra.cliente_id)}
+              </p>
+
+              <p className="obraDireccion">
+                {obra.direccion || 'Sin dirección'}
+                {obra.localidad
+                  ? ` · ${obra.localidad}`
+                  : ''}
+              </p>
+
+              {obra.descripcion && (
+                <p className="obraDescripcion">
+                  {obra.descripcion}
+                </p>
+              )}
+
+              <div className="obraProgresoResumen">
+                <div>
+                  <span>Avance de la obra</span>
+                  <strong>
+                    {Number(obra.porcentaje_avance || 0)}%
+                  </strong>
+                </div>
+
+                <div className="obraProgresoBarra">
+                  <span
+                    style={{
+                      width: `${Number(
+                        obra.porcentaje_avance || 0,
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="obraFechas">
+                <span>
+                  Inicio
+                  <strong>
+                    {formatearFecha(obra.fecha_inicio)}
+                  </strong>
+                </span>
+
+                <span>
+                  Fin estimado
+                  <strong>
+                    {formatearFecha(
+                      obra.fecha_fin_estimada,
+                    )}
+                  </strong>
+                </span>
+              </div>
+
+              <div className="obraCardActions">
+                <button
+                  className="editButton"
+                  onClick={() => {
+                    setObraEditando(obra)
+                    setMostrarFormulario(true)
+                  }}
+                >
+                  Editar obra
+                </button>
+
+                <button
+                  className="newButton"
+                  onClick={() => abrirSeguimiento(obra)}
+                >
+                  Ver ficha completa
+                </button>
+
+                <button
+                  className="editButton"
+                  onClick={() => setInformeObra(obra)}
+                >
+                  📄 Informe
+                </button>
+              </div>
+            </div>
+          ))}
+      </div>
+
+      {mostrarFormulario && (
+        <NuevaObra
+          clientes={clientes}
+          obra={obraEditando}
+          onCancelar={cerrarFormulario}
+          onGuardada={obraGuardada}
+        />
+      )}
+
+      {informeObra && (
+        <InformeObra
+          obra={informeObra}
+          cliente={obtenerCliente(informeObra.cliente_id)}
+          onCerrar={() => setInformeObra(null)}
+        />
+      )}
+
+      {obraSeguimiento && (
+        <div className="modalOverlay">
+          <div className="modalCard obraSeguimientoModal">
+            <div className="modalHeader">
+              <div>
+                <p className="subtitle">SEGUIMIENTO DE OBRA</p>
+                <h2>{obraSeguimiento.nombre_obra}</h2>
+                <p className="welcome">
+                  {obtenerCliente(obraSeguimiento.cliente_id)}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="closeButton"
+                onClick={cerrarSeguimiento}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="seguimientoResumen">
+              <div>
+                <span>Estado actual</span>
+                <strong>
+                  {etiquetaEstado(obraSeguimiento.estado)}
+                </strong>
+              </div>
+
+              <div>
+                <span>Avance</span>
+                <strong>
+                  {obraSeguimiento.porcentaje_avance}%
+                </strong>
+              </div>
+
+              <div className="seguimientoProgreso">
+                <span
+                  style={{
+                    width: `${obraSeguimiento.porcentaje_avance}%`,
+                  }}
+                />
+              </div>
+            </div>
+
+            <EconomiaObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} />
+
+            <section className="obraFotosSeccion">
+              <div className="seguimientoAcciones">
+                <div>
+                  <h3>Fotografías de la obra</h3>
+                  <p>Antes, avances, terminación y planos.</p>
+                </div>
+              </div>
+
+              <div className="obraFotoCarga">
+                <select
+                  value={tipoImagen}
+                  onChange={(evento) => setTipoImagen(evento.target.value)}
+                >
+                  <option value="avance">Avance</option>
+                  <option value="antes">Antes</option>
+                  <option value="despues">Después</option>
+                  <option value="plano">Plano</option>
+                  <option value="otro">Otro</option>
+                </select>
+                <input
+                  value={descripcionImagen}
+                  onChange={(evento) =>
+                    setDescripcionImagen(evento.target.value)
+                  }
+                  placeholder="Descripción opcional"
+                />
+                <label className="newButton obraFotoBoton">
+                  {subiendoImagen ? 'Subiendo...' : '+ Subir fotografía'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    hidden
+                    disabled={subiendoImagen}
+                    onChange={subirImagen}
+                  />
+                </label>
+              </div>
+
+              <div className="obraFotosGrid">
+                {imagenes.map((imagen) => (
+                  <figure key={imagen.id}>
+                    {imagen.url && (
+                      <a href={imagen.url} target="_blank" rel="noreferrer">
+                        <img
+                          src={imagen.url}
+                          alt={imagen.descripcion || imagen.tipo}
+                        />
+                      </a>
+                    )}
+                    <figcaption>
+                      <strong>{imagen.tipo}</strong>
+                      <span>{imagen.descripcion || 'Sin descripción'}</span>
+                    </figcaption>
+                  </figure>
+                ))}
+                {imagenes.length === 0 && (
+                  <div className="obraFotosVacio">
+                    Todavía no hay fotografías cargadas.
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <div className="seguimientoAcciones">
+              <div>
+                <h3>Línea de tiempo</h3>
+                <p>Historial de estados y trabajos realizados.</p>
+              </div>
+
+              <button
+                type="button"
+                className="newButton"
+                onClick={() =>
+                  setMostrarNuevoAvance((valor) => !valor)
+                }
+              >
+                {mostrarNuevoAvance
+                  ? 'Cancelar avance'
+                  : '+ Agregar avance'}
+              </button>
+            </div>
+
+            {mostrarNuevoAvance && (
+              <form
+                className="avanceForm"
+                onSubmit={guardarAvance}
+              >
+                <div className="formGrid">
+                  <label>
+                    Fecha
+                    <input
+                      type="date"
+                      value={formularioAvance.fecha}
+                      onChange={(evento) =>
+                        actualizarAvance(
+                          'fecha',
+                          evento.target.value,
+                        )
+                      }
+                      required
+                    />
+                  </label>
+
+                  <label>
+                    Estado de la obra
+                    <select
+                      value={formularioAvance.estado}
+                      onChange={(evento) =>
+                        cambiarEstadoAvance(
+                          evento.target.value as EstadoObra,
+                        )
+                      }
+                    >
+                      <option value="Pendiente">
+                        Aceptada para ejecutar
+                      </option>
+                      <option value="En ejecución">
+                        En ejecución
+                      </option>
+                      <option value="Pausada">Pausada</option>
+                      <option value="Finalizada">
+                        Finalizada
+                      </option>
+                    </select>
+                  </label>
+
+                  <label className="formFull">
+                    Título del avance *
+                    <input
+                      value={formularioAvance.titulo}
+                      onChange={(evento) =>
+                        actualizarAvance(
+                          'titulo',
+                          evento.target.value,
+                        )
+                      }
+                      placeholder="Ej.: Canalización terminada"
+                      required
+                    />
+                  </label>
+
+                  <label>
+                    Porcentaje completado
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={formularioAvance.porcentaje}
+                      onChange={(evento) =>
+                        actualizarAvance(
+                          'porcentaje',
+                          Number(evento.target.value),
+                        )
+                      }
+                      required
+                    />
+                  </label>
+
+                  <label className="formFull">
+                    Detalle del trabajo realizado
+                    <textarea
+                      rows={3}
+                      value={formularioAvance.descripcion}
+                      onChange={(evento) =>
+                        actualizarAvance(
+                          'descripcion',
+                          evento.target.value,
+                        )
+                      }
+                      placeholder="Descripción, observaciones o pendientes..."
+                    />
+                  </label>
+                </div>
+
+                {errorAvances && (
+                  <p className="loginError">{errorAvances}</p>
+                )}
+
+                <div className="formActions">
+                  <button
+                    type="submit"
+                    className="newButton"
+                    disabled={guardandoAvance}
+                  >
+                    {guardandoAvance
+                      ? 'Guardando...'
+                      : 'Guardar avance'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div className="obraTimeline">
+              {cargandoAvances && <p>Cargando avances...</p>}
+
+              {!mostrarNuevoAvance && errorAvances && (
+                <p className="loginError">{errorAvances}</p>
+              )}
+
+              {!cargandoAvances &&
+                !errorAvances &&
+                avances.length === 0 && (
+                  <div className="empty seguimientoEmpty">
+                    <span>🕐</span>
+                    <h3>Todavía no hay avances</h3>
+                    <p>
+                      Agregá el primer movimiento de esta obra.
+                    </p>
+                  </div>
+                )}
+
+              {!cargandoAvances &&
+                avances.map((avance) => (
+                  <article
+                    className="timelineItem"
+                    key={avance.id}
+                  >
+                    <span className="timelinePunto" />
+
+                    <div className="timelineContenido">
+                      <div className="timelineEncabezado">
+                        <div>
+                          <time>
+                            {formatearFecha(avance.fecha)}
+                          </time>
+                          <h4>{avance.titulo}</h4>
+                        </div>
+
+                        <span
+                          className={`obraEstadoBadge ${claseEstado(
+                            avance.estado,
+                          )}`}
+                        >
+                          {etiquetaEstado(avance.estado)} ·{' '}
+                          {avance.porcentaje}%
+                        </span>
+                      </div>
+
+                      {avance.descripcion && (
+                        <p>{avance.descripcion}</p>
+                      )}
+                    </div>
+                  </article>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+type CompraFicha = {
+  id: number
+  nombre: string
+  cantidad: number
+  unidad: string | null
+  precio_unitario: number
+  proveedor: string | null
+  fecha: string | null
+  numero_comprobante: string | null
+  comprobante_path: string | null
+}
+
+type CostoFicha = {
+  id: number
+  tipo: string
+  descripcion: string | null
+  monto: number
+  fecha: string | null
+}
+
+function dineroFicha(valor: number) {
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency', currency: 'ARS', minimumFractionDigits: 2,
+  }).format(valor)
+}
+
+function fechaFicha(fecha: string | null) {
+  return fecha
+    ? new Date(`${fecha.slice(0, 10)}T00:00:00`).toLocaleDateString('es-AR')
+    : 'Sin fecha'
+}
+
+function EconomiaObra({ obraId }: { obraId: number }) {
+  const [compras, setCompras] = useState<CompraFicha[]>([])
+  const [costos, setCostos] = useState<CostoFicha[]>([])
+  const [cargando, setCargando] = useState(true)
+  const [error, setError] = useState('')
+  const [revision, setRevision] = useState(0)
+  const [comprobante, setComprobante] = useState<{ id: number; url: string } | null>(null)
+  const [abriendo, setAbriendo] = useState<number | null>(null)
+  const [errorComprobante, setErrorComprobante] = useState('')
+
+  useEffect(() => {
+    let vigente = true
+    async function cargar() {
+      setCargando(true)
+      setError('')
+      // Paginar evita mostrar un total incompleto si hay muchos movimientos.
+      async function leerCompras() {
+        const filas: CompraFicha[] = []
+        for (let inicio = 0; ; inicio += 500) {
+          const resultado = await supabase.from('materiales')
+            .select('id,nombre,cantidad,unidad,precio_unitario,proveedor,fecha,numero_comprobante,comprobante_path')
+            .eq('obra_id', obraId).order('id').range(inicio, inicio + 499)
+          if (resultado.error) throw resultado.error
+          filas.push(...(resultado.data ?? []) as CompraFicha[])
+          if (!vigente || (resultado.data ?? []).length < 500) return filas.reverse()
+        }
+      }
+      async function leerCostos() {
+        const filas: CostoFicha[] = []
+        for (let inicio = 0; ; inicio += 500) {
+          const resultado = await supabase.from('costos')
+            .select('id,tipo,descripcion,monto,fecha')
+            .eq('obra_id', obraId).order('id').range(inicio, inicio + 499)
+          if (resultado.error) throw resultado.error
+          filas.push(...(resultado.data ?? []) as CostoFicha[])
+          if (!vigente || (resultado.data ?? []).length < 500) return filas.reverse()
+        }
+      }
+      try {
+        const [nuevasCompras, nuevosCostos] = await Promise.all([leerCompras(), leerCostos()])
+        if (vigente) {
+          setCompras(nuevasCompras)
+          setCostos(nuevosCostos)
+        }
+      } catch (fallo) {
+        console.error(fallo)
+        if (vigente) setError('No se pudieron cargar las compras y los costos de esta obra. Probá actualizar.')
+      } finally {
+        if (vigente) setCargando(false)
+      }
+    }
+    void cargar()
+    return () => { vigente = false }
+  }, [obraId, revision])
+
+  async function prepararComprobante(compra: CompraFicha) {
+    if (!compra.comprobante_path || abriendo !== null) return
+    setAbriendo(compra.id)
+    setComprobante(null)
+    setErrorComprobante('')
+    try {
+      const resultado = await supabase.storage.from('comprobantes')
+        .createSignedUrl(compra.comprobante_path, 300)
+      if (resultado.error || !resultado.data?.signedUrl) {
+        throw resultado.error ?? new Error('No se recibió un enlace al comprobante')
+      }
+      setComprobante({ id: compra.id, url: resultado.data.signedUrl })
+    } catch (fallo) {
+      console.error(fallo)
+      setErrorComprobante('No se pudo abrir el comprobante. Volvé a intentar.')
+    } finally {
+      setAbriendo(null)
+    }
+  }
+
+  // Los costos ya incluyen las compras: no sumar materiales nuevamente.
+  const totalCostos = costos.reduce((total, costo) => total + Number(costo.monto || 0), 0)
+  const tipos: Record<string, string> = {
+    material: 'Material', mano_obra: 'Mano de obra', terciarizado: 'Tercerizado', otro: 'Otro',
+  }
+
+  return <section className="obraFotosSeccion" aria-label="Compras y costos de la obra">
+    <div className="seguimientoAcciones">
+      <div><h3>Compras y costos de la obra</h3><p>Materiales, comprobantes y gastos asociados.</p></div>
+      <button type="button" className="editButton" disabled={cargando} onClick={() => setRevision((valor) => valor + 1)}>Actualizar</button>
+    </div>
+    {cargando && <p role="status">Cargando compras y costos...</p>}
+    {error && <p className="loginError" role="alert">{error}</p>}
+    {!cargando && !error && <>
+      <div className="seguimientoResumen">
+        <div><span>Costo total registrado</span><strong>{dineroFicha(totalCostos)}</strong></div>
+        <div><span>Compras registradas</span><strong>{compras.length}</strong></div>
+      </div>
+      <p>El total corresponde a los costos de Finanzas e incluye las compras vinculadas una sola vez.</p>
+      <h4>Compras y comprobantes</h4>
+      {compras.length === 0 ? <p>No hay compras registradas para esta obra.</p> :
+        <div className="gestionTabla" style={{ maxWidth: '100%', overflowX: 'auto' }}><table>
+          <thead><tr><th>Fecha</th><th>Material / proveedor</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th><th>Comprobante</th></tr></thead>
+          <tbody>{compras.map((compra) => <tr key={compra.id}>
+            <td>{fechaFicha(compra.fecha)}</td>
+            <td><strong>{compra.nombre}</strong><br /><small>{compra.proveedor || 'Sin proveedor'}</small></td>
+            <td>{Number(compra.cantidad)} {compra.unidad}</td>
+            <td>{dineroFicha(Number(compra.precio_unitario || 0))}</td>
+            <td>{dineroFicha(Math.round(Number(compra.cantidad) * Number(compra.precio_unitario || 0) * 100) / 100)}</td>
+            <td>{compra.numero_comprobante && <div>{compra.numero_comprobante}</div>}
+              {compra.comprobante_path ? <>
+                <button type="button" className="editButton" disabled={abriendo !== null} onClick={() => void prepararComprobante(compra)}>
+                  {abriendo === compra.id ? 'Preparando...' : 'Ver comprobante'}
+                </button>
+                {comprobante?.id === compra.id && <div><a href={comprobante.url} target="_blank" rel="noopener noreferrer">Abrir archivo (enlace por 5 minutos)</a></div>}
+              </> : <span>Sin archivo adjunto</span>}
+            </td>
+          </tr>)}</tbody>
+        </table></div>}
+      {errorComprobante && <p className="loginError" role="alert">{errorComprobante}</p>}
+      <h4>Detalle de costos</h4>
+      {costos.length === 0 ? <p>No hay costos registrados para esta obra.</p> :
+        <div className="gestionTabla" style={{ maxWidth: '100%', overflowX: 'auto' }}><table>
+          <thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Monto</th></tr></thead>
+          <tbody>{costos.map((costo) => <tr key={costo.id}>
+            <td>{fechaFicha(costo.fecha)}</td><td>{tipos[costo.tipo] ?? costo.tipo}</td>
+            <td>{costo.descripcion || 'Sin detalle'}</td><td>{dineroFicha(Number(costo.monto || 0))}</td>
+          </tr>)}</tbody>
+        </table></div>}
+    </>}
+  </section>
+}
+
+export default Obras
