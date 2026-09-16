@@ -7,6 +7,7 @@ type Presupuesto = { id: number; obra_id: number | null; titulo: string; total: 
 type Pago = { id: number; presupuesto_id: number | null; obra_id: number | null; monto: number; fecha: string; medio_pago: string; referencia: string | null; notas: string | null; origen: string }
 type Categoria = { id: number; nombre: string; deducible: boolean }
 type Costo = { id: number; obra_id: number; categoria_id: number | null; tipo: string; descripcion: string | null; monto: number; fecha: string }
+type Adicional = { id: number; obra_id: number; importe: number; estado: string }
 type Pestana = 'resumen' | 'cobros' | 'costos'
 
 function Finanzas() {
@@ -14,6 +15,7 @@ function Finanzas() {
   const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([])
   const [pagos, setPagos] = useState<Pago[]>([])
   const [costos, setCostos] = useState<Costo[]>([])
+  const [adicionales, setAdicionales] = useState<Adicional[]>([])
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [pestana, setPestana] = useState<Pestana>('resumen')
   const [formulario, setFormulario] = useState<'pago' | 'costo' | null>(null)
@@ -25,12 +27,13 @@ function Finanzas() {
     async function cargar() {
       setCargando(true)
       setError('')
-      const [rObras, rPresupuestos, rPagos, rCostos, rCategorias] = await Promise.all([
+      const [rObras, rPresupuestos, rPagos, rCostos, rCategorias, rAdicionales] = await Promise.all([
         supabase.from('obras').select('id, nombre_obra, porcentaje_avance').eq('activo', true).order('nombre_obra'),
         supabase.from('presupuestos').select('id, obra_id, titulo, total, total_pagado, saldo, estado, activo').eq('activo', true),
         supabase.from('pagos').select('*').order('fecha', { ascending: false }).order('created_at', { ascending: false }),
         supabase.from('costos').select('*').order('fecha', { ascending: false }),
         supabase.from('categorias_gasto').select('*').eq('activo', true).order('nombre'),
+        supabase.from('adicionales').select('id, obra_id, importe, estado').eq('estado', 'aprobado'),
       ])
 
       const fallo = rObras.error || rPresupuestos.error || rPagos.error || rCostos.error || rCategorias.error
@@ -46,6 +49,8 @@ function Finanzas() {
       setPagos((rPagos.data ?? []).map((p) => ({ ...p, monto: Number(p.monto) })) as Pago[])
       setCostos((rCostos.data ?? []).map((c) => ({ ...c, monto: Number(c.monto) })) as Costo[])
       setCategorias((rCategorias.data ?? []) as Categoria[])
+      // Los adicionales son opcionales: si la tabla no existe todavía, seguimos sin ellos.
+      setAdicionales(rAdicionales.error ? [] : (rAdicionales.data ?? []).map((a) => ({ ...a, importe: Number(a.importe) })) as Adicional[])
       setCargando(false)
     }
     cargar()
@@ -56,12 +61,17 @@ function Finanzas() {
     const total = aprobados.reduce((s, p) => s + p.total, 0)
     const cobrado = aprobados.reduce((s, p) => s + p.total_pagado, 0)
     const costo = costos.filter((c) => c.obra_id === obra.id).reduce((s, c) => s + c.monto, 0)
-    const pagadoPct = total > 0 ? Math.min(100, Math.round((cobrado / total) * 100)) : 0
+    // Valor actualizado = presupuestos aceptados + adicionales aprobados (pueden ser negativos).
+    const extra = adicionales.filter((a) => a.obra_id === obra.id).reduce((s, a) => s + a.importe, 0)
+    const actualizado = total + extra
+    const pagadoPct = actualizado > 0 ? Math.min(100, Math.round((cobrado / actualizado) * 100)) : 0
     const avance = Number(obra.porcentaje_avance) || 0
-    return { ...obra, total, cobrado, costo, saldo: Math.max(0, total - cobrado), pagadoPct, alerta: avance - pagadoPct >= 25 }
-  }), [obras, presupuestos, costos])
+    const habilitado = Math.round((actualizado * avance) / 100)
+    const pendienteAvance = Math.max(0, habilitado - cobrado)
+    return { ...obra, total, extra, actualizado, cobrado, costo, saldo: Math.max(0, actualizado - cobrado), pagadoPct, habilitado, pendienteAvance, alerta: avance - pagadoPct >= 25 }
+  }), [obras, presupuestos, costos, adicionales])
 
-  const totales = resumen.reduce((a, r) => ({ total: a.total + r.total, cobrado: a.cobrado + r.cobrado, saldo: a.saldo + r.saldo, costo: a.costo + r.costo }), { total: 0, cobrado: 0, saldo: 0, costo: 0 })
+  const totales = resumen.reduce((a, r) => ({ total: a.total + r.total, actualizado: a.actualizado + r.actualizado, cobrado: a.cobrado + r.cobrado, saldo: a.saldo + r.saldo, costo: a.costo + r.costo }), { total: 0, actualizado: 0, cobrado: 0, saldo: 0, costo: 0 })
   const nombreObra = (id: number | null) => obras.find((obra) => obra.id === id)?.nombre_obra ?? 'Sin obra asociada'
   const presupuestoPorId = (id: number) => presupuestos.find((presupuesto) => presupuesto.id === id)
   const nombreCategoria = (id: number | null) => categorias.find((categoria) => categoria.id === id)?.nombre ?? 'Sin categoría'
@@ -86,18 +96,20 @@ function Finanzas() {
 
       {!cargando && pestana === 'resumen' && !error && <>
         <div className="gestionKpis">
-          <div><span>CONTRATADO</span><strong>{moneda(totales.total)}</strong><small>Presupuestos aceptados</small></div>
+          <div><span>VALOR ACTUAL</span><strong>{moneda(totales.actualizado)}</strong><small>Presupuestos + adicionales</small></div>
           <div><span>COBRADO</span><strong>{moneda(totales.cobrado)}</strong><small>Total recibido</small></div>
           <div><span>POR COBRAR</span><strong>{moneda(totales.saldo)}</strong><small>Saldo pendiente</small></div>
           <div><span>GASTOS</span><strong>{moneda(totales.costo)}</strong><small>Gastos registrados</small></div>
         </div>
         <div className="gestionTabla"><table>
-          <thead><tr><th>Obra</th><th>Presupuesto</th><th>Cobrado</th><th>Saldo</th><th>Pagado / avance</th><th>Situación</th></tr></thead>
-          <tbody>{resumen.length === 0 ? <tr><td colSpan={6}>No hay obras activas.</td></tr> : resumen.map((fila) => <tr key={fila.id}>
-            <td><strong>{fila.nombre_obra}</strong></td><td>{moneda(fila.total)}</td><td>{moneda(fila.cobrado)}</td><td>{moneda(fila.saldo)}</td><td>{fila.pagadoPct}% / {fila.porcentaje_avance ?? 0}%</td><td><span className={fila.alerta ? 'gestionEstado alerta' : 'gestionEstado ok'}>{fila.alerta ? '⚠ Financiando' : 'OK'}</span></td>
+          <thead><tr><th>Obra</th><th>Valor actual.</th><th>Cobrado</th><th>Saldo</th><th>Pend. s/avance</th><th>Pagado / avance</th><th>Situación</th></tr></thead>
+          <tbody>{resumen.length === 0 ? <tr><td colSpan={7}>No hay obras activas.</td></tr> : resumen.map((fila) => <tr key={fila.id}>
+            <td><strong>{fila.nombre_obra}</strong></td>
+            <td><strong>{moneda(fila.actualizado)}</strong>{fila.extra !== 0 && <><br /><small style={{ color: fila.extra > 0 ? '#23764e' : '#b23b32' }}>base {moneda(fila.total)} · adic {fila.extra > 0 ? '+' : '−'}{moneda(Math.abs(fila.extra))}</small></>}</td>
+            <td>{moneda(fila.cobrado)}</td><td>{moneda(fila.saldo)}</td><td>{fila.pendienteAvance > 0 ? <strong style={{ color: '#b86608' }}>{moneda(fila.pendienteAvance)}</strong> : moneda(0)}</td><td>{fila.pagadoPct}% / {fila.porcentaje_avance ?? 0}%</td><td><span className={fila.alerta ? 'gestionEstado alerta' : 'gestionEstado ok'}>{fila.alerta ? '⚠ Financiando' : 'OK'}</span></td>
           </tr>)}</tbody>
         </table></div>
-        <p className="gestionAyuda">“Financiando” aparece cuando el avance de la obra supera en 25 puntos o más lo cobrado.</p>
+        <p className="gestionAyuda">El <strong>valor actualizado</strong> suma los adicionales aprobados al presupuesto original. “Financiando” aparece cuando el avance supera en 25 puntos o más lo cobrado.</p>
       </>}
 
       {!cargando && pestana === 'cobros' && !error && <div className="gestionTabla"><table>

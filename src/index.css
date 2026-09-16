@@ -2268,3 +2268,27 @@ button {
 
 /* MÓDULOS INTEGRADOS */
 .gestionTabs{display:flex;gap:8px;margin-bottom:18px;padding-bottom:8px;border-bottom:1px solid #dfe2e6}.gestionTabs button{padding:9px 14px;border:0;border-radius:8px;background:transparent;color:#666c74;cursor:pointer}.gestionTabs button.active{background:#202225;color:#fff;font-weight:700}.gestionKpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}.gestionKpis>div{display:flex;min-width:0;flex-direction:column;gap:7px;padding:20px;border:1px solid #e1e4e8;border-radius:14px;background:#fff}.gestionKpis span{color:#7d828a;font-size:10px;font-weight:800;letter-spacing:1px}.gestionKpis strong{overflow:hidden;font-size:22px;text-overflow:ellipsis}.gestionKpis small,.gestionAyuda{color:#858b94;font-size:12px}.gestionTabla{overflow-x:auto;border:1px solid #e1e4e8;border-radius:14px;background:#fff}.gestionTabla table{width:100%;border-collapse:collapse}.gestionTabla th,.gestionTabla td{padding:15px 16px;border-bottom:1px solid #eceef0;text-align:left;white-space:nowrap}.gestionTabla th{color:#777e87;font-size:10px;letter-spacing:.8px;text-transform:uppercase}.gestionTabla td{color:#4e555e;font-size:13px}.gestionTabla tbody tr:last-child td{border-bottom:0}.gestionEstado{display:inline-flex;padding:6px 10px;border-radius:999px;font-size:11px;font-weight:700}.gestionEstado.ok{background:#e7f6ef;color:#237452}.gestionEstado.alerta{background:#fff0dd;color:#9a5a05}.gestionEstado.nuevo{margin-left:auto;background:#e8efff;color:#345eaa}.gestionNotificacion{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:14px;padding:18px 22px;border-bottom:1px solid #eceef0}.gestionNotificacion:last-child{border-bottom:0}.gestionNotifIcono{display:grid;width:44px;height:44px;place-items:center;border-radius:12px;background:#f0f2f4}.gestionNotificacion p{margin:5px 0;color:#626973}.gestionNotificacion small{color:#969ca5}@media(max-width:1000px){.gestionKpis{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:700px){.gestionTabs{overflow-x:auto}.gestionTabs button{white-space:nowrap}.gestionKpis{grid-template-columns:1fr}.gestionNotificacion{grid-template-columns:42px minmax(0,1fr)}.gestionEstado.nuevo{grid-column:2;margin-left:0;width:max-content}}
+
+/* Convertir presupuesto aceptado en obra */
+.convertirObraBtn {
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: #23935b;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.convertirObraBtn:hover { background: #1c7a4b; }
+.convertirObraBtn:disabled { opacity: .6; cursor: default; }
+.obraVinculadaTag {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #e4f5eb;
+  color: #23764e;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}

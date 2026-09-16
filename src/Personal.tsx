@@ -2,9 +2,13 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { supabase } from './supabase'
 import { moneda } from './gestionFormat'
 
-type Persona = { id: number; nombre: string; apellido: string | null; tipo: string; telefono: string | null; costo_dia: number | null; activo: boolean }
+type Persona = { id: number; nombre: string; apellido: string | null; tipo: string; telefono: string | null; costo_dia: number | null; especialidad: string | null; modalidad_pago: string | null; activo: boolean }
 type Obra = { id: number; nombre_obra: string }
 type Asignacion = { id: number; obra_id: number; personal_id: number | null; rol_en_obra: string | null }
+
+const MODALIDADES: Record<string, string> = {
+  por_dia: 'Por día', por_hora: 'Por hora', por_obra: 'Por obra', porcentaje: 'Por porcentaje', por_etapa: 'Por etapa',
+}
 
 function Personal() {
   const [personas, setPersonas] = useState<Persona[]>([])
@@ -32,7 +36,7 @@ function Personal() {
 
   return <div className="gestionPage"><div className="pageHeader"><div><p className="subtitle">RECURSOS HUMANOS</p><h2>Personal</h2><p className="welcome">Obreros, auxiliares y terceros</p></div><button className="newButton" onClick={() => setMostrarNuevo(true)}>+ Nuevo</button></div>
     {error && <p className="loginError">{error}</p>}
-    {!error && <div className="clientesPanel">{personas.length === 0 ? <div className="empty"><span>👷</span><h3>Sin personal cargado</h3></div> : personas.map((persona) => <div className="clienteItem" key={persona.id}><div className="clienteAvatar">{persona.nombre.charAt(0).toUpperCase()}</div><div className="clienteInfo"><strong>{persona.nombre} {persona.apellido}</strong><span>{persona.telefono || 'Sin teléfono'} · {persona.costo_dia ? `${moneda(persona.costo_dia)}/día` : 'Costo a convenir'}</span><small>Asignado a: {obrasDe(persona.id) || 'sin obras'}</small></div><div className="clienteActions"><span className="estadoActivo">{persona.tipo}</span><button className="editButton" onClick={() => setPersonaAsignando(persona)}>Asignar a obra</button></div></div>)}</div>}
+    {!error && <div className="clientesPanel">{personas.length === 0 ? <div className="empty"><span>👷</span><h3>Sin personal cargado</h3></div> : personas.map((persona) => <div className="clienteItem" key={persona.id}><div className="clienteAvatar">{persona.nombre.charAt(0).toUpperCase()}</div><div className="clienteInfo"><strong>{persona.nombre} {persona.apellido}</strong><span>{persona.especialidad ? `${persona.especialidad} · ` : ''}{persona.telefono || 'Sin teléfono'} · {persona.costo_dia ? `${moneda(persona.costo_dia)}/día` : 'Costo a convenir'}</span><small>{persona.modalidad_pago ? `${MODALIDADES[persona.modalidad_pago] ?? persona.modalidad_pago} · ` : ''}Asignado a: {obrasDe(persona.id) || 'sin obras'}</small></div><div className="clienteActions"><span className="estadoActivo">{persona.tipo}</span><button className="editButton" onClick={() => setPersonaAsignando(persona)}>Asignar a obra</button></div></div>)}</div>}
     <ManoObra revision={actualizacion} />
     {mostrarNuevo && <FormularioPersona onCancelar={() => setMostrarNuevo(false)} onGuardado={() => { setMostrarNuevo(false); setActualizacion((v) => v + 1) }} />}
     {personaAsignando && <FormularioAsignacion persona={personaAsignando} obras={obras} onCancelar={() => setPersonaAsignando(null)} onGuardado={() => { setPersonaAsignando(null); setActualizacion((v) => v + 1) }} />}
@@ -40,10 +44,10 @@ function Personal() {
 }
 
 function FormularioPersona({ onCancelar, onGuardado }: { onCancelar: () => void; onGuardado: () => void }) {
-  const [f, setF] = useState({ nombre: '', apellido: '', tipo: 'obrero', telefono: '', costo_dia: '' }); const [guardando, setGuardando] = useState(false); const [error, setError] = useState('')
+  const [f, setF] = useState({ nombre: '', apellido: '', tipo: 'obrero', especialidad: '', modalidad_pago: 'por_dia', telefono: '', costo_dia: '' }); const [guardando, setGuardando] = useState(false); const [error, setError] = useState('')
   const set = (k: string, v: string) => setF((a) => ({ ...a, [k]: v }))
-  async function guardar(e: FormEvent) { e.preventDefault(); setGuardando(true); const r = await supabase.from('personal').insert({ nombre: f.nombre.trim(), apellido: f.apellido.trim() || null, tipo: f.tipo, telefono: f.telefono.trim() || null, costo_dia: f.costo_dia ? Number(f.costo_dia) : null, activo: true }); if (r.error) { console.error(r.error); setError('No se pudo guardar.'); setGuardando(false); return } onGuardado() }
-  return <div className="modalOverlay"><div className="modalCard"><div className="modalHeader"><div><p className="subtitle">NUEVO REGISTRO</p><h2>Agregar personal</h2></div><button className="closeButton" onClick={onCancelar}>×</button></div><form className="clienteForm" onSubmit={guardar}><div className="formGrid"><label>Nombre *<input required value={f.nombre} onChange={(e) => set('nombre', e.target.value)} /></label><label>Apellido<input value={f.apellido} onChange={(e) => set('apellido', e.target.value)} /></label><label>Tipo<select value={f.tipo} onChange={(e) => set('tipo', e.target.value)}><option value="obrero">Obrero</option><option value="auxiliar">Auxiliar</option><option value="terciarizado">Terciarizado</option></select></label><label>Teléfono<input value={f.telefono} onChange={(e) => set('telefono', e.target.value)} /></label><label>Costo por día<input type="number" min="0" value={f.costo_dia} onChange={(e) => set('costo_dia', e.target.value)} /></label></div>{error && <p className="loginError">{error}</p>}<div className="formActions"><button type="button" className="cancelButton" onClick={onCancelar}>Cancelar</button><button className="newButton" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar'}</button></div></form></div></div>
+  async function guardar(e: FormEvent) { e.preventDefault(); setGuardando(true); const r = await supabase.from('personal').insert({ nombre: f.nombre.trim(), apellido: f.apellido.trim() || null, tipo: f.tipo, especialidad: f.especialidad.trim() || null, modalidad_pago: f.modalidad_pago, telefono: f.telefono.trim() || null, costo_dia: f.costo_dia ? Number(f.costo_dia) : null, activo: true }); if (r.error) { console.error(r.error); setError('No se pudo guardar.'); setGuardando(false); return } onGuardado() }
+  return <div className="modalOverlay"><div className="modalCard"><div className="modalHeader"><div><p className="subtitle">NUEVO REGISTRO</p><h2>Agregar personal</h2></div><button className="closeButton" onClick={onCancelar}>×</button></div><form className="clienteForm" onSubmit={guardar}><div className="formGrid"><label>Nombre *<input required value={f.nombre} onChange={(e) => set('nombre', e.target.value)} /></label><label>Apellido<input value={f.apellido} onChange={(e) => set('apellido', e.target.value)} /></label><label>Tipo<select value={f.tipo} onChange={(e) => set('tipo', e.target.value)}><option value="obrero">Obrero</option><option value="auxiliar">Auxiliar</option><option value="terciarizado">Terciarizado</option></select></label><label>Especialidad<input value={f.especialidad} onChange={(e) => set('especialidad', e.target.value)} placeholder="Ej.: Electricista, Redes, Domótica" /></label><label>Modalidad de pago<select value={f.modalidad_pago} onChange={(e) => set('modalidad_pago', e.target.value)}>{Object.entries(MODALIDADES).map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select></label><label>Teléfono<input value={f.telefono} onChange={(e) => set('telefono', e.target.value)} /></label><label>Costo por día<input type="number" min="0" value={f.costo_dia} onChange={(e) => set('costo_dia', e.target.value)} /></label></div>{error && <p className="loginError">{error}</p>}<div className="formActions"><button type="button" className="cancelButton" onClick={onCancelar}>Cancelar</button><button className="newButton" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar'}</button></div></form></div></div>
 }
 
 function FormularioAsignacion({ persona, obras, onCancelar, onGuardado }: { persona: Persona; obras: Obra[]; onCancelar: () => void; onGuardado: () => void }) {
@@ -91,7 +95,7 @@ function ManoObra({ revision }: { revision: number }) {
           const filas: Persona[] = []
           for (let inicio = 0; ; inicio += 500) {
             const r = await supabase.from('personal')
-              .select('id,nombre,apellido,tipo,telefono,costo_dia,activo').order('id').range(inicio, inicio + 499)
+              .select('id,nombre,apellido,tipo,telefono,costo_dia,especialidad,modalidad_pago,activo').order('id').range(inicio, inicio + 499)
             if (r.error) throw r.error
             filas.push(...(r.data ?? []) as Persona[])
             if (!vigente || (r.data ?? []).length < 500) return filas

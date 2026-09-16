@@ -39,6 +39,7 @@ function Presupuestos() {
     useState<PresupuestoCompleto | null>(null)
   const [pdfPresupuesto, setPdfPresupuesto] =
     useState<PresupuestoCompleto | null>(null)
+  const [convirtiendo, setConvirtiendo] = useState<number | null>(null)
 
   useEffect(() => {
     cargarDatos()
@@ -250,6 +251,60 @@ function Presupuestos() {
           ? { ...item, estado: nuevoEstado }
           : item,
       ),
+    )
+  }
+
+  async function convertirEnObra(
+    presupuesto: PresupuestoCompleto,
+  ) {
+    if (convirtiendo) return
+    const ok = window.confirm(
+      `Se creará una obra a partir de "${presupuesto.titulo}" para ${nombreCliente(
+        presupuesto.cliente_id,
+      )}.\n\nEl presupuesto se conserva como historial y queda vinculado a la obra. ¿Continuar?`,
+    )
+    if (!ok) return
+
+    setConvirtiendo(presupuesto.id)
+
+    // 1) Crear la obra heredando cliente, título y descripción del presupuesto.
+    const { data: obraNueva, error: errorObra } = await supabase
+      .from('obras')
+      .insert({
+        cliente_id: presupuesto.cliente_id,
+        nombre_obra: presupuesto.titulo,
+        descripcion: presupuesto.descripcion ?? null,
+        estado: 'Pendiente',
+        porcentaje_avance: 0,
+        activo: true,
+      })
+      .select('id')
+      .single()
+
+    if (errorObra || !obraNueva) {
+      console.error(errorObra)
+      window.alert('No se pudo crear la obra a partir del presupuesto.')
+      setConvirtiendo(null)
+      return
+    }
+
+    // 2) Vincular el presupuesto a la obra recién creada (sin borrarlo).
+    const { error: errorVinculo } = await supabase
+      .from('presupuestos')
+      .update({ obra_id: obraNueva.id })
+      .eq('id', presupuesto.id)
+
+    if (errorVinculo) {
+      console.error(errorVinculo)
+      window.alert(
+        'La obra se creó, pero no se pudo vincular el presupuesto. Vinculalo manualmente editando el presupuesto.',
+      )
+    }
+
+    setConvirtiendo(null)
+    await cargarDatos()
+    window.alert(
+      `Obra creada y vinculada. Ya podés cargarle avances, adicionales y cobros desde el módulo Obras.`,
     )
   }
 
@@ -467,6 +522,29 @@ function Presupuestos() {
                         ? 'ítem'
                         : 'ítems'}
                     </span>
+
+                    {presupuesto.estado === 'aceptado' &&
+                      !presupuesto.obra_id && (
+                        <button
+                          className="convertirObraBtn"
+                          disabled={
+                            convirtiendo === presupuesto.id
+                          }
+                          onClick={() =>
+                            convertirEnObra(presupuesto)
+                          }
+                        >
+                          {convirtiendo === presupuesto.id
+                            ? 'Creando obra...'
+                            : '🏗️ Crear obra'}
+                        </button>
+                      )}
+
+                    {presupuesto.obra_id && (
+                      <span className="obraVinculadaTag">
+                        ✓ Obra vinculada
+                      </span>
+                    )}
 
                     <button
                       className="editButton"

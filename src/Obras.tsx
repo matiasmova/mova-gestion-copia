@@ -6,6 +6,10 @@ import {
 import { supabase } from './supabase'
 import NuevaObra from './NuevaObra'
 import InformeObra from './InformeObra'
+import AdicionalesObra from './AdicionalesObra'
+import PersonalObra from './PersonalObra'
+import RentabilidadObra from './RentabilidadObra'
+import ResumenPagosPDF from './ResumenPagosPDF'
 
 type EstadoObra =
   | 'Pendiente'
@@ -57,6 +61,8 @@ type ImagenObra = {
 
 type FiltroEstado = 'todos' | EstadoObra
 
+type ResumenEco = { valor: number; cobrado: number; pendiente: number }
+
 const avanceInicial = {
   fecha: new Date().toISOString().slice(0, 10),
   titulo: '',
@@ -68,6 +74,7 @@ const avanceInicial = {
 function Obras() {
   const [obras, setObras] = useState<Obra[]>([])
   const [informeObra, setInformeObra] = useState<Obra | null>(null)
+  const [seguTab, setSeguTab] = useState<'finanzas' | 'adicionales' | 'personal' | 'rentabilidad' | 'fotos' | 'timeline'>('finanzas')
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -96,13 +103,15 @@ function Obras() {
   const [subiendoImagen, setSubiendoImagen] = useState(false)
   const [tipoImagen, setTipoImagen] = useState('avance')
   const [descripcionImagen, setDescripcionImagen] = useState('')
+  const [economia, setEconomia] = useState<Record<number, ResumenEco>>({})
+  const [pagosPdf, setPagosPdf] = useState<Obra | null>(null)
 
   useEffect(() => {
     async function cargarDatos() {
       setCargando(true)
       setError('')
 
-      const [resultadoObras, resultadoClientes] =
+      const [resultadoObras, resultadoClientes, rPresupuestos, rAdicionales, rPagos] =
         await Promise.all([
           supabase
             .from('obras')
@@ -127,6 +136,10 @@ function Obras() {
               'id, nombre, apellido, direccion, localidad',
             )
             .order('nombre', { ascending: true }),
+
+          supabase.from('presupuestos').select('id, obra_id, total, estado, activo'),
+          supabase.from('adicionales').select('obra_id, importe, estado'),
+          supabase.from('pagos').select('monto, obra_id, presupuesto_id'),
         ])
 
       if (resultadoObras.error || resultadoClientes.error) {
@@ -137,6 +150,11 @@ function Obras() {
       } else {
         setObras((resultadoObras.data ?? []) as Obra[])
         setClientes(resultadoClientes.data ?? [])
+        setEconomia(calcularEconomia(
+          rPresupuestos.error ? [] : rPresupuestos.data ?? [],
+          rAdicionales.error ? [] : rAdicionales.data ?? [],
+          rPagos.error ? [] : rPagos.data ?? [],
+        ))
       }
 
       setCargando(false)
@@ -252,6 +270,11 @@ function Obras() {
     })
     cargarAvances(obra.id)
     cargarImagenes(obra.id)
+  }
+
+  function abrirEn(obra: Obra, tab: typeof seguTab) {
+    setSeguTab(tab)
+    abrirSeguimiento(obra)
   }
 
   function cerrarSeguimiento() {
@@ -533,6 +556,19 @@ function Obras() {
                 </span>
               </div>
 
+              <div className="obraCardEco">
+                <div><span>Valor</span><strong>{dineroFicha(economia[obra.id]?.valor ?? 0)}</strong></div>
+                <div><span>Cobrado</span><strong>{dineroFicha(economia[obra.id]?.cobrado ?? 0)}</strong></div>
+                <div><span>Pendiente</span><strong className={(economia[obra.id]?.pendiente ?? 0) > 0 ? 'pend' : ''}>{dineroFicha(economia[obra.id]?.pendiente ?? 0)}</strong></div>
+              </div>
+
+              <div className="obraCardAccesos">
+                <button type="button" onClick={() => abrirEn(obra, 'finanzas')}>💰 Finanzas</button>
+                <button type="button" onClick={() => abrirEn(obra, 'rentabilidad')}>📊 Rentabilidad</button>
+                <button type="button" onClick={() => abrirEn(obra, 'personal')}>👷 Personal</button>
+                <button type="button" onClick={() => abrirEn(obra, 'adicionales')}>➕ Adicionales</button>
+              </div>
+
               <div className="obraCardActions">
                 <button
                   className="editButton"
@@ -557,6 +593,13 @@ function Obras() {
                 >
                   📄 Informe
                 </button>
+
+                <button
+                  className="editButton"
+                  onClick={() => setPagosPdf(obra)}
+                >
+                  🧾 Pagos
+                </button>
               </div>
             </div>
           ))}
@@ -576,6 +619,14 @@ function Obras() {
           obra={informeObra}
           cliente={obtenerCliente(informeObra.cliente_id)}
           onCerrar={() => setInformeObra(null)}
+        />
+      )}
+
+      {pagosPdf && (
+        <ResumenPagosPDF
+          obra={pagosPdf}
+          cliente={obtenerCliente(pagosPdf.cliente_id)}
+          onCerrar={() => setPagosPdf(null)}
         />
       )}
 
@@ -624,8 +675,24 @@ function Obras() {
               </div>
             </div>
 
-            <EconomiaObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} />
+            <div className="gestionTabs seguTabs">
+              <button className={seguTab === 'finanzas' ? 'active' : ''} onClick={() => setSeguTab('finanzas')}>💰 Finanzas</button>
+              <button className={seguTab === 'adicionales' ? 'active' : ''} onClick={() => setSeguTab('adicionales')}>➕ Adicionales</button>
+              <button className={seguTab === 'personal' ? 'active' : ''} onClick={() => setSeguTab('personal')}>👷 Personal</button>
+              <button className={seguTab === 'rentabilidad' ? 'active' : ''} onClick={() => setSeguTab('rentabilidad')}>📊 Rentabilidad</button>
+              <button className={seguTab === 'fotos' ? 'active' : ''} onClick={() => setSeguTab('fotos')}>📷 Fotos</button>
+              <button className={seguTab === 'timeline' ? 'active' : ''} onClick={() => setSeguTab('timeline')}>🕐 Línea de tiempo</button>
+            </div>
 
+            {seguTab === 'finanzas' && <EconomiaObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} />}
+
+            {seguTab === 'adicionales' && <AdicionalesObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} />}
+
+            {seguTab === 'personal' && <PersonalObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} />}
+
+            {seguTab === 'rentabilidad' && <RentabilidadObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} />}
+
+            {seguTab === 'fotos' && (
             <section className="obraFotosSeccion">
               <div className="seguimientoAcciones">
                 <div>
@@ -689,7 +756,9 @@ function Obras() {
                 )}
               </div>
             </section>
+            )}
 
+            {seguTab === 'timeline' && (<>
             <div className="seguimientoAcciones">
               <div>
                 <h3>Línea de tiempo</h3>
@@ -872,6 +941,7 @@ function Obras() {
                   </article>
                 ))}
             </div>
+            </>)}
           </div>
         </div>
       )}
@@ -897,6 +967,36 @@ type CostoFicha = {
   descripcion: string | null
   monto: number
   fecha: string | null
+}
+
+function calcularEconomia(
+  presupuestos: Array<{ id: number; obra_id: number | null; total: number | string; estado: string; activo: boolean }>,
+  adicionales: Array<{ obra_id: number | null; importe: number | string; estado: string }>,
+  pagos: Array<{ monto: number | string; obra_id: number | null; presupuesto_id: number | null }>,
+): Record<number, ResumenEco> {
+  const mapa: Record<number, ResumenEco> = {}
+  const asegurar = (id: number) => (mapa[id] ??= { valor: 0, cobrado: 0, pendiente: 0 })
+  // Presupuesto -> obra (para atribuir pagos por presupuesto)
+  const obraDePresupuesto: Record<number, number> = {}
+  for (const p of presupuestos) {
+    if (p.obra_id == null) continue
+    obraDePresupuesto[p.id] = p.obra_id
+    if (p.activo !== false && p.estado === 'aceptado') asegurar(p.obra_id).valor += Number(p.total) || 0
+  }
+  for (const a of adicionales) {
+    if (a.obra_id == null || a.estado !== 'aprobado') continue
+    asegurar(a.obra_id).valor += Number(a.importe) || 0
+  }
+  for (const pago of pagos) {
+    const obraId = pago.obra_id ?? (pago.presupuesto_id != null ? obraDePresupuesto[pago.presupuesto_id] : undefined)
+    if (obraId == null) continue
+    asegurar(obraId).cobrado += Number(pago.monto) || 0
+  }
+  for (const id of Object.keys(mapa)) {
+    const eco = mapa[Number(id)]
+    eco.pendiente = Math.max(0, eco.valor - eco.cobrado)
+  }
+  return mapa
 }
 
 function dineroFicha(valor: number) {
