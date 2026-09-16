@@ -6,6 +6,7 @@ type Presupuesto = { id: number; total: number; estado: string; activo: boolean 
 type Adicional = { importe: number; estado: string }
 type Costo = { tipo: string; monto: number }
 type Pago = { monto: number; obra_id: number | null; presupuesto_id: number | null }
+type Asignacion = { valor_acordado: number | null }
 
 const ETIQUETAS_EGRESO: Record<string, string> = {
   material: 'Materiales / compras', mano_obra: 'Mano de obra', terciarizado: 'Tercerizados', otro: 'Otros gastos',
@@ -16,6 +17,7 @@ function RentabilidadObra({ obraId }: { obraId: number }) {
   const [adicionales, setAdicionales] = useState<Adicional[]>([])
   const [costos, setCostos] = useState<Costo[]>([])
   const [pagos, setPagos] = useState<Pago[]>([])
+  const [asignaciones, setAsignaciones] = useState<Asignacion[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
@@ -31,15 +33,17 @@ function RentabilidadObra({ obraId }: { obraId: number }) {
       const presu = (rPres.data ?? []).map((p) => ({ ...p, total: Number(p.total) })) as Presupuesto[]
       const idsPresu = presu.map((p) => p.id)
 
-      const [rAdic, rCostos, rPagos] = await Promise.all([
+      const [rAdic, rCostos, rPagos, rAsig] = await Promise.all([
         supabase.from('adicionales').select('importe,estado').eq('obra_id', obraId),
         supabase.from('costos').select('tipo,monto').eq('obra_id', obraId),
         supabase.from('pagos').select('monto,obra_id,presupuesto_id'),
+        supabase.from('obra_asignaciones').select('valor_acordado').eq('obra_id', obraId),
       ])
       if (!vigente) return
       setPresupuestos(presu)
       setAdicionales(rAdic.error ? [] : (rAdic.data ?? []).map((a) => ({ ...a, importe: Number(a.importe) })) as Adicional[])
       setCostos(rCostos.error ? [] : (rCostos.data ?? []).map((c) => ({ ...c, monto: Number(c.monto) })) as Costo[])
+      setAsignaciones(rAsig.error ? [] : (rAsig.data ?? []).map((a) => ({ valor_acordado: a.valor_acordado == null ? null : Number(a.valor_acordado) })) as Asignacion[])
       setPagos(rPagos.error ? [] : (rPagos.data ?? [])
         .map((p) => ({ ...p, monto: Number(p.monto) }))
         .filter((p) => p.obra_id === obraId || (p.presupuesto_id != null && idsPresu.includes(p.presupuesto_id))) as Pago[])
@@ -60,11 +64,15 @@ function RentabilidadObra({ obraId }: { obraId: number }) {
       return acc
     }, {})
     const egresos = costos.reduce((s, c) => s + c.monto, 0)
+    // Personal: acordado (asignaciones) vs pagado (costos de mano de obra / tercerizados)
+    const personalAcordado = asignaciones.reduce((s, a) => s + (Number(a.valor_acordado) || 0), 0)
+    const personalPagado = costos.filter((c) => c.tipo === 'mano_obra' || c.tipo === 'terciarizado').reduce((s, c) => s + c.monto, 0)
+    const personalPendiente = Math.max(0, personalAcordado - personalPagado)
     const resultadoProyectado = valorActualizado - egresos
     const resultadoCaja = cobrado - egresos
     const margenProyectado = valorActualizado > 0 ? Math.round((resultadoProyectado / valorActualizado) * 100) : 0
-    return { contratado, extra, valorActualizado, cobrado, egresos, egresosPorTipo, resultadoProyectado, resultadoCaja, margenProyectado }
-  }, [presupuestos, adicionales, costos, pagos])
+    return { contratado, extra, valorActualizado, cobrado, egresos, egresosPorTipo, personalAcordado, personalPagado, personalPendiente, resultadoProyectado, resultadoCaja, margenProyectado }
+  }, [presupuestos, adicionales, costos, pagos, asignaciones])
 
   const color = (v: number) => (v > 0 ? '#23764e' : v < 0 ? '#b23b32' : '#4b525c')
 
@@ -112,7 +120,17 @@ function RentabilidadObra({ obraId }: { obraId: number }) {
             <small>Cobrado − egresos (lo que quedó hoy)</small>
           </div>
         </div>
-        <p className="gestionAyuda">El resultado proyectado supone que se cobra todo lo contratado. El de caja refleja únicamente lo cobrado hasta hoy contra los gastos ya registrados.</p>
+        {(datos.personalAcordado > 0 || datos.personalPagado > 0) && (
+          <div className="rentPersonal">
+            <h4>Personal (ayudantes)</h4>
+            <div className="rentPersonalGrid">
+              <div><span>Acordado</span><strong>{moneda(datos.personalAcordado)}</strong></div>
+              <div><span>Pagado</span><strong>{moneda(datos.personalPagado)}</strong></div>
+              <div><span>Por pagar</span><strong style={{ color: datos.personalPendiente > 0 ? '#b86608' : '#23764e' }}>{moneda(datos.personalPendiente)}</strong></div>
+            </div>
+          </div>
+        )}
+        <p className="gestionAyuda">El resultado proyectado supone que se cobra todo lo contratado. El de caja refleja lo cobrado hasta hoy contra los gastos ya registrados. Los pagos a ayudantes ya están incluidos en “Mano de obra”.</p>
       </>)}
     </section>
   )

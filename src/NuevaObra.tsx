@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { supabase } from './supabase'
+import { OBRA_ESTADOS } from './obraEstado'
 
 type ClienteOpcion = {
   id: number
@@ -48,7 +49,7 @@ function NuevaObra({
       obra?.direccion ?? clienteInicial?.direccion ?? '',
     localidad:
       obra?.localidad ?? clienteInicial?.localidad ?? '',
-    estado: obra?.estado ?? 'Pendiente',
+    estado: obra?.estado ?? 'en_proceso',
     fecha_inicio: obra?.fecha_inicio ?? '',
     fecha_fin_estimada: obra?.fecha_fin_estimada ?? '',
     descripcion: obra?.descripcion ?? '',
@@ -206,10 +207,9 @@ function NuevaObra({
                   actualizar('estado', evento.target.value)
                 }
               >
-                <option>Pendiente</option>
-                <option>En ejecución</option>
-                <option>Pausada</option>
-                <option>Finalizada</option>
+                {OBRA_ESTADOS.map((e) => (
+                  <option key={e.v} value={e.v}>{e.t}</option>
+                ))}
               </select>
             </label>
 

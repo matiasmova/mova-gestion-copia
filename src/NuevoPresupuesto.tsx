@@ -41,7 +41,7 @@ export type PresupuestoEditable = {
   descripcion: string | null
   fecha: string
   validez_dias: number
-  estado: 'pendiente' | 'aceptado' | 'rechazado'
+  estado: string
   etapa_trabajo: 'sin_iniciar' | 'en_proceso' | 'finalizado'
   descuento: number
   total_pagado: number
@@ -89,9 +89,9 @@ function NuevoPresupuesto({
   const [validezDias, setValidezDias] = useState(
     presupuesto?.validez_dias ?? 15,
   )
-  const [estado, setEstado] = useState<
-    'pendiente' | 'aceptado' | 'rechazado'
-  >(presupuesto?.estado ?? 'pendiente')
+  const [estado, setEstado] = useState<string>(
+    presupuesto?.estado ?? 'borrador',
+  )
   const [etapaTrabajo, setEtapaTrabajo] = useState<
     'sin_iniciar' | 'en_proceso' | 'finalizado'
   >(presupuesto?.etapa_trabajo ?? 'sin_iniciar')
@@ -331,6 +331,19 @@ function NuevoPresupuesto({
       return
     }
 
+    // Al crear un presupuesto nuevo, descontar el stock de los productos del catálogo.
+    if (!presupuesto) {
+      for (const item of itemsValidos) {
+        if (item.catalogo_id && item.tipo === 'producto') {
+          const { error: errorStock } = await supabase.rpc('descontar_stock', {
+            p_id: item.catalogo_id,
+            p_cant: Number(item.cantidad),
+          })
+          if (errorStock) console.error('No se pudo descontar stock', item.catalogo_id, errorStock)
+        }
+      }
+    }
+
     setGuardando(false)
     onGuardado()
   }
@@ -450,16 +463,10 @@ function NuevoPresupuesto({
               Estado
               <select
                 value={estado}
-                onChange={(evento) =>
-                  setEstado(
-                    evento.target.value as
-                      | 'pendiente'
-                      | 'aceptado'
-                      | 'rechazado',
-                  )
-                }
+                onChange={(evento) => setEstado(evento.target.value)}
               >
-                <option value="pendiente">Pendiente</option>
+                <option value="borrador">Borrador</option>
+                <option value="enviado">Enviado</option>
                 <option value="aceptado">Aceptado</option>
                 <option value="rechazado">Rechazado</option>
               </select>

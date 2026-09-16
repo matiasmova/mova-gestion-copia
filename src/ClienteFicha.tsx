@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './supabase'
 import { moneda, fechaCorta } from './gestionFormat'
+import { etiquetaObra } from './obraEstado'
 
 export type ClienteFichaData = {
   id: number
@@ -29,7 +30,7 @@ type Props = {
 }
 
 const claseEstadoObra = (e: string | null) =>
-  e === 'Finalizada' ? 'fin' : e === 'En ejecución' ? 'ejecucion' : e === 'Pausada' ? 'pausa' : 'pendiente'
+  e === 'finalizada' ? 'fin' : e === 'observacion' ? 'pausa' : 'ejecucion'
 
 export default function ClienteFicha({ cliente, onCerrar, onEditar, onNuevaObra }: Props) {
   const [obras, setObras] = useState<Obra[]>([])
@@ -123,7 +124,7 @@ export default function ClienteFicha({ cliente, onCerrar, onEditar, onNuevaObra 
                 {obras.length === 0 ? <p className="fichaVacio">Sin obras.</p> : obras.map((o) => (
                   <div className="fichaRow" key={o.id}>
                     <div><strong>{o.nombre_obra}</strong><small>{Number(o.porcentaje_avance || 0)}% de avance</small></div>
-                    <em className={`fichaEstado ${claseEstadoObra(o.estado)}`}>{o.estado || 'Pendiente'}</em>
+                    <em className={`fichaEstado ${claseEstadoObra(o.estado)}`}>{etiquetaObra(o.estado)}</em>
                   </div>
                 ))}
               </div>

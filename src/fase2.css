@@ -325,3 +325,110 @@
 .pdfTablaPagos th{text-align:left;padding:8px 10px;border-bottom:2px solid #e0e4e9;color:#6b727c;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
 .pdfTablaPagos td{padding:9px 10px;border-bottom:1px solid #eef1f4}
 .pdfTablaPagos tfoot td{border-top:2px solid #e0e4e9;border-bottom:0;font-size:14px;padding-top:11px}
+
+/* ===================================================================
+   SISTEMA CRM UNIFICADO — toolbar, vistas Lista/Kanban, card y estados
+   =================================================================== */
+.crmToolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+.crmToolbar .crmFiltros{display:flex;align-items:center;gap:10px;flex:1;min-width:220px;flex-wrap:wrap}
+.crmToolbar input[type=search],.crmToolbar select{padding:9px 12px;border:1px solid var(--mova-border);border-radius:10px;background:#fff;font-size:13px;color:#2b323b}
+.crmToolbar input[type=search]{min-width:240px;flex:1}
+
+/* Toggle Lista/Kanban (segmented) */
+.vistaToggle{display:inline-flex;padding:3px;border:1px solid var(--mova-border);border-radius:10px;background:#eef1f4;gap:2px}
+.vistaToggle button{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:0;border-radius:8px;background:transparent;color:#6b727c;font-size:12.5px;font-weight:700;cursor:pointer;transition:.15s}
+.vistaToggle button.active{background:#fff;color:#14181e;box-shadow:0 1px 3px rgb(20 30 40/10%)}
+.vistaToggle svg{opacity:.8}
+
+/* KANBAN */
+.crmKanban{display:flex;gap:14px;overflow-x:auto;padding-bottom:10px;align-items:flex-start}
+.crmKanbanCol{display:flex;flex-direction:column;flex:0 0 300px;max-width:300px;background:#f4f6f8;border:1px solid var(--mova-border);border-radius:14px;max-height:70vh}
+.crmKanbanHead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:13px 15px;border-bottom:1px solid var(--mova-border)}
+.crmKanbanHead h3{margin:0;font-size:13px;display:flex;align-items:center;gap:8px}
+.crmKanbanHead .cuenta{min-width:22px;height:22px;padding:0 7px;display:grid;place-items:center;border-radius:999px;background:#fff;border:1px solid var(--mova-border);color:#596271;font-size:11px;font-weight:800}
+.crmKanbanBody{display:flex;flex-direction:column;gap:10px;padding:12px;overflow-y:auto}
+.crmKanbanVacio{padding:18px 6px;text-align:center;color:#9099a6;font-size:12px}
+.crmKanbanCol.tope{border-top:3px solid var(--col,#cbd2da)}
+
+/* CARD unificada (sirve en kanban y en grid) */
+.crmCard{border:1px solid var(--mova-border);border-radius:13px;background:#fff;padding:14px;cursor:pointer;transition:transform .12s,box-shadow .12s,border-color .12s}
+.crmCard:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgb(20 30 40/9%);border-color:#cdd4dc}
+.crmCardTop{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.crmCardTop h3{margin:0;font-size:15px;line-height:1.3}
+.crmCardCli{margin:2px 0 0;color:var(--mova-muted);font-size:12.5px}
+.crmCardMeta{margin:10px 0 0;color:var(--mova-muted);font-size:12px;display:flex;flex-wrap:wrap;gap:4px 12px}
+.crmCardEco{display:flex;gap:14px;margin-top:12px;padding-top:11px;border-top:1px solid #eef1f4}
+.crmCardEco>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.crmCardEco span{font-size:9px;font-weight:800;letter-spacing:.5px;color:#9099a6;text-transform:uppercase}
+.crmCardEco strong{font-size:13px;white-space:nowrap}
+.crmCardEco strong.pend{color:#b86608}
+.crmBarra{height:6px;border-radius:999px;background:#eef1f4;overflow:hidden;margin-top:11px}
+.crmBarra>span{display:block;height:100%;border-radius:999px;background:var(--mova-orange)}
+.crmCardFoot{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.crmCardFoot button{padding:5px 10px;border:1px solid var(--mova-border);border-radius:8px;background:#fff;color:#4b525c;font-size:11.5px;font-weight:700;cursor:pointer}
+.crmCardFoot button:hover{border-color:var(--mova-orange);color:var(--mova-orange)}
+.crmCardFoot button.crmFootPrimary{background:#11151a;border-color:#11151a;color:#fff}
+.crmCardFoot button.crmFootPrimary:hover{background:#000}
+
+/* GRID de cards (vista lista "ancha" alternativa) */
+.crmGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
+
+/* LISTA (tabla limpia) */
+.crmListaWrap{overflow-x:auto;border:1px solid var(--mova-border);border-radius:14px;background:#fff}
+.crmLista{width:100%;border-collapse:collapse}
+.crmLista th{text-align:left;padding:12px 15px;border-bottom:2px solid var(--mova-border);color:#777e87;font-size:10px;letter-spacing:.7px;text-transform:uppercase;white-space:nowrap}
+.crmLista td{padding:13px 15px;border-bottom:1px solid #eef1f4;font-size:13px;color:#4e555e;white-space:nowrap}
+.crmLista tbody tr{cursor:pointer}
+.crmLista tbody tr:hover{background:#f7f8fa}
+.crmLista tbody tr:last-child td{border-bottom:0}
+.crmLista td strong{color:#14181e}
+
+/* Estados: una sola paleta para toda la app */
+.crmBadge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;text-transform:capitalize}
+.crmBadge::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.9}
+.est-borrador{background:#eef1f4;color:#596271}
+.est-enviado{background:#e7f0fb;color:#2866a7}
+.est-aceptado{background:#e4f5eb;color:#23764e}
+.est-rechazado{background:#fdeceb;color:#b23b32}
+.est-proceso{background:#e7f0fb;color:#2866a7}
+.est-finalizada{background:#e4f5eb;color:#23764e}
+.est-observacion{background:#fff0de;color:#b86608}
+.est-neutro{background:#eef1f4;color:#596271}
+.col-borrador{--col:#9aa4b0}.col-enviado{--col:#2866a7}.col-aceptado{--col:#23935b}.col-rechazado{--col:#b23b32}
+.col-proceso{--col:#2866a7}.col-finalizada{--col:#23935b}.col-observacion{--col:#e08a2b}
+
+@media(max-width:640px){.crmKanbanCol{flex-basis:82vw;max-width:82vw}.crmGrid{grid-template-columns:1fr}}
+
+/* Ficha de presupuesto (detalle) */
+.fichaEstadoSelect{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:700;color:var(--mova-muted);text-transform:uppercase;letter-spacing:.4px}
+.fichaEstadoSelect select{padding:7px 10px;border:1px solid var(--mova-border);border-radius:9px;background:#fff;font-size:13px;font-weight:600;color:#2b323b;text-transform:none;letter-spacing:0}
+.fichaDescripcion{margin:14px 0 0;padding:12px 14px;border:1px solid var(--mova-border);border-radius:11px;background:#f8f9fa;color:#4b525c;font-size:13px;line-height:1.5}
+.fichaGrupoItems{margin-top:8px}
+.fichaGrupoItems h4{margin:12px 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--mova-orange)}
+.fichaTotales{margin-top:12px;padding-top:10px;border-top:1px solid var(--mova-border)}
+.fichaTotales>div{display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:13.5px;color:#4b525c}
+.fichaTotales .fichaTotalFinal{margin-top:4px;padding-top:9px;border-top:2px solid var(--mova-border);font-size:17px;font-weight:800;color:#14181e}
+
+/* ===== Productos: KPIs de stock + aviso de reposición ===== */
+.prodKpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 16px}
+.prodKpis>div{display:flex;flex-direction:column;padding:15px 16px;border:1px solid var(--mova-border);border-radius:12px;background:#fff}
+.prodKpis span{color:#9099a6;font-size:10px;font-weight:800;letter-spacing:.6px}
+.prodKpis strong{margin:8px 0 4px;font-size:22px}
+.prodKpis small{color:var(--mova-muted);font-size:11.5px}
+.prodKpis .alertaStock{border-color:#f1c38d;background:#fff9f0}
+.prodKpis .alertaStock strong{color:#b86608}
+.stockAviso{margin:0 0 16px;padding:12px 15px;border:1px solid #f1c38d;border-radius:11px;background:#fff6e9;color:#8a5a08;font-size:13px;line-height:1.5}
+.stockAviso strong{color:#b86608}
+@media(max-width:640px){.prodKpis{grid-template-columns:1fr}}
+
+/* Finanzas: breakdown consolidado */
+.finBreakdown{display:flex;flex-wrap:wrap;gap:10px 22px;margin:-6px 0 18px;padding:12px 16px;border:1px solid var(--mova-border);border-radius:11px;background:#f8f9fa;font-size:13px;color:#4b525c}
+.finBreakdown strong{color:#14181e}
+/* Rentabilidad: bloque personal */
+.rentPersonal{margin-top:14px;padding:14px 16px;border:1px solid var(--mova-border);border-radius:12px;background:#fff}
+.rentPersonal h4{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#4b525c}
+.rentPersonalGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.rentPersonalGrid>div{display:flex;flex-direction:column;gap:3px}
+.rentPersonalGrid span{font-size:10px;font-weight:800;letter-spacing:.4px;color:#9099a6;text-transform:uppercase}
+.rentPersonalGrid strong{font-size:16px}
+@media(max-width:560px){.rentPersonalGrid{grid-template-columns:1fr}}

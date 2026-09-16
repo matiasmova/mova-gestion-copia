@@ -23,6 +23,7 @@ function Compras() {
   const [materiales, setMateriales] = useState<MaterialConUrl[]>([])
   const [pestana, setPestana] = useState<Pestana>('materiales')
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
+  const [compraEditando, setCompraEditando] = useState<MaterialConUrl | null>(null)
   const [actualizacion, setActualizacion] = useState(0)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -72,7 +73,7 @@ function Compras() {
   const nombreObra = (id: number) => obras.find((obra) => obra.id === id)?.nombre_obra ?? 'Obra no disponible'
 
   return <div className="gestionPage">
-    <div className="pageHeader"><div><p className="subtitle">COMPRAS Y MATERIALES</p><h2>Compras</h2><p className="welcome">Materiales y comprobantes vinculados a cada obra</p></div><button className="newButton" onClick={() => setMostrarFormulario(true)}>+ Registrar compra</button></div>
+    <div className="pageHeader"><div><p className="subtitle">COMPRAS Y MATERIALES</p><h2>Compras</h2><p className="welcome">Materiales y comprobantes vinculados a cada obra</p></div><button className="newButton" onClick={() => { setCompraEditando(null); setMostrarFormulario(true) }}>+ Registrar compra</button></div>
 
     <div className="comprasResumen">
       <div><span>TOTAL COMPRAS</span><strong>{moneda(totalCompras)}</strong><small>Se refleja automáticamente en Finanzas</small></div>
@@ -87,8 +88,8 @@ function Compras() {
     {cargando && <p>Cargando compras...</p>}
     {error && <p className="loginError">{error}</p>}
 
-    {!cargando && !error && pestana === 'materiales' && <div className="gestionTabla"><table><thead><tr><th>Fecha</th><th>Material</th><th>Obra</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th><th>Proveedor</th><th>Comprobante</th></tr></thead><tbody>
-      {materiales.length === 0 ? <tr><td colSpan={8}>Todavía no hay compras cargadas.</td></tr> : materiales.map((material) => <tr key={material.id}><td>{fechaCorta(material.fecha)}</td><td><strong>{material.nombre}</strong></td><td>{nombreObra(material.obra_id)}</td><td>{material.cantidad} {material.unidad}</td><td>{moneda(material.precio_unitario)}</td><td><strong>{moneda(material.cantidad * material.precio_unitario)}</strong></td><td>{material.proveedor || '—'}</td><td>{material.comprobante_url ? <a className="comprobanteEnlace" href={material.comprobante_url} target="_blank" rel="noreferrer">Ver archivo</a> : '—'}</td></tr>)}
+    {!cargando && !error && pestana === 'materiales' && <div className="gestionTabla"><table><thead><tr><th>Fecha</th><th>Material</th><th>Obra</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th><th>Proveedor</th><th>Comprobante</th><th>Acción</th></tr></thead><tbody>
+      {materiales.length === 0 ? <tr><td colSpan={9}>Todavía no hay compras cargadas.</td></tr> : materiales.map((material) => <tr key={material.id}><td>{fechaCorta(material.fecha)}</td><td><strong>{material.nombre}</strong></td><td>{nombreObra(material.obra_id)}</td><td>{material.cantidad} {material.unidad}</td><td>{moneda(material.precio_unitario)}</td><td><strong>{moneda(material.cantidad * material.precio_unitario)}</strong></td><td>{material.proveedor || '—'}</td><td>{material.comprobante_url ? <a className="comprobanteEnlace" href={material.comprobante_url} target="_blank" rel="noreferrer">Ver archivo</a> : '—'}</td><td><button className="editButton" onClick={() => { setCompraEditando(material); setMostrarFormulario(true) }}>Editar</button></td></tr>)}
     </tbody></table></div>}
 
     {!cargando && !error && pestana === 'comprobantes' && (
@@ -101,12 +102,22 @@ function Compras() {
       })}</div>
     )}
 
-    {mostrarFormulario && <FormularioCompra obras={obras} onCancelar={() => setMostrarFormulario(false)} onGuardado={() => { setMostrarFormulario(false); setActualizacion((valor) => valor + 1) }} />}
+    {mostrarFormulario && <FormularioCompra obras={obras} compra={compraEditando} onCancelar={() => { setMostrarFormulario(false); setCompraEditando(null) }} onGuardado={() => { setMostrarFormulario(false); setCompraEditando(null); setActualizacion((valor) => valor + 1) }} />}
   </div>
 }
 
-function FormularioCompra({ obras, onCancelar, onGuardado }: { obras: Obra[]; onCancelar: () => void; onGuardado: () => void }) {
-  const [formulario, setFormulario] = useState({ obra_id: '', nombre: '', cantidad: '1', unidad: 'unidad', precio_unitario: '', proveedor: '', fecha: hoy(), numero_comprobante: '' })
+function FormularioCompra({ obras, compra, onCancelar, onGuardado }: { obras: Obra[]; compra: Material | null; onCancelar: () => void; onGuardado: () => void }) {
+  const editando = !!compra
+  const [formulario, setFormulario] = useState({
+    obra_id: compra ? String(compra.obra_id) : '',
+    nombre: compra?.nombre ?? '',
+    cantidad: compra ? String(compra.cantidad) : '1',
+    unidad: compra?.unidad ?? 'unidad',
+    precio_unitario: compra ? String(compra.precio_unitario) : '',
+    proveedor: compra?.proveedor ?? '',
+    fecha: compra?.fecha ? compra.fecha.slice(0, 10) : hoy(),
+    numero_comprobante: compra?.numero_comprobante ?? '',
+  })
   const [archivo, setArchivo] = useState<File | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
@@ -116,20 +127,27 @@ function FormularioCompra({ obras, onCancelar, onGuardado }: { obras: Obra[]; on
 
   async function guardar(evento: FormEvent) {
     evento.preventDefault(); setGuardando(true); setError('')
-    const { data: material, error: errorMaterial } = await supabase.from('materiales').insert({
+    const datos = {
       obra_id: Number(formulario.obra_id), nombre: formulario.nombre.trim(), cantidad: Number(formulario.cantidad), unidad: formulario.unidad.trim() || null, precio_unitario: Number(formulario.precio_unitario), proveedor: formulario.proveedor.trim() || null, fecha: formulario.fecha, numero_comprobante: formulario.numero_comprobante.trim() || null,
-    }).select('id').single()
-
-    if (errorMaterial || !material) { console.error(errorMaterial); setError('No se pudo guardar la compra.'); setGuardando(false); return }
+    }
+    let materialId = compra?.id ?? 0
+    if (editando) {
+      const { error: errorUpdate } = await supabase.from('materiales').update(datos).eq('id', compra!.id)
+      if (errorUpdate) { console.error(errorUpdate); setError('No se pudo actualizar la compra.'); setGuardando(false); return }
+    } else {
+      const { data: material, error: errorMaterial } = await supabase.from('materiales').insert(datos).select('id').single()
+      if (errorMaterial || !material) { console.error(errorMaterial); setError('No se pudo guardar la compra.'); setGuardando(false); return }
+      materialId = material.id
+    }
 
     if (archivo) {
       const extension = archivo.name.split('.').pop()?.toLowerCase() || 'archivo'
       const nombreSeguro = archivo.name.replace(/[^a-zA-Z0-9._-]/g, '-').toLowerCase()
-      const ruta = `${formulario.obra_id}/${material.id}-${Date.now()}-${nombreSeguro || `comprobante.${extension}`}`
+      const ruta = `${formulario.obra_id}/${materialId}-${Date.now()}-${nombreSeguro || `comprobante.${extension}`}`
       const { error: errorArchivo } = await supabase.storage.from('comprobantes').upload(ruta, archivo, { contentType: archivo.type, upsert: false })
       if (errorArchivo) { console.error(errorArchivo); setError('La compra se guardó, pero no se pudo subir el comprobante.'); setGuardando(false); return }
 
-      const { error: errorRuta } = await supabase.from('materiales').update({ comprobante_path: ruta }).eq('id', material.id)
+      const { error: errorRuta } = await supabase.from('materiales').update({ comprobante_path: ruta }).eq('id', materialId)
       if (errorRuta) {
         console.error(errorRuta)
         await supabase.storage.from('comprobantes').remove([ruta])
@@ -141,7 +159,7 @@ function FormularioCompra({ obras, onCancelar, onGuardado }: { obras: Obra[]; on
     onGuardado()
   }
 
-  return <div className="modalOverlay"><div className="modalCard"><div className="modalHeader"><div><p className="subtitle">NUEVA COMPRA</p><h2>Registrar compra</h2></div><button type="button" className="closeButton" onClick={onCancelar}>×</button></div><form className="clienteForm" onSubmit={guardar}><div className="formGrid">
+  return <div className="modalOverlay"><div className="modalCard"><div className="modalHeader"><div><p className="subtitle">{editando ? 'EDITAR COMPRA' : 'NUEVA COMPRA'}</p><h2>{editando ? 'Editar compra' : 'Registrar compra'}</h2></div><button type="button" className="closeButton" onClick={onCancelar}>×</button></div><form className="clienteForm" onSubmit={guardar}><div className="formGrid">
     <label>Obra *<select required value={formulario.obra_id} onChange={(e) => actualizar('obra_id', e.target.value)}><option value="">Seleccionar obra</option>{obras.map((obra) => <option key={obra.id} value={obra.id}>{obra.nombre_obra}</option>)}</select></label>
     <label>Material *<input required value={formulario.nombre} onChange={(e) => actualizar('nombre', e.target.value)} placeholder="Ej.: Cable UTP Cat 6" /></label>
     <label>Cantidad *<input type="number" min="0.01" step="0.01" required value={formulario.cantidad} onChange={(e) => actualizar('cantidad', e.target.value)} /></label>
@@ -150,8 +168,8 @@ function FormularioCompra({ obras, onCancelar, onGuardado }: { obras: Obra[]; on
     <label>Proveedor<input value={formulario.proveedor} onChange={(e) => actualizar('proveedor', e.target.value)} /></label>
     <label>Fecha *<input type="date" required value={formulario.fecha} onChange={(e) => actualizar('fecha', e.target.value)} /></label>
     <label>Número de comprobante<input value={formulario.numero_comprobante} onChange={(e) => actualizar('numero_comprobante', e.target.value)} /></label>
-    <label className="formFull">Factura o ticket (opcional)<input ref={archivoRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic,application/pdf" onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} /></label>
-  </div><p className="compraSubtotal">Costo que se enviará a Finanzas: <strong>{moneda(subtotal)}</strong></p>{error && <p className="loginError">{error}</p>}<div className="formActions"><button type="button" className="cancelButton" onClick={onCancelar}>Cancelar</button><button className="newButton" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar compra'}</button></div></form></div></div>
+    <label className="formFull">{editando ? 'Reemplazar factura o ticket (opcional)' : 'Factura o ticket (opcional)'}<input ref={archivoRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic,application/pdf" onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} /></label>
+  </div><p className="compraSubtotal">Costo que se {editando ? 'actualizará' : 'enviará'} en Finanzas: <strong>{moneda(subtotal)}</strong></p>{error && <p className="loginError">{error}</p>}<div className="formActions"><button type="button" className="cancelButton" onClick={onCancelar}>Cancelar</button><button className="newButton" disabled={guardando}>{guardando ? 'Guardando...' : editando ? 'Guardar cambios' : 'Guardar compra'}</button></div></form></div></div>
 }
 
 export default Compras

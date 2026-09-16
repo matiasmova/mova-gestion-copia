@@ -72,6 +72,9 @@ function Finanzas() {
   }), [obras, presupuestos, costos, adicionales])
 
   const totales = resumen.reduce((a, r) => ({ total: a.total + r.total, actualizado: a.actualizado + r.actualizado, cobrado: a.cobrado + r.cobrado, saldo: a.saldo + r.saldo, costo: a.costo + r.costo }), { total: 0, actualizado: 0, cobrado: 0, saldo: 0, costo: 0 })
+  const manoObraTotal = costos.filter((c) => c.tipo === 'mano_obra' || c.tipo === 'terciarizado').reduce((s, c) => s + c.monto, 0)
+  const variosTotal = costos.filter((c) => c.tipo === 'material' || c.tipo === 'otro' || !['mano_obra', 'terciarizado'].includes(c.tipo)).reduce((s, c) => s + c.monto, 0)
+  const gananciaNeta = totales.actualizado - totales.costo
   const nombreObra = (id: number | null) => obras.find((obra) => obra.id === id)?.nombre_obra ?? 'Sin obra asociada'
   const presupuestoPorId = (id: number) => presupuestos.find((presupuesto) => presupuesto.id === id)
   const nombreCategoria = (id: number | null) => categorias.find((categoria) => categoria.id === id)?.nombre ?? 'Sin categoría'
@@ -98,8 +101,13 @@ function Finanzas() {
         <div className="gestionKpis">
           <div><span>VALOR ACTUAL</span><strong>{moneda(totales.actualizado)}</strong><small>Presupuestos + adicionales</small></div>
           <div><span>COBRADO</span><strong>{moneda(totales.cobrado)}</strong><small>Total recibido</small></div>
-          <div><span>POR COBRAR</span><strong>{moneda(totales.saldo)}</strong><small>Saldo pendiente</small></div>
-          <div><span>GASTOS</span><strong>{moneda(totales.costo)}</strong><small>Gastos registrados</small></div>
+          <div><span>GASTOS</span><strong>{moneda(totales.costo)}</strong><small>Todo lo invertido</small></div>
+          <div className="destacado"><span>GANANCIA NETA</span><strong>{moneda(gananciaNeta)}</strong><small>Valor actual − gastos</small></div>
+        </div>
+        <div className="finBreakdown">
+          <span>Por cobrar: <strong>{moneda(totales.saldo)}</strong></span>
+          <span>Pago total a ayudantes: <strong>{moneda(manoObraTotal)}</strong></span>
+          <span>Materiales y varios: <strong>{moneda(variosTotal)}</strong></span>
         </div>
         <div className="gestionTabla"><table>
           <thead><tr><th>Obra</th><th>Valor actual.</th><th>Cobrado</th><th>Saldo</th><th>Pend. s/avance</th><th>Pagado / avance</th><th>Situación</th></tr></thead>

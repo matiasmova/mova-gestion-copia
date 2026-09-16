@@ -31,7 +31,7 @@ function Notificaciones() {
       setCargando(true)
       setError('')
       const [o, p, r] = await Promise.all([
-        supabase.from('obras').select('id,nombre_obra,estado,fecha_fin_estimada').eq('activo', true).neq('estado', 'Finalizada'),
+        supabase.from('obras').select('id,nombre_obra,estado,fecha_fin_estimada').eq('activo', true).eq('estado', 'en_proceso'),
         supabase.from('presupuestos').select('id,titulo,obra_id,saldo,estado,activo').eq('activo', true).eq('estado', 'aceptado'),
         supabase.from('recordatorios').select('id,titulo,fecha,obra_id,completado').eq('completado', false),
       ])

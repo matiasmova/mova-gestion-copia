@@ -14,6 +14,7 @@ import Usuarios from './Usuarios'
 import Calendario from './Calendario'
 import logo from './assets/mova-logo.png'
 import { moneda } from './gestionFormat'
+import { etiquetaObra } from './obraEstado'
 import './fase2.css'
 
 type Rol = 'admin' | 'encargado' | 'auxiliar' | 'contable'
@@ -208,11 +209,10 @@ export default function AppFase2() {
   </div>
 }
 
-const ESTADOS_OBRA: { clave: string; clase: string }[] = [
-  { clave: 'Pendiente', clase: 'pendiente' },
-  { clave: 'En ejecución', clase: 'ejecucion' },
-  { clave: 'Pausada', clase: 'pausa' },
-  { clave: 'Finalizada', clase: 'fin' },
+const ESTADOS_OBRA: { clave: string; t: string; clase: string }[] = [
+  { clave: 'en_proceso', t: 'En proceso', clase: 'ejecucion' },
+  { clave: 'finalizada', t: 'Finalizada', clase: 'fin' },
+  { clave: 'observacion', t: 'En observación', clase: 'pausa' },
 ]
 
 function Dashboard({ nombre, rol, cargando, clientes, obras, presupuestos, pagos, onNavegar, onSalir }: {
@@ -221,13 +221,13 @@ function Dashboard({ nombre, rol, cargando, clientes, obras, presupuestos, pagos
   onNavegar: (v: Vista) => void; onSalir: () => void
 }) {
   const [mesSel, setMesSel] = useState(() => new Date().toISOString().slice(0, 7))
-  const pendientes = presupuestos.filter((p) => p.estado === 'pendiente')
-  const obrasActivas = obras.filter((o) => o.estado !== 'Finalizada')
+  const pendientes = presupuestos.filter((p) => p.estado === 'borrador' || p.estado === 'enviado')
+  const obrasActivas = obras.filter((o) => o.estado === 'en_proceso')
   const pagosMes = pagos.filter((pago) => pago.fecha?.slice(0, 7) === mesSel)
   const ingresosMes = pagosMes.reduce((suma, pago) => suma + pago.monto, 0)
   const porCobrar = presupuestos.filter((p) => p.estado === 'aceptado' && Number(p.saldo) > 0)
   const nombreCliente = (id: number) => { const c = clientes.find((x) => x.id === id); return c ? `${c.nombre} ${c.apellido ?? ''}`.trim() : 'Cliente' }
-  const claseEstado = (estado: string) => estado === 'Finalizada' ? 'fin' : estado === 'En ejecución' ? 'ejecucion' : estado === 'Pausada' ? 'pausa' : 'pendiente'
+  const claseEstado = (estado: string) => estado === 'finalizada' ? 'fin' : estado === 'observacion' ? 'pausa' : 'ejecucion'
   const saldoTotal = useMemo(() => porCobrar.reduce((s, p) => s + Number(p.saldo), 0), [porCobrar])
   const distribucion = ESTADOS_OBRA.map((e) => ({ ...e, n: obras.filter((o) => o.estado === e.clave).length }))
   const totalObras = obras.length || 1
@@ -268,10 +268,10 @@ function Dashboard({ nombre, rol, cargando, clientes, obras, presupuestos, pagos
       <section className="fase2Distribucion">
         <div className="fase2DistHead"><h3>Obras por estado</h3><span>{obras.length} en total</span></div>
         <div className="fase2DistBar">
-          {distribucion.filter((d) => d.n > 0).map((d) => <i key={d.clave} className={d.clase} style={{ width: `${(d.n / totalObras) * 100}%` }} title={`${d.clave}: ${d.n}`} />)}
+          {distribucion.filter((d) => d.n > 0).map((d) => <i key={d.clave} className={d.clase} style={{ width: `${(d.n / totalObras) * 100}%` }} title={`${d.t}: ${d.n}`} />)}
         </div>
         <div className="fase2DistLeyenda">
-          {distribucion.map((d) => <span key={d.clave}><em className={d.clase} />{d.clave} <b>{d.n}</b></span>)}
+          {distribucion.map((d) => <span key={d.clave}><em className={d.clase} />{d.t} <b>{d.n}</b></span>)}
         </div>
       </section>
     )}
@@ -281,7 +281,7 @@ function Dashboard({ nombre, rol, cargando, clientes, obras, presupuestos, pagos
         <div className="fase2PanelTitulo"><div><h3>Obras recientes</h3><p>Últimos trabajos registrados</p></div><button onClick={() => onNavegar('obras')}>Ver todas →</button></div>
         {cargando ? [0, 1, 2].map((i) => <div className="fase2ObraFila" key={i}><span className="skel skelIcono" /><div style={{ width: '100%' }}><strong className="skel skelLine" /><span className="skel skelLine" /></div></div>)
           : obras.length === 0 ? <div className="fase2Vacio"><span>🏠</span><p>Todavía no hay obras.</p></div>
-          : obras.slice(0, 5).map((obra) => <div className="fase2ObraFila" key={obra.id}><span className="icono">🏠</span><div><strong>{obra.nombre_obra}</strong><span>{nombreCliente(obra.cliente_id)}</span><small>{obra.localidad || 'Sin localidad'} · {obra.porcentaje_avance ?? 0}% avance</small></div><em className={claseEstado(obra.estado)}>{obra.estado}</em></div>)}
+          : obras.slice(0, 5).map((obra) => <div className="fase2ObraFila" key={obra.id}><span className="icono">🏠</span><div><strong>{obra.nombre_obra}</strong><span>{nombreCliente(obra.cliente_id)}</span><small>{obra.localidad || 'Sin localidad'} · {obra.porcentaje_avance ?? 0}% avance</small></div><em className={claseEstado(obra.estado)}>{etiquetaObra(obra.estado)}</em></div>)}
       </div>
       <div className="fase2Panel">
         <div className="fase2PanelTitulo"><div><h3>Cuentas por cobrar</h3><p>{moneda(saldoTotal)} pendiente</p></div></div>

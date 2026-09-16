@@ -5,6 +5,7 @@ import NuevoCliente, {
 } from './NuevoCliente'
 import NuevaObra from './NuevaObra'
 import ClienteFicha from './ClienteFicha'
+import VistaToggle, { useVista } from './VistaToggle'
 
 type Cliente = {
   id: number
@@ -44,6 +45,7 @@ function Clientes() {
 
   const [filtroEstado, setFiltroEstado] =
     useState<FiltroEstado>('activos')
+  const [vista, setVista] = useVista('clientes', 'kanban')
 
   const clientesFiltrados = clientes.filter((cliente) => {
     const textoCliente = `
@@ -188,123 +190,81 @@ function Clientes() {
         </button>
       </div>
 
-      <div className="clientesToolbar">
-        <input
-          type="search"
-          placeholder="Buscar por nombre, teléfono o correo..."
-          value={busqueda}
-          onChange={(evento) => setBusqueda(evento.target.value)}
-        />
-
-        <select
-          value={filtroEstado}
-          onChange={(evento) =>
-            setFiltroEstado(evento.target.value as FiltroEstado)
-          }
-        >
-          <option value="activos">Clientes activos</option>
-          <option value="inactivos">Clientes inactivos</option>
-          <option value="todos">Todos los clientes</option>
-        </select>
+      <div className="crmToolbar">
+        <div className="crmFiltros">
+          <input
+            type="search"
+            placeholder="Buscar por nombre, teléfono o correo..."
+            value={busqueda}
+            onChange={(evento) => setBusqueda(evento.target.value)}
+          />
+          <select
+            value={filtroEstado}
+            onChange={(evento) => setFiltroEstado(evento.target.value as FiltroEstado)}
+          >
+            <option value="activos">Clientes activos</option>
+            <option value="inactivos">Clientes inactivos</option>
+            <option value="todos">Todos los clientes</option>
+          </select>
+        </div>
+        <VistaToggle vista={vista} onCambio={setVista} />
       </div>
 
-      <div className="clientesPanel">
-        {cargando && <p>Cargando clientes...</p>}
+      {cargando && <p>Cargando clientes...</p>}
+      {error && <p className="loginError">{error}</p>}
 
-        {error && <p className="loginError">{error}</p>}
+      {!cargando && !error && clientesFiltrados.length === 0 && (
+        <div className="empty">
+          <span>🔍</span>
+          <h3>No encontramos clientes</h3>
+          <p>Probá con otra búsqueda o cambiá el filtro.</p>
+        </div>
+      )}
 
-        {!cargando &&
-          !error &&
-          clientesFiltrados.length === 0 && (
-            <div className="empty">
-              <span>🔍</span>
-              <h3>No encontramos clientes</h3>
-              <p>
-                Probá con otra búsqueda o cambiá el filtro.
-              </p>
-            </div>
-          )}
-
-        {!cargando && clientesFiltrados.length > 0 && (
-          <div className="clientesList">
-            {clientesFiltrados.map((cliente) => (
-              <div className="clienteItem" key={cliente.id}>
-                <div className="clienteAvatar">
-                  {cliente.nombre.charAt(0).toUpperCase()}
+      {!cargando && !error && clientesFiltrados.length > 0 && vista === 'kanban' && (
+        <div className="crmGrid">
+          {clientesFiltrados.map((cliente) => (
+            <div className="crmCard" key={cliente.id} onClick={() => setFichaCliente(cliente)}>
+              <div className="crmCardTop">
+                <div>
+                  <h3>{cliente.nombre} {cliente.apellido ?? ''}</h3>
+                  <p className="crmCardCli">{cliente.telefono || 'Sin teléfono'}</p>
                 </div>
-
-                <div
-                  className="clienteInfo clienteInfoClick"
-                  onClick={() => setFichaCliente(cliente)}
-                  title="Ver ficha del cliente"
-                >
-                  <strong>
-                    {cliente.nombre} {cliente.apellido}
-                  </strong>
-
-                  <span>
-                    {cliente.telefono || 'Sin teléfono'}
-                  </span>
-
-                  <small>
-                    {cliente.email ||
-                      cliente.localidad ||
-                      'Sin información adicional'}
-                  </small>
-                </div>
-
-                <div className="clienteActions">
-                  <span
-                    className={
-                      cliente.activo
-                        ? 'estadoActivo'
-                        : 'estadoInactivo'
-                    }
-                  >
-                    {cliente.activo ? 'Activo' : 'Inactivo'}
-                  </span>
-
-                  <button
-                    className="editButton"
-                    onClick={() => setFichaCliente(cliente)}
-                  >
-                    Ver
-                  </button>
-
-                  <button
-                    className="editButton"
-                    onClick={() => abrirNuevaObra(cliente)}
-                    disabled={!cliente.activo}
-                  >
-                    + Obra
-                  </button>
-
-                  <button
-                    className="editButton"
-                    onClick={() => {
-                      setClienteEditando(cliente)
-                      setMostrarFormulario(true)
-                    }}
-                  >
-                    Editar
-                  </button>
-
-                  <button
-                    className={
-                      cliente.activo
-                        ? 'deactivateButton'
-                        : 'activateButton'
-                    }
-                    onClick={() => cambiarEstado(cliente)}
-                  >
-                    {cliente.activo ? 'Desactivar' : 'Activar'}
-                  </button>
-                </div>
+                <span className={`crmBadge ${cliente.activo ? 'est-aceptado' : 'est-rechazado'}`}>{cliente.activo ? 'Activo' : 'Inactivo'}</span>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+              <div className="crmCardMeta">
+                <span>{cliente.email || 'Sin email'}</span>
+                <span>{cliente.localidad || 'Sin localidad'}</span>
+              </div>
+              <div className="crmCardFoot" onClick={(e) => e.stopPropagation()}>
+                <button className="crmFootPrimary" onClick={() => setFichaCliente(cliente)}>Ver ficha</button>
+                <button onClick={() => abrirNuevaObra(cliente)} disabled={!cliente.activo}>+ Obra</button>
+                <button onClick={() => { setClienteEditando(cliente); setMostrarFormulario(true) }}>Editar</button>
+                <button onClick={() => cambiarEstado(cliente)}>{cliente.activo ? 'Desactivar' : 'Activar'}</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!cargando && !error && clientesFiltrados.length > 0 && vista === 'lista' && (
+        <div className="crmListaWrap">
+          <table className="crmLista">
+            <thead><tr><th>Nombre</th><th>Teléfono</th><th>Email</th><th>Localidad</th><th>Estado</th></tr></thead>
+            <tbody>
+              {clientesFiltrados.map((cliente) => (
+                <tr key={cliente.id} onClick={() => setFichaCliente(cliente)}>
+                  <td><strong>{cliente.nombre} {cliente.apellido ?? ''}</strong></td>
+                  <td>{cliente.telefono || '—'}</td>
+                  <td>{cliente.email || '—'}</td>
+                  <td>{cliente.localidad || '—'}</td>
+                  <td><span className={`crmBadge ${cliente.activo ? 'est-aceptado' : 'est-rechazado'}`}>{cliente.activo ? 'Activo' : 'Inactivo'}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {mostrarFormulario && (
         <NuevoCliente

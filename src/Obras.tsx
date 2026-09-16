@@ -10,12 +10,10 @@ import AdicionalesObra from './AdicionalesObra'
 import PersonalObra from './PersonalObra'
 import RentabilidadObra from './RentabilidadObra'
 import ResumenPagosPDF from './ResumenPagosPDF'
+import VistaToggle, { useVista } from './VistaToggle'
+import { OBRA_ESTADOS, etiquetaObra, claseObra } from './obraEstado'
 
-type EstadoObra =
-  | 'Pendiente'
-  | 'En ejecución'
-  | 'Pausada'
-  | 'Finalizada'
+type EstadoObra = 'en_proceso' | 'finalizada' | 'observacion'
 
 type Obra = {
   id: number
@@ -67,7 +65,7 @@ const avanceInicial = {
   fecha: new Date().toISOString().slice(0, 10),
   titulo: '',
   descripcion: '',
-  estado: 'Pendiente' as EstadoObra,
+  estado: 'en_proceso' as EstadoObra,
   porcentaje: 0,
 }
 
@@ -105,6 +103,7 @@ function Obras() {
   const [descripcionImagen, setDescripcionImagen] = useState('')
   const [economia, setEconomia] = useState<Record<number, ResumenEco>>({})
   const [pagosPdf, setPagosPdf] = useState<Obra | null>(null)
+  const [vista, setVista] = useVista('obras', 'kanban')
 
   useEffect(() => {
     async function cargarDatos() {
@@ -182,18 +181,8 @@ function Obras() {
       .toLocaleDateString('es-AR')
   }
 
-  function etiquetaEstado(estado: EstadoObra | null) {
-    return estado === 'Pendiente'
-      ? 'Aceptada para ejecutar'
-      : estado || 'Aceptada para ejecutar'
-  }
-
-  function claseEstado(estado: EstadoObra | null) {
-    if (estado === 'Finalizada') return 'finalizada'
-    if (estado === 'En ejecución') return 'ejecucion'
-    if (estado === 'Pausada') return 'pausada'
-    return 'pendiente'
-  }
+  const etiquetaEstado = etiquetaObra
+  const claseEstado = claseObra
 
   function cerrarFormulario() {
     setMostrarFormulario(false)
@@ -265,7 +254,7 @@ function Obras() {
     setFormularioAvance({
       ...avanceInicial,
       fecha: new Date().toISOString().slice(0, 10),
-      estado: obra.estado ?? 'Pendiente',
+      estado: obra.estado ?? 'en_proceso',
       porcentaje: Number(obra.porcentaje_avance || 0),
     })
     cargarAvances(obra.id)
@@ -300,7 +289,7 @@ function Obras() {
       ...anterior,
       estado,
       porcentaje:
-        estado === 'Finalizada' ? 100 : anterior.porcentaje,
+        estado === 'finalizada' ? 100 : anterior.porcentaje,
     }))
   }
 
@@ -442,168 +431,101 @@ function Obras() {
         </button>
       </div>
 
-      <div className="clientesToolbar">
-        <input
-          type="search"
-          placeholder="Buscar obra, cliente o localidad..."
-          value={busqueda}
-          onChange={(evento) =>
-            setBusqueda(evento.target.value)
-          }
-        />
+      <div className="crmToolbar">
+        <div className="crmFiltros">
+          <input
+            type="search"
+            placeholder="Buscar obra, cliente o localidad..."
+            value={busqueda}
+            onChange={(evento) => setBusqueda(evento.target.value)}
+          />
+          <select
+            value={filtroEstado}
+            onChange={(evento) => setFiltroEstado(evento.target.value as FiltroEstado)}
+          >
+            <option value="todos">Todos los estados</option>
+            {OBRA_ESTADOS.map((e) => <option key={e.v} value={e.v}>{e.t}</option>)}
+          </select>
+        </div>
+        <VistaToggle vista={vista} onCambio={setVista} />
+      </div>
 
-        <select
-          value={filtroEstado}
-          onChange={(evento) =>
-            setFiltroEstado(
-              evento.target.value as FiltroEstado,
+      {cargando && <p>Cargando obras...</p>}
+      {error && <p className="loginError">{error}</p>}
+
+      {!cargando && !error && obrasFiltradas.length === 0 && (
+        <div className="empty obrasEmpty">
+          <span>🏠</span>
+          <h3>No encontramos obras</h3>
+          <p>Las obras nacen de un presupuesto aceptado. Probá con otra búsqueda o cambiá el filtro.</p>
+        </div>
+      )}
+
+      {!cargando && !error && obrasFiltradas.length > 0 && vista === 'kanban' && (
+        <div className="crmKanban">
+          {OBRA_ESTADOS.map((s) => {
+            const cols = obrasFiltradas.filter((o) => (o.estado ?? 'en_proceso') === s.v)
+            return (
+              <div className={`crmKanbanCol tope col-${claseObra(s.v)}`} key={s.v}>
+                <div className="crmKanbanHead"><h3>{s.t}</h3><span className="cuenta">{cols.length}</span></div>
+                <div className="crmKanbanBody">
+                  {cols.length === 0 ? <div className="crmKanbanVacio">—</div> : cols.map((obra) => (
+                    <div className="crmCard" key={obra.id} onClick={() => abrirSeguimiento(obra)}>
+                      <div className="crmCardTop">
+                        <div><h3>{obra.nombre_obra}</h3><p className="crmCardCli">{obtenerCliente(obra.cliente_id)}</p></div>
+                        <span className={`crmBadge est-${claseObra(obra.estado)}`}>{etiquetaObra(obra.estado)}</span>
+                      </div>
+                      <div className="crmCardMeta">
+                        <span>{obra.localidad || 'Sin localidad'}</span>
+                        <span>{Number(obra.porcentaje_avance || 0)}% avance</span>
+                      </div>
+                      <div className="crmBarra"><span style={{ width: `${Number(obra.porcentaje_avance || 0)}%` }} /></div>
+                      <div className="crmCardEco">
+                        <div><span>Valor</span><strong>{dineroFicha(economia[obra.id]?.valor ?? 0)}</strong></div>
+                        <div><span>Cobrado</span><strong>{dineroFicha(economia[obra.id]?.cobrado ?? 0)}</strong></div>
+                        <div><span>Pendiente</span><strong className={(economia[obra.id]?.pendiente ?? 0) > 0 ? 'pend' : ''}>{dineroFicha(economia[obra.id]?.pendiente ?? 0)}</strong></div>
+                      </div>
+                      <div className="obraCardAccesos" onClick={(e) => e.stopPropagation()}>
+                        <button type="button" title="Finanzas" onClick={() => abrirEn(obra, 'finanzas')}>💰</button>
+                        <button type="button" title="Rentabilidad" onClick={() => abrirEn(obra, 'rentabilidad')}>📊</button>
+                        <button type="button" title="Personal" onClick={() => abrirEn(obra, 'personal')}>👷</button>
+                        <button type="button" title="Adicionales" onClick={() => abrirEn(obra, 'adicionales')}>➕</button>
+                      </div>
+                      <div className="crmCardFoot" onClick={(e) => e.stopPropagation()}>
+                        <button className="crmFootPrimary" onClick={() => abrirSeguimiento(obra)}>Ver ficha</button>
+                        <button onClick={() => setInformeObra(obra)}>📄 Informe</button>
+                        <button onClick={() => setPagosPdf(obra)}>🧾 Pagos</button>
+                        <button onClick={() => { setObraEditando(obra); setMostrarFormulario(true) }}>Editar</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )
-          }
-        >
-          <option value="todos">Todos los estados</option>
-          <option value="Pendiente">
-            Aceptadas para ejecutar
-          </option>
-          <option value="En ejecución">En ejecución</option>
-          <option value="Pausada">Pausadas</option>
-          <option value="Finalizada">Finalizadas</option>
-        </select>
-      </div>
+          })}
+        </div>
+      )}
 
-      <div className="obrasGrid">
-        {cargando && <p>Cargando obras...</p>}
-
-        {error && <p className="loginError">{error}</p>}
-
-        {!cargando && !error && obrasFiltradas.length === 0 && (
-          <div className="empty obrasEmpty">
-            <span>🏠</span>
-            <h3>No encontramos obras</h3>
-            <p>
-              Probá con otra búsqueda o cambiá el filtro.
-            </p>
-          </div>
-        )}
-
-        {!cargando &&
-          obrasFiltradas.map((obra) => (
-            <div className="obraCard" key={obra.id}>
-              <div className="obraCardHeader">
-                <span className="obraIcon">🏠</span>
-
-                <span
-                  className={`obraEstadoBadge ${claseEstado(
-                    obra.estado,
-                  )}`}
-                >
-                  {etiquetaEstado(obra.estado)}
-                </span>
-              </div>
-
-              <h3>{obra.nombre_obra}</h3>
-
-              <p className="obraCliente">
-                {obtenerCliente(obra.cliente_id)}
-              </p>
-
-              <p className="obraDireccion">
-                {obra.direccion || 'Sin dirección'}
-                {obra.localidad
-                  ? ` · ${obra.localidad}`
-                  : ''}
-              </p>
-
-              {obra.descripcion && (
-                <p className="obraDescripcion">
-                  {obra.descripcion}
-                </p>
-              )}
-
-              <div className="obraProgresoResumen">
-                <div>
-                  <span>Avance de la obra</span>
-                  <strong>
-                    {Number(obra.porcentaje_avance || 0)}%
-                  </strong>
-                </div>
-
-                <div className="obraProgresoBarra">
-                  <span
-                    style={{
-                      width: `${Number(
-                        obra.porcentaje_avance || 0,
-                      )}%`,
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="obraFechas">
-                <span>
-                  Inicio
-                  <strong>
-                    {formatearFecha(obra.fecha_inicio)}
-                  </strong>
-                </span>
-
-                <span>
-                  Fin estimado
-                  <strong>
-                    {formatearFecha(
-                      obra.fecha_fin_estimada,
-                    )}
-                  </strong>
-                </span>
-              </div>
-
-              <div className="obraCardEco">
-                <div><span>Valor</span><strong>{dineroFicha(economia[obra.id]?.valor ?? 0)}</strong></div>
-                <div><span>Cobrado</span><strong>{dineroFicha(economia[obra.id]?.cobrado ?? 0)}</strong></div>
-                <div><span>Pendiente</span><strong className={(economia[obra.id]?.pendiente ?? 0) > 0 ? 'pend' : ''}>{dineroFicha(economia[obra.id]?.pendiente ?? 0)}</strong></div>
-              </div>
-
-              <div className="obraCardAccesos">
-                <button type="button" onClick={() => abrirEn(obra, 'finanzas')}>💰 Finanzas</button>
-                <button type="button" onClick={() => abrirEn(obra, 'rentabilidad')}>📊 Rentabilidad</button>
-                <button type="button" onClick={() => abrirEn(obra, 'personal')}>👷 Personal</button>
-                <button type="button" onClick={() => abrirEn(obra, 'adicionales')}>➕ Adicionales</button>
-              </div>
-
-              <div className="obraCardActions">
-                <button
-                  className="editButton"
-                  onClick={() => {
-                    setObraEditando(obra)
-                    setMostrarFormulario(true)
-                  }}
-                >
-                  Editar obra
-                </button>
-
-                <button
-                  className="newButton"
-                  onClick={() => abrirSeguimiento(obra)}
-                >
-                  Ver ficha completa
-                </button>
-
-                <button
-                  className="editButton"
-                  onClick={() => setInformeObra(obra)}
-                >
-                  📄 Informe
-                </button>
-
-                <button
-                  className="editButton"
-                  onClick={() => setPagosPdf(obra)}
-                >
-                  🧾 Pagos
-                </button>
-              </div>
-            </div>
-          ))}
-      </div>
+      {!cargando && !error && obrasFiltradas.length > 0 && vista === 'lista' && (
+        <div className="crmListaWrap">
+          <table className="crmLista">
+            <thead><tr><th>Obra</th><th>Cliente</th><th>Avance</th><th>Valor</th><th>Cobrado</th><th>Pendiente</th><th>Estado</th></tr></thead>
+            <tbody>
+              {obrasFiltradas.map((obra) => (
+                <tr key={obra.id} onClick={() => abrirSeguimiento(obra)}>
+                  <td><strong>{obra.nombre_obra}</strong></td>
+                  <td>{obtenerCliente(obra.cliente_id)}</td>
+                  <td>{Number(obra.porcentaje_avance || 0)}%</td>
+                  <td>{dineroFicha(economia[obra.id]?.valor ?? 0)}</td>
+                  <td>{dineroFicha(economia[obra.id]?.cobrado ?? 0)}</td>
+                  <td>{dineroFicha(economia[obra.id]?.pendiente ?? 0)}</td>
+                  <td><span className={`crmBadge est-${claseObra(obra.estado)}`}>{etiquetaObra(obra.estado)}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {mostrarFormulario && (
         <NuevaObra
@@ -809,16 +731,9 @@ function Obras() {
                         )
                       }
                     >
-                      <option value="Pendiente">
-                        Aceptada para ejecutar
-                      </option>
-                      <option value="En ejecución">
-                        En ejecución
-                      </option>
-                      <option value="Pausada">Pausada</option>
-                      <option value="Finalizada">
-                        Finalizada
-                      </option>
+                      {OBRA_ESTADOS.map((e) => (
+                        <option key={e.v} value={e.v}>{e.t}</option>
+                      ))}
                     </select>
                   </label>
 
