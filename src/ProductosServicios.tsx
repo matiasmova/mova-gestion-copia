@@ -58,7 +58,7 @@ async function comprimirImagen(file: File): Promise<Blob> {
 }
 
 function formatoDinero(valor: number) {
-  return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 2 }).format(Number(valor || 0))
+  return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(valor || 0))
 }
 
 function precioFinalUnidad(el: { precio_venta: number; aplica_descuento: boolean; descuento_pct: number; descuento_monto: number }) {
@@ -176,20 +176,21 @@ function ProductosServicios() {
   function cerrarFormulario() { setMostrarFormulario(false); setEditando(null); setErrorFormulario('') }
 
   // Recalcular precios de forma bidireccional (precio de compra + % ganancia => precio de lista)
+  const dos = (n: number) => Math.round(n * 100) / 100
   function cambiarCompra(v: string) {
     setPrecioCompra(v)
     const c = Number(v || 0), g = Number(gananciaPct || 0)
-    if (c > 0 && gananciaPct !== '') setPrecioLista(String(Math.round(c * (1 + g / 100))))
+    if (c > 0 && gananciaPct !== '') setPrecioLista(String(dos(c * (1 + g / 100))))
   }
   function cambiarGanancia(v: string) {
     setGananciaPct(v)
     const c = Number(precioCompra || 0), g = Number(v || 0)
-    if (c > 0) setPrecioLista(String(Math.round(c * (1 + g / 100))))
+    if (c > 0) setPrecioLista(String(dos(c * (1 + g / 100))))
   }
   function cambiarLista(v: string) {
     setPrecioLista(v)
     const c = Number(precioCompra || 0), l = Number(v || 0)
-    if (c > 0) setGananciaPct(String(Math.round(((l - c) / c) * 1000) / 10))
+    if (c > 0) setGananciaPct(String(dos(((l - c) / c) * 100)))
   }
 
   async function subirFoto(evento: React.ChangeEvent<HTMLInputElement>) {

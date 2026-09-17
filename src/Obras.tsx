@@ -69,7 +69,7 @@ const avanceInicial = {
   porcentaje: 0,
 }
 
-function Obras() {
+function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; onObraAbierta?: () => void } = {}) {
   const [obras, setObras] = useState<Obra[]>([])
   const [informeObra, setInformeObra] = useState<Obra | null>(null)
   const [seguTab, setSeguTab] = useState<'finanzas' | 'adicionales' | 'personal' | 'rentabilidad' | 'fotos' | 'timeline'>('timeline')
@@ -162,6 +162,14 @@ function Obras() {
 
     cargarDatos()
   }, [actualizacion])
+
+  // Abrir automáticamente una obra cuando se llega desde otro módulo (ej. Finanzas)
+  useEffect(() => {
+    if (obraAbrirId == null || obras.length === 0) return
+    const obra = obras.find((o) => o.id === obraAbrirId)
+    if (obra) { abrirSeguimiento(obra); onObraAbierta?.() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [obraAbrirId, obras])
 
   function obtenerCliente(clienteId: number) {
     const cliente = clientes.find(
@@ -329,13 +337,23 @@ function Obras() {
       return
     }
 
-    // Al crear un avance nuevo, actualizamos el estado/avance de la obra.
-    // Al editar uno viejo, no pisamos el estado actual de la obra.
-    if (!editandoAvanceId) {
+    // El estado y % de la obra siempre reflejan el avance MÁS RECIENTE (crear o editar).
+    const { data: ultimo } = await supabase
+      .from('obra_avances')
+      .select('estado,porcentaje')
+      .eq('obra_id', obraSeguimiento.id)
+      .order('fecha', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (ultimo) {
+      await supabase.from('obras')
+        .update({ estado: ultimo.estado, porcentaje_avance: Number(ultimo.porcentaje) })
+        .eq('id', obraSeguimiento.id)
       setObraSeguimiento({
         ...obraSeguimiento,
-        estado: formularioAvance.estado,
-        porcentaje_avance: Number(formularioAvance.porcentaje),
+        estado: ultimo.estado as EstadoObra,
+        porcentaje_avance: Number(ultimo.porcentaje),
       })
     }
     setMostrarNuevoAvance(false)
@@ -954,6 +972,41 @@ function EconomiaObra({ obraId }: { obraId: number }) {
   const [comprobante, setComprobante] = useState<{ id: number; url: string } | null>(null)
   const [abriendo, setAbriendo] = useState<number | null>(null)
   const [errorComprobante, setErrorComprobante] = useState('')
+  const [cobros, setCobros] = useState<{ id: number; monto: number; fecha: string; medio_pago: string | null; referencia: string | null }[]>([])
+  const [mostrarCobro, setMostrarCobro] = useState(false)
+  const [cobroForm, setCobroForm] = useState({ monto: '', fecha: new Date().toISOString().slice(0, 10), medio_pago: 'transferencia', referencia: '' })
+  const [guardandoCobro, setGuardandoCobro] = useState(false)
+
+  async function guardarCobro(e: FormEvent) {
+    e.preventDefault()
+    const monto = Number(cobroForm.monto)
+    if (!(monto > 0)) return
+    setGuardandoCobro(true)
+    const { error: fallo } = await supabase.from('pagos').insert({
+      obra_id: obraId, presupuesto_id: null, monto, fecha: cobroForm.fecha,
+      medio_pago: cobroForm.medio_pago, referencia: cobroForm.referencia.trim() || null,
+    })
+    setGuardandoCobro(false)
+    if (fallo) { console.error(fallo); window.alert('No se pudo registrar el cobro.'); return }
+    setMostrarCobro(false)
+    setCobroForm({ monto: '', fecha: new Date().toISOString().slice(0, 10), medio_pago: 'transferencia', referencia: '' })
+    setRevision((v) => v + 1)
+  }
+
+  async function eliminarCobro(id: number) {
+    if (!window.confirm('¿Eliminar este cobro?')) return
+    const { error: fallo } = await supabase.from('pagos').delete().eq('id', id)
+    if (fallo) { console.error(fallo); window.alert('No se pudo eliminar el cobro.'); return }
+    setRevision((v) => v + 1)
+  }
+
+  useEffect(() => {
+    let vigente = true
+    supabase.from('pagos').select('id,monto,fecha,medio_pago,referencia').eq('obra_id', obraId).order('fecha', { ascending: false }).then(({ data }) => {
+      if (vigente) setCobros((data ?? []).map((p) => ({ ...p, monto: Number(p.monto) })))
+    })
+    return () => { vigente = false }
+  }, [obraId, revision])
 
   useEffect(() => {
     let vigente = true
@@ -1026,18 +1079,48 @@ function EconomiaObra({ obraId }: { obraId: number }) {
     material: 'Material', mano_obra: 'Mano de obra', terciarizado: 'Tercerizado', otro: 'Otro',
   }
 
+  const totalCobrado = cobros.reduce((s, c) => s + c.monto, 0)
+
   return <section className="obraFotosSeccion" aria-label="Compras y costos de la obra">
     <div className="seguimientoAcciones">
-      <div><h3>Compras y costos de la obra</h3><p>Materiales, comprobantes y gastos asociados.</p></div>
-      <button type="button" className="editButton" disabled={cargando} onClick={() => setRevision((valor) => valor + 1)}>Actualizar</button>
+      <div><h3>Finanzas de la obra</h3><p>Cobros del cliente, compras y costos asociados.</p></div>
+      <div className="adicAcciones">
+        <button type="button" className="newButton" onClick={() => setMostrarCobro((v) => !v)}>{mostrarCobro ? 'Cancelar' : '💵 Registrar cobro'}</button>
+        <button type="button" className="editButton" disabled={cargando} onClick={() => setRevision((valor) => valor + 1)}>Actualizar</button>
+      </div>
     </div>
+
+    {mostrarCobro && (
+      <form className="clienteForm adicForm" onSubmit={guardarCobro}>
+        <div className="formGrid">
+          <label>Monto *<input type="number" min="0.01" step="0.01" required value={cobroForm.monto} onChange={(e) => setCobroForm((f) => ({ ...f, monto: e.target.value }))} /></label>
+          <label>Fecha *<input type="date" required value={cobroForm.fecha} onChange={(e) => setCobroForm((f) => ({ ...f, fecha: e.target.value }))} /></label>
+          <label>Medio<select value={cobroForm.medio_pago} onChange={(e) => setCobroForm((f) => ({ ...f, medio_pago: e.target.value }))}><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option><option value="tarjeta">Tarjeta</option><option value="cheque">Cheque</option><option value="otro">Otro</option></select></label>
+          <label>Referencia<input value={cobroForm.referencia} onChange={(e) => setCobroForm((f) => ({ ...f, referencia: e.target.value }))} /></label>
+        </div>
+        <div className="formActions"><button type="button" className="cancelButton" onClick={() => setMostrarCobro(false)}>Cancelar</button><button className="newButton" disabled={guardandoCobro}>{guardandoCobro ? 'Guardando...' : 'Guardar cobro'}</button></div>
+      </form>
+    )}
+
     {cargando && <p role="status">Cargando compras y costos...</p>}
     {error && <p className="loginError" role="alert">{error}</p>}
     {!cargando && !error && <>
       <div className="seguimientoResumen">
+        <div><span>Cobrado (esta obra)</span><strong>{dineroFicha(totalCobrado)}</strong></div>
         <div><span>Costo total registrado</span><strong>{dineroFicha(totalCostos)}</strong></div>
         <div><span>Compras registradas</span><strong>{compras.length}</strong></div>
       </div>
+
+      {cobros.length > 0 && <>
+        <h4>Cobros registrados</h4>
+        <div className="gestionTabla" style={{ maxWidth: '100%', overflowX: 'auto' }}><table>
+          <thead><tr><th>Fecha</th><th>Medio</th><th>Referencia</th><th>Monto</th><th>Acción</th></tr></thead>
+          <tbody>{cobros.map((c) => <tr key={c.id}>
+            <td>{fechaFicha(c.fecha)}</td><td>{(c.medio_pago || '').replace('_', ' ')}</td><td>{c.referencia || '—'}</td><td><strong>{dineroFicha(c.monto)}</strong></td>
+            <td><button type="button" className="adicNo" onClick={() => eliminarCobro(c.id)}>Eliminar</button></td>
+          </tr>)}</tbody>
+        </table></div>
+      </>}
       <p>El total corresponde a los costos de Finanzas e incluye las compras vinculadas una sola vez.</p>
       <h4>Compras y comprobantes</h4>
       {compras.length === 0 ? <p>No hay compras registradas para esta obra.</p> :

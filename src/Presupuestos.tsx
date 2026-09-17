@@ -104,6 +104,15 @@ function Presupuestos() {
   async function cambiarEstado(p: PresupuestoCompleto, nuevo: string) {
     const { error: err } = await supabase.from('presupuestos').update({ estado: nuevo }).eq('id', p.id)
     if (err) { console.error(err); window.alert('No se pudo modificar el estado.'); return }
+    // Stock: al ACEPTAR se descuenta (venta confirmada); si sale de aceptado se repone.
+    const eraAceptado = p.estado === 'aceptado'
+    const seraAceptado = nuevo === 'aceptado'
+    const itemsStock = p.items.filter((it) => it.catalogo_id && it.tipo === 'producto')
+    if (!eraAceptado && seraAceptado) {
+      for (const it of itemsStock) await supabase.rpc('descontar_stock', { p_id: it.catalogo_id, p_cant: Number(it.cantidad) })
+    } else if (eraAceptado && !seraAceptado) {
+      for (const it of itemsStock) await supabase.rpc('descontar_stock', { p_id: it.catalogo_id, p_cant: -Number(it.cantidad) })
+    }
     setPresupuestos((prev) => prev.map((x) => (x.id === p.id ? { ...x, estado: nuevo } : x)))
     setFicha((f) => (f && f.id === p.id ? { ...f, estado: nuevo } : f))
   }

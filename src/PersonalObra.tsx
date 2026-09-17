@@ -36,6 +36,20 @@ function PersonalObra({ obraId, puedeEditar = true, onCambio }: { obraId: number
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
   const [formAbierto, setFormAbierto] = useState<'asignar' | 'pago' | 'jornal' | null>(null)
+  const [asigEditar, setAsigEditar] = useState<Asignacion | null>(null)
+
+  async function quitarAsignacion(a: Asignacion, nombre: string) {
+    if (!window.confirm(`¿Quitar a ${nombre} de esta obra? (no borra los pagos ya registrados)`)) return
+    const { error: fallo } = await supabase.from('obra_asignaciones').delete().eq('id', a.id)
+    if (fallo) { console.error(fallo); window.alert('No se pudo quitar la asignación.'); return }
+    setRevision((v) => v + 1); onCambio?.()
+  }
+  async function eliminarJornal(id: number) {
+    if (!window.confirm('¿Eliminar este jornal?')) return
+    const { error: fallo } = await supabase.from('jornales').delete().eq('id', id)
+    if (fallo) { console.error(fallo); window.alert('No se pudo eliminar el jornal.'); return }
+    setRevision((v) => v + 1)
+  }
 
   useEffect(() => {
     let vigente = true
@@ -109,8 +123,11 @@ function PersonalObra({ obraId, puedeEditar = true, onCambio }: { obraId: number
         </div>
       )}
 
-      {formAbierto === 'asignar' && puedeEditar && (
+      {formAbierto === 'asignar' && puedeEditar && !asigEditar && (
         <FormAsignar obraId={obraId} personas={sinAsignar} onCancelar={() => setFormAbierto(null)} onGuardado={recargar} />
+      )}
+      {asigEditar && puedeEditar && (
+        <FormAsignar obraId={obraId} personas={personas} asignacion={asigEditar} nombrePersona={nombreDe(personaPorId(asigEditar.personal_id))} onCancelar={() => setAsigEditar(null)} onGuardado={() => { setAsigEditar(null); setRevision((v) => v + 1); onCambio?.() }} />
       )}
       {formAbierto === 'pago' && puedeEditar && (
         <FormPago obraId={obraId} personas={asignados} onCancelar={() => setFormAbierto(null)} onGuardado={recargar} />
@@ -130,7 +147,7 @@ function PersonalObra({ obraId, puedeEditar = true, onCambio }: { obraId: number
             <table>
               <thead>
                 <tr>
-                  <th>Persona</th><th>Modalidad</th><th>Acordado</th><th>Pagado</th><th>Pendiente</th><th>Jornales</th>
+                  <th>Persona</th><th>Modalidad</th><th>Acordado</th><th>Pagado</th><th>Pendiente</th><th>Jornales</th>{puedeEditar && <th>Acción</th>}
                 </tr>
               </thead>
               <tbody>
@@ -147,6 +164,14 @@ function PersonalObra({ obraId, puedeEditar = true, onCambio }: { obraId: number
                     <td>{moneda(f.pagado)}</td>
                     <td>{f.acordado > 0 ? (f.pendiente > 0 ? <strong style={{ color: '#b86608' }}>{moneda(f.pendiente)}</strong> : <span className="adicBadge aprobado">saldado</span>) : '—'}</td>
                     <td>{f.jornadas ? f.jornadas.toLocaleString('es-AR') : '—'}</td>
+                    {puedeEditar && (
+                      <td>
+                        <div className="adicAcciones">
+                          <button type="button" className="editButton" onClick={() => { setAsigEditar(f.asig); setFormAbierto(null) }}>Editar</button>
+                          <button type="button" className="adicNo" onClick={() => quitarAsignacion(f.asig, nombreDe(f.persona))}>Quitar</button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -160,7 +185,7 @@ function PersonalObra({ obraId, puedeEditar = true, onCambio }: { obraId: number
           <summary>Ver jornales registrados ({jornales.length})</summary>
           <div className="gestionTabla" style={{ overflowX: 'auto', marginTop: 10 }}>
             <table>
-              <thead><tr><th>Fecha</th><th>Persona</th><th>Jornada</th><th>Horas</th><th>Observaciones</th></tr></thead>
+              <thead><tr><th>Fecha</th><th>Persona</th><th>Jornada</th><th>Horas</th><th>Observaciones</th>{puedeEditar && <th></th>}</tr></thead>
               <tbody>
                 {jornales.map((j) => (
                   <tr key={j.id}>
@@ -169,6 +194,7 @@ function PersonalObra({ obraId, puedeEditar = true, onCambio }: { obraId: number
                     <td>{j.jornada.toLocaleString('es-AR')}</td>
                     <td>{j.horas != null ? j.horas.toLocaleString('es-AR') : '—'}</td>
                     <td>{j.observaciones || '—'}</td>
+                    {puedeEditar && <td><button type="button" className="adicNo" onClick={() => eliminarJornal(j.id)}>Eliminar</button></td>}
                   </tr>
                 ))}
               </tbody>
@@ -180,8 +206,15 @@ function PersonalObra({ obraId, puedeEditar = true, onCambio }: { obraId: number
   )
 }
 
-function FormAsignar({ obraId, personas, onCancelar, onGuardado }: { obraId: number; personas: Persona[]; onCancelar: () => void; onGuardado: () => void }) {
-  const [f, setF] = useState({ personal_id: '', modalidad: 'por_obra', valor_acordado: '', rol_en_obra: '', notas: '' })
+function FormAsignar({ obraId, personas, asignacion, nombrePersona, onCancelar, onGuardado }: { obraId: number; personas: Persona[]; asignacion?: Asignacion; nombrePersona?: string; onCancelar: () => void; onGuardado: () => void }) {
+  const editando = !!asignacion
+  const [f, setF] = useState({
+    personal_id: asignacion ? String(asignacion.personal_id ?? '') : '',
+    modalidad: asignacion?.modalidad ?? 'por_obra',
+    valor_acordado: asignacion?.valor_acordado ? String(asignacion.valor_acordado) : '',
+    rol_en_obra: asignacion?.rol_en_obra ?? '',
+    notas: asignacion?.notas ?? '',
+  })
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const set = (k: string, v: string) => setF((a) => ({ ...a, [k]: v }))
@@ -189,18 +222,23 @@ function FormAsignar({ obraId, personas, onCancelar, onGuardado }: { obraId: num
     e.preventDefault(); setError('')
     if (!f.personal_id) { setError('Elegí una persona.'); return }
     setGuardando(true)
-    const { error: fallo } = await supabase.from('obra_asignaciones').insert({
+    const datos = {
       obra_id: obraId, personal_id: Number(f.personal_id), modalidad: f.modalidad,
       valor_acordado: f.valor_acordado ? Number(f.valor_acordado) : 0,
       rol_en_obra: f.rol_en_obra.trim() || null, notas: f.notas.trim() || null,
-    })
-    if (fallo) { console.error(fallo); setError('No se pudo asignar.'); setGuardando(false); return }
+    }
+    const { error: fallo } = editando
+      ? await supabase.from('obra_asignaciones').update(datos).eq('id', asignacion!.id)
+      : await supabase.from('obra_asignaciones').insert(datos)
+    if (fallo) { console.error(fallo); setError('No se pudo guardar.'); setGuardando(false); return }
     onGuardado()
   }
   return (
     <form className="clienteForm adicForm" onSubmit={guardar}>
       <div className="formGrid">
-        <label>Persona *<select required value={f.personal_id} onChange={(e) => set('personal_id', e.target.value)}><option value="">Seleccionar</option>{personas.map((p) => <option key={p.id} value={p.id}>{nombreDe(p)}{p.especialidad ? ` · ${p.especialidad}` : ''}</option>)}</select></label>
+        {editando
+          ? <label>Persona<input value={nombrePersona ?? ''} disabled /></label>
+          : <label>Persona *<select required value={f.personal_id} onChange={(e) => set('personal_id', e.target.value)}><option value="">Seleccionar</option>{personas.map((p) => <option key={p.id} value={p.id}>{nombreDe(p)}{p.especialidad ? ` · ${p.especialidad}` : ''}</option>)}</select></label>}
         <label>Modalidad<select value={f.modalidad} onChange={(e) => set('modalidad', e.target.value)}>{Object.entries(MODALIDADES).map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select></label>
         <label>Valor acordado<input type="number" min="0" step="0.01" value={f.valor_acordado} onChange={(e) => set('valor_acordado', e.target.value)} placeholder="Dejar vacío si es a jornal" /></label>
         <label>Función en la obra<input value={f.rol_en_obra} onChange={(e) => set('rol_en_obra', e.target.value)} placeholder="Ej.: Instalador" /></label>

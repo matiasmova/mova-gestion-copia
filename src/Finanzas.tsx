@@ -10,7 +10,7 @@ type Costo = { id: number; obra_id: number; categoria_id: number | null; tipo: s
 type Adicional = { id: number; obra_id: number; importe: number; estado: string }
 type Pestana = 'resumen' | 'cobros' | 'costos'
 
-function Finanzas() {
+function Finanzas({ onAbrirObra }: { onAbrirObra?: (obraId: number) => void } = {}) {
   const [obras, setObras] = useState<Obra[]>([])
   const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([])
   const [pagos, setPagos] = useState<Pago[]>([])
@@ -19,9 +19,17 @@ function Finanzas() {
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [pestana, setPestana] = useState<Pestana>('resumen')
   const [formulario, setFormulario] = useState<'pago' | 'costo' | null>(null)
+  const [pagoEditar, setPagoEditar] = useState<Pago | null>(null)
   const [actualizacion, setActualizacion] = useState(0)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
+
+  async function eliminarPago(p: Pago) {
+    if (!window.confirm('¿Eliminar este cobro? No se puede deshacer.')) return
+    const { error: err } = await supabase.from('pagos').delete().eq('id', p.id)
+    if (err) { console.error(err); window.alert('No se pudo eliminar el cobro.'); return }
+    setActualizacion((v) => v + 1)
+  }
 
   useEffect(() => {
     async function cargar() {
@@ -78,13 +86,13 @@ function Finanzas() {
   const nombreObra = (id: number | null) => obras.find((obra) => obra.id === id)?.nombre_obra ?? 'Sin obra asociada'
   const presupuestoPorId = (id: number) => presupuestos.find((presupuesto) => presupuesto.id === id)
   const nombreCategoria = (id: number | null) => categorias.find((categoria) => categoria.id === id)?.nombre ?? 'Sin categoría'
-  function recargar() { setFormulario(null); setActualizacion((valor) => valor + 1) }
+  function recargar() { setFormulario(null); setPagoEditar(null); setActualizacion((valor) => valor + 1) }
 
   return (
     <div className="gestionPage">
       <div className="pageHeader">
         <div><p className="subtitle">CONTROL FINANCIERO</p><h2>Finanzas</h2><p className="welcome">Cobros, costos y avance por obra</p></div>
-        {pestana === 'cobros' && <button className="newButton" onClick={() => setFormulario('pago')}>+ Registrar cobro</button>}
+        {pestana === 'cobros' && <button className="newButton" onClick={() => { setPagoEditar(null); setFormulario('pago') }}>+ Registrar cobro</button>}
         {pestana === 'costos' && <button className="newButton" onClick={() => setFormulario('costo')}>+ Registrar gasto</button>}
       </div>
 
@@ -111,7 +119,7 @@ function Finanzas() {
         </div>
         <div className="gestionTabla"><table>
           <thead><tr><th>Obra</th><th>Valor actual.</th><th>Cobrado</th><th>Saldo</th><th>Pend. s/avance</th><th>Pagado / avance</th><th>Situación</th></tr></thead>
-          <tbody>{resumen.length === 0 ? <tr><td colSpan={7}>No hay obras activas.</td></tr> : resumen.map((fila) => <tr key={fila.id}>
+          <tbody>{resumen.length === 0 ? <tr><td colSpan={7}>No hay obras activas.</td></tr> : resumen.map((fila) => <tr key={fila.id} onClick={() => onAbrirObra?.(fila.id)} style={onAbrirObra ? { cursor: 'pointer' } : undefined} title={onAbrirObra ? 'Ver ficha de la obra' : undefined}>
             <td><strong>{fila.nombre_obra}</strong></td>
             <td><strong>{moneda(fila.actualizado)}</strong>{fila.extra !== 0 && <><br /><small style={{ color: fila.extra > 0 ? '#23764e' : '#b23b32' }}>base {moneda(fila.total)} · adic {fila.extra > 0 ? '+' : '−'}{moneda(Math.abs(fila.extra))}</small></>}</td>
             <td>{moneda(fila.cobrado)}</td><td>{moneda(fila.saldo)}</td><td>{fila.pendienteAvance > 0 ? <strong style={{ color: '#b86608' }}>{moneda(fila.pendienteAvance)}</strong> : moneda(0)}</td><td>{fila.pagadoPct}% / {fila.porcentaje_avance ?? 0}%</td><td><span className={fila.alerta ? 'gestionEstado alerta' : 'gestionEstado ok'}>{fila.alerta ? '⚠ Financiando' : 'OK'}</span></td>
@@ -121,11 +129,11 @@ function Finanzas() {
       </>}
 
       {!cargando && pestana === 'cobros' && !error && <div className="gestionTabla"><table>
-        <thead><tr><th>Fecha</th><th>Presupuesto</th><th>Obra</th><th>Medio</th><th>Referencia</th><th>Monto</th></tr></thead>
-        <tbody>{pagos.length === 0 ? <tr><td colSpan={6}>Todavía no hay cobros registrados.</td></tr> : pagos.map((pago) => {
+        <thead><tr><th>Fecha</th><th>Presupuesto</th><th>Obra</th><th>Medio</th><th>Referencia</th><th>Monto</th><th>Acción</th></tr></thead>
+        <tbody>{pagos.length === 0 ? <tr><td colSpan={7}>Todavía no hay cobros registrados.</td></tr> : pagos.map((pago) => {
           const presupuesto = pago.presupuesto_id ? presupuestoPorId(pago.presupuesto_id) : undefined
           const obraId = pago.obra_id ?? presupuesto?.obra_id ?? null
-          return <tr key={pago.id}><td>{fechaCorta(pago.fecha)}</td><td><strong>{presupuesto?.titulo ?? 'Cobro directo a obra'}</strong></td><td>{nombreObra(obraId)}</td><td><span className="pagoMedio">{pago.medio_pago.replace('_', ' ')}</span></td><td>{pago.referencia || pago.notas || '—'}</td><td><strong>{moneda(pago.monto)}</strong></td></tr>
+          return <tr key={pago.id}><td>{fechaCorta(pago.fecha)}</td><td><strong>{presupuesto?.titulo ?? 'Cobro directo a obra'}</strong></td><td>{nombreObra(obraId)}</td><td><span className="pagoMedio">{pago.medio_pago.replace('_', ' ')}</span></td><td>{pago.referencia || pago.notas || '—'}</td><td><strong>{moneda(pago.monto)}</strong></td><td><div className="adicAcciones"><button className="editButton" onClick={() => { setPagoEditar(pago); setFormulario('pago') }}>Editar</button><button className="adicNo" onClick={() => eliminarPago(pago)}>Eliminar</button></div></td></tr>
         })}</tbody>
       </table></div>}
 
@@ -134,14 +142,23 @@ function Finanzas() {
         <tbody>{costos.length === 0 ? <tr><td colSpan={6}>Todavía no hay gastos cargados.</td></tr> : costos.map((costo) => <tr key={costo.id}><td>{nombreObra(costo.obra_id)}</td><td>{costo.tipo.replace('_', ' ')}</td><td>{nombreCategoria(costo.categoria_id)}</td><td>{costo.descripcion || '—'}</td><td>{fechaCorta(costo.fecha)}</td><td><strong>{moneda(costo.monto)}</strong></td></tr>)}</tbody>
       </table></div>}
 
-      {formulario === 'pago' && <FormularioPago presupuestos={presupuestos} obras={obras} onCancelar={() => setFormulario(null)} onGuardado={recargar} />}
+      {formulario === 'pago' && <FormularioPago presupuestos={presupuestos} obras={obras} pago={pagoEditar} onCancelar={() => { setFormulario(null); setPagoEditar(null) }} onGuardado={recargar} />}
       {formulario === 'costo' && <FormularioCosto obras={obras} categorias={categorias} onCancelar={() => setFormulario(null)} onGuardado={recargar} />}
     </div>
   )
 }
 
-function FormularioPago({ presupuestos, obras, onCancelar, onGuardado }: { presupuestos: Presupuesto[]; obras: Obra[]; onCancelar: () => void; onGuardado: () => void }) {
-  const [formulario, setFormulario] = useState({ obra_id: '', presupuesto_id: '', monto: '', fecha: hoy(), medio_pago: 'transferencia', referencia: '', notas: '' })
+function FormularioPago({ presupuestos, obras, pago, onCancelar, onGuardado }: { presupuestos: Presupuesto[]; obras: Obra[]; pago?: Pago | null; onCancelar: () => void; onGuardado: () => void }) {
+  const editando = !!pago
+  const [formulario, setFormulario] = useState({
+    obra_id: pago?.obra_id ? String(pago.obra_id) : '',
+    presupuesto_id: pago?.presupuesto_id ? String(pago.presupuesto_id) : '',
+    monto: pago ? String(pago.monto) : '',
+    fecha: pago?.fecha ? pago.fecha.slice(0, 10) : hoy(),
+    medio_pago: pago?.medio_pago ?? 'transferencia',
+    referencia: pago?.referencia ?? '',
+    notas: pago?.notas ?? '',
+  })
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const actualizar = (campo: string, valor: string) => setFormulario((actual) => ({ ...actual, [campo]: valor }))
@@ -155,22 +172,25 @@ function FormularioPago({ presupuestos, obras, onCancelar, onGuardado }: { presu
     const obraId = formulario.obra_id ? Number(formulario.obra_id) : (seleccionado?.obra_id ?? null)
     if (!obraId && !seleccionado) { setError('Elegí una obra o un presupuesto.'); return }
     if (monto <= 0) { setError('Ingresá un monto mayor que cero.'); return }
-    if (seleccionado && monto > seleccionado.saldo) { setError(`El monto supera el saldo de ${moneda(seleccionado.saldo)}.`); return }
+    if (!editando && seleccionado && monto > seleccionado.saldo) { setError(`El monto supera el saldo de ${moneda(seleccionado.saldo)}.`); return }
     setGuardando(true)
-    const { error: errorPago } = await supabase.from('pagos').insert({
-      presupuesto_id: seleccionado ? seleccionado.id : null,
+    const datos = {
+      presupuesto_id: seleccionado ? seleccionado.id : (formulario.presupuesto_id ? Number(formulario.presupuesto_id) : null),
       obra_id: obraId,
       monto,
       fecha: formulario.fecha,
       medio_pago: formulario.medio_pago,
       referencia: formulario.referencia.trim() || null,
       notas: formulario.notas.trim() || null,
-    })
+    }
+    const { error: errorPago } = editando
+      ? await supabase.from('pagos').update(datos).eq('id', pago!.id)
+      : await supabase.from('pagos').insert(datos)
     if (errorPago) { console.error(errorPago); setError('No se pudo registrar el cobro.'); setGuardando(false); return }
     onGuardado()
   }
 
-  return <div className="modalOverlay"><div className="modalCard"><div className="modalHeader"><div><p className="subtitle">NUEVO INGRESO</p><h2>Registrar cobro</h2></div><button type="button" className="closeButton" onClick={onCancelar}>×</button></div>
+  return <div className="modalOverlay"><div className="modalCard"><div className="modalHeader"><div><p className="subtitle">{editando ? 'EDITAR INGRESO' : 'NUEVO INGRESO'}</p><h2>{editando ? 'Editar cobro' : 'Registrar cobro'}</h2></div><button type="button" className="closeButton" onClick={onCancelar}>×</button></div>
     <form className="clienteForm" onSubmit={guardar}>
       <div className="formGrid">
         <label>Obra{seleccionado ? '' : ' *'}<select value={formulario.obra_id} onChange={(e) => { actualizar('obra_id', e.target.value); actualizar('presupuesto_id', '') }}><option value="">Seleccionar obra</option>{obras.map((o) => <option key={o.id} value={o.id}>{o.nombre_obra}</option>)}</select></label>

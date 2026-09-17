@@ -67,6 +67,7 @@ export default function AppFase2() {
   const [modoAuth, setModoAuth] = useState<'login' | 'reset'>('login')
   const [avisoReset, setAvisoReset] = useState('')
   const [vista, setVista] = useState<Vista>('dashboard')
+  const [obraAbrirId, setObraAbrirId] = useState<number | null>(null)
   const [menuAbierto, setMenuAbierto] = useState(false)
   const [rol, setRol] = useState<Rol>('admin')
   const [nombreUsuario, setNombreUsuario] = useState('')
@@ -189,8 +190,12 @@ export default function AppFase2() {
   const modulos = NAVEGACION.filter(([clave]) => puedeVer(rol, clave))
 
   const contenido: Record<Exclude<Vista, 'dashboard'>, React.ReactNode> = {
-    clientes: <Clientes />, obras: <Obras />, presupuestos: <Presupuestos />,
-    catalogo: <ProductosServicios />, finanzas: <Finanzas />, compras: <Compras />,
+    clientes: <Clientes />,
+    obras: <Obras obraAbrirId={obraAbrirId} onObraAbierta={() => setObraAbrirId(null)} />,
+    presupuestos: <Presupuestos />,
+    catalogo: <ProductosServicios />,
+    finanzas: <Finanzas onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} />,
+    compras: <Compras />,
     personal: <Personal />, notificaciones: <Notificaciones />, usuarios: <Usuarios />, configuracion: <Configuracion />,
   }
 

@@ -336,19 +336,6 @@ function NuevoPresupuesto({
       return
     }
 
-    // Al crear un presupuesto nuevo, descontar el stock de los productos del catálogo.
-    if (!presupuesto) {
-      for (const item of itemsValidos) {
-        if (item.catalogo_id && item.tipo === 'producto') {
-          const { error: errorStock } = await supabase.rpc('descontar_stock', {
-            p_id: item.catalogo_id,
-            p_cant: Number(item.cantidad),
-          })
-          if (errorStock) console.error('No se pudo descontar stock', item.catalogo_id, errorStock)
-        }
-      }
-    }
-
     setGuardando(false)
     onGuardado()
   }
@@ -357,6 +344,7 @@ function NuevoPresupuesto({
     return new Intl.NumberFormat('es-AR', {
       style: 'currency',
       currency: 'ARS',
+      minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(valor)
   }

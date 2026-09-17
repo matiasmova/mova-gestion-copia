@@ -90,7 +90,7 @@ function RentabilidadObra({ obraId }: { obraId: number }) {
       <div className="seguimientoAcciones">
         <div>
           <h3>Rentabilidad de la obra</h3>
-          <p>Ingresos menos egresos. Resultado proyectado (todo cobrado) vs. resultado de caja (lo cobrado hoy).</p>
+          <p>Costo vs ingreso. Resultado proyectado (todo cobrado) vs. resultado de caja (lo cobrado hoy).</p>
         </div>
         <button type="button" className="editButton" disabled={cargando} onClick={() => setRevision((v) => v + 1)}>Actualizar</button>
       </div>
@@ -101,20 +101,20 @@ function RentabilidadObra({ obraId }: { obraId: number }) {
       {!cargando && !error && (<>
         <div className="rentGrid">
           <div className="rentCol">
-            <h4>Ingresos</h4>
+            <h4>Costo</h4>
+            {datos.costoItems > 0 && <div className="rentRow"><span>Costo de productos/servicios (presupuesto)</span><strong>{moneda(datos.costoItems)}</strong></div>}
+            {Object.keys(datos.egresosPorTipo).length === 0 && datos.costoItems === 0 && <div className="rentRow"><span>Sin costos registrados</span><strong>{moneda(0)}</strong></div>}
+            {Object.entries(datos.egresosPorTipo).map(([tipo, monto]) => (
+              <div className="rentRow" key={tipo}><span>{ETIQUETAS_EGRESO[tipo] ?? tipo} (registrados)</span><strong>{moneda(monto)}</strong></div>
+            ))}
+            <div className="rentRow total"><span>Costo total</span><strong>{moneda(datos.egresos)}</strong></div>
+          </div>
+          <div className="rentCol">
+            <h4>Ingreso</h4>
             <div className="rentRow"><span>Presupuestos aceptados</span><strong>{moneda(datos.contratado)}</strong></div>
             <div className="rentRow"><span>Adicionales aprobados</span><strong style={{ color: color(datos.extra) }}>{datos.extra >= 0 ? '+' : ''}{moneda(datos.extra)}</strong></div>
             <div className="rentRow total"><span>Valor actualizado</span><strong>{moneda(datos.valorActualizado)}</strong></div>
             <div className="rentRow"><span>Cobrado a la fecha</span><strong>{moneda(datos.cobrado)}</strong></div>
-          </div>
-          <div className="rentCol">
-            <h4>Egresos</h4>
-            {datos.costoItems > 0 && <div className="rentRow"><span>Costo de productos/servicios (presupuesto)</span><strong>{moneda(datos.costoItems)}</strong></div>}
-            {Object.keys(datos.egresosPorTipo).length === 0 && datos.costoItems === 0 && <div className="rentRow"><span>Sin gastos registrados</span><strong>{moneda(0)}</strong></div>}
-            {Object.entries(datos.egresosPorTipo).map(([tipo, monto]) => (
-              <div className="rentRow" key={tipo}><span>{ETIQUETAS_EGRESO[tipo] ?? tipo} (registrados)</span><strong>{moneda(monto)}</strong></div>
-            ))}
-            <div className="rentRow total"><span>Total egresos</span><strong>{moneda(datos.egresos)}</strong></div>
           </div>
         </div>
 
