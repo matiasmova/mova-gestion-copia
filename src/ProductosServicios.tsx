@@ -34,6 +34,29 @@ const TIPOS_KANBAN = [
 ]
 const esHttp = (u: string | null | undefined) => !!u && /^https?:\/\//.test(u)
 
+// Comprime y redimensiona la imagen antes de subirla, para ocupar el mínimo de storage.
+// Reescala a máx. 1000px y exporta WebP ~0.8 (una foto de celular de ~4MB queda en ~100-200KB).
+async function comprimirImagen(file: File): Promise<Blob> {
+  try {
+    const url = URL.createObjectURL(file)
+    const img = document.createElement('img')
+    await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error('img')); img.src = url })
+    const max = 1000
+    let w = img.naturalWidth || img.width, h = img.naturalHeight || img.height
+    if (w > max || h > max) { const r = Math.min(max / w, max / h); w = Math.round(w * r); h = Math.round(h * r) }
+    const canvas = document.createElement('canvas')
+    canvas.width = w; canvas.height = h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return file
+    ctx.drawImage(img, 0, 0, w, h)
+    URL.revokeObjectURL(url)
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob((b) => res(b), 'image/webp', 0.8))
+    return blob && blob.size < file.size ? blob : file
+  } catch {
+    return file
+  }
+}
+
 function formatoDinero(valor: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 2 }).format(Number(valor || 0))
 }
@@ -173,8 +196,9 @@ function ProductosServicios() {
     const file = evento.target.files?.[0]
     if (!file) return
     setSubiendoFoto(true); setErrorFormulario('')
-    const path = `p-${Date.now()}-${file.name.replace(/[^\w.\-]/g, '_')}`
-    const subida = await supabase.storage.from(BUCKET).upload(path, file, { upsert: true })
+    const comprimida = await comprimirImagen(file)
+    const path = `p-${Date.now()}.webp`
+    const subida = await supabase.storage.from(BUCKET).upload(path, comprimida, { upsert: true, contentType: 'image/webp' })
     if (subida.error) { console.error(subida.error); setErrorFormulario('No se pudo subir la foto.'); setSubiendoFoto(false); return }
     setFotoUrl(path)
     const { data } = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600)

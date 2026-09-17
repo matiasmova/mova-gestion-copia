@@ -455,3 +455,6 @@
 .prodListaFoto{width:52px}
 .prodListaFoto img{width:40px;height:40px;object-fit:cover;border-radius:8px;display:block}
 .prodListaFoto span{font-size:20px;opacity:.5}
+
+/* Timeline: acciones por avance (badge + editar) */
+.timelineAcciones{display:flex;align-items:center;gap:8px;flex-wrap:wrap}

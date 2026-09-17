@@ -18,6 +18,7 @@ function RentabilidadObra({ obraId }: { obraId: number }) {
   const [costos, setCostos] = useState<Costo[]>([])
   const [pagos, setPagos] = useState<Pago[]>([])
   const [asignaciones, setAsignaciones] = useState<Asignacion[]>([])
+  const [costoItems, setCostoItems] = useState(0)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
@@ -32,15 +33,21 @@ function RentabilidadObra({ obraId }: { obraId: number }) {
       if (rPres.error) { console.error(rPres.error); setError('No se pudo calcular la rentabilidad.'); setCargando(false); return }
       const presu = (rPres.data ?? []).map((p) => ({ ...p, total: Number(p.total) })) as Presupuesto[]
       const idsPresu = presu.map((p) => p.id)
+      const idsAceptados = presu.filter((p) => p.activo !== false && p.estado === 'aceptado').map((p) => p.id)
 
-      const [rAdic, rCostos, rPagos, rAsig] = await Promise.all([
+      const [rAdic, rCostos, rPagos, rAsig, rItems] = await Promise.all([
         supabase.from('adicionales').select('importe,estado').eq('obra_id', obraId),
         supabase.from('costos').select('tipo,monto').eq('obra_id', obraId),
         supabase.from('pagos').select('monto,obra_id,presupuesto_id'),
         supabase.from('obra_asignaciones').select('valor_acordado').eq('obra_id', obraId),
+        idsAceptados.length
+          ? supabase.from('presupuesto_items').select('cantidad,costo_unitario,presupuesto_id').in('presupuesto_id', idsAceptados)
+          : Promise.resolve({ data: [], error: null } as { data: unknown[]; error: null }),
       ])
       if (!vigente) return
       setPresupuestos(presu)
+      const itemsData = (rItems.error ? [] : (rItems.data ?? [])) as Array<{ cantidad?: number; costo_unitario?: number }>
+      setCostoItems(itemsData.reduce((s, it) => s + (Number(it.cantidad) || 0) * (Number(it.costo_unitario) || 0), 0))
       setAdicionales(rAdic.error ? [] : (rAdic.data ?? []).map((a) => ({ ...a, importe: Number(a.importe) })) as Adicional[])
       setCostos(rCostos.error ? [] : (rCostos.data ?? []).map((c) => ({ ...c, monto: Number(c.monto) })) as Costo[])
       setAsignaciones(rAsig.error ? [] : (rAsig.data ?? []).map((a) => ({ valor_acordado: a.valor_acordado == null ? null : Number(a.valor_acordado) })) as Asignacion[])
@@ -63,7 +70,9 @@ function RentabilidadObra({ obraId }: { obraId: number }) {
       acc[clave] = (acc[clave] || 0) + c.monto
       return acc
     }, {})
-    const egresos = costos.reduce((s, c) => s + c.monto, 0)
+    const egresosRegistrados = costos.reduce((s, c) => s + c.monto, 0)
+    // El costo de los productos/servicios del presupuesto (lo que MOVA paga por los equipos) también es un egreso.
+    const egresos = egresosRegistrados + costoItems
     // Personal: acordado (asignaciones) vs pagado (costos de mano de obra / tercerizados)
     const personalAcordado = asignaciones.reduce((s, a) => s + (Number(a.valor_acordado) || 0), 0)
     const personalPagado = costos.filter((c) => c.tipo === 'mano_obra' || c.tipo === 'terciarizado').reduce((s, c) => s + c.monto, 0)
@@ -71,8 +80,8 @@ function RentabilidadObra({ obraId }: { obraId: number }) {
     const resultadoProyectado = valorActualizado - egresos
     const resultadoCaja = cobrado - egresos
     const margenProyectado = valorActualizado > 0 ? Math.round((resultadoProyectado / valorActualizado) * 100) : 0
-    return { contratado, extra, valorActualizado, cobrado, egresos, egresosPorTipo, personalAcordado, personalPagado, personalPendiente, resultadoProyectado, resultadoCaja, margenProyectado }
-  }, [presupuestos, adicionales, costos, pagos, asignaciones])
+    return { contratado, extra, valorActualizado, cobrado, egresos, egresosPorTipo, costoItems, personalAcordado, personalPagado, personalPendiente, resultadoProyectado, resultadoCaja, margenProyectado }
+  }, [presupuestos, adicionales, costos, pagos, asignaciones, costoItems])
 
   const color = (v: number) => (v > 0 ? '#23764e' : v < 0 ? '#b23b32' : '#4b525c')
 
@@ -100,9 +109,10 @@ function RentabilidadObra({ obraId }: { obraId: number }) {
           </div>
           <div className="rentCol">
             <h4>Egresos</h4>
-            {Object.keys(datos.egresosPorTipo).length === 0 && <div className="rentRow"><span>Sin gastos registrados</span><strong>{moneda(0)}</strong></div>}
+            {datos.costoItems > 0 && <div className="rentRow"><span>Costo de productos/servicios (presupuesto)</span><strong>{moneda(datos.costoItems)}</strong></div>}
+            {Object.keys(datos.egresosPorTipo).length === 0 && datos.costoItems === 0 && <div className="rentRow"><span>Sin gastos registrados</span><strong>{moneda(0)}</strong></div>}
             {Object.entries(datos.egresosPorTipo).map(([tipo, monto]) => (
-              <div className="rentRow" key={tipo}><span>{ETIQUETAS_EGRESO[tipo] ?? tipo}</span><strong>{moneda(monto)}</strong></div>
+              <div className="rentRow" key={tipo}><span>{ETIQUETAS_EGRESO[tipo] ?? tipo} (registrados)</span><strong>{moneda(monto)}</strong></div>
             ))}
             <div className="rentRow total"><span>Total egresos</span><strong>{moneda(datos.egresos)}</strong></div>
           </div>
@@ -130,7 +140,7 @@ function RentabilidadObra({ obraId }: { obraId: number }) {
             </div>
           </div>
         )}
-        <p className="gestionAyuda">El resultado proyectado supone que se cobra todo lo contratado. El de caja refleja lo cobrado hasta hoy contra los gastos ya registrados. Los pagos a ayudantes ya están incluidos en “Mano de obra”.</p>
+        <p className="gestionAyuda">Egresos = costo de los productos/servicios del presupuesto + gastos registrados (mano de obra, ferretería, varios). El <strong>resultado proyectado</strong> supone cobrar todo lo contratado; el <strong>de caja</strong> es lo cobrado hoy − egresos (por eso una obra aceptada sin cobrar aún da negativo). Tip: en Compras/gastos cargá lo extra (ferretería, mano de obra), no vuelvas a cargar los productos del catálogo (su costo ya sale del presupuesto).</p>
       </>)}
     </section>
   )

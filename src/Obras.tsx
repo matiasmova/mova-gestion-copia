@@ -97,6 +97,7 @@ function Obras() {
     useState(false)
   const [formularioAvance, setFormularioAvance] =
     useState(avanceInicial)
+  const [editandoAvanceId, setEditandoAvanceId] = useState<number | null>(null)
   const [imagenes, setImagenes] = useState<ImagenObra[]>([])
   const [subiendoImagen, setSubiendoImagen] = useState(false)
   const [tipoImagen, setTipoImagen] = useState('avance')
@@ -308,17 +309,18 @@ function Obras() {
     setGuardandoAvance(true)
     setErrorAvances('')
 
-    const { error: errorGuardar } = await supabase
-      .from('obra_avances')
-      .insert({
-        obra_id: obraSeguimiento.id,
-        fecha: formularioAvance.fecha,
-        titulo: formularioAvance.titulo.trim(),
-        descripcion:
-          formularioAvance.descripcion.trim() || null,
-        estado: formularioAvance.estado,
-        porcentaje: Number(formularioAvance.porcentaje),
-      })
+    const datosAvance = {
+      obra_id: obraSeguimiento.id,
+      fecha: formularioAvance.fecha,
+      titulo: formularioAvance.titulo.trim(),
+      descripcion: formularioAvance.descripcion.trim() || null,
+      estado: formularioAvance.estado,
+      porcentaje: Number(formularioAvance.porcentaje),
+    }
+
+    const { error: errorGuardar } = editandoAvanceId
+      ? await supabase.from('obra_avances').update(datosAvance).eq('id', editandoAvanceId)
+      : await supabase.from('obra_avances').insert(datosAvance)
 
     if (errorGuardar) {
       console.error(errorGuardar)
@@ -327,14 +329,17 @@ function Obras() {
       return
     }
 
-    const obraActualizada = {
-      ...obraSeguimiento,
-      estado: formularioAvance.estado,
-      porcentaje_avance: Number(formularioAvance.porcentaje),
+    // Al crear un avance nuevo, actualizamos el estado/avance de la obra.
+    // Al editar uno viejo, no pisamos el estado actual de la obra.
+    if (!editandoAvanceId) {
+      setObraSeguimiento({
+        ...obraSeguimiento,
+        estado: formularioAvance.estado,
+        porcentaje_avance: Number(formularioAvance.porcentaje),
+      })
     }
-
-    setObraSeguimiento(obraActualizada)
     setMostrarNuevoAvance(false)
+    setEditandoAvanceId(null)
     setFormularioAvance({
       ...avanceInicial,
       fecha: new Date().toISOString().slice(0, 10),
@@ -344,6 +349,18 @@ function Obras() {
     setGuardandoAvance(false)
     setActualizacion((valor) => valor + 1)
     cargarAvances(obraSeguimiento.id)
+  }
+
+  function editarAvance(avance: AvanceObra) {
+    setEditandoAvanceId(avance.id)
+    setFormularioAvance({
+      fecha: (avance.fecha || '').slice(0, 10) || new Date().toISOString().slice(0, 10),
+      titulo: avance.titulo,
+      descripcion: avance.descripcion ?? '',
+      estado: avance.estado,
+      porcentaje: Number(avance.porcentaje) || 0,
+    })
+    setMostrarNuevoAvance(true)
   }
 
   async function subirImagen(
@@ -680,12 +697,24 @@ function Obras() {
               <button
                 type="button"
                 className="newButton"
-                onClick={() =>
-                  setMostrarNuevoAvance((valor) => !valor)
-                }
+                onClick={() => {
+                  if (mostrarNuevoAvance) {
+                    setMostrarNuevoAvance(false)
+                    setEditandoAvanceId(null)
+                  } else {
+                    setEditandoAvanceId(null)
+                    setFormularioAvance({
+                      ...avanceInicial,
+                      fecha: new Date().toISOString().slice(0, 10),
+                      estado: (obraSeguimiento?.estado as EstadoObra) ?? 'en_proceso',
+                      porcentaje: Number(obraSeguimiento?.porcentaje_avance || 0),
+                    })
+                    setMostrarNuevoAvance(true)
+                  }
+                }}
               >
                 {mostrarNuevoAvance
-                  ? 'Cancelar avance'
+                  ? 'Cancelar'
                   : '+ Agregar avance'}
               </button>
             </div>
@@ -787,7 +816,9 @@ function Obras() {
                   >
                     {guardandoAvance
                       ? 'Guardando...'
-                      : 'Guardar avance'}
+                      : editandoAvanceId
+                        ? 'Guardar cambios'
+                        : 'Guardar avance'}
                   </button>
                 </div>
               </form>
@@ -829,14 +860,12 @@ function Obras() {
                           <h4>{avance.titulo}</h4>
                         </div>
 
-                        <span
-                          className={`obraEstadoBadge ${claseEstado(
-                            avance.estado,
-                          )}`}
-                        >
-                          {etiquetaEstado(avance.estado)} ·{' '}
-                          {avance.porcentaje}%
-                        </span>
+                        <div className="timelineAcciones">
+                          <span className={`crmBadge est-${claseEstado(avance.estado)}`}>
+                            {etiquetaEstado(avance.estado)} · {avance.porcentaje}%
+                          </span>
+                          <button type="button" className="editButton" onClick={() => editarAvance(avance)}>Editar</button>
+                        </div>
                       </div>
 
                       {avance.descripcion && (
