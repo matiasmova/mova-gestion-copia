@@ -7,7 +7,7 @@ import NuevoPresupuesto, {
   type PresupuestoEditable,
 } from './NuevoPresupuesto'
 import PresupuestoPDF from './PresupuestoPDF'
-import PresupuestoFicha from './PresupuestoFicha'
+import PresupuestoFicha, { type DatosObra } from './PresupuestoFicha'
 import VistaToggle, { useVista } from './VistaToggle'
 import { moneda, fechaCorta } from './gestionFormat'
 
@@ -108,12 +108,13 @@ function Presupuestos() {
     setFicha((f) => (f && f.id === p.id ? { ...f, estado: nuevo } : f))
   }
 
-  async function convertirEnObra(p: PresupuestoCompleto) {
+  async function convertirEnObra(p: PresupuestoCompleto, datos?: DatosObra) {
     if (convirtiendo) return
-    if (!window.confirm(`Se creará una obra a partir de "${p.titulo}" para ${nombreCliente(p.cliente_id)}.\n\nEl presupuesto se conserva y queda vinculado. ¿Continuar?`)) return
     setConvirtiendo(p.id)
     const { data: obraNueva, error: errObra } = await supabase.from('obras').insert({
       cliente_id: p.cliente_id, nombre_obra: p.titulo, descripcion: p.descripcion ?? null,
+      direccion: datos?.direccion?.trim() || null, localidad: datos?.localidad?.trim() || null,
+      fecha_inicio: datos?.fecha_inicio || null, fecha_fin_estimada: datos?.fecha_fin_estimada || null,
       estado: 'en_proceso', porcentaje_avance: 0, activo: true,
     }).select('id').single()
     if (errObra || !obraNueva) { console.error(errObra); window.alert('No se pudo crear la obra.'); setConvirtiendo(null); return }
@@ -122,6 +123,18 @@ function Presupuestos() {
     setConvirtiendo(null)
     await cargarDatos()
     window.alert('Obra creada y vinculada. Ya podés cargarle avances, adicionales y cobros desde Obras.')
+  }
+
+  async function eliminar(p: PresupuestoCompleto) {
+    if (!window.confirm(`¿Eliminar definitivamente el presupuesto "${p.titulo}"?\n\nEsto borra el presupuesto y sus ítems. Los cobros registrados se conservan pero quedan sin presupuesto asociado. Esta acción no se puede deshacer.`)) return
+    // 1) Desvincular pagos (conservar el registro del cobro)
+    await supabase.from('pagos').update({ presupuesto_id: null }).eq('presupuesto_id', p.id)
+    // 2) Borrar ítems y luego el presupuesto
+    await supabase.from('presupuesto_items').delete().eq('presupuesto_id', p.id)
+    const { error: err } = await supabase.from('presupuestos').delete().eq('id', p.id)
+    if (err) { console.error(err); window.alert('No se pudo eliminar el presupuesto.'); return }
+    setFicha(null)
+    await cargarDatos()
   }
 
   const abrirFicha = (p: PresupuestoCompleto) => setFicha(p)
@@ -209,8 +222,9 @@ function Presupuestos() {
           onCerrar={() => setFicha(null)}
           onEditar={() => editar(ficha)}
           onPDF={() => setPdfPresupuesto(ficha)}
-          onCrearObra={() => convertirEnObra(ficha)}
+          onCrearObra={(datos) => convertirEnObra(ficha, datos)}
           onCambiarEstado={(nuevo) => cambiarEstado(ficha, nuevo)}
+          onEliminar={() => eliminar(ficha)}
         />
       )}
     </div>

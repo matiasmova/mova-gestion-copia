@@ -98,6 +98,7 @@ function NuevoPresupuesto({
   const [descuento, setDescuento] = useState(
     presupuesto?.descuento ?? 0,
   )
+  const [descuentoTipo, setDescuentoTipo] = useState<'monto' | 'porcentaje'>('monto')
   const totalPagado = presupuesto?.total_pagado ?? 0
   const [notas, setNotas] = useState(presupuesto?.notas ?? '')
   const [items, setItems] = useState<ItemPresupuesto[]>(
@@ -165,7 +166,11 @@ function NuevoPresupuesto({
     [items],
   )
 
-  const total = Math.max(subtotal - Number(descuento || 0), 0)
+  // El descuento puede ingresarse en $ o en %; siempre se guarda como monto en $.
+  const descuentoMonto = descuentoTipo === 'porcentaje'
+    ? Math.round(subtotal * (Number(descuento || 0) / 100) * 100) / 100
+    : Number(descuento || 0)
+  const total = Math.max(subtotal - descuentoMonto, 0)
   const saldo = Math.max(total - Number(totalPagado || 0), 0)
 
   function actualizarItem(
@@ -260,7 +265,7 @@ function NuevoPresupuesto({
       validez_dias: Number(validezDias),
       estado,
       etapa_trabajo: etapaTrabajo,
-      descuento: Number(descuento || 0),
+      descuento: descuentoMonto,
       ...(!presupuesto && { total_pagado: 0 }),
       notas: notas.trim() || null,
       activo: true,
@@ -642,21 +647,26 @@ function NuevoPresupuesto({
 
           <div className="presupuestoEconomia">
             <label>
-              Descuento ($)
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={descuento}
-                onChange={(evento) =>
-                  setDescuento(Number(evento.target.value))
-                }
-              />
+              Descuento / Bonificación
+              <div className="descuentoPresu">
+                <div className="segTipo">
+                  <button type="button" className={descuentoTipo === 'monto' ? 'active' : ''} onClick={() => setDescuentoTipo('monto')}>$</button>
+                  <button type="button" className={descuentoTipo === 'porcentaje' ? 'active' : ''} onClick={() => setDescuentoTipo('porcentaje')}>%</button>
+                </div>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={descuento}
+                  onChange={(evento) => setDescuento(Number(evento.target.value))}
+                  placeholder={descuentoTipo === 'porcentaje' ? '% de descuento' : 'Monto en $'}
+                />
+              </div>
             </label>
 
             <div className="presupuestoTotales">
               <span>Subtotal: {formatoDinero(subtotal)}</span>
-              <span>Descuento: {formatoDinero(descuento)}</span>
+              <span>Descuento: {formatoDinero(descuentoMonto)}{descuentoTipo === 'porcentaje' ? ` (${Number(descuento || 0)}%)` : ''}</span>
               <strong>Total: {formatoDinero(total)}</strong>
               <span>Cobrado: {formatoDinero(totalPagado)}</span>
               <span>Saldo: {formatoDinero(saldo)}</span>

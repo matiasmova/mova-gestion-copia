@@ -15,11 +15,13 @@ export type ProductoServicio = {
   stock: number
   stock_minimo: number
   proveedor: string | null
+  link_compra: string | null
   foto_url: string | null
   aplica_descuento: boolean
   descuento_pct: number
   descuento_monto: number
   activo: boolean
+  fotoView?: string | null
 }
 
 type TipoFiltro = 'todos' | 'producto' | 'servicio'
@@ -30,6 +32,7 @@ const TIPOS_KANBAN = [
   { v: 'producto', t: 'Productos' },
   { v: 'servicio', t: 'Servicios' },
 ]
+const esHttp = (u: string | null | undefined) => !!u && /^https?:\/\//.test(u)
 
 function formatoDinero(valor: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 2 }).format(Number(valor || 0))
@@ -52,6 +55,7 @@ function ProductosServicios() {
   const [busqueda, setBusqueda] = useState('')
   const [tipoFiltro, setTipoFiltro] = useState<TipoFiltro>('todos')
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoFiltro>('activos')
+  const [soloStockBajo, setSoloStockBajo] = useState(false)
   const [vista, setVista] = useVista('productos', 'kanban')
 
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
@@ -64,9 +68,11 @@ function ProductosServicios() {
   const [descripcion, setDescripcion] = useState('')
   const [categoria, setCategoria] = useState('')
   const [proveedor, setProveedor] = useState('')
+  const [linkCompra, setLinkCompra] = useState('')
   const [unidad, setUnidad] = useState('unidad')
-  const [precioVenta, setPrecioVenta] = useState('')
-  const [costoUnitario, setCostoUnitario] = useState('')
+  const [precioCompra, setPrecioCompra] = useState('')
+  const [gananciaPct, setGananciaPct] = useState('')
+  const [precioLista, setPrecioLista] = useState('')
   const [stock, setStock] = useState('')
   const [stockMinimo, setStockMinimo] = useState('5')
   const [aplicaDescuento, setAplicaDescuento] = useState(false)
@@ -83,7 +89,7 @@ function ProductosServicios() {
     setError('')
     const { data, error: errorConsulta } = await supabase
       .from('productos_servicios')
-      .select(`id, created_at, tipo, nombre, descripcion, categoria, unidad, precio_venta, costo_unitario, stock, stock_minimo, proveedor, foto_url, aplica_descuento, descuento_pct, descuento_monto, activo`)
+      .select(`id, created_at, tipo, nombre, descripcion, categoria, unidad, precio_venta, costo_unitario, stock, stock_minimo, proveedor, link_compra, foto_url, aplica_descuento, descuento_pct, descuento_monto, activo`)
       .order('nombre', { ascending: true })
     if (errorConsulta) {
       console.error(errorConsulta)
@@ -91,13 +97,21 @@ function ProductosServicios() {
       setCargando(false)
       return
     }
-    setElementos((data ?? []).map((el) => ({
+    const base = (data ?? []).map((el) => ({
       ...el,
       precio_venta: Number(el.precio_venta), costo_unitario: Number(el.costo_unitario),
       stock: Number(el.stock ?? 0), stock_minimo: Number(el.stock_minimo ?? 5),
       descuento_pct: Number(el.descuento_pct ?? 0), descuento_monto: Number(el.descuento_monto ?? 0),
-      aplica_descuento: !!el.aplica_descuento,
-    })) as ProductoServicio[])
+      aplica_descuento: !!el.aplica_descuento, fotoView: null as string | null,
+    })) as ProductoServicio[]
+    // Resolver la foto: si es URL http la usamos directo; si es un path del storage, firmamos.
+    const conFoto = await Promise.all(base.map(async (el) => {
+      if (!el.foto_url) return el
+      if (esHttp(el.foto_url)) return { ...el, fotoView: el.foto_url }
+      const { data: firma } = await supabase.storage.from(BUCKET).createSignedUrl(el.foto_url, 3600)
+      return { ...el, fotoView: firma?.signedUrl ?? null }
+    }))
+    setElementos(conFoto)
     setCargando(false)
   }
 
@@ -107,32 +121,53 @@ function ProductosServicios() {
       const coincideBusqueda = !texto || el.nombre.toLowerCase().includes(texto) || (el.descripcion ?? '').toLowerCase().includes(texto) || (el.categoria ?? '').toLowerCase().includes(texto) || (el.proveedor ?? '').toLowerCase().includes(texto)
       const coincideTipo = tipoFiltro === 'todos' || el.tipo === tipoFiltro
       const coincideEstado = estadoFiltro === 'todos' || (estadoFiltro === 'activos' && el.activo) || (estadoFiltro === 'inactivos' && !el.activo)
-      return coincideBusqueda && coincideTipo && coincideEstado
+      const coincideStock = !soloStockBajo || nivelStock(el) === 'bajo' || nivelStock(el) === 'sin'
+      return coincideBusqueda && coincideTipo && coincideEstado && coincideStock
     })
-  }, [elementos, busqueda, tipoFiltro, estadoFiltro])
+  }, [elementos, busqueda, tipoFiltro, estadoFiltro, soloStockBajo])
 
-  // KPIs de stock
   const inversionStock = elementos.filter((el) => el.tipo === 'producto' && el.activo).reduce((s, el) => s + el.costo_unitario * el.stock, 0)
   const bajos = elementos.filter((el) => el.activo && (nivelStock(el) === 'bajo' || nivelStock(el) === 'sin'))
 
   function limpiarFormulario() {
-    setTipo('producto'); setNombre(''); setDescripcion(''); setCategoria(''); setProveedor('')
-    setUnidad('unidad'); setPrecioVenta(''); setCostoUnitario(''); setStock(''); setStockMinimo('5')
+    setTipo('producto'); setNombre(''); setDescripcion(''); setCategoria(''); setProveedor(''); setLinkCompra('')
+    setUnidad('unidad'); setPrecioCompra(''); setGananciaPct(''); setPrecioLista(''); setStock(''); setStockMinimo('5')
     setAplicaDescuento(false); setDescuentoTipo('porcentaje'); setDescuentoValor('')
     setFotoUrl(null); setFotoPreview(''); setErrorFormulario('')
   }
   function abrirNuevo() { setEditando(null); limpiarFormulario(); setMostrarFormulario(true) }
   async function abrirEdicion(el: ProductoServicio) {
     setEditando(el)
-    setTipo(el.tipo); setNombre(el.nombre); setDescripcion(el.descripcion ?? ''); setCategoria(el.categoria ?? ''); setProveedor(el.proveedor ?? '')
-    setUnidad(el.unidad); setPrecioVenta(String(el.precio_venta)); setCostoUnitario(String(el.costo_unitario)); setStock(String(el.stock)); setStockMinimo(String(el.stock_minimo ?? 5))
+    setTipo(el.tipo); setNombre(el.nombre); setDescripcion(el.descripcion ?? ''); setCategoria(el.categoria ?? '')
+    setProveedor(el.proveedor ?? ''); setLinkCompra(el.link_compra ?? ''); setUnidad(el.unidad)
+    setPrecioCompra(el.costo_unitario ? String(el.costo_unitario) : '')
+    setPrecioLista(el.precio_venta ? String(el.precio_venta) : '')
+    setGananciaPct(el.costo_unitario > 0 ? String(Math.round(((el.precio_venta - el.costo_unitario) / el.costo_unitario) * 1000) / 10) : '')
+    setStock(String(el.stock)); setStockMinimo(String(el.stock_minimo ?? 5))
     setAplicaDescuento(el.aplica_descuento); setDescuentoTipo(el.descuento_monto > 0 ? 'monto' : 'porcentaje')
     setDescuentoValor(String(el.descuento_monto > 0 ? el.descuento_monto : el.descuento_pct))
-    setFotoUrl(el.foto_url); setErrorFormulario(''); setFotoPreview('')
-    if (el.foto_url) { const { data } = await supabase.storage.from(BUCKET).createSignedUrl(el.foto_url, 3600); setFotoPreview(data?.signedUrl ?? '') }
+    setFotoUrl(el.foto_url); setErrorFormulario('')
+    setFotoPreview(esHttp(el.foto_url) ? (el.foto_url as string) : (el.fotoView ?? ''))
     setMostrarFormulario(true)
   }
   function cerrarFormulario() { setMostrarFormulario(false); setEditando(null); setErrorFormulario('') }
+
+  // Recalcular precios de forma bidireccional (precio de compra + % ganancia => precio de lista)
+  function cambiarCompra(v: string) {
+    setPrecioCompra(v)
+    const c = Number(v || 0), g = Number(gananciaPct || 0)
+    if (c > 0 && gananciaPct !== '') setPrecioLista(String(Math.round(c * (1 + g / 100))))
+  }
+  function cambiarGanancia(v: string) {
+    setGananciaPct(v)
+    const c = Number(precioCompra || 0), g = Number(v || 0)
+    if (c > 0) setPrecioLista(String(Math.round(c * (1 + g / 100))))
+  }
+  function cambiarLista(v: string) {
+    setPrecioLista(v)
+    const c = Number(precioCompra || 0), l = Number(v || 0)
+    if (c > 0) setGananciaPct(String(Math.round(((l - c) / c) * 1000) / 10))
+  }
 
   async function subirFoto(evento: React.ChangeEvent<HTMLInputElement>) {
     const file = evento.target.files?.[0]
@@ -154,8 +189,8 @@ function ProductosServicios() {
     const descuentoMonto = aplicaDescuento && descuentoTipo === 'monto' ? Number(descuentoValor || 0) : 0
     const datos = {
       tipo, nombre: nombre.trim(), descripcion: descripcion.trim() || null, categoria: categoria.trim() || null,
-      proveedor: proveedor.trim() || null, unidad,
-      precio_venta: Number(precioVenta || 0), costo_unitario: Number(costoUnitario || 0),
+      proveedor: proveedor.trim() || null, link_compra: linkCompra.trim() || null, unidad,
+      precio_venta: Number(precioLista || 0), costo_unitario: Number(precioCompra || 0),
       stock: Number(stock || 0), stock_minimo: Number(stockMinimo || 0),
       foto_url: fotoUrl, aplica_descuento: aplicaDescuento, descuento_pct: descuentoPct, descuento_monto: descuentoMonto,
     }
@@ -174,13 +209,13 @@ function ProductosServicios() {
     setElementos((arr) => arr.map((x) => (x.id === el.id ? { ...x, activo: !x.activo } : x)))
   }
 
-  // Simulación en vivo
+  // Simulación en vivo (usa precio de lista + descuento)
   const simDescuentoPct = aplicaDescuento && descuentoTipo === 'porcentaje' ? Number(descuentoValor || 0) : 0
   const simDescuentoMonto = aplicaDescuento && descuentoTipo === 'monto' ? Number(descuentoValor || 0) : 0
-  const simPrecioFinal = precioFinalUnidad({ precio_venta: Number(precioVenta || 0), aplica_descuento: aplicaDescuento, descuento_pct: simDescuentoPct, descuento_monto: simDescuentoMonto })
-  const simGanancia = simPrecioFinal - Number(costoUnitario || 0)
+  const simPrecioFinal = precioFinalUnidad({ precio_venta: Number(precioLista || 0), aplica_descuento: aplicaDescuento, descuento_pct: simDescuentoPct, descuento_monto: simDescuentoMonto })
+  const simGanancia = simPrecioFinal - Number(precioCompra || 0)
   const simMargen = simPrecioFinal > 0 ? (simGanancia / simPrecioFinal) * 100 : 0
-  const simTotal = simPrecioFinal * Number(stock || 0)
+  const simInversion = Number(precioCompra || 0) * Number(stock || 0)
 
   const tarjeta = (el: ProductoServicio) => {
     const final = precioFinalUnidad(el)
@@ -190,6 +225,9 @@ function ProductosServicios() {
     const nivel = nivelStock(el)
     return (
       <article className={`prodCard ${el.activo ? '' : 'inactivo'}`} key={el.id}>
+        <div className="prodCardFoto">
+          {el.fotoView ? <img src={el.fotoView} alt={el.nombre} loading="lazy" /> : <span>{el.tipo === 'servicio' ? '🛠️' : '📦'}</span>}
+        </div>
         <div className="prodCardTop">
           <span className={`catalogoTipo ${el.tipo}`}>{el.tipo === 'producto' ? 'Producto' : 'Servicio'}</span>
           {el.tipo === 'producto' && (
@@ -207,13 +245,14 @@ function ProductosServicios() {
           </>) : <strong>{formatoDinero(el.precio_venta)}</strong>}
         </div>
         <div className="prodDatos">
-          <span>Costo <b>{formatoDinero(el.costo_unitario)}</b></span>
+          <span>Compra <b>{formatoDinero(el.costo_unitario)}</b></span>
           <span>Ganancia <b>{formatoDinero(ganancia)}</b></span>
           <span>Margen <b>{margen.toFixed(1)}%</b></span>
           {el.tipo === 'producto' && <span>Invertido <b>{formatoDinero(el.costo_unitario * el.stock)}</b></span>}
         </div>
         <div className="prodAcciones">
           <button className="editButton" onClick={() => abrirEdicion(el)}>Editar</button>
+          {el.link_compra && <a className="editButton" href={el.link_compra} target="_blank" rel="noreferrer">Ver en web</a>}
           <button className={el.activo ? 'deactivateButton' : 'activateButton'} onClick={() => cambiarEstado(el)}>{el.activo ? 'Desactivar' : 'Activar'}</button>
         </div>
       </article>
@@ -233,9 +272,11 @@ function ProductosServicios() {
 
       {!cargando && !error && (
         <div className="prodKpis">
-          <div><span>INVERSIÓN EN STOCK</span><strong>{formatoDinero(inversionStock)}</strong><small>Costo × stock (productos)</small></div>
+          <div><span>INVERSIÓN EN STOCK</span><strong>{formatoDinero(inversionStock)}</strong><small>Precio de compra × stock</small></div>
           <div><span>PRODUCTOS ACTIVOS</span><strong>{elementos.filter((e) => e.tipo === 'producto' && e.activo).length}</strong><small>En catálogo</small></div>
-          <div className={bajos.length ? 'alertaStock' : ''}><span>STOCK BAJO</span><strong>{bajos.length}</strong><small>Para reponer</small></div>
+          <button type="button" className={`prodKpiBtn ${bajos.length ? 'alertaStock' : ''} ${soloStockBajo ? 'activo' : ''}`} onClick={() => setSoloStockBajo((v) => !v)}>
+            <span>STOCK BAJO</span><strong>{bajos.length}</strong><small>{soloStockBajo ? 'Mostrando solo estos ✓' : 'Tocá para filtrar'}</small>
+          </button>
         </div>
       )}
 
@@ -258,6 +299,7 @@ function ProductosServicios() {
             <option value="inactivos">Inactivos</option>
             <option value="todos">Todos</option>
           </select>
+          {soloStockBajo && <button type="button" className="editButton" onClick={() => setSoloStockBajo(false)}>Ver todos ✕</button>}
         </div>
         <VistaToggle vista={vista} onCambio={setVista} />
       </div>
@@ -265,7 +307,7 @@ function ProductosServicios() {
       {cargando && <p>Cargando lista...</p>}
       {error && <p className="loginError">{error}</p>}
       {!cargando && !error && elementosFiltrados.length === 0 && (
-        <div className="empty"><span>📦</span><h3>Todavía no hay productos o servicios</h3><p>Los elementos que agregues aparecerán acá.</p></div>
+        <div className="empty"><span>📦</span><h3>Sin resultados</h3><p>Probá con otra búsqueda o filtro.</p></div>
       )}
 
       {!cargando && !error && elementosFiltrados.length > 0 && vista === 'kanban' && (
@@ -287,15 +329,15 @@ function ProductosServicios() {
       {!cargando && !error && elementosFiltrados.length > 0 && vista === 'lista' && (
         <div className="crmListaWrap">
           <table className="crmLista">
-            <thead><tr><th>Nombre</th><th>Tipo</th><th>Proveedor</th><th>Costo</th><th>Venta</th><th>Ganancia</th><th>Stock</th></tr></thead>
+            <thead><tr><th></th><th>Nombre</th><th>Proveedor</th><th>P. compra</th><th>P. lista</th><th>Ganancia</th><th>Stock</th></tr></thead>
             <tbody>
               {elementosFiltrados.map((el) => {
                 const final = precioFinalUnidad(el)
                 const nivel = nivelStock(el)
                 return (
                   <tr key={el.id} onClick={() => abrirEdicion(el)}>
+                    <td className="prodListaFoto">{el.fotoView ? <img src={el.fotoView} alt="" /> : <span>{el.tipo === 'servicio' ? '🛠️' : '📦'}</span>}</td>
                     <td><strong>{el.nombre}</strong></td>
-                    <td>{el.tipo === 'producto' ? 'Producto' : 'Servicio'}</td>
                     <td>{el.proveedor || '—'}</td>
                     <td>{formatoDinero(el.costo_unitario)}</td>
                     <td>{formatoDinero(final)}</td>
@@ -327,16 +369,20 @@ function ProductosServicios() {
                 <label>Nombre *<input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej.: Módulo inteligente" required /></label>
                 <label>Categoría<input value={categoria} onChange={(e) => setCategoria(e.target.value)} placeholder="Ej.: Domótica" /></label>
                 <label>Proveedor<input value={proveedor} onChange={(e) => setProveedor(e.target.value)} placeholder="Ej.: Tuya / Sonoff" /></label>
+
+                <label>Precio de compra<input type="number" min="0" step="0.01" value={precioCompra} onChange={(e) => cambiarCompra(e.target.value)} placeholder="0,00" /></label>
+                <label>% de ganancia<input type="number" step="0.1" value={gananciaPct} onChange={(e) => cambiarGanancia(e.target.value)} placeholder="Ej.: 40" /></label>
+                <label>Precio de lista<input type="number" min="0" step="0.01" value={precioLista} onChange={(e) => cambiarLista(e.target.value)} placeholder="0,00" /></label>
+
+                {tipo === 'producto' && <label>Stock (cantidad)<input type="number" min="0" step="1" value={stock} onChange={(e) => setStock(e.target.value)} placeholder="0" /></label>}
+                {tipo === 'producto' && <label>Stock mínimo (alerta)<input type="number" min="0" step="1" value={stockMinimo} onChange={(e) => setStockMinimo(e.target.value)} placeholder="5" /></label>}
                 <label>Unidad
                   <select value={unidad} onChange={(e) => setUnidad(e.target.value)}>
                     <option value="unidad">Unidad</option><option value="metro">Metro</option><option value="hora">Hora</option>
                     <option value="servicio">Servicio</option><option value="kit">Kit</option><option value="boca">Boca</option><option value="circuito">Circuito</option>
                   </select>
                 </label>
-                <label>Precio de costo<input type="number" min="0" step="0.01" value={costoUnitario} onChange={(e) => setCostoUnitario(e.target.value)} placeholder="0,00" /></label>
-                <label>Precio de venta<input type="number" min="0" step="0.01" value={precioVenta} onChange={(e) => setPrecioVenta(e.target.value)} placeholder="0,00" /></label>
-                {tipo === 'producto' && <label>Stock (cantidad)<input type="number" min="0" step="1" value={stock} onChange={(e) => setStock(e.target.value)} placeholder="0" /></label>}
-                {tipo === 'producto' && <label>Stock mínimo (alerta)<input type="number" min="0" step="1" value={stockMinimo} onChange={(e) => setStockMinimo(e.target.value)} placeholder="5" /></label>}
+                <label className="formFull">Link de compra (dónde se compra)<input type="url" value={linkCompra} onChange={(e) => setLinkCompra(e.target.value)} placeholder="https://..." /></label>
                 <label>Foto del producto<input type="file" accept="image/*" onChange={subirFoto} disabled={subiendoFoto} /></label>
 
                 {fotoPreview && (
@@ -348,7 +394,7 @@ function ProductosServicios() {
 
                 <div className="descuentoBox formFull">
                   <div className="descuentoHead">
-                    <span>Aplica descuento</span>
+                    <span>Aplica descuento (sobre el precio de lista)</span>
                     <button type="button" className={`swToggle ${aplicaDescuento ? 'on' : ''}`} onClick={() => setAplicaDescuento((v) => !v)} aria-label="Aplica descuento"><i /></button>
                   </div>
                   {aplicaDescuento && (
@@ -365,12 +411,12 @@ function ProductosServicios() {
                 <label className="formFull">Descripción<textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder="Descripción detallada..." /></label>
 
                 <div className="simulacionBox formFull">
-                  <span className="simulacionTitulo">Simulación de venta</span>
+                  <span className="simulacionTitulo">Resumen del producto</span>
                   <div className="simulacionGrid">
                     <div><small>Precio final / unidad</small><strong>{formatoDinero(simPrecioFinal)}</strong></div>
                     <div><small>Ganancia / unidad</small><strong className={simGanancia < 0 ? 'neg' : ''}>{formatoDinero(simGanancia)}</strong></div>
                     <div><small>Margen</small><strong>{simMargen.toFixed(1)}%</strong></div>
-                    <div><small>Total final ({Number(stock || 0)} u.)</small><strong>{formatoDinero(simTotal)}</strong></div>
+                    <div><small>Inversión en stock ({Number(stock || 0)} u.)</small><strong>{formatoDinero(simInversion)}</strong></div>
                   </div>
                 </div>
               </div>

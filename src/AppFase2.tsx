@@ -24,14 +24,14 @@ const ROLES: Record<Rol, string> = {
 const ROLES_VALIDOS: Rol[] = ['admin', 'encargado', 'auxiliar', 'contable']
 
 const NAVEGACION = [
-  ['dashboard', '▦', 'Dashboard'],
+  ['dashboard', '▦', 'Home'],
   ['clientes', '👤', 'Clientes'],
-  ['obras', '🏠', 'Obras'],
   ['presupuestos', '📄', 'Presupuestos'],
+  ['obras', '🏠', 'Obras'],
   ['catalogo', '📦', 'Productos y servicios'],
-  ['finanzas', '💰', 'Finanzas'],
   ['compras', '🧾', 'Compras'],
   ['personal', '👷', 'Personal'],
+  ['finanzas', '💰', 'Finanzas'],
   ['notificaciones', '🔔', 'Notificaciones'],
   ['usuarios', '🛡️', 'Usuarios'],
   ['configuracion', '⚙️', 'Configuración'],

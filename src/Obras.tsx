@@ -72,7 +72,7 @@ const avanceInicial = {
 function Obras() {
   const [obras, setObras] = useState<Obra[]>([])
   const [informeObra, setInformeObra] = useState<Obra | null>(null)
-  const [seguTab, setSeguTab] = useState<'finanzas' | 'adicionales' | 'personal' | 'rentabilidad' | 'fotos' | 'timeline'>('finanzas')
+  const [seguTab, setSeguTab] = useState<'finanzas' | 'adicionales' | 'personal' | 'rentabilidad' | 'fotos' | 'timeline'>('timeline')
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -416,19 +416,9 @@ function Obras() {
           <p className="subtitle">GESTIÓN DE TRABAJOS</p>
           <h2>Obras</h2>
           <p className="welcome">
-            Seguimiento de trabajos y proyectos
+            Las obras nacen de un presupuesto aceptado
           </p>
         </div>
-
-        <button
-          className="newButton"
-          onClick={() => {
-            setObraEditando(null)
-            setMostrarFormulario(true)
-          }}
-        >
-          + Nueva obra
-        </button>
       </div>
 
       <div className="crmToolbar">
@@ -598,12 +588,12 @@ function Obras() {
             </div>
 
             <div className="gestionTabs seguTabs">
-              <button className={seguTab === 'finanzas' ? 'active' : ''} onClick={() => setSeguTab('finanzas')}>💰 Finanzas</button>
-              <button className={seguTab === 'adicionales' ? 'active' : ''} onClick={() => setSeguTab('adicionales')}>➕ Adicionales</button>
+              <button className={seguTab === 'timeline' ? 'active' : ''} onClick={() => setSeguTab('timeline')}>🕐 Estados</button>
+              <button className={seguTab === 'fotos' ? 'active' : ''} onClick={() => setSeguTab('fotos')}>📷 Fotos</button>
               <button className={seguTab === 'personal' ? 'active' : ''} onClick={() => setSeguTab('personal')}>👷 Personal</button>
               <button className={seguTab === 'rentabilidad' ? 'active' : ''} onClick={() => setSeguTab('rentabilidad')}>📊 Rentabilidad</button>
-              <button className={seguTab === 'fotos' ? 'active' : ''} onClick={() => setSeguTab('fotos')}>📷 Fotos</button>
-              <button className={seguTab === 'timeline' ? 'active' : ''} onClick={() => setSeguTab('timeline')}>🕐 Línea de tiempo</button>
+              <button className={seguTab === 'finanzas' ? 'active' : ''} onClick={() => setSeguTab('finanzas')}>💰 Finanzas</button>
+              <button className={seguTab === 'adicionales' ? 'active' : ''} onClick={() => setSeguTab('adicionales')}>➕ Adicionales</button>
             </div>
 
             {seguTab === 'finanzas' && <EconomiaObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} />}
@@ -683,8 +673,8 @@ function Obras() {
             {seguTab === 'timeline' && (<>
             <div className="seguimientoAcciones">
               <div>
-                <h3>Línea de tiempo</h3>
-                <p>Historial de estados y trabajos realizados.</p>
+                <h3>Estados y avances</h3>
+                <p>Historial de estados y trabajos realizados. Podés editar un avance si te equivocaste al cargarlo.</p>
               </div>
 
               <button

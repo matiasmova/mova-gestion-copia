@@ -33,6 +33,8 @@ const GRUPOS: Record<string, string> = {
   producto: 'Productos y equipos', servicio: 'Servicios', material: 'Materiales', mano_obra: 'Mano de obra', otro: 'Otros',
 }
 
+export type DatosObra = { direccion: string; localidad: string; fecha_inicio: string; fecha_fin_estimada: string }
+
 type Props = {
   presupuesto: PresupuestoFichaData
   cliente: string
@@ -41,14 +43,18 @@ type Props = {
   onCerrar: () => void
   onEditar: () => void
   onPDF: () => void
-  onCrearObra: () => void
+  onCrearObra: (datos: DatosObra) => void
   onCambiarEstado: (nuevo: string) => void
+  onEliminar: () => void
 }
 
-export default function PresupuestoFicha({ presupuesto, cliente, obra, convirtiendo, onCerrar, onEditar, onPDF, onCrearObra, onCambiarEstado }: Props) {
+export default function PresupuestoFicha({ presupuesto, cliente, obra, convirtiendo, onCerrar, onEditar, onPDF, onCrearObra, onCambiarEstado, onEliminar }: Props) {
   const [pagos, setPagos] = useState<Pago[]>([])
   const [cargando, setCargando] = useState(true)
+  const [estadoLocal, setEstadoLocal] = useState(presupuesto.estado)
+  const [obraForm, setObraForm] = useState<DatosObra>({ direccion: '', localidad: '', fecha_inicio: '', fecha_fin_estimada: '' })
   const codigo = `#${presupuesto.id.toString().padStart(4, '0')}`
+  const cambioEstado = estadoLocal !== presupuesto.estado
 
   useEffect(() => {
     async function cargar() {
@@ -87,17 +93,32 @@ export default function PresupuestoFicha({ presupuesto, cliente, obra, convirtie
           <div className="fichaAcciones">
             <label className="fichaEstadoSelect">
               Estado
-              <select value={presupuesto.estado} onChange={(e) => onCambiarEstado(e.target.value)}>
+              <select value={estadoLocal} onChange={(e) => setEstadoLocal(e.target.value)}>
                 {ESTADOS.map((s) => <option key={s.v} value={s.v}>{s.t}</option>)}
               </select>
             </label>
-            {presupuesto.estado === 'aceptado' && !presupuesto.obra_id && (
-              <button className="newButton" disabled={convirtiendo} onClick={onCrearObra}>{convirtiendo ? 'Creando obra...' : '🏗️ Crear obra'}</button>
+            {cambioEstado && (
+              <button className="newButton" onClick={() => onCambiarEstado(estadoLocal)}>Guardar estado</button>
             )}
             {presupuesto.obra_id && <span className="obraVinculadaTag">✓ Obra vinculada</span>}
             <button className="editButton" onClick={onEditar}>Editar</button>
             <button className="editButton" onClick={onPDF}>📄 PDF</button>
+            <button className="deactivateButton" onClick={onEliminar}>Eliminar</button>
           </div>
+
+          {presupuesto.estado === 'aceptado' && !presupuesto.obra_id && (
+            <div className="fichaObraNueva">
+              <h3>✅ Presupuesto aceptado — creá la obra</h3>
+              <p>Completá los datos y la obra queda vinculada a este presupuesto (hereda cliente, título y monto).</p>
+              <div className="formGrid">
+                <label>Dirección<input value={obraForm.direccion} onChange={(e) => setObraForm((f) => ({ ...f, direccion: e.target.value }))} placeholder="Dirección de la obra" /></label>
+                <label>Localidad<input value={obraForm.localidad} onChange={(e) => setObraForm((f) => ({ ...f, localidad: e.target.value }))} /></label>
+                <label>Fecha de inicio<input type="date" value={obraForm.fecha_inicio} onChange={(e) => setObraForm((f) => ({ ...f, fecha_inicio: e.target.value }))} /></label>
+                <label>Fecha fin estimada<input type="date" value={obraForm.fecha_fin_estimada} onChange={(e) => setObraForm((f) => ({ ...f, fecha_fin_estimada: e.target.value }))} /></label>
+              </div>
+              <button className="newButton" disabled={convirtiendo} onClick={() => onCrearObra(obraForm)}>{convirtiendo ? 'Creando obra...' : '🏗️ Crear obra'}</button>
+            </div>
+          )}
 
           <div className="fichaKpis">
             <div><span>TOTAL</span><strong>{moneda(presupuesto.total)}</strong></div>
