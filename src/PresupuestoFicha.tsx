@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from './supabase'
 import { moneda, fechaCorta } from './gestionFormat'
 import type { ItemPresupuesto } from './NuevoPresupuesto'
-import { compartirPresupuestoPdf } from './presupuestoPdf'
+import { compartirPresupuestoPdf } from './pdfPresupuesto'
 
 export type PresupuestoFichaData = {
   id: number

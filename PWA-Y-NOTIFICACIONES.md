@@ -44,6 +44,13 @@ Abrir el presupuesto → botón **📲 Compartir** → elegir **WhatsApp** (o lo
 
 ## 5. Activar las notificaciones automáticas (una sola vez, técnico)
 
+> ✅ **YA DESPLEGADO Y PROBADO (18/09/2026).** La Edge Function `enviar-recordatorios`
+> está desplegada, con sus 3 secrets cargados, Verify JWT desactivado, y el cron
+> `enviar-recordatorios` corriendo cada 15 minutos (`*/15 * * * *`, activo).
+> Prueba real: se enviaron 2 notificaciones (status 200, `{"enviados":2}`).
+> `CRON_SECRET` usado: `mova-cron-a7F3kQ9pL2xN8vR4t`.
+> Esta sección queda solo como referencia por si hay que rehacerlo.
+
 Las notificaciones necesitan un “enviador” que corre en Supabase. Pasos:
 
 ### 5.1 Claves VAPID

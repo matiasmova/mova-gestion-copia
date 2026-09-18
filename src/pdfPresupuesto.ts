@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont, type RGB } from 'pdf-lib'
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type RGB } from 'pdf-lib'
 import logoUrl from './assets/mova-logo.png'
 import { moneda, fechaCorta } from './gestionFormat'
 import type { ItemPresupuesto } from './NuevoPresupuesto'
@@ -115,13 +115,14 @@ export async function generarPdfPresupuesto(d: DatosPdf): Promise<Blob> {
   T('VIGENCIA', M, 8, bold, GRAY); y -= 13
   wrap(`Este presupuesto tiene una validez de ${d.validez_dias ?? 10} días corridos desde su emisión.`, M, 9, DARK, W - 2 * M)
 
-  // Pie (fijo abajo de la última página)
+  // Pie
   const fy = M + 6
   page.drawLine({ start: { x: M, y: fy + 20 }, end: { x: W - M, y: fy + 20 }, thickness: 0.5, color: LINE })
   page.drawText(win('www.movaelectronica.com.ar  -  IG @mova.smart  -  +54 9 261 555 7970'), { x: M, y: fy + 6, size: 8, font, color: GRAY })
   page.drawText(win('MOVA Tecnologia Smart - Espacios inteligentes'), { x: M, y: fy - 6, size: 7, font, color: GRAY })
 
-  return new Blob([await pdf.save()], { type: 'application/pdf' })
+  const bytes = await pdf.save()
+  return new Blob([bytes as unknown as BlobPart], { type: 'application/pdf' })
 }
 
 // Genera el PDF y lo comparte por el menú nativo (WhatsApp, mail, etc.).
