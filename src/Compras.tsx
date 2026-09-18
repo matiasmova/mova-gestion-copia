@@ -14,6 +14,8 @@ type Material = {
   fecha: string
   numero_comprobante: string | null
   comprobante_path: string | null
+  pagado: boolean
+  fecha_vencimiento: string | null
 }
 type MaterialConUrl = Material & { comprobante_url: string | null }
 type Pestana = 'materiales' | 'comprobantes'
@@ -34,7 +36,7 @@ function Compras() {
       setError('')
       const [rObras, rMateriales] = await Promise.all([
         supabase.from('obras').select('id, nombre_obra').eq('activo', true).order('nombre_obra'),
-        supabase.from('materiales').select('id, obra_id, nombre, cantidad, unidad, precio_unitario, proveedor, fecha, numero_comprobante, comprobante_path').order('fecha', { ascending: false }).order('created_at', { ascending: false }),
+        supabase.from('materiales').select('id, obra_id, nombre, cantidad, unidad, precio_unitario, proveedor, fecha, numero_comprobante, comprobante_path, pagado, fecha_vencimiento').order('fecha', { ascending: false }).order('created_at', { ascending: false }),
       ])
       if (rObras.error || rMateriales.error) {
         console.error(rObras.error || rMateriales.error)
@@ -71,6 +73,12 @@ function Compras() {
     0,
   )
   const nombreObra = (id: number) => obras.find((obra) => obra.id === id)?.nombre_obra ?? 'Obra no disponible'
+  async function togglePagado(m: MaterialConUrl) {
+    const { error: err } = await supabase.from('materiales').update({ pagado: !m.pagado }).eq('id', m.id)
+    if (err) { console.error(err); window.alert('No se pudo actualizar el estado de pago.'); return }
+    setMateriales((arr) => arr.map((x) => (x.id === m.id ? { ...x, pagado: !x.pagado } : x)))
+  }
+  const totalImpago = materiales.filter((m) => !m.pagado).reduce((s, m) => s + m.cantidad * m.precio_unitario, 0)
 
   return <div className="gestionPage">
     <div className="pageHeader"><div><p className="subtitle">COMPRAS Y MATERIALES</p><h2>Compras</h2><p className="welcome">Materiales y comprobantes vinculados a cada obra</p></div><button className="newButton" onClick={() => { setCompraEditando(null); setMostrarFormulario(true) }}>+ Registrar compra</button></div>
@@ -78,6 +86,7 @@ function Compras() {
     <div className="comprasResumen">
       <div><span>TOTAL COMPRAS</span><strong>{moneda(totalCompras)}</strong><small>Se refleja automáticamente en Finanzas</small></div>
       <div><span>COMPROBANTES</span><strong>{comprobantes.length}</strong><small>Facturas y tickets guardados</small></div>
+      <div><span>POR PAGAR</span><strong>{moneda(totalImpago)}</strong><small>Compras impagas</small></div>
     </div>
 
     <div className="gestionTabs">
@@ -88,8 +97,8 @@ function Compras() {
     {cargando && <p>Cargando compras...</p>}
     {error && <p className="loginError">{error}</p>}
 
-    {!cargando && !error && pestana === 'materiales' && <div className="gestionTabla"><table><thead><tr><th>Fecha</th><th>Material</th><th>Obra</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th><th>Proveedor</th><th>Comprobante</th><th>Acción</th></tr></thead><tbody>
-      {materiales.length === 0 ? <tr><td colSpan={9}>Todavía no hay compras cargadas.</td></tr> : materiales.map((material) => <tr key={material.id}><td>{fechaCorta(material.fecha)}</td><td><strong>{material.nombre}</strong></td><td>{nombreObra(material.obra_id)}</td><td>{material.cantidad} {material.unidad}</td><td>{moneda(material.precio_unitario)}</td><td><strong>{moneda(material.cantidad * material.precio_unitario)}</strong></td><td>{material.proveedor || '—'}</td><td>{material.comprobante_url ? <a className="comprobanteEnlace" href={material.comprobante_url} target="_blank" rel="noreferrer">Ver archivo</a> : '—'}</td><td><button className="editButton" onClick={() => { setCompraEditando(material); setMostrarFormulario(true) }}>Editar</button></td></tr>)}
+    {!cargando && !error && pestana === 'materiales' && <div className="gestionTabla"><table><thead><tr><th>Fecha</th><th>Material</th><th>Obra</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th><th>Proveedor</th><th>Pago</th><th>Comprobante</th><th>Acción</th></tr></thead><tbody>
+      {materiales.length === 0 ? <tr><td colSpan={10}>Todavía no hay compras cargadas.</td></tr> : materiales.map((material) => <tr key={material.id}><td>{fechaCorta(material.fecha)}</td><td><strong>{material.nombre}</strong></td><td>{nombreObra(material.obra_id)}</td><td>{material.cantidad} {material.unidad}</td><td>{moneda(material.precio_unitario)}</td><td><strong>{moneda(material.cantidad * material.precio_unitario)}</strong></td><td>{material.proveedor || '—'}</td><td><button type="button" className={`crmBadge ${material.pagado ? 'est-aceptado' : 'est-rechazado'}`} style={{ border: 0, cursor: 'pointer' }} onClick={() => togglePagado(material)} title="Cambiar estado de pago">{material.pagado ? 'Pagado' : 'Impago'}</button></td><td>{material.comprobante_url ? <a className="comprobanteEnlace" href={material.comprobante_url} target="_blank" rel="noreferrer">Ver archivo</a> : '—'}</td><td><button className="editButton" onClick={() => { setCompraEditando(material); setMostrarFormulario(true) }}>Editar</button></td></tr>)}
     </tbody></table></div>}
 
     {!cargando && !error && pestana === 'comprobantes' && (
@@ -117,6 +126,8 @@ function FormularioCompra({ obras, compra, onCancelar, onGuardado }: { obras: Ob
     proveedor: compra?.proveedor ?? '',
     fecha: compra?.fecha ? compra.fecha.slice(0, 10) : hoy(),
     numero_comprobante: compra?.numero_comprobante ?? '',
+    pagado: compra ? (compra.pagado ? 'si' : 'no') : 'si',
+    fecha_vencimiento: compra?.fecha_vencimiento ? compra.fecha_vencimiento.slice(0, 10) : '',
   })
   const [archivo, setArchivo] = useState<File | null>(null)
   const [guardando, setGuardando] = useState(false)
@@ -129,6 +140,7 @@ function FormularioCompra({ obras, compra, onCancelar, onGuardado }: { obras: Ob
     evento.preventDefault(); setGuardando(true); setError('')
     const datos = {
       obra_id: Number(formulario.obra_id), nombre: formulario.nombre.trim(), cantidad: Number(formulario.cantidad), unidad: formulario.unidad.trim() || null, precio_unitario: Number(formulario.precio_unitario), proveedor: formulario.proveedor.trim() || null, fecha: formulario.fecha, numero_comprobante: formulario.numero_comprobante.trim() || null,
+      pagado: formulario.pagado === 'si', fecha_vencimiento: formulario.fecha_vencimiento || null,
     }
     let materialId = compra?.id ?? 0
     if (editando) {
@@ -168,6 +180,8 @@ function FormularioCompra({ obras, compra, onCancelar, onGuardado }: { obras: Ob
     <label>Proveedor<input value={formulario.proveedor} onChange={(e) => actualizar('proveedor', e.target.value)} /></label>
     <label>Fecha *<input type="date" required value={formulario.fecha} onChange={(e) => actualizar('fecha', e.target.value)} /></label>
     <label>Número de comprobante<input value={formulario.numero_comprobante} onChange={(e) => actualizar('numero_comprobante', e.target.value)} /></label>
+    <label>¿Está pagada?<select value={formulario.pagado} onChange={(e) => actualizar('pagado', e.target.value)}><option value="si">Sí, ya pagada</option><option value="no">No, queda por pagar</option></select></label>
+    {formulario.pagado === 'no' && <label>Vence el<input type="date" value={formulario.fecha_vencimiento} onChange={(e) => actualizar('fecha_vencimiento', e.target.value)} /></label>}
     <label className="formFull">{editando ? 'Reemplazar factura o ticket (opcional)' : 'Factura o ticket (opcional)'}<input ref={archivoRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic,application/pdf" onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} /></label>
   </div><p className="compraSubtotal">Costo que se {editando ? 'actualizará' : 'enviará'} en Finanzas: <strong>{moneda(subtotal)}</strong></p>{error && <p className="loginError">{error}</p>}<div className="formActions"><button type="button" className="cancelButton" onClick={onCancelar}>Cancelar</button><button className="newButton" disabled={guardando}>{guardando ? 'Guardando...' : editando ? 'Guardar cambios' : 'Guardar compra'}</button></div></form></div></div>
 }

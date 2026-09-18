@@ -154,7 +154,9 @@ export default function PresupuestoFicha({ presupuesto, cliente, obra, convirtie
             <div className="fichaTotales">
               <div><span>Subtotal</span><b>{moneda(presupuesto.subtotal)}</b></div>
               {presupuesto.descuento > 0 && <div><span>Bonificación</span><b>− {moneda(presupuesto.descuento)}</b></div>}
-              <div className="fichaTotalFinal"><span>Total</span><b>{moneda(presupuesto.total)}</b></div>
+              <div><span>Neto gravado</span><b>{moneda(presupuesto.total / 1.21)}</b></div>
+              <div><span>IVA (21%) contenido</span><b>{moneda(presupuesto.total - presupuesto.total / 1.21)}</b></div>
+              <div className="fichaTotalFinal"><span>Total (IVA incluido)</span><b>{moneda(presupuesto.total)}</b></div>
             </div>
           </div>
 

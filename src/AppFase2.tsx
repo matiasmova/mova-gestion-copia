@@ -7,6 +7,8 @@ import Presupuestos from './Presupuestos'
 import ProductosServicios from './ProductosServicios'
 import Finanzas from './Finanzas'
 import Compras from './Compras'
+import Tablero from './Tablero'
+import GastosGenerales from './GastosGenerales'
 import Personal from './Personal.tsx'
 import Notificaciones from './Notificaciones'
 import Configuracion from './Configuracion'
@@ -25,6 +27,7 @@ const ROLES_VALIDOS: Rol[] = ['admin', 'encargado', 'auxiliar', 'contable']
 
 const NAVEGACION = [
   ['dashboard', '▦', 'Home'],
+  ['tablero', '📊', 'Tablero'],
   ['clientes', '👤', 'Clientes'],
   ['presupuestos', '📄', 'Presupuestos'],
   ['obras', '🏠', 'Obras'],
@@ -32,6 +35,7 @@ const NAVEGACION = [
   ['compras', '🧾', 'Compras'],
   ['personal', '👷', 'Personal'],
   ['finanzas', '💰', 'Finanzas'],
+  ['gastos', '💸', 'Gastos fijos'],
   ['notificaciones', '🔔', 'Notificaciones'],
   ['usuarios', '🛡️', 'Usuarios'],
   ['configuracion', '⚙️', 'Configuración'],
@@ -44,6 +48,8 @@ const PERMISOS: Partial<Record<Vista, Rol[]>> = {
   clientes: ['admin', 'encargado', 'contable'],
   presupuestos: ['admin', 'contable'],
   finanzas: ['admin', 'contable'],
+  tablero: ['admin', 'contable'],
+  gastos: ['admin', 'contable'],
   compras: ['admin', 'encargado', 'auxiliar'],
   personal: ['admin', 'encargado', 'contable'],
   usuarios: ['admin'],
@@ -190,12 +196,14 @@ export default function AppFase2() {
   const modulos = NAVEGACION.filter(([clave]) => puedeVer(rol, clave))
 
   const contenido: Record<Exclude<Vista, 'dashboard'>, React.ReactNode> = {
+    tablero: <Tablero />,
     clientes: <Clientes />,
     obras: <Obras obraAbrirId={obraAbrirId} onObraAbierta={() => setObraAbrirId(null)} />,
     presupuestos: <Presupuestos />,
     catalogo: <ProductosServicios />,
     finanzas: <Finanzas onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} />,
     compras: <Compras />,
+    gastos: <GastosGenerales />,
     personal: <Personal />, notificaciones: <Notificaciones />, usuarios: <Usuarios />, configuracion: <Configuracion />,
   }
 

@@ -16,6 +16,7 @@ export type ProductoServicio = {
   stock_minimo: number
   proveedor: string | null
   link_compra: string | null
+  iva_pct: number
   foto_url: string | null
   aplica_descuento: boolean
   descuento_pct: number
@@ -98,6 +99,7 @@ function ProductosServicios() {
   const [precioLista, setPrecioLista] = useState('')
   const [stock, setStock] = useState('')
   const [stockMinimo, setStockMinimo] = useState('5')
+  const [ivaPct, setIvaPct] = useState('21')
   const [aplicaDescuento, setAplicaDescuento] = useState(false)
   const [descuentoTipo, setDescuentoTipo] = useState<'porcentaje' | 'monto'>('porcentaje')
   const [descuentoValor, setDescuentoValor] = useState('')
@@ -112,7 +114,7 @@ function ProductosServicios() {
     setError('')
     const { data, error: errorConsulta } = await supabase
       .from('productos_servicios')
-      .select(`id, created_at, tipo, nombre, descripcion, categoria, unidad, precio_venta, costo_unitario, stock, stock_minimo, proveedor, link_compra, foto_url, aplica_descuento, descuento_pct, descuento_monto, activo`)
+      .select(`id, created_at, tipo, nombre, descripcion, categoria, unidad, precio_venta, costo_unitario, stock, stock_minimo, proveedor, link_compra, iva_pct, foto_url, aplica_descuento, descuento_pct, descuento_monto, activo`)
       .order('nombre', { ascending: true })
     if (errorConsulta) {
       console.error(errorConsulta)
@@ -125,6 +127,7 @@ function ProductosServicios() {
       precio_venta: Number(el.precio_venta), costo_unitario: Number(el.costo_unitario),
       stock: Number(el.stock ?? 0), stock_minimo: Number(el.stock_minimo ?? 5),
       descuento_pct: Number(el.descuento_pct ?? 0), descuento_monto: Number(el.descuento_monto ?? 0),
+      iva_pct: Number(el.iva_pct ?? 21),
       aplica_descuento: !!el.aplica_descuento, fotoView: null as string | null,
     })) as ProductoServicio[]
     // Resolver la foto: si es URL http la usamos directo; si es un path del storage, firmamos.
@@ -154,7 +157,7 @@ function ProductosServicios() {
 
   function limpiarFormulario() {
     setTipo('producto'); setNombre(''); setDescripcion(''); setCategoria(''); setProveedor(''); setLinkCompra('')
-    setUnidad('unidad'); setPrecioCompra(''); setGananciaPct(''); setPrecioLista(''); setStock(''); setStockMinimo('5')
+    setUnidad('unidad'); setPrecioCompra(''); setGananciaPct(''); setPrecioLista(''); setStock(''); setStockMinimo('5'); setIvaPct('21')
     setAplicaDescuento(false); setDescuentoTipo('porcentaje'); setDescuentoValor('')
     setFotoUrl(null); setFotoPreview(''); setErrorFormulario('')
   }
@@ -166,7 +169,7 @@ function ProductosServicios() {
     setPrecioCompra(el.costo_unitario ? String(el.costo_unitario) : '')
     setPrecioLista(el.precio_venta ? String(el.precio_venta) : '')
     setGananciaPct(el.costo_unitario > 0 ? String(Math.round(((el.precio_venta - el.costo_unitario) / el.costo_unitario) * 1000) / 10) : '')
-    setStock(String(el.stock)); setStockMinimo(String(el.stock_minimo ?? 5))
+    setStock(String(el.stock)); setStockMinimo(String(el.stock_minimo ?? 5)); setIvaPct(String(el.iva_pct ?? 21))
     setAplicaDescuento(el.aplica_descuento); setDescuentoTipo(el.descuento_monto > 0 ? 'monto' : 'porcentaje')
     setDescuentoValor(String(el.descuento_monto > 0 ? el.descuento_monto : el.descuento_pct))
     setFotoUrl(el.foto_url); setErrorFormulario('')
@@ -216,7 +219,7 @@ function ProductosServicios() {
       tipo, nombre: nombre.trim(), descripcion: descripcion.trim() || null, categoria: categoria.trim() || null,
       proveedor: proveedor.trim() || null, link_compra: linkCompra.trim() || null, unidad,
       precio_venta: Number(precioLista || 0), costo_unitario: Number(precioCompra || 0),
-      stock: Number(stock || 0), stock_minimo: Number(stockMinimo || 0),
+      stock: Number(stock || 0), stock_minimo: Number(stockMinimo || 0), iva_pct: Number(ivaPct || 21),
       foto_url: fotoUrl, aplica_descuento: aplicaDescuento, descuento_pct: descuentoPct, descuento_monto: descuentoMonto,
     }
     const resultado = editando
@@ -405,6 +408,11 @@ function ProductosServicios() {
                   <select value={unidad} onChange={(e) => setUnidad(e.target.value)}>
                     <option value="unidad">Unidad</option><option value="metro">Metro</option><option value="hora">Hora</option>
                     <option value="servicio">Servicio</option><option value="kit">Kit</option><option value="boca">Boca</option><option value="circuito">Circuito</option>
+                  </select>
+                </label>
+                <label>IVA
+                  <select value={ivaPct} onChange={(e) => setIvaPct(e.target.value)}>
+                    <option value="21">21%</option><option value="10.5">10,5%</option><option value="27">27%</option><option value="0">Exento (0%)</option>
                   </select>
                 </label>
                 <label className="formFull">Link de compra (dónde se compra)<input type="url" value={linkCompra} onChange={(e) => setLinkCompra(e.target.value)} placeholder="https://..." /></label>
