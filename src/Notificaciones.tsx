@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from './supabase'
 import { fechaCorta, moneda } from './gestionFormat'
+import { estadoPush, activarPush, desactivarPush, type EstadoPush } from './push'
 
 type Obra = { id: number; nombre_obra: string; estado: string | null; fecha_fin_estimada: string | null }
 type Presupuesto = { id: number; titulo: string; obra_id: number | null; saldo: number }
@@ -25,6 +26,19 @@ function Notificaciones() {
   const [recordatorios, setRecordatorios] = useState<Recordatorio[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
+  const [push, setPush] = useState<EstadoPush | 'cargando' | 'procesando'>('cargando')
+  const [pushMsg, setPushMsg] = useState('')
+
+  useEffect(() => { estadoPush().then(setPush) }, [])
+
+  async function togglePush() {
+    if (push === 'activo') {
+      const r = await desactivarPush(); setPushMsg(r.msg)
+    } else {
+      setPush('procesando'); const r = await activarPush(); setPushMsg(r.msg)
+    }
+    setPush(await estadoPush())
+  }
 
   useEffect(() => {
     async function cargar() {
@@ -76,6 +90,23 @@ function Notificaciones() {
     <div className="gestionPage">
       <div className="pageHeader">
         <div><p className="subtitle">SEGUIMIENTO</p><h2>Notificaciones</h2><p className="welcome">Alertas automáticas de plazos, cobros y recordatorios</p></div>
+      </div>
+
+      <div className="configGrid" style={{ marginBottom: 18 }}>
+        <article>
+          <div className="configIcono">🔔</div>
+          <span className="configEstado">{push === 'activo' ? 'Activadas' : push === 'bloqueado' ? 'Bloqueadas' : 'Este dispositivo'}</span>
+          <h3>Notificaciones en el teléfono</h3>
+          <p>Recibí las alertas de recordatorios y plazos como notificación del celular, aunque la app esté cerrada.</p>
+          {push === 'no-soportado' ? (
+            <p className="gestionAyuda">📱 En iPhone: primero “Compartir → Agregar a inicio”, abrí la app desde el ícono y volvé acá para activarlas.</p>
+          ) : push === 'bloqueado' ? (
+            <p className="gestionAyuda">El permiso está bloqueado. Habilitalo desde los ajustes del navegador/teléfono y recargá.</p>
+          ) : (
+            <button className={`configSwitch ${push === 'activo' ? 'on' : ''}`} onClick={togglePush} disabled={push === 'cargando' || push === 'procesando'} aria-label="Activar notificaciones en este dispositivo"><i /></button>
+          )}
+          {pushMsg && <p className="gestionAyuda">{pushMsg}</p>}
+        </article>
       </div>
 
       {error && <p className="loginError">{error}</p>}

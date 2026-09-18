@@ -56,6 +56,22 @@ export default function PresupuestoFicha({ presupuesto, cliente, obra, convirtie
   const codigo = `#${presupuesto.id.toString().padStart(4, '0')}`
   const cambioEstado = estadoLocal !== presupuesto.estado
 
+  async function compartir() {
+    const texto = [
+      `*MOVA* — Presupuesto ${codigo}`,
+      presupuesto.titulo,
+      `Cliente: ${cliente}`,
+      `Total: ${moneda(presupuesto.total)}`,
+      presupuesto.saldo > 0 ? `Saldo: ${moneda(presupuesto.saldo)}` : 'Pagado ✓',
+    ].filter(Boolean).join('\n')
+    if (navigator.share) {
+      try { await navigator.share({ title: `Presupuesto ${codigo}`, text: texto }) } catch { /* el usuario canceló */ }
+      return
+    }
+    // Fallback en escritorio (sin menú nativo): abre WhatsApp Web con el texto
+    window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank', 'noopener')
+  }
+
   useEffect(() => {
     async function cargar() {
       setCargando(true)
@@ -103,6 +119,7 @@ export default function PresupuestoFicha({ presupuesto, cliente, obra, convirtie
             {presupuesto.obra_id && <span className="obraVinculadaTag">✓ Obra vinculada</span>}
             <button className="editButton" onClick={onEditar}>Editar</button>
             <button className="editButton" onClick={onPDF}>📄 PDF</button>
+            <button className="editButton" onClick={compartir}>📲 Compartir</button>
             <button className="deactivateButton" onClick={onEliminar}>Eliminar</button>
           </div>
 
