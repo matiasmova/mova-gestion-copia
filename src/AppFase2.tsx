@@ -75,7 +75,7 @@ export default function AppFase2() {
   const [vista, setVista] = useState<Vista>('dashboard')
   const [obraAbrirId, setObraAbrirId] = useState<number | null>(null)
   const [menuAbierto, setMenuAbierto] = useState(false)
-  const [rol, setRol] = useState<Rol>('admin')
+  const [rol, setRol] = useState<Rol>('auxiliar')
   const [nombreUsuario, setNombreUsuario] = useState('')
   const [clientes, setClientes] = useState<ClienteResumen[]>([])
   const [obras, setObras] = useState<ObraResumen[]>([])
@@ -97,8 +97,9 @@ export default function AppFase2() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // Lee nombre y rol desde la tabla profiles. Si la tabla no existe todavía,
-  // queda como 'admin' por defecto (defensivo, no rompe la app).
+  // Lee nombre y rol desde la tabla profiles. SEGURIDAD: si no hay perfil o
+  // falla la lectura, se mantiene el mínimo privilegio ('auxiliar'), nunca admin.
+  // El rol admin SOLO se otorga si el perfil en la BD lo dice explícitamente.
   async function cargarPerfil(sesion: Session) {
     setNombreUsuario(sesion.user.email?.split('@')[0] ?? 'Usuario')
     try {
@@ -110,9 +111,12 @@ export default function AppFase2() {
       if (!error && data) {
         if (data.nombre) setNombreUsuario(data.nombre)
         if (data.rol && ROLES_VALIDOS.includes(data.rol as Rol)) setRol(data.rol as Rol)
+        else setRol('auxiliar')
+      } else {
+        setRol('auxiliar')
       }
     } catch {
-      /* sin tabla profiles → se mantiene 'admin' */
+      setRol('auxiliar') // fail-closed: sin perfil → mínimo privilegio
     }
   }
 
