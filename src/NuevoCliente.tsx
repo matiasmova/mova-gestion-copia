@@ -61,23 +61,50 @@ function NuevoCliente({
     }))
   }
 
+  const [buscandoLoc, setBuscandoLoc] = useState(false)
+
+  // Geocodificación inversa: de coordenadas → localidad y dirección (OpenStreetMap).
+  async function completarDesdeCoords(lat: string, lng: string) {
+    if (!lat || !lng) return
+    setBuscandoLoc(true)
+    try {
+      const r = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=es`,
+      )
+      const j = await r.json()
+      const a = j.address ?? {}
+      const loc = a.city || a.town || a.village || a.suburb || a.county || a.state || ''
+      const calle = [a.road, a.house_number].filter(Boolean).join(' ')
+      setFormulario((ant) => ({
+        ...ant,
+        localidad: ant.localidad || loc,
+        direccion: ant.direccion || calle,
+      }))
+    } catch {
+      /* sin conexión al geocodificador: se deja para carga manual */
+    } finally {
+      setBuscandoLoc(false)
+    }
+  }
+
   function usarMiUbicacion() {
     if (!navigator.geolocation) {
       setError('Tu navegador no permite obtener la ubicación.')
       return
     }
+    setError('')
     navigator.geolocation.getCurrentPosition(
-      (posicion) => {
-        setFormulario((anterior) => ({
-          ...anterior,
-          lat: posicion.coords.latitude.toFixed(6),
-          lng: posicion.coords.longitude.toFixed(6),
-        }))
+      async (posicion) => {
+        const lat = posicion.coords.latitude.toFixed(6)
+        const lng = posicion.coords.longitude.toFixed(6)
+        setFormulario((anterior) => ({ ...anterior, lat, lng }))
+        await completarDesdeCoords(lat, lng)
       },
       () =>
         setError(
-          'No pudimos obtener tu ubicación. Podés cargarla manualmente.',
+          'No pudimos obtener tu ubicación. Revisá el permiso de ubicación del navegador o cargala manualmente.',
         ),
+      { enableHighAccuracy: true, timeout: 10000 },
     )
   }
 
@@ -285,6 +312,17 @@ function NuevoCliente({
                 onChange={(evento) => actualizar('lng', evento.target.value)}
               />
             </div>
+            {formulario.lat && formulario.lng && (
+              <button
+                type="button"
+                className="ubicacionBtn"
+                style={{ marginTop: 8 }}
+                disabled={buscandoLoc}
+                onClick={() => completarDesdeCoords(formulario.lat, formulario.lng)}
+              >
+                {buscandoLoc ? 'Buscando localidad...' : '📍 Completar dirección y localidad'}
+              </button>
+            )}
             {formulario.lat && formulario.lng && (
               <iframe
                 title="Ubicación del cliente"
