@@ -510,8 +510,17 @@ export async function ejecutarImportacion(
   plan: Plan,
   alProgreso: (hechas: number, total: number) => void,
 ): Promise<ResultadoImportacion> {
-  const crear = plan.filas.filter((f) => f.accion === 'crear' && f.datos)
-  const actualizar = plan.filas.filter((f) => f.accion === 'actualizar' && f.datos && f.existente)
+  const crear = plan.filas.filter(
+    (f): f is FilaPlan & { datos: Record<string, unknown> } =>
+      f.accion === 'crear' && f.datos !== undefined
+  )
+  
+  const actualizar = plan.filas.filter(
+    (f): f is FilaPlan & { datos: Record<string, unknown>; existente: ProductoServicio } =>
+      f.accion === 'actualizar' &&
+      f.datos !== undefined &&
+      f.existente !== undefined
+  )
   const total = crear.length + actualizar.length
   const resultado: ResultadoImportacion = { creados: 0, actualizados: 0, fallidos: [] }
   let hechas = 0
@@ -520,12 +529,12 @@ export async function ejecutarImportacion(
   // Altas en tandas; si una tanda falla se reintenta fila por fila para saber cuál falló.
   for (let i = 0; i < crear.length; i += 50) {
     const tanda = crear.slice(i, i + 50)
-    const { error } = await supabase.from('productos_servicios').insert(tanda.map((f) => f.datos))
+    const { error } = await supabase.from('productos_servicios').insert(tanda.map((f) => f.datos!))
     if (!error) {
       resultado.creados += tanda.length
     } else {
       for (const fila of tanda) {
-        const uno = await supabase.from('productos_servicios').insert(fila.datos)
+        const uno = await supabase.from('productos_servicios').insert(fila.datos!)
         if (uno.error) resultado.fallidos.push({ linea: fila.linea, nombre: fila.nombre, mensaje: mensajeError(uno.error) })
         else resultado.creados++
       }
@@ -539,7 +548,7 @@ export async function ejecutarImportacion(
   const trabajador = async () => {
     while (siguiente < actualizar.length) {
       const fila = actualizar[siguiente++]
-      const { error } = await supabase.from('productos_servicios').update(fila.datos).eq('id', fila.existente!.id)
+      const { error } = await supabase.from('productos_servicios').update(fila.datos!).eq('id', fila.existente!.id)
       if (error) resultado.fallidos.push({ linea: fila.linea, nombre: fila.nombre, mensaje: mensajeError(error) })
       else resultado.actualizados++
       hechas++
