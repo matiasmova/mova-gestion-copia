@@ -1,0 +1,44 @@
+/*
+  Montos de las tarjetas de obra (Valor / Cobrado / Pendiente).
+
+  La tarjeta mide su propio ancho (container query), así el ajuste funciona
+  igual en el celular que en una columna angosta del kanban en la compu:
+   · Tarjeta ancha  -> los tres montos en columnas, como siempre.
+   · Tarjeta angosta -> un monto por fila: etiqueta a la izquierda, importe a la derecha.
+  Los importes nunca se cortan ni se pisan entre sí.
+*/
+
+.crmCard {
+  container-type: inline-size;
+}
+
+.crmCard .crmCardEco > div {
+  min-width: 0;
+}
+
+.crmCard .crmCardEco strong {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(12px, 4.4cqi, 15px);
+}
+
+@container (max-width: 340px) {
+  .crmCard .crmCardEco {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .crmCard .crmCardEco > div {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .crmCard .crmCardEco strong {
+    font-size: 15px;
+    text-align: right;
+  }
+}

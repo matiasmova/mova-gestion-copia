@@ -11,6 +11,7 @@ import PersonalObra from './PersonalObra'
 import RentabilidadObra from './RentabilidadObra'
 import ResumenPagosPDF from './ResumenPagosPDF'
 import VistaToggle, { useVista } from './VistaToggle'
+import './obrasCard.css'
 import { OBRA_ESTADOS, etiquetaObra, claseObra } from './obraEstado'
 import { useFinanzasObra, leerFinanzasObra, situacionCobro } from './finanzasObra'
 import {
@@ -1082,10 +1083,15 @@ function calcularEconomia(
   return mapa
 }
 
+// Montos redondos sin ",00" ($ 1.800.000); si hay centavos se muestran ($ 1.800.000,50).
 function dineroFicha(valor: number) {
+  const redondo = Math.abs(valor - Math.round(valor)) < 0.005
   return new Intl.NumberFormat('es-AR', {
-    style: 'currency', currency: 'ARS', minimumFractionDigits: 2,
-  }).format(valor)
+    style: 'currency',
+    currency: 'ARS',
+    minimumFractionDigits: redondo ? 0 : 2,
+    maximumFractionDigits: redondo ? 0 : 2,
+  }).format(redondo ? Math.round(valor) : valor)
 }
 
 function fechaFicha(fecha: string | null) {
