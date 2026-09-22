@@ -214,6 +214,19 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
     ? presupuestosObra.filter((p) => p.obra_id != null && Number(p.obra_id) === Number(obraSeguimiento.id) && p.activo !== false)
     : []
 
+  // TEMPORAL: diagnóstico para ver por qué no aparece el botón "Ver presupuesto".
+  // Se puede borrar este bloque una vez resuelto.
+  if (obraSeguimiento) {
+    // eslint-disable-next-line no-console
+    console.log('[debug presupuestos] obra abierta:', obraSeguimiento.id, obraSeguimiento.nombre_obra)
+    // eslint-disable-next-line no-console
+    console.log('[debug presupuestos] total presupuestos cargados:', presupuestosObra.length)
+    // eslint-disable-next-line no-console
+    console.log('[debug presupuestos] presupuestos (id, obra_id, activo, estado):', presupuestosObra.map((p) => [p.id, p.obra_id, p.activo, p.estado]))
+    // eslint-disable-next-line no-console
+    console.log('[debug presupuestos] coinciden con esta obra:', presupuestosDeObra.length)
+  }
+
   function cerrarFormulario() {
     setMostrarFormulario(false)
     setObraEditando(null)

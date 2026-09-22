@@ -13,9 +13,14 @@ import Finanzas from './Finanzas'
 import Compras from './Compras'
 import Personal from './Personal'
 import Notificaciones from './Notificaciones'
+import Tablero from './Tablero'
+import GastosGenerales from './GastosGenerales'
+import Usuarios from './Usuarios'
+import Configuracion from './Configuracion'
 
 type Vista =
   | 'dashboard'
+  | 'tablero'
   | 'clientes'
   | 'obras'
   | 'presupuestos'
@@ -23,7 +28,10 @@ type Vista =
   | 'finanzas'
   | 'compras'
   | 'personal'
+  | 'gastos'
   | 'notificaciones'
+  | 'usuarios'
+  | 'configuracion'
 
 type ObraReciente = {
   id: number
@@ -357,6 +365,19 @@ function App() {
 
           <button
             className={
+              vista === 'tablero'
+                ? 'active'
+                : ''
+            }
+            onClick={() =>
+              setVista('tablero')
+            }
+          >
+            📊 Tablero
+          </button>
+
+          <button
+            className={
               vista === 'clientes'
                 ? 'active'
                 : ''
@@ -405,7 +426,10 @@ function App() {
           <button className={vista === 'finanzas' ? 'active' : ''} onClick={() => setVista('finanzas')}>💰 Finanzas</button>
           <button className={vista === 'compras' ? 'active' : ''} onClick={() => setVista('compras')}>🧾 Compras</button>
           <button className={vista === 'personal' ? 'active' : ''} onClick={() => setVista('personal')}>👷 Personal</button>
+          <button className={vista === 'gastos' ? 'active' : ''} onClick={() => setVista('gastos')}>💸 Gastos fijos</button>
           <button className={vista === 'notificaciones' ? 'active' : ''} onClick={() => setVista('notificaciones')}>🔔 Notificaciones</button>
+          <button className={vista === 'usuarios' ? 'active' : ''} onClick={() => setVista('usuarios')}>🛡 Usuarios</button>
+          <button className={vista === 'configuracion' ? 'active' : ''} onClick={() => setVista('configuracion')}>⚙️ Configuración</button>
         </nav>
 
         <div className="sidebarFooter">
@@ -437,7 +461,14 @@ function App() {
         {vista === 'finanzas' && <Finanzas />}
         {vista === 'compras' && <Compras />}
         {vista === 'personal' && <Personal />}
+        {vista === 'gastos' && <GastosGenerales />}
         {vista === 'notificaciones' && <Notificaciones />}
+        {vista === 'usuarios' && <Usuarios />}
+        {vista === 'configuracion' && <Configuracion />}
+
+        {vista === 'tablero' && (
+          <Tablero onIrA={(destino) => setVista(destino)} />
+        )}
 
         {vista === 'dashboard' && (
           <>
