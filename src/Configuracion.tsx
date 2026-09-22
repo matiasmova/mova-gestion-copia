@@ -49,6 +49,6 @@ export default function Configuracion() {
         </table></div>
       )}
     </section>
-    <p className="gestionAyuda">Las integraciones marcadas como “Próxima fase” requieren configuración técnica. El registro de auditoría es automático y sirve para control interno.</p>
+    <p className="gestionAyuda">Las integraciones marcadas como "Próxima fase" requieren configuración técnica. El registro de auditoría es automático y sirve para control interno.</p>
   </div>
 }
