@@ -10,6 +10,11 @@ import PresupuestoPDF from './PresupuestoPDF'
 import PresupuestoFicha, { type DatosObra } from './PresupuestoFicha'
 import VistaToggle, { useVista } from './VistaToggle'
 import { moneda, fechaCorta } from './gestionFormat'
+import {
+  eliminarObraCompleta,
+  mensajeEliminacionObra,
+  resumenEliminacionObra,
+} from './eliminarObra'
 
 type PresupuestoCompleto = PresupuestoEditable & {
   created_at: string
@@ -28,7 +33,7 @@ const ESTADOS = [
 ]
 const etiquetaEstado = (v: string) => ESTADOS.find((e) => e.v === v)?.t ?? v
 
-function Presupuestos() {
+function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto }: { presupuestoAbrirId?: number | null; onPresupuestoAbierto?: () => void } = {}) {
   const [presupuestos, setPresupuestos] = useState<PresupuestoCompleto[]>([])
   const [clientes, setClientes] = useState<ClienteOpcion[]>([])
   const [obras, setObras] = useState<ObraOpcion[]>([])
@@ -45,12 +50,20 @@ function Presupuestos() {
 
   useEffect(() => { cargarDatos() }, [])
 
+  // Abrir automáticamente un presupuesto cuando se llega desde otro módulo (ej. Obras).
+  useEffect(() => {
+    if (presupuestoAbrirId == null || presupuestos.length === 0) return
+    const p = presupuestos.find((x) => x.id === presupuestoAbrirId)
+    if (p) { setFicha(p); onPresupuestoAbierto?.() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presupuestoAbrirId, presupuestos])
+
   async function cargarDatos() {
     setCargando(true)
     setError('')
     const [rPres, rItems, rClientes, rObras] = await Promise.all([
       supabase.from('presupuestos').select('id, created_at, cliente_id, obra_id, titulo, descripcion, fecha, validez_dias, estado, etapa_trabajo, subtotal, descuento, total, total_pagado, saldo, notas, activo').eq('activo', true).order('created_at', { ascending: false }),
-      supabase.from('presupuesto_items').select('id, presupuesto_id, catalogo_id, tipo, descripcion, cantidad, precio_unitario, costo_unitario, orden').order('orden', { ascending: true }),
+      supabase.from('presupuesto_items').select('id, presupuesto_id, catalogo_id, tipo, descripcion, cantidad, precio_unitario, costo_unitario, descuento_pct, orden').order('orden', { ascending: true }),
       supabase.from('Clientes').select('id, nombre, apellido').order('nombre', { ascending: true }),
       supabase.from('obras').select('id, cliente_id, nombre_obra').order('nombre_obra', { ascending: true }),
     ])
@@ -68,6 +81,7 @@ function Presupuestos() {
       items: items.filter((it) => it.presupuesto_id === p.id).map((it) => ({
         id: it.id, catalogo_id: it.catalogo_id ?? null, tipo: it.tipo, descripcion: it.descripcion,
         cantidad: Number(it.cantidad), precio_unitario: Number(it.precio_unitario), costo_unitario: Number(it.costo_unitario),
+        descuento_pct: Number(it.descuento_pct ?? 0),
       })),
     })) as PresupuestoCompleto[]
     setClientes((rClientes.data ?? []) as ClienteOpcion[])
@@ -101,6 +115,21 @@ function Presupuestos() {
   function cerrarFormulario() { setMostrarFormulario(false); setPresupuestoEditado(null) }
   async function guardado() { cerrarFormulario(); await cargarDatos() }
 
+  // Pregunta si se elimina también la obra vinculada (con todo lo cargado en ella).
+  async function ofrecerEliminarObra(obraId: number, intro: string): Promise<boolean> {
+    try {
+      const resumen = await resumenEliminacionObra(obraId)
+      if (!window.confirm(mensajeEliminacionObra(nombreObra(obraId), resumen, intro))) return false
+      const resultado = await eliminarObraCompleta(obraId)
+      if (!resultado.ok) { window.alert(resultado.mensaje); return false }
+      return true
+    } catch (err) {
+      console.error(err)
+      window.alert('No se pudo revisar la obra vinculada. No se borró nada.')
+      return false
+    }
+  }
+
   async function cambiarEstado(p: PresupuestoCompleto, nuevo: string) {
     const { error: err } = await supabase.from('presupuestos').update({ estado: nuevo }).eq('id', p.id)
     if (err) { console.error(err); window.alert('No se pudo modificar el estado.'); return }
@@ -115,6 +144,11 @@ function Presupuestos() {
     }
     setPresupuestos((prev) => prev.map((x) => (x.id === p.id ? { ...x, estado: nuevo } : x)))
     setFicha((f) => (f && f.id === p.id ? { ...f, estado: nuevo } : f))
+    // Si se rechaza un presupuesto que ya tenía obra, se ofrece eliminarla.
+    if (nuevo === 'rechazado' && p.obra_id != null) {
+      const eliminada = await ofrecerEliminarObra(p.obra_id, 'El presupuesto pasó a Rechazado y tiene una obra vinculada.')
+      if (eliminada) await cargarDatos()
+    }
   }
 
   async function convertirEnObra(p: PresupuestoCompleto, datos?: DatosObra) {
@@ -136,6 +170,10 @@ function Presupuestos() {
 
   async function eliminar(p: PresupuestoCompleto) {
     if (!window.confirm(`¿Eliminar definitivamente el presupuesto "${p.titulo}"?\n\nEsto borra el presupuesto y sus ítems. Los cobros registrados se conservan pero quedan sin presupuesto asociado. Esta acción no se puede deshacer.`)) return
+    // 0) Si tiene obra vinculada, se ofrece eliminarla (junto con sus cobros).
+    if (p.obra_id != null) {
+      await ofrecerEliminarObra(p.obra_id, `Al eliminar el presupuesto "${p.titulo}" también podés eliminar su obra vinculada.`)
+    }
     // 1) Desvincular pagos (conservar el registro del cobro)
     await supabase.from('pagos').update({ presupuesto_id: null }).eq('presupuesto_id', p.id)
     // 2) Borrar ítems y luego el presupuesto
@@ -234,6 +272,11 @@ function Presupuestos() {
           onCrearObra={(datos) => convertirEnObra(ficha, datos)}
           onCambiarEstado={(nuevo) => cambiarEstado(ficha, nuevo)}
           onEliminar={() => eliminar(ficha)}
+          onEliminarObra={async () => {
+            if (ficha.obra_id == null) return
+            const eliminada = await ofrecerEliminarObra(ficha.obra_id, 'Vas a eliminar la obra vinculada a este presupuesto.')
+            if (eliminada) await cargarDatos()
+          }}
         />
       )}
     </div>

@@ -51,6 +51,12 @@ function App() {
   const [vista, setVista] =
     useState<Vista>('dashboard')
 
+  // Navegación entre módulos: guarda qué obra o presupuesto abrir
+  // automáticamente cuando se llega desde otro módulo (ej. "Ver presupuesto"
+  // desde el detalle de una obra, o "Ver obra" desde Finanzas).
+  const [obraAbrirId, setObraAbrirId] = useState<number | null>(null)
+  const [presupuestoAbrirId, setPresupuestoAbrirId] = useState<number | null>(null)
+
   const [totalClientes, setTotalClientes] = useState(0)
   const [totalObrasActivas, setTotalObrasActivas] =
     useState(0)
@@ -180,7 +186,7 @@ function App() {
     if (!session || vista !== 'dashboard') {
       return
     }
-  
+
     async function cargarPresupuestosPendientes() {
       const { count, error } = await supabase
         .from('presupuestos')
@@ -190,7 +196,7 @@ function App() {
         })
         .eq('activo', true)
         .eq('estado', 'pendiente')
-  
+
       if (error) {
         console.error(
           'Error al consultar presupuestos:',
@@ -198,10 +204,10 @@ function App() {
         )
         return
       }
-  
+
       setTotalPresupuestosPendientes(count ?? 0)
     }
-  
+
     cargarPresupuestosPendientes()
   }, [session, vista])
   async function iniciarSesion(
@@ -241,6 +247,18 @@ function App() {
     return `${cliente.nombre} ${
       cliente.apellido ?? ''
     }`.trim()
+  }
+
+  // Ir a Obras y abrir una obra puntual (ej. desde Finanzas u otro módulo).
+  function irAObra(id: number) {
+    setObraAbrirId(id)
+    setVista('obras')
+  }
+
+  // Ir a Presupuestos y abrir un presupuesto puntual (ej. desde el detalle de una obra).
+  function irAPresupuesto(id: number) {
+    setPresupuestoAbrirId(id)
+    setVista('presupuestos')
   }
 
   if (verificando) {
@@ -399,10 +417,19 @@ function App() {
       <main className="main">
         {vista === 'clientes' && <Clientes />}
 
-        {vista === 'obras' && <Obras />}
+        {vista === 'obras' && (
+          <Obras
+            obraAbrirId={obraAbrirId}
+            onObraAbierta={() => setObraAbrirId(null)}
+            onVerPresupuesto={irAPresupuesto}
+          />
+        )}
 
         {vista === 'presupuestos' && (
-          <Presupuestos />
+          <Presupuestos
+            presupuestoAbrirId={presupuestoAbrirId}
+            onPresupuestoAbierto={() => setPresupuestoAbrirId(null)}
+          />
         )}
 {vista === 'catalogo' && (
   <ProductosServicios />
@@ -509,6 +536,12 @@ function App() {
                         <div
                           className="obraRecienteItem"
                           key={obra.id}
+                          role="button"
+                          tabIndex={0}
+                          style={{ cursor: 'pointer' }}
+                          onClick={() =>
+                            irAObra(obra.id)
+                          }
                         >
                           <div className="obraRecienteIcono">
                             🏠

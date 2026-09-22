@@ -1,4 +1,4 @@
-import logo from './assets/mova-logo.png'
+import logo from './assets/mova-logo.jpg'
 import { fechaCorta } from './gestionFormat'
 import type { ItemPresupuesto } from './NuevoPresupuesto'
 

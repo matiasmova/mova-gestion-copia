@@ -12,6 +12,12 @@ import RentabilidadObra from './RentabilidadObra'
 import ResumenPagosPDF from './ResumenPagosPDF'
 import VistaToggle, { useVista } from './VistaToggle'
 import { OBRA_ESTADOS, etiquetaObra, claseObra } from './obraEstado'
+import { useFinanzasObra, leerFinanzasObra, situacionCobro } from './finanzasObra'
+import {
+  eliminarObraCompleta,
+  mensajeEliminacionObra,
+  resumenEliminacionObra,
+} from './eliminarObra'
 
 type EstadoObra = 'en_proceso' | 'finalizada' | 'observacion'
 
@@ -54,12 +60,18 @@ type ImagenObra = {
   tipo: string
   descripcion: string | null
   created_at: string
+  avance_id: number | null
   url?: string
 }
 
 type FiltroEstado = 'todos' | EstadoObra
 
 type ResumenEco = { valor: number; cobrado: number; pendiente: number }
+
+const ESTADOS_PRESUPUESTO: Record<string, string> = {
+  borrador: 'Borrador', enviado: 'Enviado', aceptado: 'Aceptado', rechazado: 'Rechazado',
+}
+const etiquetaEstadoPresupuesto = (v: string) => ESTADOS_PRESUPUESTO[v] ?? v
 
 const avanceInicial = {
   fecha: new Date().toISOString().slice(0, 10),
@@ -69,10 +81,11 @@ const avanceInicial = {
   porcentaje: 0,
 }
 
-function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; onObraAbierta?: () => void } = {}) {
+function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?: number | null; onObraAbierta?: () => void; onVerPresupuesto?: (presupuestoId: number) => void } = {}) {
   const [obras, setObras] = useState<Obra[]>([])
+  const [presupuestosObra, setPresupuestosObra] = useState<{ id: number; obra_id: number | null; estado: string; activo: boolean; titulo: string }[]>([])
   const [informeObra, setInformeObra] = useState<Obra | null>(null)
-  const [seguTab, setSeguTab] = useState<'finanzas' | 'adicionales' | 'personal' | 'rentabilidad' | 'fotos' | 'timeline'>('timeline')
+  const [seguTab, setSeguTab] = useState<'finanzas' | 'adicionales' | 'personal' | 'rentabilidad' | 'timeline'>('timeline')
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -99,12 +112,13 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
     useState(avanceInicial)
   const [editandoAvanceId, setEditandoAvanceId] = useState<number | null>(null)
   const [imagenes, setImagenes] = useState<ImagenObra[]>([])
-  const [subiendoImagen, setSubiendoImagen] = useState(false)
-  const [tipoImagen, setTipoImagen] = useState('avance')
-  const [descripcionImagen, setDescripcionImagen] = useState('')
+  const [fotoAvance, setFotoAvance] = useState<File | null>(null)
   const [economia, setEconomia] = useState<Record<number, ResumenEco>>({})
   const [pagosPdf, setPagosPdf] = useState<Obra | null>(null)
+  const [eliminandoObra, setEliminandoObra] = useState<number | null>(null)
   const [vista, setVista] = useVista('obras', 'kanban')
+  // Finanzas de la obra abierta: se recargan al cambiar de pestaña o al guardar.
+  const finanzasSeg = useFinanzasObra(obraSeguimiento?.id ?? null, `${seguTab}-${actualizacion}`)
 
   useEffect(() => {
     async function cargarDatos() {
@@ -137,7 +151,7 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
             )
             .order('nombre', { ascending: true }),
 
-          supabase.from('presupuestos').select('id, obra_id, total, estado, activo'),
+          supabase.from('presupuestos').select('id, obra_id, total, estado, activo, titulo'),
           supabase.from('adicionales').select('obra_id, importe, estado'),
           supabase.from('pagos').select('monto, obra_id, presupuesto_id'),
         ])
@@ -150,6 +164,8 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
       } else {
         setObras((resultadoObras.data ?? []) as Obra[])
         setClientes(resultadoClientes.data ?? [])
+        if (rPresupuestos.error) console.error('No se pudieron cargar los presupuestos de las obras:', rPresupuestos.error)
+        setPresupuestosObra(rPresupuestos.error ? [] : (rPresupuestos.data ?? []) as typeof presupuestosObra)
         setEconomia(calcularEconomia(
           rPresupuestos.error ? [] : rPresupuestos.data ?? [],
           rAdicionales.error ? [] : rAdicionales.data ?? [],
@@ -192,6 +208,11 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
 
   const etiquetaEstado = etiquetaObra
   const claseEstado = claseObra
+
+  // Presupuestos activos vinculados a la obra que está abierta en el modal de seguimiento.
+  const presupuestosDeObra = obraSeguimiento
+    ? presupuestosObra.filter((p) => p.obra_id != null && Number(p.obra_id) === Number(obraSeguimiento.id) && p.activo !== false)
+    : []
 
   function cerrarFormulario() {
     setMostrarFormulario(false)
@@ -236,7 +257,7 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
   async function cargarImagenes(obraId: number) {
     const { data, error: errorCarga } = await supabase
       .from('obra_imagenes')
-      .select('id, storage_path, tipo, descripcion, created_at')
+      .select('id, storage_path, tipo, descripcion, created_at, avance_id')
       .eq('obra_id', obraId)
       .order('created_at', { ascending: false })
 
@@ -260,6 +281,7 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
   function abrirSeguimiento(obra: Obra) {
     setObraSeguimiento(obra)
     setMostrarNuevoAvance(false)
+    setFotoAvance(null)
     setFormularioAvance({
       ...avanceInicial,
       fecha: new Date().toISOString().slice(0, 10),
@@ -280,7 +302,46 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
     setAvances([])
     setImagenes([])
     setMostrarNuevoAvance(false)
+    setFotoAvance(null)
     setErrorAvances('')
+  }
+
+  // Elimina la obra con todo lo cargado en ella (avances, fotos, compras,
+  // costos, adicionales, personal y cobros), previa confirmación.
+  async function eliminarObra(obra: Obra) {
+    if (eliminandoObra !== null) return
+
+    setEliminandoObra(obra.id)
+
+    try {
+      const resumen = await resumenEliminacionObra(obra.id)
+
+      if (!window.confirm(mensajeEliminacionObra(obra.nombre_obra, resumen))) {
+        return
+      }
+
+      const resultado = await eliminarObraCompleta(obra.id)
+
+      if (!resultado.ok) {
+        window.alert(resultado.mensaje)
+        return
+      }
+
+      if (obraSeguimiento?.id === obra.id) cerrarSeguimiento()
+      setActualizacion((valor) => valor + 1)
+
+      if (resultado.presupuestosAceptados > 0) {
+        window.alert(
+          'La obra se eliminó. El presupuesto vinculado sigue en estado Aceptado: ' +
+            'si el trabajo se canceló, pasalo a Rechazado desde Presupuestos.',
+        )
+      }
+    } catch (fallo) {
+      console.error(fallo)
+      window.alert('No se pudo revisar la obra. No se borró nada.')
+    } finally {
+      setEliminandoObra(null)
+    }
   }
 
   function actualizarAvance(
@@ -326,15 +387,56 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
       porcentaje: Number(formularioAvance.porcentaje),
     }
 
-    const { error: errorGuardar } = editandoAvanceId
-      ? await supabase.from('obra_avances').update(datosAvance).eq('id', editandoAvanceId)
-      : await supabase.from('obra_avances').insert(datosAvance)
+    let avanceId = editandoAvanceId
 
-    if (errorGuardar) {
-      console.error(errorGuardar)
-      setErrorAvances('No se pudo guardar el avance.')
-      setGuardandoAvance(false)
-      return
+    if (editandoAvanceId) {
+      const { error: errorGuardar } = await supabase
+        .from('obra_avances')
+        .update(datosAvance)
+        .eq('id', editandoAvanceId)
+
+      if (errorGuardar) {
+        console.error(errorGuardar)
+        setErrorAvances('No se pudo guardar el avance.')
+        setGuardandoAvance(false)
+        return
+      }
+    } else {
+      const { data: creado, error: errorGuardar } = await supabase
+        .from('obra_avances')
+        .insert(datosAvance)
+        .select('id')
+        .single()
+
+      if (errorGuardar) {
+        console.error(errorGuardar)
+        setErrorAvances('No se pudo guardar el avance.')
+        setGuardandoAvance(false)
+        return
+      }
+      avanceId = creado?.id ?? null
+    }
+
+    // La foto es opcional: si el avance se guardó pero la foto falla, avisamos
+    // pero no perdemos el avance ya guardado.
+    if (fotoAvance && avanceId) {
+      const nombreSeguro = fotoAvance.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const ruta = `${obraSeguimiento.id}/${Date.now()}-${nombreSeguro}`
+      const subida = await supabase.storage.from('obras').upload(ruta, fotoAvance)
+
+      if (subida.error) {
+        console.error(subida.error)
+        setErrorAvances('El avance se guardó, pero no se pudo subir la foto.')
+      } else {
+        const registro = await supabase.from('obra_imagenes').insert({
+          obra_id: obraSeguimiento.id,
+          avance_id: avanceId,
+          storage_path: ruta,
+          tipo: 'avance',
+          descripcion: null,
+        })
+        if (registro.error) console.error(registro.error)
+      }
     }
 
     // El estado y % de la obra siempre reflejan el avance MÁS RECIENTE (crear o editar).
@@ -358,6 +460,7 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
     }
     setMostrarNuevoAvance(false)
     setEditandoAvanceId(null)
+    setFotoAvance(null)
     setFormularioAvance({
       ...avanceInicial,
       fecha: new Date().toISOString().slice(0, 10),
@@ -367,10 +470,12 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
     setGuardandoAvance(false)
     setActualizacion((valor) => valor + 1)
     cargarAvances(obraSeguimiento.id)
+    cargarImagenes(obraSeguimiento.id)
   }
 
   function editarAvance(avance: AvanceObra) {
     setEditandoAvanceId(avance.id)
+    setFotoAvance(null)
     setFormularioAvance({
       fecha: (avance.fecha || '').slice(0, 10) || new Date().toISOString().slice(0, 10),
       titulo: avance.titulo,
@@ -379,49 +484,6 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
       porcentaje: Number(avance.porcentaje) || 0,
     })
     setMostrarNuevoAvance(true)
-  }
-
-  async function subirImagen(
-    evento: React.ChangeEvent<HTMLInputElement>,
-  ) {
-    const archivo = evento.target.files?.[0]
-    if (!archivo || !obraSeguimiento) return
-
-    setSubiendoImagen(true)
-    setErrorAvances('')
-    const nombreSeguro = archivo.name.replace(
-      /[^a-zA-Z0-9._-]/g,
-      '_',
-    )
-    const ruta = `${obraSeguimiento.id}/${Date.now()}-${nombreSeguro}`
-    const subida = await supabase.storage
-      .from('obras')
-      .upload(ruta, archivo)
-
-    if (subida.error) {
-      console.error(subida.error)
-      setErrorAvances('No se pudo subir la fotografía.')
-      setSubiendoImagen(false)
-      return
-    }
-
-    const registro = await supabase.from('obra_imagenes').insert({
-      obra_id: obraSeguimiento.id,
-      storage_path: ruta,
-      tipo: tipoImagen,
-      descripcion: descripcionImagen.trim() || null,
-    })
-
-    if (registro.error) {
-      console.error(registro.error)
-      setErrorAvances('La foto subió, pero no pudo registrarse.')
-    } else {
-      setDescripcionImagen('')
-      await cargarImagenes(obraSeguimiento.id)
-    }
-
-    evento.target.value = ''
-    setSubiendoImagen(false)
   }
 
   const obrasFiltradas = obras.filter((obra) => {
@@ -521,6 +583,13 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
                         <button onClick={() => setInformeObra(obra)}>📄 Informe</button>
                         <button onClick={() => setPagosPdf(obra)}>🧾 Pagos</button>
                         <button onClick={() => { setObraEditando(obra); setMostrarFormulario(true) }}>Editar</button>
+                        <button
+                          title="Eliminar obra"
+                          disabled={eliminandoObra === obra.id}
+                          onClick={() => void eliminarObra(obra)}
+                        >
+                          {eliminandoObra === obra.id ? 'Revisando...' : '🗑 Eliminar'}
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -622,88 +691,36 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
               </div>
             </div>
 
+            {onVerPresupuesto && presupuestosDeObra.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                {presupuestosDeObra.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="editButton"
+                    onClick={() => onVerPresupuesto(p.id)}
+                  >
+                    📄 {p.titulo || `Presupuesto #${p.id}`} · {etiquetaEstadoPresupuesto(p.estado)}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="gestionTabs seguTabs">
               <button className={seguTab === 'timeline' ? 'active' : ''} onClick={() => setSeguTab('timeline')}>🕐 Estados</button>
-              <button className={seguTab === 'fotos' ? 'active' : ''} onClick={() => setSeguTab('fotos')}>📷 Fotos</button>
               <button className={seguTab === 'personal' ? 'active' : ''} onClick={() => setSeguTab('personal')}>👷 Personal</button>
               <button className={seguTab === 'rentabilidad' ? 'active' : ''} onClick={() => setSeguTab('rentabilidad')}>📊 Rentabilidad</button>
               <button className={seguTab === 'finanzas' ? 'active' : ''} onClick={() => setSeguTab('finanzas')}>💰 Finanzas</button>
               <button className={seguTab === 'adicionales' ? 'active' : ''} onClick={() => setSeguTab('adicionales')}>➕ Adicionales</button>
             </div>
 
-            {seguTab === 'finanzas' && <EconomiaObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} />}
+            {seguTab === 'finanzas' && <EconomiaObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} onGenerarPdf={() => setPagosPdf(obraSeguimiento)} />}
 
             {seguTab === 'adicionales' && <AdicionalesObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} />}
 
-            {seguTab === 'personal' && <PersonalObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} />}
+            {seguTab === 'personal' && <PersonalObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} avance={Number(obraSeguimiento.porcentaje_avance || 0)} />}
 
-            {seguTab === 'rentabilidad' && <RentabilidadObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} />}
-
-            {seguTab === 'fotos' && (
-            <section className="obraFotosSeccion">
-              <div className="seguimientoAcciones">
-                <div>
-                  <h3>Fotografías de la obra</h3>
-                  <p>Antes, avances, terminación y planos.</p>
-                </div>
-              </div>
-
-              <div className="obraFotoCarga">
-                <select
-                  value={tipoImagen}
-                  onChange={(evento) => setTipoImagen(evento.target.value)}
-                >
-                  <option value="avance">Avance</option>
-                  <option value="antes">Antes</option>
-                  <option value="despues">Después</option>
-                  <option value="plano">Plano</option>
-                  <option value="otro">Otro</option>
-                </select>
-                <input
-                  value={descripcionImagen}
-                  onChange={(evento) =>
-                    setDescripcionImagen(evento.target.value)
-                  }
-                  placeholder="Descripción opcional"
-                />
-                <label className="newButton obraFotoBoton">
-                  {subiendoImagen ? 'Subiendo...' : '+ Subir fotografía'}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    hidden
-                    disabled={subiendoImagen}
-                    onChange={subirImagen}
-                  />
-                </label>
-              </div>
-
-              <div className="obraFotosGrid">
-                {imagenes.map((imagen) => (
-                  <figure key={imagen.id}>
-                    {imagen.url && (
-                      <a href={imagen.url} target="_blank" rel="noreferrer">
-                        <img
-                          src={imagen.url}
-                          alt={imagen.descripcion || imagen.tipo}
-                        />
-                      </a>
-                    )}
-                    <figcaption>
-                      <strong>{imagen.tipo}</strong>
-                      <span>{imagen.descripcion || 'Sin descripción'}</span>
-                    </figcaption>
-                  </figure>
-                ))}
-                {imagenes.length === 0 && (
-                  <div className="obraFotosVacio">
-                    Todavía no hay fotografías cargadas.
-                  </div>
-                )}
-              </div>
-            </section>
-            )}
+            {seguTab === 'rentabilidad' && <RentabilidadObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} avance={Number(obraSeguimiento.porcentaje_avance || 0)} />}
 
             {seguTab === 'timeline' && (<>
             <div className="seguimientoAcciones">
@@ -716,6 +733,7 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
                 type="button"
                 className="newButton"
                 onClick={() => {
+                  setFotoAvance(null)
                   if (mostrarNuevoAvance) {
                     setMostrarNuevoAvance(false)
                     setEditandoAvanceId(null)
@@ -820,6 +838,30 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
                       placeholder="Descripción, observaciones o pendientes..."
                     />
                   </label>
+
+                  <label className="formFull">
+                    Foto (opcional)
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={(evento) =>
+                        setFotoAvance(evento.target.files?.[0] ?? null)
+                      }
+                    />
+                    {fotoAvance && (
+                      <small>
+                        {fotoAvance.name}{' '}
+                        <button
+                          type="button"
+                          className="editButton"
+                          onClick={() => setFotoAvance(null)}
+                        >
+                          Quitar
+                        </button>
+                      </small>
+                    )}
+                  </label>
                 </div>
 
                 {errorAvances && (
@@ -841,6 +883,24 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
                 </div>
               </form>
             )}
+
+            {(() => {
+              const hoy = situacionCobro(finanzasSeg.valorProgresivo, finanzasSeg.gastoExtraPendiente, finanzasSeg.cobros, Number(obraSeguimiento.porcentaje_avance || 0))
+              if (finanzasSeg.valor <= 0 && finanzasSeg.cobros.length === 0) return null
+              return (
+                <div style={{ margin: '4px 0 18px' }}>
+                  <div className="seguimientoResumen">
+                    <div><span>Valor de la obra</span><strong>{dineroFicha(finanzasSeg.valor)}</strong></div>
+                    <div><span>Corresponde cobrar ({hoy.pct}%)</span><strong>{dineroFicha(hoy.corresponde)}</strong></div>
+                    <div><span>Cobrado hasta hoy</span><strong>{dineroFicha(hoy.cobrado)}</strong></div>
+                    <div>
+                      <span>{hoy.diferencia > 0 ? 'Adelanto del cliente' : hoy.diferencia < 0 ? 'Falta cobrar por avance' : 'Cobros al día'}</span>
+                      <strong style={{ color: hoy.diferencia > 0 ? '#1f7a4d' : hoy.diferencia < 0 ? '#c2410c' : undefined }}>{dineroFicha(Math.abs(hoy.diferencia))}</strong>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
 
             <div className="obraTimeline">
               {cargandoAvances && <p>Cargando avances...</p>}
@@ -889,36 +949,94 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
                       {avance.descripcion && (
                         <p>{avance.descripcion}</p>
                       )}
+
+                      {(() => {
+                        const fotosDelAvance = imagenes.filter((imagen) => imagen.avance_id === avance.id)
+                        if (fotosDelAvance.length === 0) return null
+                        return (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '10px' }}>
+                            {fotosDelAvance.map((imagen) => (
+                              <a key={imagen.id} href={imagen.url} target="_blank" rel="noreferrer">
+                                {imagen.url && (
+                                  <img
+                                    src={imagen.url}
+                                    alt="Foto del avance"
+                                    style={{
+                                      width: '72px',
+                                      height: '72px',
+                                      objectFit: 'cover',
+                                      borderRadius: '8px',
+                                      border: '1px solid #e2e5e9',
+                                    }}
+                                  />
+                                )}
+                              </a>
+                            ))}
+                          </div>
+                        )
+                      })()}
+
+                      {(finanzasSeg.valor > 0 || finanzasSeg.cobros.length > 0) && (() => {
+                        const sit = situacionCobro(finanzasSeg.valorProgresivo, finanzasSeg.gastoExtraPendiente, finanzasSeg.cobros, Number(avance.porcentaje), avance.fecha)
+                        const color = sit.diferencia > 0 ? '#1f7a4d' : sit.diferencia < 0 ? '#c2410c' : '#4b525c'
+                        return (
+                          <div
+                            style={{
+                              display: 'flex',
+                              flexWrap: 'wrap',
+                              gap: '6px 18px',
+                              marginTop: '10px',
+                              paddingTop: '10px',
+                              borderTop: '1px dashed #e2e5e9',
+                              fontSize: '13px',
+                              color: '#64748b',
+                            }}
+                          >
+                            <span>💰 Al {sit.pct}% corresponde cobrar <strong style={{ color: '#101318' }}>{dineroFicha(sit.corresponde)}</strong></span>
+                            <span>Cobrado a esa fecha <strong style={{ color: '#101318' }}>{dineroFicha(sit.cobrado)}</strong></span>
+                            <span style={{ color }}>
+                              <strong>
+                                {sit.diferencia > 0
+                                  ? `Adelanto ${dineroFicha(sit.diferencia)}`
+                                  : sit.diferencia < 0
+                                    ? `Falta cobrar ${dineroFicha(-sit.diferencia)}`
+                                    : 'Al día'}
+                              </strong>
+                            </span>
+                          </div>
+                        )
+                      })()}
                     </div>
                   </article>
                 ))}
             </div>
             </>)}
+
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                marginTop: '24px',
+                paddingTop: '16px',
+                borderTop: '1px solid #e2e5e9',
+              }}
+            >
+              <button
+                type="button"
+                className="deactivateButton"
+                disabled={eliminandoObra === obraSeguimiento.id}
+                onClick={() => void eliminarObra(obraSeguimiento)}
+              >
+                {eliminandoObra === obraSeguimiento.id
+                  ? 'Revisando...'
+                  : '🗑 Eliminar obra'}
+              </button>
+            </div>
           </div>
         </div>
       )}
     </div>
   )
-}
-
-type CompraFicha = {
-  id: number
-  nombre: string
-  cantidad: number
-  unidad: string | null
-  precio_unitario: number
-  proveedor: string | null
-  fecha: string | null
-  numero_comprobante: string | null
-  comprobante_path: string | null
-}
-
-type CostoFicha = {
-  id: number
-  tipo: string
-  descripcion: string | null
-  monto: number
-  fecha: string | null
 }
 
 function calcularEconomia(
@@ -963,16 +1081,37 @@ function fechaFicha(fecha: string | null) {
     : 'Sin fecha'
 }
 
-function EconomiaObra({ obraId }: { obraId: number }) {
-  const [compras, setCompras] = useState<CompraFicha[]>([])
-  const [costos, setCostos] = useState<CostoFicha[]>([])
+type AdicionalMovimiento = {
+  id: number
+  fecha: string
+  tipo: string
+  descripcion: string | null
+  motivo: string | null
+  importe: number
+  estado: string
+}
+
+const TIPOS_ADIC: Record<string, string> = {
+  adicional: 'Adicional', producto: 'Producto extra', servicio: 'Servicio extra', cambio: 'Cambio de alcance',
+  gasto_extra: 'Gasto extra', ajuste: 'Ajuste', bonificacion: 'Bonificación',
+}
+const ESTADO_ADIC_CLASE: Record<string, string> = {
+  aprobado: 'adicBadge aprobado', pagado: 'adicBadge aprobado', rechazado: 'adicBadge rechazado', pendiente: 'adicBadge pendiente',
+}
+const ESTADO_ADIC_LABEL: Record<string, string> = {
+  aprobado: 'Aprobado', pagado: 'Pagado', rechazado: 'Rechazado', pendiente: 'Pendiente',
+}
+
+// Pestaña Finanzas, simplificada: solo registrar los cobros del cliente, ver
+// los movimientos de Adicionales (se editan en esa pestaña) y generar el
+// comprobante en PDF. El resto de los números (valor de obra, corresponde
+// cobrar, costos, compras) se ve todo junto en Rentabilidad.
+function EconomiaObra({ obraId, onGenerarPdf }: { obraId: number; onGenerarPdf: () => void }) {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
-  const [comprobante, setComprobante] = useState<{ id: number; url: string } | null>(null)
-  const [abriendo, setAbriendo] = useState<number | null>(null)
-  const [errorComprobante, setErrorComprobante] = useState('')
   const [cobros, setCobros] = useState<{ id: number; monto: number; fecha: string; medio_pago: string | null; referencia: string | null }[]>([])
+  const [movimientos, setMovimientos] = useState<AdicionalMovimiento[]>([])
   const [mostrarCobro, setMostrarCobro] = useState(false)
   const [cobroForm, setCobroForm] = useState({ monto: '', fecha: new Date().toISOString().slice(0, 10), medio_pago: 'transferencia', referencia: '' })
   const [guardandoCobro, setGuardandoCobro] = useState(false)
@@ -1002,90 +1141,33 @@ function EconomiaObra({ obraId }: { obraId: number }) {
 
   useEffect(() => {
     let vigente = true
-    supabase.from('pagos').select('id,monto,fecha,medio_pago,referencia').eq('obra_id', obraId).order('fecha', { ascending: false }).then(({ data }) => {
-      if (vigente) setCobros((data ?? []).map((p) => ({ ...p, monto: Number(p.monto) })))
-    })
-    return () => { vigente = false }
-  }, [obraId, revision])
-
-  useEffect(() => {
-    let vigente = true
     async function cargar() {
       setCargando(true)
       setError('')
-      // Paginar evita mostrar un total incompleto si hay muchos movimientos.
-      async function leerCompras() {
-        const filas: CompraFicha[] = []
-        for (let inicio = 0; ; inicio += 500) {
-          const resultado = await supabase.from('materiales')
-            .select('id,nombre,cantidad,unidad,precio_unitario,proveedor,fecha,numero_comprobante,comprobante_path')
-            .eq('obra_id', obraId).order('id').range(inicio, inicio + 499)
-          if (resultado.error) throw resultado.error
-          filas.push(...(resultado.data ?? []) as CompraFicha[])
-          if (!vigente || (resultado.data ?? []).length < 500) return filas.reverse()
-        }
+      const [finanzas, rAdic] = await Promise.all([
+        leerFinanzasObra(obraId),
+        supabase.from('adicionales').select('id,fecha,tipo,descripcion,motivo,importe,estado').eq('obra_id', obraId).order('fecha', { ascending: false }),
+      ])
+      if (!vigente) return
+      setCobros(finanzas.cobros)
+      if (rAdic.error) {
+        console.error(rAdic.error)
+        setError('No se pudieron cargar los movimientos de Adicionales.')
+      } else {
+        setMovimientos((rAdic.data ?? []).map((a: AdicionalMovimiento) => ({ ...a, importe: Number(a.importe) })))
       }
-      async function leerCostos() {
-        const filas: CostoFicha[] = []
-        for (let inicio = 0; ; inicio += 500) {
-          const resultado = await supabase.from('costos')
-            .select('id,tipo,descripcion,monto,fecha')
-            .eq('obra_id', obraId).order('id').range(inicio, inicio + 499)
-          if (resultado.error) throw resultado.error
-          filas.push(...(resultado.data ?? []) as CostoFicha[])
-          if (!vigente || (resultado.data ?? []).length < 500) return filas.reverse()
-        }
-      }
-      try {
-        const [nuevasCompras, nuevosCostos] = await Promise.all([leerCompras(), leerCostos()])
-        if (vigente) {
-          setCompras(nuevasCompras)
-          setCostos(nuevosCostos)
-        }
-      } catch (fallo) {
-        console.error(fallo)
-        if (vigente) setError('No se pudieron cargar las compras y los costos de esta obra. Probá actualizar.')
-      } finally {
-        if (vigente) setCargando(false)
-      }
+      setCargando(false)
     }
     void cargar()
     return () => { vigente = false }
   }, [obraId, revision])
 
-  async function prepararComprobante(compra: CompraFicha) {
-    if (!compra.comprobante_path || abriendo !== null) return
-    setAbriendo(compra.id)
-    setComprobante(null)
-    setErrorComprobante('')
-    try {
-      const resultado = await supabase.storage.from('comprobantes')
-        .createSignedUrl(compra.comprobante_path, 300)
-      if (resultado.error || !resultado.data?.signedUrl) {
-        throw resultado.error ?? new Error('No se recibió un enlace al comprobante')
-      }
-      setComprobante({ id: compra.id, url: resultado.data.signedUrl })
-    } catch (fallo) {
-      console.error(fallo)
-      setErrorComprobante('No se pudo abrir el comprobante. Volvé a intentar.')
-    } finally {
-      setAbriendo(null)
-    }
-  }
-
-  // Los costos ya incluyen las compras: no sumar materiales nuevamente.
-  const totalCostos = costos.reduce((total, costo) => total + Number(costo.monto || 0), 0)
-  const tipos: Record<string, string> = {
-    material: 'Material', mano_obra: 'Mano de obra', terciarizado: 'Tercerizado', otro: 'Otro',
-  }
-
-  const totalCobrado = cobros.reduce((s, c) => s + c.monto, 0)
-
-  return <section className="obraFotosSeccion" aria-label="Compras y costos de la obra">
+  return <section className="obraFotosSeccion" aria-label="Finanzas de la obra">
     <div className="seguimientoAcciones">
-      <div><h3>Finanzas de la obra</h3><p>Cobros del cliente, compras y costos asociados.</p></div>
+      <div><h3>Finanzas de la obra</h3><p>Registrá los cobros del cliente y generá su comprobante. Los números completos de la obra están en Rentabilidad.</p></div>
       <div className="adicAcciones">
         <button type="button" className="newButton" onClick={() => setMostrarCobro((v) => !v)}>{mostrarCobro ? 'Cancelar' : '💵 Registrar cobro'}</button>
+        <button type="button" className="editButton" onClick={onGenerarPdf}>📄 Generar comprobante</button>
         <button type="button" className="editButton" disabled={cargando} onClick={() => setRevision((valor) => valor + 1)}>Actualizar</button>
       </div>
     </div>
@@ -1102,17 +1184,11 @@ function EconomiaObra({ obraId }: { obraId: number }) {
       </form>
     )}
 
-    {cargando && <p role="status">Cargando compras y costos...</p>}
+    {cargando && <p role="status">Cargando...</p>}
     {error && <p className="loginError" role="alert">{error}</p>}
     {!cargando && !error && <>
-      <div className="seguimientoResumen">
-        <div><span>Cobrado (esta obra)</span><strong>{dineroFicha(totalCobrado)}</strong></div>
-        <div><span>Costo total registrado</span><strong>{dineroFicha(totalCostos)}</strong></div>
-        <div><span>Compras registradas</span><strong>{compras.length}</strong></div>
-      </div>
-
-      {cobros.length > 0 && <>
-        <h4>Cobros registrados</h4>
+      <h4>Cobros registrados</h4>
+      {cobros.length === 0 ? <p className="adicVacio">Todavía no registraste ningún cobro de esta obra.</p> : (
         <div className="gestionTabla" style={{ maxWidth: '100%', overflowX: 'auto' }}><table>
           <thead><tr><th>Fecha</th><th>Medio</th><th>Referencia</th><th>Monto</th><th>Acción</th></tr></thead>
           <tbody>{cobros.map((c) => <tr key={c.id}>
@@ -1120,38 +1196,22 @@ function EconomiaObra({ obraId }: { obraId: number }) {
             <td><button type="button" className="adicNo" onClick={() => eliminarCobro(c.id)}>Eliminar</button></td>
           </tr>)}</tbody>
         </table></div>
-      </>}
-      <p>El total corresponde a los costos de Finanzas e incluye las compras vinculadas una sola vez.</p>
-      <h4>Compras y comprobantes</h4>
-      {compras.length === 0 ? <p>No hay compras registradas para esta obra.</p> :
+      )}
+
+      <h4 style={{ marginTop: '22px' }}>Movimientos registrados en Adicionales</h4>
+      <p className="gestionAyuda" style={{ marginTop: 0 }}>Se cargan y editan en la pestaña Adicionales; acá solo se muestran.</p>
+      {movimientos.length === 0 ? <p className="adicVacio">Todavía no hay adicionales cargados en esta obra.</p> : (
         <div className="gestionTabla" style={{ maxWidth: '100%', overflowX: 'auto' }}><table>
-          <thead><tr><th>Fecha</th><th>Material / proveedor</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th><th>Comprobante</th></tr></thead>
-          <tbody>{compras.map((compra) => <tr key={compra.id}>
-            <td>{fechaFicha(compra.fecha)}</td>
-            <td><strong>{compra.nombre}</strong><br /><small>{compra.proveedor || 'Sin proveedor'}</small></td>
-            <td>{Number(compra.cantidad)} {compra.unidad}</td>
-            <td>{dineroFicha(Number(compra.precio_unitario || 0))}</td>
-            <td>{dineroFicha(Math.round(Number(compra.cantidad) * Number(compra.precio_unitario || 0) * 100) / 100)}</td>
-            <td>{compra.numero_comprobante && <div>{compra.numero_comprobante}</div>}
-              {compra.comprobante_path ? <>
-                <button type="button" className="editButton" disabled={abriendo !== null} onClick={() => void prepararComprobante(compra)}>
-                  {abriendo === compra.id ? 'Preparando...' : 'Ver comprobante'}
-                </button>
-                {comprobante?.id === compra.id && <div><a href={comprobante.url} target="_blank" rel="noopener noreferrer">Abrir archivo (enlace por 5 minutos)</a></div>}
-              </> : <span>Sin archivo adjunto</span>}
-            </td>
+          <thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Importe</th><th>Estado</th></tr></thead>
+          <tbody>{movimientos.map((m) => <tr key={m.id}>
+            <td>{fechaFicha(m.fecha)}</td>
+            <td>{TIPOS_ADIC[m.tipo] ?? m.tipo}</td>
+            <td>{m.descripcion || m.motivo || 'Sin detalle'}</td>
+            <td><strong>{dineroFicha(m.importe)}</strong></td>
+            <td><span className={ESTADO_ADIC_CLASE[m.estado] ?? 'adicBadge pendiente'}>{ESTADO_ADIC_LABEL[m.estado] ?? m.estado}</span></td>
           </tr>)}</tbody>
-        </table></div>}
-      {errorComprobante && <p className="loginError" role="alert">{errorComprobante}</p>}
-      <h4>Detalle de costos</h4>
-      {costos.length === 0 ? <p>No hay costos registrados para esta obra.</p> :
-        <div className="gestionTabla" style={{ maxWidth: '100%', overflowX: 'auto' }}><table>
-          <thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Monto</th></tr></thead>
-          <tbody>{costos.map((costo) => <tr key={costo.id}>
-            <td>{fechaFicha(costo.fecha)}</td><td>{tipos[costo.tipo] ?? costo.tipo}</td>
-            <td>{costo.descripcion || 'Sin detalle'}</td><td>{dineroFicha(Number(costo.monto || 0))}</td>
-          </tr>)}</tbody>
-        </table></div>}
+        </table></div>
+      )}
     </>}
   </section>
 }
