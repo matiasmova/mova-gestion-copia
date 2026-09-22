@@ -14,6 +14,21 @@ type Pago = {
   presupuesto_id: number | null
 }
 
+type Movimiento = {
+  id: number
+  fecha: string
+  tipo: string
+  descripcion: string | null
+  motivo: string | null
+  importe: number
+  estado: string
+}
+
+const TIPOS_MOV: Record<string, string> = {
+  adicional: 'Adicional', producto: 'Producto extra', servicio: 'Servicio extra', cambio: 'Cambio de alcance',
+  gasto_extra: 'Gasto extra', ajuste: 'Ajuste', bonificacion: 'Bonificación',
+}
+
 type Props = {
   obra: { id: number; nombre_obra: string }
   cliente: string
@@ -22,6 +37,7 @@ type Props = {
 
 export default function ResumenPagosPDF({ obra, cliente, onCerrar }: Props) {
   const [pagos, setPagos] = useState<Pago[]>([])
+  const [movimientos, setMovimientos] = useState<Movimiento[]>([])
   const [valor, setValor] = useState(0)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -39,12 +55,20 @@ export default function ResumenPagosPDF({ obra, cliente, onCerrar }: Props) {
       const contratado = presu.filter((p) => p.activo !== false && p.estado === 'aceptado').reduce((s, p) => s + Number(p.total || 0), 0)
 
       const [rAdic, rPagos] = await Promise.all([
-        supabase.from('adicionales').select('importe, estado').eq('obra_id', obra.id),
+        supabase.from('adicionales').select('id, fecha, tipo, descripcion, motivo, importe, estado').eq('obra_id', obra.id).order('fecha', { ascending: true }),
         supabase.from('pagos').select('id, monto, fecha, medio_pago, referencia, notas, obra_id, presupuesto_id').order('fecha', { ascending: true }),
       ])
       if (!vigente) return
-      const extra = rAdic.error ? 0 : (rAdic.data ?? []).filter((a) => a.estado === 'aprobado').reduce((s, a) => s + Number(a.importe || 0), 0)
+      const todos = rAdic.error ? [] : (rAdic.data ?? [])
+      // Para el valor de la obra, un adicional "Pagado" (Gasto extra ya
+      // devuelto) queda cancelado, como "Rechazado" o "Pendiente": no suma.
+      const aprobados = todos.filter((a) => a.estado === 'aprobado')
+      const extra = aprobados.reduce((s, a) => s + Number(a.importe || 0), 0)
       setValor(contratado + extra)
+      // Para el detalle sí mostramos también los Gasto extra "Pagado": no
+      // desaparecen, quedan en la lista para que se vea la historia completa.
+      const paraMostrar = todos.filter((a) => a.estado === 'aprobado' || (a.tipo === 'gasto_extra' && a.estado === 'pagado'))
+      setMovimientos(paraMostrar.map((a) => ({ ...a, importe: Number(a.importe) })) as Movimiento[])
       setPagos(rPagos.error ? [] : (rPagos.data ?? [])
         .map((p) => ({ ...p, monto: Number(p.monto) }))
         .filter((p) => p.obra_id === obra.id || (p.presupuesto_id != null && ids.includes(p.presupuesto_id))) as Pago[])
@@ -94,6 +118,39 @@ export default function ResumenPagosPDF({ obra, cliente, onCerrar }: Props) {
             <div><span className="pdfLabel">Total cobrado</span><strong>{moneda(cobrado)}</strong></div>
             <div className="pdfSaldoBox"><span className="pdfLabel">Saldo pendiente</span><strong>{moneda(saldo)}</strong></div>
           </section>
+
+          {movimientos.length > 0 && (
+            <section className="pdfGrupo">
+              <h2>Adicionales y modificaciones ({movimientos.length})</h2>
+              <table className="pdfTablaPagos">
+                <thead>
+                  <tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th style={{ textAlign: 'right' }}>Importe</th></tr>
+                </thead>
+                <tbody>
+                  {movimientos.map((m) => {
+                    const pendienteDevolucion = m.tipo === 'gasto_extra' && m.estado === 'aprobado'
+                    const yaDevuelto = m.tipo === 'gasto_extra' && m.estado === 'pagado'
+                    return (
+                      <tr key={m.id}>
+                        <td>{fechaCorta(m.fecha)}</td>
+                        <td>
+                          {TIPOS_MOV[m.tipo] ?? m.tipo}
+                          {pendienteDevolucion && <><br /><small style={{ color: '#b86608' }}>Deuda pendiente de devolución</small></>}
+                          {yaDevuelto && <><br /><small style={{ color: '#1f7a4d' }}>Ya devuelto</small></>}
+                        </td>
+                        <td>{m.descripcion || m.motivo || '—'}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          <b style={yaDevuelto ? { color: '#c2410c' } : undefined}>
+                            {yaDevuelto ? '− ' : m.importe >= 0 ? '+' : ''}{moneda(Math.abs(m.importe))}
+                          </b>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </section>
+          )}
 
           <section className="pdfGrupo">
             <h2>Detalle de cobros ({pagos.length})</h2>

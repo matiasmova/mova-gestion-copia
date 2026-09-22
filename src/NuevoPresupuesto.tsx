@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from './supabase'
+import {
+  descuentoItem,
+  descuentoItems,
+  importeBruto,
+  importeNeto,
+  pctItem,
+  redondear,
+} from './presupuestoCalculos'
 
 export type ClienteOpcion = {
   id: number
@@ -21,6 +29,8 @@ export type ItemPresupuesto = {
   cantidad: number
   precio_unitario: number
   costo_unitario: number
+  // Descuento propio del ítem, en % (0 a 100).
+  descuento_pct?: number
 }
 
 type ProductoServicio = {
@@ -43,6 +53,7 @@ export type PresupuestoEditable = {
   validez_dias: number
   estado: string
   etapa_trabajo: 'sin_iniciar' | 'en_proceso' | 'finalizado'
+  // Total de descuentos guardados (descuentos por ítem + bonificación general).
   descuento: number
   total_pagado: number
   notas: string | null
@@ -64,6 +75,7 @@ const itemVacio: ItemPresupuesto = {
   cantidad: 1,
   precio_unitario: 0,
   costo_unitario: 0,
+  descuento_pct: 0,
 }
 
 function NuevoPresupuesto({
@@ -92,11 +104,17 @@ function NuevoPresupuesto({
   const [estado, setEstado] = useState<string>(
     presupuesto?.estado ?? 'borrador',
   )
-  const [etapaTrabajo, setEtapaTrabajo] = useState<
-    'sin_iniciar' | 'en_proceso' | 'finalizado'
-  >(presupuesto?.etapa_trabajo ?? 'sin_iniciar')
-  const [descuento, setDescuento] = useState(
-    presupuesto?.descuento ?? 0,
+
+  // Bonificación general adicional: lo guardado menos lo que suman
+  // los descuentos por ítem.
+  const [descuento, setDescuento] = useState(() =>
+    redondear(
+      Math.max(
+        (presupuesto?.descuento ?? 0) -
+          descuentoItems(presupuesto?.items ?? []),
+        0,
+      ),
+    ),
   )
   const [descuentoTipo, setDescuentoTipo] = useState<'monto' | 'porcentaje'>('monto')
   const totalPagado = presupuesto?.total_pagado ?? 0
@@ -138,15 +156,15 @@ function NuevoPresupuesto({
   const obrasDisponibles = obras.filter(
     (obra) => Number(obra.cliente_id) === Number(clienteId),
   )
-  
+
   function cambiarCliente(nuevoClienteId: string) {
     setClienteId(nuevoClienteId)
-  
+
     const obrasDelCliente = obras.filter(
       (obra) =>
         Number(obra.cliente_id) === Number(nuevoClienteId),
     )
-  
+
     if (obrasDelCliente.length === 1) {
       setObraId(obrasDelCliente[0].id.toString())
     } else {
@@ -154,23 +172,37 @@ function NuevoPresupuesto({
     }
   }
 
+  // Subtotal a precio de lista (sin descuentos).
   const subtotal = useMemo(
     () =>
       items.reduce(
-        (acumulado, item) =>
-          acumulado +
-          Number(item.cantidad || 0) *
-            Number(item.precio_unitario || 0),
+        (acumulado, item) => acumulado + importeBruto(item),
         0,
       ),
     [items],
   )
 
-  // El descuento puede ingresarse en $ o en %; siempre se guarda como monto en $.
-  const descuentoMonto = descuentoTipo === 'porcentaje'
-    ? Math.round(subtotal * (Number(descuento || 0) / 100) * 100) / 100
-    : Number(descuento || 0)
-  const total = Math.max(subtotal - descuentoMonto, 0)
+  // Suma de los descuentos propios de cada ítem.
+  const descuentoPorItems = useMemo(
+    () => descuentoItems(items),
+    [items],
+  )
+
+  // La bonificación general puede ingresarse en $ o en % (se calcula sobre
+  // lo que queda después de los descuentos por ítem).
+  const descuentoGeneral = Math.min(
+    descuentoTipo === 'porcentaje'
+      ? redondear(
+          (subtotal - descuentoPorItems) *
+            (Number(descuento || 0) / 100),
+        )
+      : Number(descuento || 0),
+    Math.max(subtotal - descuentoPorItems, 0),
+  )
+
+  // Siempre se guarda un único monto en $ con todos los descuentos.
+  const descuentoTotal = redondear(descuentoPorItems + descuentoGeneral)
+  const total = Math.max(subtotal - descuentoTotal, 0)
   const saldo = Math.max(total - Number(totalPagado || 0), 0)
 
   function actualizarItem(
@@ -256,6 +288,22 @@ function NuevoPresupuesto({
 
     setGuardando(true)
 
+    // Solo cuentan los descuentos de los ítems que se guardan.
+    const descuentoItemsValidos = descuentoItems(itemsValidos)
+    const descuentoAGuardar = redondear(
+      descuentoItemsValidos +
+        Math.min(
+          descuentoGeneral,
+          Math.max(
+            itemsValidos.reduce(
+              (suma, item) => suma + importeBruto(item),
+              0,
+            ) - descuentoItemsValidos,
+            0,
+          ),
+        ),
+    )
+
     const datosPresupuesto = {
       cliente_id: Number(clienteId),
       obra_id: obraId ? Number(obraId) : null,
@@ -264,9 +312,9 @@ function NuevoPresupuesto({
       fecha,
       validez_dias: Number(validezDias),
       estado,
-      etapa_trabajo: etapaTrabajo,
-      descuento: descuentoMonto,
-      ...(!presupuesto && { total_pagado: 0 }),
+      descuento: descuentoAGuardar,
+      // La etapa del trabajo se maneja desde Presupuestos: al editar no se toca.
+      ...(!presupuesto && { total_pagado: 0, etapa_trabajo: 'sin_iniciar' }),
       notas: notas.trim() || null,
       activo: true,
     }
@@ -322,6 +370,7 @@ function NuevoPresupuesto({
       cantidad: Number(item.cantidad),
       precio_unitario: Number(item.precio_unitario),
       costo_unitario: Number(item.costo_unitario),
+      descuento_pct: pctItem(item),
       orden: indice,
     }))
 
@@ -464,25 +513,6 @@ function NuevoPresupuesto({
                 <option value="rechazado">Rechazado</option>
               </select>
             </label>
-
-            <label>
-              Etapa del trabajo
-              <select
-                value={etapaTrabajo}
-                onChange={(evento) =>
-                  setEtapaTrabajo(
-                    evento.target.value as
-                      | 'sin_iniciar'
-                      | 'en_proceso'
-                      | 'finalizado',
-                  )
-                }
-              >
-                <option value="sin_iniciar">Sin iniciar</option>
-                <option value="en_proceso">En proceso</option>
-                <option value="finalizado">Finalizado</option>
-              </select>
-            </label>
           </div>
 
           <div className="itemsHeader">
@@ -615,9 +645,7 @@ function NuevoPresupuesto({
                 <div className="itemSubtotal">
                   <span>Subtotal</span>
                   <strong>
-                    {formatoDinero(
-                      item.cantidad * item.precio_unitario,
-                    )}
+                    {formatoDinero(importeBruto(item))}
                   </strong>
                 </div>
 
@@ -629,13 +657,62 @@ function NuevoPresupuesto({
                 >
                   ×
                 </button>
+
+                {/* Descuento propio del ítem: ocupa una fila completa
+                    debajo de los demás campos. */}
+                <div
+                  style={{
+                    gridColumn: '1 / -1',
+                    flexBasis: '100%',
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    gap: '10px 16px',
+                    paddingTop: '4px',
+                    fontSize: '13px',
+                  }}
+                >
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    <span>Descuento del ítem</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={item.descuento_pct ?? 0}
+                      onChange={(evento) =>
+                        actualizarItem(
+                          indice,
+                          'descuento_pct',
+                          Number(evento.target.value),
+                        )
+                      }
+                      style={{ width: '90px' }}
+                      aria-label="Descuento del ítem en porcentaje"
+                    />
+                    <span>%</span>
+                  </label>
+
+                  {pctItem(item) > 0 && (
+                    <span style={{ color: '#c62828', fontWeight: 600 }}>
+                      − {formatoDinero(descuentoItem(item))} · Neto{' '}
+                      {formatoDinero(importeNeto(item))}
+                    </span>
+                  )}
+                </div>
               </div>
             ))}
           </div>
 
           <div className="presupuestoEconomia">
             <label>
-              Descuento / Bonificación
+              Bonificación general (opcional)
               <div className="descuentoPresu">
                 <div className="segTipo">
                   <button type="button" className={descuentoTipo === 'monto' ? 'active' : ''} onClick={() => setDescuentoTipo('monto')}>$</button>
@@ -654,7 +731,13 @@ function NuevoPresupuesto({
 
             <div className="presupuestoTotales">
               <span>Subtotal: {formatoDinero(subtotal)}</span>
-              <span>Descuento: {formatoDinero(descuentoMonto)}{descuentoTipo === 'porcentaje' ? ` (${Number(descuento || 0)}%)` : ''}</span>
+              {descuentoPorItems > 0 && (
+                <span>Descuentos por ítem: −{formatoDinero(descuentoPorItems)}</span>
+              )}
+              {descuentoGeneral > 0 && (
+                <span>Bonificación general: −{formatoDinero(descuentoGeneral)}{descuentoTipo === 'porcentaje' ? ` (${Number(descuento || 0)}%)` : ''}</span>
+              )}
+              <span>Total descuentos: {formatoDinero(descuentoTotal)}</span>
               <strong>Total: {formatoDinero(total)}</strong>
               <span>Cobrado: {formatoDinero(totalPagado)}</span>
               <span>Saldo: {formatoDinero(saldo)}</span>

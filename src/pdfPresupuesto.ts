@@ -14,6 +14,11 @@ export type DatosPdf = {
   items: ItemPresupuesto[]; cliente: string; obra: string
 }
 
+// Color de marca en hex, usado también fuera del PDF (por ejemplo en
+// DocumentoPresupuesto.tsx, la vista previa en pantalla) para que ambos
+// coincidan exactamente.
+export const COLOR_MARCA_HEX = '#E47B00'
+
 const ORANGE = rgb(0.894, 0.482, 0)
 const DARK = rgb(0.063, 0.075, 0.094)
 const GRAY = rgb(0.47, 0.51, 0.56)
@@ -22,7 +27,7 @@ const LINE = rgb(0.88, 0.89, 0.91)
 // Sanitiza a caracteres que las fuentes estándar (WinAnsi) pueden dibujar.
 function win(s: string): string {
   return (s ?? '')
-    .replace(/[  ]/g, ' ')
+    .replace(/[  ]/g, ' ')
     .replace(/[‒-―−]/g, '-')
     .replace(/[‘’]/g, "'")
     .replace(/[“”]/g, '"')
