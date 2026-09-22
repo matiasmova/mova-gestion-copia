@@ -279,7 +279,8 @@ export function planificarDesdeFilas(
   const resultado: FilaPlan[] = []
   const codigosVistos = new Map<string, number>()
   const nombresVistos = new Map<string, number>()
-  const productosUsados = new Map<number, number>()
+  // El tipo del id se toma de ProductoServicio (sirve tanto si es número como si es texto/uuid).
+  const productosUsados = new Map<ProductoServicio['id'], number>()
 
   for (const { celdas, linea } of filas.slice(1)) {
     const celda = (campo: Campo): string | undefined => {
@@ -506,26 +507,39 @@ export type ResultadoImportacion = {
 const mensajeError = (e: { code?: string; message?: string } | null) =>
   e?.code === '23505' ? 'Ya existe otro producto con ese código.' : e?.message || 'No se pudo guardar.'
 
+// Filas que seguro traen datos (y, para actualizar, el producto existente).
+// Con estos filtros tipados TypeScript sabe que datos/existente no son undefined.
+type FilaConDatos = FilaPlan & { datos: Record<string, unknown> }
+type FilaParaActualizar = FilaConDatos & { existente: ProductoServicio }
+
+const esFilaParaCrear = (f: FilaPlan): f is FilaConDatos =>
+  f.accion === 'crear' && f.datos !== undefined
+
+const esFilaParaActualizar = (f: FilaPlan): f is FilaParaActualizar =>
+  f.accion === 'actualizar' && f.datos !== undefined && f.existente !== undefined
+
 export async function ejecutarImportacion(
   plan: Plan,
   alProgreso: (hechas: number, total: number) => void,
 ): Promise<ResultadoImportacion> {
-  const crear = plan.filas.filter((f) => f.accion === 'crear' && f.datos)
-  const actualizar = plan.filas.filter((f) => f.accion === 'actualizar' && f.datos && f.existente)
+  const crear = plan.filas.filter(esFilaParaCrear)
+  const actualizar = plan.filas.filter(esFilaParaActualizar)
   const total = crear.length + actualizar.length
   const resultado: ResultadoImportacion = { creados: 0, actualizados: 0, fallidos: [] }
   let hechas = 0
   alProgreso(0, total)
 
   // Altas en tandas; si una tanda falla se reintenta fila por fila para saber cuál falló.
+  // Los datos se arman dinámicamente, por eso se pasan con "as never" (evita que
+  // TypeScript los compare contra el esquema tipado de Supabase y rompa el build).
   for (let i = 0; i < crear.length; i += 50) {
     const tanda = crear.slice(i, i + 50)
-    const { error } = await supabase.from('productos_servicios').insert(tanda.map((f) => f.datos))
+    const { error } = await supabase.from('productos_servicios').insert(tanda.map((f) => f.datos) as never)
     if (!error) {
       resultado.creados += tanda.length
     } else {
       for (const fila of tanda) {
-        const uno = await supabase.from('productos_servicios').insert(fila.datos)
+        const uno = await supabase.from('productos_servicios').insert(fila.datos as never)
         if (uno.error) resultado.fallidos.push({ linea: fila.linea, nombre: fila.nombre, mensaje: mensajeError(uno.error) })
         else resultado.creados++
       }
@@ -539,7 +553,7 @@ export async function ejecutarImportacion(
   const trabajador = async () => {
     while (siguiente < actualizar.length) {
       const fila = actualizar[siguiente++]
-      const { error } = await supabase.from('productos_servicios').update(fila.datos).eq('id', fila.existente!.id)
+      const { error } = await supabase.from('productos_servicios').update(fila.datos as never).eq('id', fila.existente.id)
       if (error) resultado.fallidos.push({ linea: fila.linea, nombre: fila.nombre, mensaje: mensajeError(error) })
       else resultado.actualizados++
       hechas++
@@ -559,5 +573,6 @@ export function plantillaCsv(): string {
     ['MINI-LN-01W', 'Mini Switch Wifi 1 Canal', 'producto', 'Módulos y llaves', 'Qisfeel', 'unidad', '', '5,01', '50', '', '10', '5', '10,5', '', ''],
     ['INST-001', 'Instalación por boca', 'servicio', 'Mano de obra', '', 'boca', '', '', '', '18000', '', '', '21', '', 'Colocación y configuración'],
   ]
-  return '﻿' + filas.map((f) => f.join(';')).join('\r\n') + '\r\n'
+  // "\uFEFF" = marca BOM, para que Excel abra el CSV con tildes correctas.
+  return '\uFEFF' + filas.map((f) => f.join(';')).join('\r\n') + '\r\n'
 }
