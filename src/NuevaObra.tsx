@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from 'react'
 import { supabase } from './supabase'
-import { OBRA_ESTADOS } from './obraEstado'
 
 type ClienteOpcion = {
   id: number
@@ -31,6 +30,13 @@ type NuevaObraProps = {
   onCancelar: () => void
 }
 
+// El estado de la obra no se elige en este formulario:
+//  · Una obra nueva se guarda como "en_proceso" por dentro, pero recién
+//    aparece en la sección Obras cuando su presupuesto pasa a Aceptado.
+//  · Después, el estado cambia solo con los avances cargados en la ficha.
+//  · Al editar una obra existente, su estado no se toca.
+const ESTADO_INICIAL_OBRA = 'en_proceso'
+
 function NuevaObra({
   clientes,
   obra,
@@ -49,7 +55,6 @@ function NuevaObra({
       obra?.direccion ?? clienteInicial?.direccion ?? '',
     localidad:
       obra?.localidad ?? clienteInicial?.localidad ?? '',
-    estado: obra?.estado ?? 'en_proceso',
     fecha_inicio: obra?.fecha_inicio ?? '',
     fecha_fin_estimada: obra?.fecha_fin_estimada ?? '',
     descripcion: obra?.descripcion ?? '',
@@ -90,7 +95,6 @@ function NuevaObra({
       nombre_obra: formulario.nombre_obra.trim(),
       direccion: formulario.direccion.trim() || null,
       localidad: formulario.localidad.trim() || null,
-      estado: formulario.estado,
       fecha_inicio: formulario.fecha_inicio || null,
       fecha_fin_estimada:
         formulario.fecha_fin_estimada || null,
@@ -106,6 +110,7 @@ function NuevaObra({
           .from('obras')
           .insert({
             ...datosObra,
+            estado: ESTADO_INICIAL_OBRA,
             activo: true,
           })
 
@@ -197,20 +202,6 @@ function NuevaObra({
                   actualizar('localidad', evento.target.value)
                 }
               />
-            </label>
-
-            <label>
-              Estado
-              <select
-                value={formulario.estado}
-                onChange={(evento) =>
-                  actualizar('estado', evento.target.value)
-                }
-              >
-                {OBRA_ESTADOS.map((e) => (
-                  <option key={e.v} value={e.v}>{e.t}</option>
-                ))}
-              </select>
             </label>
 
             <label>

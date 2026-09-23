@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from './supabase'
 import { moneda, fechaCorta, hoy } from './gestionFormat'
 import { calcularPersona } from './personalCalculos'
+import { etiquetaObra, claseObra } from './obraEstado'
 
-type Obra = { id: number; nombre_obra: string; estado: string | null; porcentaje_avance: number | null; activo: boolean }
+type Obra = { id: number; cliente_id: number; nombre_obra: string; estado: string | null; porcentaje_avance: number | null; activo: boolean }
 type Presupuesto = { id: number; obra_id: number | null; cliente_id: number; titulo: string; total: number; total_pagado: number; saldo: number; estado: string; activo: boolean; fecha: string }
 type Cliente = { id: number; nombre: string; apellido: string | null }
 type Pago = { monto: number; fecha: string; obra_id: number | null; presupuesto_id: number | null }
 type Costo = { monto: number; fecha: string; tipo: string; personal_id: number | null; obra_id: number | null }
 type Gasto = { id: number; fecha: string; categoria: string | null; descripcion: string | null; monto: number; recurrente: boolean }
-type Material = { cantidad: number; precio_unitario: number; pagado: boolean }
 type Prod = { id: number; nombre: string; tipo: string; costo_unitario: number; stock: number; stock_minimo: number; activo: boolean }
 type AsigTablero = { obra_id: number; personal_id: number | null; modalidad: string | null; valor_acordado: number | null }
 type PersonaTablero = { id: number; nombre: string; apellido: string | null; tipo: string; costo_dia: number | null }
@@ -17,11 +17,26 @@ type JornalTablero = { obra_id: number; personal_id: number | null; jornada: num
 type AdicionalTablero = { obra_id: number; importe: number; estado: string; tipo: string }
 type Item = { catalogo_id: number | null; cantidad: number; presupuesto_id: number }
 
-// Pestañas del tablero. "Resumen" se quitó: el tablero abre en "Balance de la empresa".
-type Pestana = 'pyl' | 'caja' | 'personal' | 'gastos' | 'pagar' | 'inventario'
+// Pestañas del tablero. "Resumen" y "Cuentas por pagar" se quitaron: el tablero abre en "Balance de la empresa".
+type Pestana = 'pyl' | 'caja' | 'personal' | 'gastos' | 'inventario'
 const mesActual = () => new Date().toISOString().slice(0, 7)
 const nombreMes = (ym: string) => new Date(`${ym}-01T12:00:00`).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
 const redondear = (n: number) => Math.round(n * 100) / 100
+const sumarMeses = (ym: string, n: number) => {
+  const [anio, mes] = ym.split('-').map(Number)
+  const d = new Date(anio, mes - 1 + n, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+const mesesEntre = (desde: string, hasta: string) => {
+  const lista: string[] = []
+  let ym = desde
+  while (ym <= hasta && lista.length < 60) { lista.push(ym); ym = sumarMeses(ym, 1) }
+  return lista
+}
+const nombreMesCorto = (ym: string) =>
+  new Date(`${ym}-01T12:00:00`).toLocaleDateString('es-AR', { month: 'short', year: 'numeric' }).replace('.', '')
+type Periodo = 'mes' | '3' | '6' | 'anio' | 'custom'
+const PERIODOS: [Periodo, string][] = [['mes', 'Este mes'], ['3', 'Últimos 3 meses'], ['6', 'Últimos 6 meses'], ['anio', 'Este año'], ['custom', 'Elegir período']]
 const monedaCorta = (v: number) => {
   const signo = v < 0 ? '-' : ''
   const abs = Math.abs(v)
@@ -34,15 +49,18 @@ const MODALIDADES: Record<string, string> = {
 }
 const CATEGORIAS_GASTO = ['Alquiler', 'Sueldos fijos', 'Servicios', 'Impuestos', 'Contador', 'Combustible', 'Herramientas', 'Marketing', 'Otros']
 
-type TableroProps = { onIrA?: (destino: 'gastos' | 'finanzas') => void }
+type TableroProps = {
+  onIrA?: (destino: 'gastos' | 'finanzas') => void
+  // Abre la ficha de una obra (se usa desde la pestaña Cobranzas).
+  onAbrirObra?: (obraId: number) => void
+}
 
-function Tablero({ onIrA }: TableroProps = {}) {
+function Tablero({ onIrA, onAbrirObra }: TableroProps = {}) {
   const [obras, setObras] = useState<Obra[]>([])
   const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([])
   const [pagos, setPagos] = useState<Pago[]>([])
   const [costos, setCostos] = useState<Costo[]>([])
   const [gastos, setGastos] = useState<Gasto[]>([])
-  const [materiales, setMateriales] = useState<Material[]>([])
   const [productos, setProductos] = useState<Prod[]>([])
   const [asigTablero, setAsigTablero] = useState<AsigTablero[]>([])
   const [personasTablero, setPersonasTablero] = useState<PersonaTablero[]>([])
@@ -51,23 +69,25 @@ function Tablero({ onIrA }: TableroProps = {}) {
   const [items, setItems] = useState<Item[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [pestana, setPestana] = useState<Pestana>('pyl')
-  const [mesSel, setMesSel] = useState(mesActual())
-  const [agingSel, setAgingSel] = useState<string | null>(null)
+  // Período del Balance y de Gastos fijos (compartido): por defecto siempre el mes actual.
+  const [periodo, setPeriodo] = useState<Periodo>('mes')
+  const [desdeSel, setDesdeSel] = useState(mesActual())
+  const [hastaSel, setHastaSel] = useState(mesActual())
   const [invFiltro, setInvFiltro] = useState<'todos' | 'sin' | 'reponer'>('todos')
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [formGasto, setFormGasto] = useState<Gasto | null>(null)
+  const [cargandoRecurrentes, setCargandoRecurrentes] = useState(false)
 
   useEffect(() => {
     async function cargar() {
       setCargando(true); setError('')
-      const [rO, rP, rPa, rC, rG, rM, rProd, rA, rItems, rCli, rPer, rJor, rAdic] = await Promise.all([
-        supabase.from('obras').select('id,nombre_obra,estado,porcentaje_avance,activo'),
+      const [rO, rP, rPa, rC, rG, rProd, rA, rItems, rCli, rPer, rJor, rAdic] = await Promise.all([
+        supabase.from('obras').select('id,cliente_id,nombre_obra,estado,porcentaje_avance,activo'),
         supabase.from('presupuestos').select('id,obra_id,cliente_id,titulo,total,total_pagado,saldo,estado,activo,fecha').eq('activo', true),
         supabase.from('pagos').select('monto,fecha,obra_id,presupuesto_id'),
         supabase.from('costos').select('monto,fecha,tipo,personal_id,obra_id'),
         supabase.from('gastos_generales').select('id,fecha,categoria,descripcion,monto,recurrente'),
-        supabase.from('materiales').select('cantidad,precio_unitario,pagado'),
         supabase.from('productos_servicios').select('id,nombre,tipo,costo_unitario,stock,stock_minimo,activo'),
         supabase.from('obra_asignaciones').select('obra_id,personal_id,modalidad,valor_acordado'),
         supabase.from('presupuesto_items').select('catalogo_id,cantidad,presupuesto_id').eq('tipo', 'producto'),
@@ -83,7 +103,6 @@ function Tablero({ onIrA }: TableroProps = {}) {
       setPagos(rPa.error ? [] : (rPa.data ?? []).map((p) => ({ ...p, monto: num(p.monto) })) as Pago[])
       setCostos(rC.error ? [] : (rC.data ?? []).map((c) => ({ ...c, monto: num(c.monto) })) as Costo[])
       setGastos(rG.error ? [] : (rG.data ?? []).map((g) => ({ ...g, monto: num(g.monto) })) as Gasto[])
-      setMateriales(rM.error ? [] : (rM.data ?? []).map((m) => ({ cantidad: num(m.cantidad), precio_unitario: num(m.precio_unitario), pagado: m.pagado !== false })) as Material[])
       setProductos(rProd.error ? [] : (rProd.data ?? []).map((p) => ({ ...p, costo_unitario: num(p.costo_unitario), stock: num(p.stock), stock_minimo: num(p.stock_minimo) })) as Prod[])
       setAsigTablero(rA.error ? [] : (rA.data ?? []).map((a) => ({ ...a, valor_acordado: a.valor_acordado == null ? null : num(a.valor_acordado) })) as AsigTablero[])
       setItems(rItems.error ? [] : (rItems.data ?? []).map((i) => ({ catalogo_id: i.catalogo_id, cantidad: num(i.cantidad), presupuesto_id: i.presupuesto_id })) as Item[])
@@ -111,23 +130,45 @@ function Tablero({ onIrA }: TableroProps = {}) {
 
   const enMes = (f: string | null | undefined, ym: string) => (f ?? '').slice(0, 7) === ym
 
-  // ---- Balance del mes seleccionado + últimos 12 meses (alimenta el gráfico) ----
-  const pyl = useMemo(() => {
+  // ---- Balance: período elegido (por defecto, este mes) ----
+  const rango = useMemo(() => {
+    const hoyYm = mesActual()
+    let desde = hoyYm
+    let hasta = hoyYm
+    if (periodo === '3') desde = sumarMeses(hoyYm, -2)
+    else if (periodo === '6') desde = sumarMeses(hoyYm, -5)
+    else if (periodo === 'anio') desde = `${hoyYm.slice(0, 4)}-01`
+    else if (periodo === 'custom') {
+      desde = desdeSel <= hastaSel ? desdeSel : hastaSel
+      hasta = desdeSel <= hastaSel ? hastaSel : desdeSel
+    }
+    return { desde, hasta, meses: mesesEntre(desde, hasta) }
+  }, [periodo, desdeSel, hastaSel])
+
+  const balance = useMemo(() => {
     const calc = (ym: string) => {
       const ingresos = pagos.filter((p) => enMes(p.fecha, ym)).reduce((s, p) => s + p.monto, 0)
       const costosDir = costos.filter((c) => enMes(c.fecha, ym)).reduce((s, c) => s + c.monto, 0)
       const fijos = gastos.filter((g) => enMes(g.fecha, ym)).reduce((s, g) => s + g.monto, 0)
       return { ingresos, costosDir, fijos, resultado: ingresos - costosDir - fijos }
     }
-    const meses: { ym: string; ingresos: number; costosDir: number; fijos: number; resultado: number }[] = []
-    const base = new Date(`${mesSel}-01T12:00:00`)
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(base.getFullYear(), base.getMonth() - i, 1)
-      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-      meses.push({ ym, ...calc(ym) })
-    }
-    return { actual: calc(mesSel), meses }
-  }, [pagos, costos, gastos, mesSel])
+    const total = rango.meses.map(calc).reduce(
+      (acc, m) => ({ ingresos: acc.ingresos + m.ingresos, costosDir: acc.costosDir + m.costosDir, fijos: acc.fijos + m.fijos, resultado: acc.resultado + m.resultado }),
+      { ingresos: 0, costosDir: 0, fijos: 0, resultado: 0 },
+    )
+    // Un solo mes: el gráfico muestra los 12 meses que terminan en ese mes, como contexto.
+    // Un período: el gráfico muestra exactamente los meses elegidos.
+    const mesesGrafico = rango.meses.length === 1 ? mesesEntre(sumarMeses(rango.hasta, -11), rango.hasta) : rango.meses
+    return { total, grafico: mesesGrafico.map((ym) => ({ ym, ...calc(ym) })) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagos, costos, gastos, rango])
+
+  const etiquetaPeriodo = rango.meses.length === 1
+    ? nombreMes(rango.desde)
+    : `${nombreMesCorto(rango.desde)} – ${nombreMesCorto(rango.hasta)}`
+  const margenNeto = balance.total.ingresos > 0 ? Math.round((balance.total.resultado / balance.total.ingresos) * 100) : null
+  const ivaDebito = balance.total.ingresos - balance.total.ingresos / 1.21
+  const ivaCredito = balance.total.costosDir - balance.total.costosDir / 1.21
 
   // ---- Histórico de toda la empresa: lo invertido, lo ganado y los impuestos ----
   const historico = useMemo(() => {
@@ -141,22 +182,65 @@ function Tablero({ onIrA }: TableroProps = {}) {
   const nombreCli = (id: number) => { const c = clientes.find((x) => x.id === id); return c ? `${c.nombre} ${c.apellido ?? ''}`.trim() : 'Cliente' }
   const nombreObra = (id: number | null) => (id != null ? obras.find((o) => o.id === id)?.nombre_obra ?? `Obra #${id}` : '—')
 
-  // ---- Aging de cuentas por cobrar (por presupuesto aceptado con saldo), con la obra de cada uno ----
-  const aging = useMemo(() => {
-    type Fila = { id: number; cliente: string; titulo: string; obra: string; saldo: number; dias: number }
-    const det: Record<string, Fila[]> = { b0: [], b30: [], b60: [], b90: [] }
-    const buckets = { b0: 0, b30: 0, b60: 0, b90: 0 }
-    const hoyMs = Date.now()
-    presupuestos.filter((p) => p.estado === 'aceptado' && p.saldo > 0).forEach((p) => {
-      const dias = Math.floor((hoyMs - new Date(`${(p.fecha ?? '').slice(0, 10)}T12:00:00`).getTime()) / 86400000)
-      const k = dias <= 30 ? 'b0' : dias <= 60 ? 'b30' : dias <= 90 ? 'b60' : 'b90'
-      buckets[k as keyof typeof buckets] += p.saldo
-      det[k].push({ id: p.id, cliente: nombreCli(p.cliente_id), titulo: p.titulo, obra: nombreObra(p.obra_id), saldo: p.saldo, dias })
+  // ---- Cobranzas: semáforo por obra ----
+  // Se calcula igual que las tarjetas de Obras:
+  //   valor   = presupuestos aceptados + adicionales aprobados de la obra
+  //   cobrado = todos los pagos de la obra (cargados en la obra o en su presupuesto)
+  //   corresponde cobrar = valor × % de avance (100% si la obra está terminada)
+  //  🔴 Terminada con saldo: obra finalizada / en observación y todavía hay saldo.
+  //  🟠 Atrasada por avance: en proceso y se cobró menos de lo que corresponde al avance.
+  //  🟢 Al día: se cobró lo que corresponde al avance (o más).
+  const cobranzas = useMemo(() => {
+    type Situacion = 'rojo' | 'naranja' | 'verde'
+    type FilaCobranza = {
+      obraId: number; obra: string; cliente: string; estado: string | null; avance: number
+      valor: number; cobrado: number; saldo: number; faltaAvance: number; situacion: Situacion
+    }
+    const valorPorObra: Record<number, number> = {}
+    const obraDePresupuesto: Record<number, number> = {}
+    presupuestos.forEach((p) => {
+      if (p.obra_id == null) return
+      obraDePresupuesto[p.id] = p.obra_id
+      if (p.activo !== false && p.estado === 'aceptado') valorPorObra[p.obra_id] = (valorPorObra[p.obra_id] || 0) + p.total
     })
-    const total = buckets.b0 + buckets.b30 + buckets.b60 + buckets.b90
-    return { ...buckets, total, det }
+    const conAceptado = new Set(Object.keys(valorPorObra).map(Number))
+    adicionalesTablero.forEach((a) => {
+      if (a.estado === 'aprobado' && conAceptado.has(a.obra_id)) valorPorObra[a.obra_id] += a.importe
+    })
+    const cobradoPorObra: Record<number, number> = {}
+    pagos.forEach((pago) => {
+      const obraId = pago.obra_id ?? (pago.presupuesto_id != null ? obraDePresupuesto[pago.presupuesto_id] : undefined)
+      if (obraId == null) return
+      cobradoPorObra[obraId] = (cobradoPorObra[obraId] || 0) + pago.monto
+    })
+
+    const filas: FilaCobranza[] = []
+    obras.filter((o) => o.activo !== false && conAceptado.has(o.id)).forEach((o) => {
+      const valor = redondear(valorPorObra[o.id] || 0)
+      const cobrado = redondear(cobradoPorObra[o.id] || 0)
+      const saldo = redondear(Math.max(0, valor - cobrado))
+      if (saldo <= 0) return
+      const terminada = o.estado === 'finalizada' || o.estado === 'observacion'
+      const avance = terminada ? 100 : Math.min(100, Math.max(0, Number(o.porcentaje_avance || 0)))
+      const corresponde = redondear(valor * avance / 100)
+      const faltaAvance = redondear(Math.max(0, corresponde - cobrado))
+      const situacion: Situacion = terminada ? 'rojo' : faltaAvance > 0.5 ? 'naranja' : 'verde'
+      filas.push({ obraId: o.id, obra: o.nombre_obra, cliente: nombreCli(o.cliente_id), estado: o.estado, avance, valor, cobrado, saldo, faltaAvance, situacion })
+    })
+
+    const orden: Record<Situacion, number> = { rojo: 0, naranja: 1, verde: 2 }
+    filas.sort((x, y) => orden[x.situacion] - orden[y.situacion] || (y.situacion === 'naranja' ? y.faltaAvance - x.faltaAvance : y.saldo - x.saldo))
+
+    const de = (sit: Situacion) => filas.filter((f) => f.situacion === sit)
+    return {
+      filas,
+      total: filas.reduce((s, f) => s + f.saldo, 0),
+      rojo: { n: de('rojo').length, monto: de('rojo').reduce((s, f) => s + f.saldo, 0) },
+      naranja: { n: de('naranja').length, monto: de('naranja').reduce((s, f) => s + f.faltaAvance, 0) },
+      verde: { n: de('verde').length, monto: de('verde').reduce((s, f) => s + f.saldo, 0) },
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [presupuestos, clientes, obras])
+  }, [presupuestos, adicionalesTablero, pagos, obras, clientes])
 
   // ---- Personal: lo pactado, pagado y el saldo con cada persona en cada obra ----
   const personalDetalle = useMemo(() => {
@@ -171,13 +255,36 @@ function Tablero({ onIrA }: TableroProps = {}) {
       const avanceObra = obras.find((o) => o.id === a.obra_id)?.porcentaje_avance ?? 0
       const calc = calcularPersona(a, persona, pagosPersona, jornalesObra, valorObra, avanceObra)
       const saldo = calc.totalContrato != null ? Math.max(calc.totalContrato - calc.pagado, 0) : Math.max(calc.diferencia, 0)
+
+      // Qué corresponde pagar HOY según el avance de la obra:
+      //  · Con total pactado (por obra / etapa / %): total × % de avance (100% si la obra terminó).
+      //  · Por día u hora: lo devengado según los jornales cargados (ya viene en calc.diferencia).
+      const estadoObra = obras.find((o) => o.id === a.obra_id)?.estado ?? null
+      const terminada = estadoObra === 'finalizada' || estadoObra === 'observacion'
+      const avance = terminada ? 100 : Math.min(100, Math.max(0, Number(avanceObra || 0)))
+      let debe = 0
+      let adelantado = 0
+      if (calc.totalContrato != null) {
+        const corresponde = calc.totalContrato * avance / 100
+        debe = Math.max(0, corresponde - calc.pagado)
+        adelantado = Math.max(0, calc.pagado - corresponde)
+      } else {
+        debe = Math.max(0, calc.diferencia)
+        adelantado = Math.max(0, -calc.diferencia)
+      }
+      debe = redondear(debe)
+      adelantado = redondear(adelantado)
+      const situacion: 'rojo' | 'naranja' | 'verde' = debe > 0.5 ? 'rojo' : adelantado > 0.5 ? 'naranja' : 'verde'
+
       return {
         obraId: a.obra_id,
         personaId: a.personal_id,
         nombre: persona ? `${persona.nombre} ${persona.apellido ?? ''}`.trim() : 'Persona',
         obra: nombreObra(a.obra_id),
+        estadoObra,
+        avance,
         modalidad: a.modalidad ?? 'por_obra',
-        calc, saldo,
+        calc, saldo, debe, adelantado, situacion,
       }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -186,13 +293,11 @@ function Tablero({ onIrA }: TableroProps = {}) {
   const totalesPersonal = useMemo(() => personalDetalle.reduce((acc, f) => ({
     pagado: acc.pagado + f.calc.pagado,
     saldo: acc.saldo + f.saldo,
-  }), { pagado: 0, saldo: 0 }), [personalDetalle])
-
-  // ---- Cuentas por pagar: proveedores (compras impagas) + saldo con el personal ----
-  const porPagar = useMemo(() => {
-    const proveedores = materiales.filter((m) => !m.pagado).reduce((s, m) => s + m.cantidad * m.precio_unitario, 0)
-    return { proveedores, personal: totalesPersonal.saldo, total: proveedores + totalesPersonal.saldo }
-  }, [materiales, totalesPersonal])
+    debe: acc.debe + f.debe,
+    nDebe: acc.nDebe + (f.situacion === 'rojo' ? 1 : 0),
+    adelantado: acc.adelantado + f.adelantado,
+    nAdelantado: acc.nAdelantado + (f.situacion === 'naranja' ? 1 : 0),
+  }), { pagado: 0, saldo: 0, debe: 0, nDebe: 0, adelantado: 0, nAdelantado: 0 }), [personalDetalle])
 
   // ---- Rotación de inventario ----
   const inventario = useMemo(() => {
@@ -224,23 +329,95 @@ function Tablero({ onIrA }: TableroProps = {}) {
   }
 
   const color = (v: number) => (v > 0 ? '#23764e' : v < 0 ? '#b23b32' : '#4b525c')
-  const maxRes = Math.max(1, ...pyl.meses.map((m) => Math.abs(m.resultado)))
-  const delMes = useMemo(() => gastos.filter((g) => enMes(g.fecha, mesSel)), [gastos, mesSel])
-  const totalGastosMes = delMes.reduce((s, g) => s + g.monto, 0)
-  const recurrentesMes = delMes.filter((g) => g.recurrente).reduce((s, g) => s + g.monto, 0)
-  const porCategoria = useMemo(() => {
-    const m: Record<string, number> = {}
-    delMes.forEach((g) => { const k = g.categoria || 'Otros'; m[k] = (m[k] || 0) + g.monto })
-    return Object.entries(m).sort((a, b) => b[1] - a[1])
-  }, [delMes])
+  // ---- Gastos fijos del período elegido ----
+  const claveGasto = (g: Gasto) => `${(g.categoria || 'Otros').toLowerCase()}|${(g.descripcion || '').trim().toLowerCase()}`
+  const gastosFijos = useMemo(() => {
+    const mesesSet = new Set(rango.meses)
+    const delPeriodo = gastos
+      .filter((g) => mesesSet.has((g.fecha ?? '').slice(0, 7)))
+      .sort((x, y) => (y.fecha ?? '').localeCompare(x.fecha ?? ''))
+    const total = delPeriodo.reduce((s, g) => s + g.monto, 0)
+
+    // Comparación: último mes del período contra el mes anterior.
+    const mesRef = rango.hasta
+    const mesPrevio = sumarMeses(mesRef, -1)
+    const totalDe = (ym: string) => gastos.filter((g) => enMes(g.fecha, ym)).reduce((s, g) => s + g.monto, 0)
+    const totalRef = totalDe(mesRef)
+    const totalPrevio = totalDe(mesPrevio)
+    const diferencia = totalRef - totalPrevio
+    const variacion = totalPrevio > 0 ? Math.round((diferencia / totalPrevio) * 100) : null
+
+    // Costo fijo mensual: recurrentes del último mes del período.
+    const costoFijoMensual = gastos.filter((g) => g.recurrente && enMes(g.fecha, mesRef)).reduce((s, g) => s + g.monto, 0)
+
+    // Por categoría, con % del total del período.
+    const mapa: Record<string, number> = {}
+    delPeriodo.forEach((g) => { const k = g.categoria || 'Otros'; mapa[k] = (mapa[k] || 0) + g.monto })
+    const porCategoria = Object.entries(mapa).sort((x, y) => y[1] - x[1])
+
+    // Recurrentes del mes pasado que todavía no se cargaron este mes.
+    const hoyYm = mesActual()
+    const cargadosEsteMes = new Set(gastos.filter((g) => enMes(g.fecha, hoyYm)).map(claveGasto))
+    const vistos = new Set<string>()
+    const pendientes = gastos
+      .filter((g) => g.recurrente && enMes(g.fecha, sumarMeses(hoyYm, -1)))
+      .filter((g) => {
+        const k = claveGasto(g)
+        if (cargadosEsteMes.has(k) || vistos.has(k)) return false
+        vistos.add(k)
+        return true
+      })
+
+    return { delPeriodo, total, mesRef, mesPrevio, totalRef, totalPrevio, diferencia, variacion, costoFijoMensual, porCategoria, pendientes }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gastos, rango])
+
+  async function cargarRecurrentes(lista: Gasto[]) {
+    if (lista.length === 0 || cargandoRecurrentes) return
+    setCargandoRecurrentes(true)
+    const filas = lista.map((g) => ({ fecha: hoy(), categoria: g.categoria, descripcion: g.descripcion, monto: g.monto, recurrente: true }))
+    const { error: err } = await supabase.from('gastos_generales').insert(filas)
+    setCargandoRecurrentes(false)
+    if (err) { console.error(err); window.alert('No se pudieron cargar los gastos recurrentes.'); return }
+    void recargarGastos()
+  }
+
+  // Selector de período compartido por Balance y Gastos fijos.
+  const selectorPeriodo = (
+    <>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', margin: '14px 0 6px' }}>
+        {PERIODOS.map(([clave, texto]) => (
+          <button
+            key={clave}
+            type="button"
+            className={periodo === clave ? 'newButton' : 'editButton'}
+            onClick={() => {
+              if (clave === 'custom' && periodo !== 'custom') { setDesdeSel(rango.desde); setHastaSel(rango.hasta) }
+              setPeriodo(clave)
+            }}
+          >
+            {texto}
+          </button>
+        ))}
+        {periodo === 'custom' && (
+          <span style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 13, color: 'var(--mova-muted)' }}>
+            <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>Desde
+              <input type="month" value={desdeSel} max={mesActual()} onChange={(e) => e.target.value && setDesdeSel(e.target.value)} style={{ padding: '8px 10px', border: '1px solid var(--mova-border)', borderRadius: 10 }} />
+            </label>
+            <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>Hasta
+              <input type="month" value={hastaSel} max={mesActual()} onChange={(e) => e.target.value && setHastaSel(e.target.value)} style={{ padding: '8px 10px', border: '1px solid var(--mova-border)', borderRadius: 10 }} />
+            </label>
+          </span>
+        )}
+      </div>
+      <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--mova-muted)' }}>Período: <strong style={{ color: 'inherit' }}>{etiquetaPeriodo}</strong></p>
+    </>
+  )
 
   return (
     <div className="gestionPage">
       <div className="pageHeader">
-        <div><p className="subtitle">DIRECCIÓN</p><h2>Tablero</h2><p className="welcome">Visión 360: balance, caja, cobranzas e inventario</p></div>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: 'var(--mova-muted)' }}>Mes
-          <input type="month" value={mesSel} onChange={(e) => setMesSel(e.target.value)} style={{ padding: '9px 12px', border: '1px solid var(--mova-border)', borderRadius: 10 }} />
-        </label>
+        <div><p className="subtitle">DIRECCIÓN</p><h2>Tablero</h2><p className="welcome">Visión 360: balance, cobranzas, personal e inventario</p></div>
       </div>
 
       {onIrA && (
@@ -251,10 +428,9 @@ function Tablero({ onIrA }: TableroProps = {}) {
 
       <div className="gestionTabs">
         <button className={pestana === 'pyl' ? 'active' : ''} onClick={() => setPestana('pyl')}>Balance de la empresa</button>
-        <button className={pestana === 'caja' ? 'active' : ''} onClick={() => setPestana('caja')}>Caja & Cobranzas</button>
+        <button className={pestana === 'caja' ? 'active' : ''} onClick={() => setPestana('caja')}>Cobranzas</button>
         <button className={pestana === 'personal' ? 'active' : ''} onClick={() => setPestana('personal')}>Personal</button>
         <button className={pestana === 'gastos' ? 'active' : ''} onClick={() => setPestana('gastos')}>Gastos fijos</button>
-        <button className={pestana === 'pagar' ? 'active' : ''} onClick={() => setPestana('pagar')}>Cuentas por pagar</button>
         <button className={pestana === 'inventario' ? 'active' : ''} onClick={() => setPestana('inventario')}>Inventario</button>
       </div>
 
@@ -262,126 +438,182 @@ function Tablero({ onIrA }: TableroProps = {}) {
       {error && <p className="loginError">{error}</p>}
 
       {!cargando && !error && pestana === 'pyl' && <>
+        {selectorPeriodo}
+
         <div className="gestionKpis">
-          <div><span>INGRESOS</span><strong>{moneda(pyl.actual.ingresos)}</strong><small>Cobrado del mes</small></div>
-          <div><span>COSTOS DIRECTOS</span><strong>{moneda(pyl.actual.costosDir)}</strong><small>Obras</small></div>
-          <div><span>GASTOS FIJOS</span><strong>{moneda(pyl.actual.fijos)}</strong><small>Estructura</small></div>
-          <div className="destacado"><span>RESULTADO NETO</span><strong style={{ color: color(pyl.actual.resultado) }}>{moneda(pyl.actual.resultado)}</strong><small>{nombreMes(mesSel)}</small></div>
+          <div><span>INGRESOS</span><strong>{moneda(balance.total.ingresos)}</strong><small>Cobrado</small></div>
+          <div><span>COSTOS DIRECTOS</span><strong>{moneda(balance.total.costosDir)}</strong><small>Obras</small></div>
+          <div><span>GASTOS FIJOS</span><strong>{moneda(balance.total.fijos)}</strong><small>Estructura</small></div>
+          <div className="destacado"><span>RESULTADO NETO</span><strong style={{ color: color(balance.total.resultado) }}>{moneda(balance.total.resultado)}</strong><small>{margenNeto != null ? `${margenNeto}% de lo cobrado` : 'Sin ingresos en el período'}</small></div>
         </div>
 
-        <GraficoMensual datos={pyl.meses} mesSel={mesSel} onSeleccionar={setMesSel} />
+        <GraficoMensual
+          datos={balance.grafico}
+          activos={rango.meses.length === 1 ? [rango.hasta] : []}
+          onSeleccionar={(ym) => { setDesdeSel(ym); setHastaSel(ym); setPeriodo('custom') }}
+        />
 
-        <div className="crmListaWrap" style={{ marginTop: 16 }}>
-          <table className="crmLista">
-            <thead><tr><th>Mes</th><th>Ingresos</th><th>Costos directos</th><th>Gastos fijos</th><th>Resultado</th><th></th></tr></thead>
-            <tbody>{pyl.meses.map((m) => (
-              <tr key={m.ym} onClick={() => setMesSel(m.ym)} style={{ cursor: 'pointer', background: m.ym === mesSel ? '#fff9f0' : undefined }} title="Ver este mes">
-                <td><strong>{nombreMes(m.ym)}</strong></td>
-                <td>{moneda(m.ingresos)}</td><td>{moneda(m.costosDir)}</td><td>{moneda(m.fijos)}</td>
-                <td><strong style={{ color: color(m.resultado) }}>{moneda(m.resultado)}</strong></td>
-                <td style={{ width: 160 }}><div className="tabBar"><span style={{ width: `${(Math.abs(m.resultado) / maxRes) * 100}%`, background: m.resultado >= 0 ? '#23935b' : '#b23b32' }} /></div></td>
-              </tr>
-            ))}</tbody>
-          </table>
+        <div className="finBreakdown" style={{ marginTop: 14 }}>
+          <span>IVA aprox. del período: <strong>{moneda(ivaDebito - ivaCredito)}</strong></span>
+          <span>Ganancia acumulada (histórica): <strong style={{ color: color(historico.ganancia) }}>{moneda(historico.ganancia)}</strong></span>
+          <span>Impuestos pagados (histórico): <strong>{moneda(historico.impuestosTotal)}</strong></span>
         </div>
-        <div className="finBreakdown">
-          <span>IVA débito (ventas cobradas 21%): <strong>{moneda(pyl.actual.ingresos - pyl.actual.ingresos / 1.21)}</strong></span>
-          <span>IVA crédito estimado (costos 21%): <strong>{moneda(pyl.actual.costosDir - pyl.actual.costosDir / 1.21)}</strong></span>
-          <span>Posición IVA aprox.: <strong>{moneda((pyl.actual.ingresos - pyl.actual.ingresos / 1.21) - (pyl.actual.costosDir - pyl.actual.costosDir / 1.21))}</strong></span>
-        </div>
-        <p className="gestionAyuda">Resultado neto = ingresos cobrados − costos directos de obras − gastos fijos de estructura. Es la utilidad real de la empresa en el mes. La posición de IVA es una estimación al 21% (para la liquidación exacta usá los comprobantes con factura).</p>
-
-        <h4 style={{ marginTop: 24 }}>Histórico de la empresa</h4>
-        <div className="gestionKpis">
-          <div><span>COBRADO (HISTÓRICO)</span><strong>{moneda(historico.pagosTotal)}</strong><small>Todos los pagos</small></div>
-          <div><span>COSTOS + GASTOS (HISTÓRICO)</span><strong>{moneda(historico.costosTotal + historico.gastosTotal)}</strong><small>Obras + estructura</small></div>
-          <div><span>IMPUESTOS PAGADOS (HISTÓRICO)</span><strong>{moneda(historico.impuestosTotal)}</strong><small>Categoría "Impuestos" en Gastos fijos</small></div>
-          <div className="destacado"><span>GANANCIA ACUMULADA</span><strong style={{ color: color(historico.ganancia) }}>{moneda(historico.ganancia)}</strong><small>Cobrado − costos − gastos (incluye impuestos)</small></div>
-        </div>
+        <p className="gestionAyuda">Resultado neto = cobrado − costos directos de obras − gastos fijos. El IVA es una estimación al 21% (para la liquidación exacta usá los comprobantes con factura).</p>
       </>}
 
       {!cargando && !error && pestana === 'caja' && <>
         <div className="gestionKpis">
-          <div><span>POR COBRAR TOTAL</span><strong>{moneda(aging.total)}</strong><small>Presupuestos aceptados con saldo</small></div>
-          <div><span>AL DÍA (0-30)</span><strong>{moneda(aging.b0)}</strong><small>Reciente</small></div>
-          <div><span>31-60 / 61-90</span><strong>{moneda(aging.b30 + aging.b60)}</strong><small>Atención</small></div>
-          <div className="destacado"><span>VENCIDO +90</span><strong style={{ color: aging.b90 > 0 ? '#b23b32' : undefined }}>{moneda(aging.b90)}</strong><small>Riesgo</small></div>
+          <div><span>POR COBRAR TOTAL</span><strong>{moneda(cobranzas.total)}</strong><small>Saldo de obras con presupuesto aceptado</small></div>
+          <div className="destacado"><span>🔴 TERMINADAS CON SALDO</span><strong style={{ color: cobranzas.rojo.monto > 0 ? '#b23b32' : undefined }}>{moneda(cobranzas.rojo.monto)}</strong><small>{cobranzas.rojo.n} obra{cobranzas.rojo.n === 1 ? '' : 's'} · cobrar ya</small></div>
+          <div><span>🟠 ATRASADO POR AVANCE</span><strong style={{ color: cobranzas.naranja.monto > 0 ? '#b86608' : undefined }}>{moneda(cobranzas.naranja.monto)}</strong><small>{cobranzas.naranja.n} obra{cobranzas.naranja.n === 1 ? '' : 's'} · según el % hecho</small></div>
+          <div><span>🟢 AL DÍA</span><strong style={{ color: cobranzas.verde.n > 0 ? '#23764e' : undefined }}>{moneda(cobranzas.verde.monto)}</strong><small>{cobranzas.verde.n} obra{cobranzas.verde.n === 1 ? '' : 's'} · se cobra con el avance</small></div>
         </div>
         <div className="crmListaWrap">
           <table className="crmLista">
-            <thead><tr><th>Antigüedad</th><th>Monto por cobrar</th><th>% del total</th><th></th></tr></thead>
+            <thead><tr><th>Obra</th><th>Cliente</th><th>Estado</th><th>Avance</th><th>Valor</th><th>Cobrado</th><th>Saldo</th><th>Situación</th></tr></thead>
             <tbody>
-              {([['b0', '0 a 30 días', aging.b0], ['b30', '31 a 60 días', aging.b30], ['b60', '61 a 90 días', aging.b60], ['b90', 'Más de 90 días', aging.b90]] as const).map(([key, lbl, val]) => (
-                <tr key={key} onClick={() => setAgingSel(agingSel === key ? null : key)} style={{ cursor: 'pointer', background: agingSel === key ? '#fff9f0' : undefined }} title="Ver detalle">
-                  <td><strong>{lbl}</strong></td><td>{moneda(val)}</td><td>{aging.total ? Math.round((val / aging.total) * 100) : 0}%</td>
-                  <td style={{ color: 'var(--mova-orange)', fontWeight: 700 }}>{aging.det[key].length ? (agingSel === key ? 'Ocultar ▲' : `Ver ${aging.det[key].length} ▼`) : '—'}</td>
+              {cobranzas.filas.length === 0 ? <tr><td colSpan={8}>No hay saldos pendientes de cobro. 👌</td></tr> : cobranzas.filas.map((f) => (
+                <tr
+                  key={f.obraId}
+                  onClick={onAbrirObra ? () => onAbrirObra(f.obraId) : undefined}
+                  style={{ cursor: onAbrirObra ? 'pointer' : undefined }}
+                  title={onAbrirObra ? 'Abrir la obra para registrar el cobro' : undefined}
+                >
+                  <td><strong>{f.obra}</strong></td>
+                  <td>{f.cliente}</td>
+                  <td><span className={`crmBadge est-${claseObra(f.estado)}`}>{etiquetaObra(f.estado)}</span></td>
+                  <td>{f.avance}%</td>
+                  <td>{moneda(f.valor)}</td>
+                  <td>{moneda(f.cobrado)}</td>
+                  <td><strong>{moneda(f.saldo)}</strong></td>
+                  <td>
+                    {f.situacion === 'rojo' && <strong style={{ color: '#b23b32' }}>🔴 Terminada: cobrar {moneda(f.saldo)}</strong>}
+                    {f.situacion === 'naranja' && <strong style={{ color: '#b86608' }}>🟠 Falta cobrar {moneda(f.faltaAvance)}</strong>}
+                    {f.situacion === 'verde' && <span style={{ color: '#23764e' }}>🟢 Al día</span>}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        {agingSel && aging.det[agingSel].length > 0 && (
-          <div className="crmListaWrap" style={{ marginTop: 12 }}>
-            <table className="crmLista">
-              <thead><tr><th>Cliente</th><th>Obra</th><th>Presupuesto</th><th>Días</th><th>Saldo</th></tr></thead>
-              <tbody>{aging.det[agingSel].sort((a, b) => b.saldo - a.saldo).map((d) => (
-                <tr key={d.id}><td><strong>{d.cliente}</strong></td><td>{d.obra}</td><td>{d.titulo}</td><td>{d.dias} días</td><td><strong>{moneda(d.saldo)}</strong></td></tr>
-              ))}</tbody>
-            </table>
-          </div>
-        )}
-        <p className="gestionAyuda">Tocá una fila para ver el detalle de qué clientes/obras están en esa antigüedad. Lo vencido +90 es la principal alerta de cobranza.</p>
+        <p className="gestionAyuda">
+          Lo que corresponde cobrar sale del avance de la obra: valor × % de avance. <strong>Falta cobrar</strong> = lo que ya
+          debería estar cobrado según lo hecho y todavía no entró. <strong>Al día</strong> = el saldo restante se cobra a medida que avanza la obra.
+          {onAbrirObra && ' Tocá una fila para abrir la obra y registrar el cobro.'}
+        </p>
       </>}
 
       {!cargando && !error && pestana === 'personal' && <>
         <div className="gestionKpis">
-          <div><span>PAGADO A PERSONAL (HISTÓRICO)</span><strong>{moneda(totalesPersonal.pagado)}</strong><small>Todas las obras</small></div>
-          <div className="destacado"><span>SALDO PENDIENTE</span><strong style={{ color: totalesPersonal.saldo > 0 ? '#b86608' : '#23764e' }}>{moneda(totalesPersonal.saldo)}</strong><small>Sobre lo pactado con cada persona</small></div>
-          <div><span>ASIGNACIONES</span><strong>{personalDetalle.length}</strong><small>Persona × obra</small></div>
+          <div className="destacado"><span>🔴 LE DEBÉS POR AVANCE</span><strong style={{ color: totalesPersonal.debe > 0 ? '#b23b32' : undefined }}>{moneda(totalesPersonal.debe)}</strong><small>{totalesPersonal.nDebe} asignación{totalesPersonal.nDebe === 1 ? '' : 'es'} · ya corresponde pagar</small></div>
+          <div><span>🟠 PAGADO POR ADELANTADO</span><strong style={{ color: totalesPersonal.adelantado > 0 ? '#b86608' : undefined }}>{moneda(totalesPersonal.adelantado)}</strong><small>{totalesPersonal.nAdelantado} asignación{totalesPersonal.nAdelantado === 1 ? '' : 'es'} · por encima del avance</small></div>
+          <div><span>SALDO PACTADO PENDIENTE</span><strong>{moneda(totalesPersonal.saldo)}</strong><small>Falta pagar hasta terminar</small></div>
+          <div><span>PAGADO A PERSONAL</span><strong>{moneda(totalesPersonal.pagado)}</strong><small>Histórico, todas las obras</small></div>
         </div>
         <div className="crmListaWrap">
           <table className="crmLista">
-            <thead><tr><th>Persona</th><th>Obra</th><th>Modalidad</th><th>Acordado</th><th>Pagado</th><th>Saldo</th></tr></thead>
+            <thead><tr><th>Persona</th><th>Obra</th><th>Avance</th><th>Modalidad</th><th>Acordado</th><th>Pagado</th><th>Saldo</th><th>Situación</th></tr></thead>
             <tbody>
-              {personalDetalle.length === 0 ? <tr><td colSpan={6}>Sin personal asignado.</td></tr> : personalDetalle
+              {personalDetalle.length === 0 ? <tr><td colSpan={8}>Sin personal asignado.</td></tr> : personalDetalle
                 .slice()
-                .sort((a, b) => b.saldo - a.saldo)
+                .sort((x, y) => {
+                  const orden = { rojo: 0, naranja: 1, verde: 2 }
+                  return orden[x.situacion] - orden[y.situacion] || (y.debe + y.adelantado) - (x.debe + x.adelantado) || y.saldo - x.saldo
+                })
                 .map((f) => (
-                  <tr key={`${f.personaId}-${f.obraId}`}>
+                  <tr
+                    key={`${f.personaId}-${f.obraId}`}
+                    onClick={onAbrirObra ? () => onAbrirObra(f.obraId) : undefined}
+                    style={{ cursor: onAbrirObra ? 'pointer' : undefined }}
+                    title={onAbrirObra ? 'Abrir la obra para registrar el pago' : undefined}
+                  >
                     <td><strong>{f.nombre}</strong></td>
-                    <td>{f.obra}</td>
+                    <td>{f.obra}{f.estadoObra && f.estadoObra !== 'en_proceso' && <> <span className={`crmBadge est-${claseObra(f.estadoObra)}`}>{etiquetaObra(f.estadoObra)}</span></>}</td>
+                    <td>{f.avance}%</td>
                     <td>{MODALIDADES[f.modalidad] ?? f.modalidad}</td>
                     <td>{f.calc.totalContrato != null ? moneda(f.calc.totalContrato) : '—'}</td>
                     <td>{moneda(f.calc.pagado)}</td>
-                    <td><strong style={{ color: f.saldo > 0 ? '#b86608' : '#23764e' }}>{moneda(f.saldo)}</strong></td>
+                    <td><strong>{moneda(f.saldo)}</strong></td>
+                    <td>
+                      {f.situacion === 'rojo' && <strong style={{ color: '#b23b32' }}>🔴 Le debés {moneda(f.debe)}</strong>}
+                      {f.situacion === 'naranja' && <strong style={{ color: '#b86608' }}>🟠 Adelantado {moneda(f.adelantado)}</strong>}
+                      {f.situacion === 'verde' && <span style={{ color: '#23764e' }}>🟢 {f.saldo > 0 ? 'Al día' : 'Pagado completo'}</span>}
+                    </td>
                   </tr>
                 ))}
             </tbody>
           </table>
         </div>
-        <p className="gestionAyuda">Acordado y saldo son sobre el total pactado (por obra, por etapa o por %). Para quienes cobran por día u hora no hay un total fijo: el saldo sale de lo devengado según los jornales cargados menos lo pagado.</p>
+        <p className="gestionAyuda">
+          Lo que corresponde pagar sale del avance de la obra: acordado × % de avance (100% si la obra terminó). Para quienes cobran por día u hora,
+          sale de los jornales cargados. <strong>Le debés</strong> = ya corresponde pagarlo. <strong>Adelantado</strong> = pagaste más de lo que corresponde al avance.
+          {onAbrirObra && ' Tocá una fila para abrir la obra y registrar el pago.'}
+        </p>
       </>}
 
       {!cargando && !error && pestana === 'gastos' && <>
-        <div className="pageHeader" style={{ marginBottom: 12 }}>
-          <div><h3 style={{ margin: 0 }}>Gastos fijos de la empresa</h3><p className="welcome">Alquiler, sueldos, servicios e impuestos — no atados a una obra. Para ver otro mes, cambialo arriba a la derecha.</p></div>
+        <div className="pageHeader" style={{ marginBottom: 0, marginTop: 14 }}>
+          <div><h3 style={{ margin: 0 }}>Gastos fijos de la empresa</h3><p className="welcome">Alquiler, sueldos, servicios e impuestos — no atados a una obra</p></div>
           <button className="newButton" onClick={() => setFormGasto({ id: 0, fecha: hoy(), categoria: 'Alquiler', descripcion: '', monto: 0, recurrente: true })}>+ Nuevo gasto</button>
         </div>
-        <div className="gestionKpis">
-          <div><span>GASTOS DEL MES</span><strong>{moneda(totalGastosMes)}</strong><small>{delMes.length} registros</small></div>
-          <div><span>RECURRENTES</span><strong>{moneda(recurrentesMes)}</strong><small>Fijos mensuales</small></div>
-          <div><span>PROMEDIO / REGISTRO</span><strong>{moneda(delMes.length ? totalGastosMes / delMes.length : 0)}</strong><small>Del mes</small></div>
-        </div>
-        {porCategoria.length > 0 && (
-          <div className="finBreakdown">
-            {porCategoria.map(([cat, monto]) => <span key={cat}>{cat}: <strong>{moneda(monto)}</strong></span>)}
+
+        {selectorPeriodo}
+
+        {gastosFijos.pendientes.length > 0 && (
+          <div className="stockAviso" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>
+              <strong>⏰ Faltan cargar {gastosFijos.pendientes.length} gasto{gastosFijos.pendientes.length === 1 ? '' : 's'} recurrente{gastosFijos.pendientes.length === 1 ? '' : 's'} de este mes:</strong>{' '}
+              {gastosFijos.pendientes.map((g, i) => (
+                <span key={g.id}>
+                  {i > 0 && ' · '}
+                  {g.descripcion || g.categoria || 'Otros'} ({moneda(g.monto)}){' '}
+                  <button type="button" className="editButton" style={{ padding: '2px 8px', fontSize: 12 }} disabled={cargandoRecurrentes} onClick={() => void cargarRecurrentes([g])}>Cargar</button>
+                </span>
+              ))}
+            </span>
+            {gastosFijos.pendientes.length > 1 && (
+              <button type="button" className="newButton" disabled={cargandoRecurrentes} onClick={() => void cargarRecurrentes(gastosFijos.pendientes)}>
+                {cargandoRecurrentes ? 'Cargando...' : 'Cargar todos'}
+              </button>
+            )}
           </div>
         )}
+
+        <div className="gestionKpis">
+          <div className="destacado"><span>GASTOS DEL PERÍODO</span><strong>{moneda(gastosFijos.total)}</strong><small>{gastosFijos.delPeriodo.length} registro{gastosFijos.delPeriodo.length === 1 ? '' : 's'}</small></div>
+          <div><span>COSTO FIJO MENSUAL</span><strong>{moneda(gastosFijos.costoFijoMensual)}</strong><small>Recurrentes de {nombreMes(gastosFijos.mesRef)}</small></div>
+          <div>
+            <span>CONTRA EL MES ANTERIOR</span>
+            <strong style={{ color: gastosFijos.diferencia > 0 ? '#b23b32' : gastosFijos.diferencia < 0 ? '#23764e' : undefined }}>
+              {gastosFijos.diferencia > 0 ? '↑ ' : gastosFijos.diferencia < 0 ? '↓ ' : ''}{moneda(Math.abs(gastosFijos.diferencia))}
+            </strong>
+            <small>
+              {nombreMesCorto(gastosFijos.mesRef)} vs {nombreMesCorto(gastosFijos.mesPrevio)}
+              {gastosFijos.variacion != null ? ` · ${gastosFijos.variacion > 0 ? '+' : ''}${gastosFijos.variacion}%` : ''}
+            </small>
+          </div>
+        </div>
+
+        {gastosFijos.porCategoria.length > 0 && (
+          <div className="crmListaWrap" style={{ padding: '14px 16px', marginBottom: 14 }}>
+            {gastosFijos.porCategoria.map(([cat, monto]) => {
+              const pct = gastosFijos.total > 0 ? Math.round((monto / gastosFijos.total) * 100) : 0
+              return (
+                <div key={cat} style={{ display: 'grid', gridTemplateColumns: 'minmax(90px, 140px) 1fr auto', gap: 10, alignItems: 'center', padding: '5px 0', fontSize: 13 }}>
+                  <strong>{cat}</strong>
+                  <div className="tabBar"><span style={{ width: `${pct}%`, background: '#b86608' }} /></div>
+                  <span style={{ whiteSpace: 'nowrap' }}>{moneda(monto)} · {pct}%</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
         <div className="crmListaWrap">
           <table className="crmLista">
             <thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Tipo</th><th>Monto</th><th>Acción</th></tr></thead>
             <tbody>
-              {delMes.length === 0 ? <tr><td colSpan={6}>Sin gastos en este mes.</td></tr> : delMes.map((g) => (
+              {gastosFijos.delPeriodo.length === 0 ? <tr><td colSpan={6}>Sin gastos en este período.</td></tr> : gastosFijos.delPeriodo.map((g) => (
                 <tr key={g.id}>
                   <td>{fechaCorta(g.fecha)}</td>
                   <td><strong>{g.categoria || 'Otros'}</strong></td>
@@ -394,15 +626,7 @@ function Tablero({ onIrA }: TableroProps = {}) {
             </tbody>
           </table>
         </div>
-      </>}
-
-      {!cargando && !error && pestana === 'pagar' && <>
-        <div className="gestionKpis">
-          <div className="destacado"><span>TOTAL POR PAGAR</span><strong>{moneda(porPagar.total)}</strong><small>Compromisos pendientes</small></div>
-          <div><span>PROVEEDORES</span><strong>{moneda(porPagar.proveedores)}</strong><small>Compras impagas</small></div>
-          <div><span>AYUDANTES / PERSONAL</span><strong>{moneda(porPagar.personal)}</strong><small>Pactado − pagado</small></div>
-        </div>
-        <p className="gestionAyuda">Proveedores: compras marcadas como impagas (marcá "pagado" en cada compra). Personal: el detalle de quién y de qué obra está en la pestaña <strong>Personal</strong>.</p>
+        <p className="gestionAyuda">Costo fijo mensual = lo que tu empresa necesita ganar cada mes, como mínimo, para cubrir la estructura. Los recurrentes pendientes se cargan con la fecha de hoy y el mismo monto del mes pasado: si cambió el precio, editalo después.</p>
       </>}
 
       {!cargando && !error && pestana === 'inventario' && <>
@@ -447,7 +671,7 @@ function Tablero({ onIrA }: TableroProps = {}) {
 // ---- Gráfico mensual: barras de Ingresos / Costos directos / Gastos fijos + línea de Resultado ----
 type PuntoMes = { ym: string; ingresos: number; costosDir: number; fijos: number; resultado: number }
 
-function GraficoMensual({ datos, mesSel, onSeleccionar }: { datos: PuntoMes[]; mesSel: string; onSeleccionar: (ym: string) => void }) {
+function GraficoMensual({ datos, activos, onSeleccionar }: { datos: PuntoMes[]; activos: string[]; onSeleccionar: (ym: string) => void }) {
   const ancho = 760
   const alto = 220
   const margenIzq = 54
@@ -481,7 +705,7 @@ function GraficoMensual({ datos, mesSel, onSeleccionar }: { datos: PuntoMes[]; m
         <line x1={margenIzq} y1={y0} x2={ancho - margenDer} y2={y0} stroke="#d8dbe0" strokeWidth={1} />
         {datos.map((d, i) => {
           const cx = margenIzq + grupoAncho * i
-          const activo = d.ym === mesSel
+          const activo = activos.includes(d.ym)
           return (
             <g key={d.ym} onClick={() => onSeleccionar(d.ym)} style={{ cursor: 'pointer' }}>
               {activo && <rect x={cx} y={margenSup} width={grupoAncho} height={altoUtil} fill="#fff3e0" />}

@@ -115,6 +115,9 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
   const [imagenes, setImagenes] = useState<ImagenObra[]>([])
   const [fotoAvance, setFotoAvance] = useState<File | null>(null)
   const [economia, setEconomia] = useState<Record<number, ResumenEco>>({})
+  // Si los presupuestos no se pudieron cargar, se muestran todas las obras
+  // (mejor ver de más que esconder obras por un error de conexión).
+  const [presupuestosOk, setPresupuestosOk] = useState(true)
   const [pagosPdf, setPagosPdf] = useState<Obra | null>(null)
   const [eliminandoObra, setEliminandoObra] = useState<number | null>(null)
   const [vista, setVista] = useVista('obras', 'kanban')
@@ -167,6 +170,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
         setClientes(resultadoClientes.data ?? [])
         if (rPresupuestos.error) console.error('No se pudieron cargar los presupuestos de las obras:', rPresupuestos.error)
         setPresupuestosObra(rPresupuestos.error ? [] : (rPresupuestos.data ?? []) as typeof presupuestosObra)
+        setPresupuestosOk(!rPresupuestos.error)
         setEconomia(calcularEconomia(
           rPresupuestos.error ? [] : rPresupuestos.data ?? [],
           rAdicionales.error ? [] : rAdicionales.data ?? [],
@@ -500,7 +504,20 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
     setMostrarNuevoAvance(true)
   }
 
-  const obrasFiltradas = obras.filter((obra) => {
+  // Una obra aparece en esta pantalla recién cuando tiene al menos un
+  // presupuesto ACEPTADO (y activo). Las obras cargadas desde Clientes que
+  // todavía no tienen presupuesto aceptado quedan solo en la ficha del cliente.
+  const obrasConPresupuestoAceptado = new Set(
+    presupuestosObra
+      .filter((p) => p.obra_id != null && p.activo !== false && p.estado === 'aceptado')
+      .map((p) => Number(p.obra_id)),
+  )
+  const obrasVisibles = presupuestosOk
+    ? obras.filter((obra) => obrasConPresupuestoAceptado.has(Number(obra.id)))
+    : obras
+  const obrasEsperandoPresupuesto = obras.length - obrasVisibles.length
+
+  const obrasFiltradas = obrasVisibles.filter((obra) => {
     const texto = `
       ${obra.nombre_obra}
       ${obra.direccion ?? ''}
@@ -552,13 +569,24 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
       </div>
 
       {cargando && <p>Cargando obras...</p>}
+      {!cargando && !error && obrasEsperandoPresupuesto > 0 && (
+        <p className="gestionAyuda">
+          {obrasEsperandoPresupuesto === 1
+            ? 'Hay 1 obra cargada que todavía no tiene presupuesto aceptado: aparece acá cuando lo aceptes.'
+            : `Hay ${obrasEsperandoPresupuesto} obras cargadas que todavía no tienen presupuesto aceptado: aparecen acá cuando los aceptes.`}
+        </p>
+      )}
       {error && <p className="loginError">{error}</p>}
 
       {!cargando && !error && obrasFiltradas.length === 0 && (
         <div className="empty obrasEmpty">
           <span>🏠</span>
-          <h3>No encontramos obras</h3>
-          <p>Las obras nacen de un presupuesto aceptado. Probá con otra búsqueda o cambiá el filtro.</p>
+          <h3>{obrasVisibles.length === 0 ? 'Todavía no hay obras en marcha' : 'No encontramos obras'}</h3>
+          <p>
+            {obrasVisibles.length === 0
+              ? 'Una obra aparece acá cuando su presupuesto pasa a estado Aceptado.'
+              : 'Probá con otra búsqueda o cambiá el filtro.'}
+          </p>
         </div>
       )}
 
