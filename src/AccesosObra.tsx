@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { supabase } from './supabase'
 import { AVISO_ACCESOS, generarPdfAccesos, nombreArchivoAccesos } from './pdfAccesos'
+import { confirmarEliminacion } from './confirmar'
 
 // Accesos de la obra: apps, usuarios y contraseñas creadas por el instalador.
 // Se entregan al cliente en el PDF "Resumen de accesos".
@@ -78,7 +79,7 @@ export default function AccesosObra({ obraId, cliente, obra, ubicacion }: Props)
   }
 
   async function eliminar(a: Acceso) {
-    if (!window.confirm(`¿Eliminar el acceso "${a.app}"?`)) return
+    if (!confirmarEliminacion(`¿Eliminar el acceso "${a.app}"?`)) return
     const r = await supabase.from('obra_accesos').delete().eq('id', a.id)
     if (r.error) { console.error(r.error); window.alert('No se pudo eliminar. Reintentá.'); return }
     setRevision((v) => v + 1)

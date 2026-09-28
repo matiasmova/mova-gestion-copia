@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from './supabase'
 import { moneda, fechaCorta, hoy } from './gestionFormat'
 import { calcularPersona } from './personalCalculos'
+import { confirmarEliminacion } from './confirmar'
 
 type Persona = {
   id: number
@@ -66,19 +67,19 @@ function PersonalObra({ obraId, avance = 0, puedeEditar = true, onCambio }: { ob
   const [pagoEditar, setPagoEditar] = useState<CostoPersonal | null>(null)
 
   async function quitarAsignacion(a: Asignacion, nombre: string) {
-    if (!window.confirm(`¿Quitar a ${nombre} de esta obra? (no borra los pagos ya registrados)`)) return
+    if (!confirmarEliminacion(`¿Quitar a ${nombre} de esta obra? (no borra los pagos ya registrados)`)) return
     const { error: fallo } = await supabase.from('obra_asignaciones').delete().eq('id', a.id)
     if (fallo) { console.error(fallo); window.alert('No se pudo quitar la asignación.'); return }
     setRevision((v) => v + 1); onCambio?.()
   }
   async function eliminarJornal(id: number) {
-    if (!window.confirm('¿Eliminar este jornal?')) return
+    if (!confirmarEliminacion('¿Eliminar este jornal?')) return
     const { error: fallo } = await supabase.from('jornales').delete().eq('id', id)
     if (fallo) { console.error(fallo); window.alert('No se pudo eliminar el jornal.'); return }
     setRevision((v) => v + 1); onCambio?.()
   }
   async function eliminarPago(id: number) {
-    if (!window.confirm('¿Eliminar este pago? También desaparece del costo de la obra.')) return
+    if (!confirmarEliminacion('¿Eliminar este pago? También desaparece del costo de la obra.')) return
     const { error: fallo } = await supabase.from('costos').delete().eq('id', id)
     if (fallo) { console.error(fallo); window.alert('No se pudo eliminar el pago.'); return }
     setRevision((v) => v + 1); onCambio?.()

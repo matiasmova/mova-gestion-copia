@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from './supabase'
 import { moneda, fechaCorta, hoy } from './gestionFormat'
+import { confirmarEliminacion } from './confirmar'
 
 type Gasto = {
   id: number
@@ -42,7 +43,7 @@ function GastosGenerales() {
   }, [delMes])
 
   async function eliminar(g: Gasto) {
-    if (!window.confirm(`¿Eliminar el gasto "${g.descripcion || g.categoria}"?`)) return
+    if (!confirmarEliminacion(`¿Eliminar el gasto "${g.descripcion || g.categoria}"?`)) return
     const { error: err } = await supabase.from('gastos_generales').delete().eq('id', g.id)
     if (err) { console.error(err); window.alert('No se pudo eliminar.'); return }
     setActualizacion((v) => v + 1)

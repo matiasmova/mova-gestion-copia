@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from './supabase'
 import { fechaCorta, moneda, hoy } from './gestionFormat'
+import { confirmarEliminacion } from './confirmar'
 
 // Movimientos: toda la plata que entra y sale, en una sola lista ordenada por fecha.
 //  · Entra: cobros a clientes (tabla pagos).
@@ -200,7 +201,7 @@ function Finanzas({ onAbrirObra }: { onAbrirObra?: (obraId: number) => void } = 
     const aviso = m.tipo === 'personal'
       ? '¿Eliminar este pago a personal? Va a cambiar el saldo que le debés a esa persona.'
       : `¿Eliminar "${m.concepto}" de ${moneda(m.monto)}? No se puede deshacer.`
-    if (!window.confirm(aviso)) return
+    if (!confirmarEliminacion(aviso)) return
     const { error: err } = await supabase.from(tabla).delete().eq('id', id)
     if (err) { console.error(err); window.alert('No se pudo eliminar.'); return }
     setActualizacion((v) => v + 1)
