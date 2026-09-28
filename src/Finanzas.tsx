@@ -313,7 +313,7 @@ function Finanzas({ onAbrirObra }: { onAbrirObra?: (obraId: number) => void } = 
           </table>
         </div>
         <p className="gestionAyuda">
-          Los cobros se editan acá (o desde la ficha de la obra). Los gastos fijos se cargan y editan en <strong>Tablero → Gastos fijos</strong>, y los pagos al personal desde la ficha de cada obra.
+          Los cobros se editan acá (o desde la ficha de la obra). Los gastos fijos se cargan y editan en <strong>Inicio → Gastos fijos</strong>, y los pagos al personal desde la ficha de cada obra.
           Los movimientos <strong>sin obra asociada</strong> no suman a ninguna obra: asignales una para que los números de cobranzas cierren.
         </p>
       </>}

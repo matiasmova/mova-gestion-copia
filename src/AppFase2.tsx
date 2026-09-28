@@ -8,7 +8,6 @@ import Soluciones from './Soluciones'
 import ProductosServicios from './ProductosServicios'
 import Finanzas from './Finanzas'
 import Compras from './Compras'
-import Tablero from './Tablero'
 import Personal from './Personal.tsx'
 import Notificaciones from './Notificaciones'
 import Configuracion from './Configuracion'
@@ -25,11 +24,10 @@ const ROLES: Record<Rol, string> = {
 }
 const ROLES_VALIDOS: Rol[] = ['admin', 'encargado', 'auxiliar', 'contable']
 
-// Gastos fijos ya no está en el menú: se cargan y consultan desde
-// Tablero → pestaña "Gastos fijos".
+// Inicio reúne el resumen y lo que antes era el Tablero (balance, cobranzas,
+// personal, gastos fijos e inventario), cada cosa en su pestaña.
 const NAVEGACION = [
-  ['dashboard', 'principal', 'Home'],
-  ['tablero', 'principal', 'Tablero'],
+  ['dashboard', 'principal', 'Inicio'],
   ['clientes', 'comercial', 'Clientes'],
   ['presupuestos', 'comercial', 'Presupuestos'],
   ['obras', 'comercial', 'Obras'],
@@ -59,7 +57,6 @@ const PERMISOS: Partial<Record<Vista, Rol[]>> = {
   presupuestos: ['admin', 'contable'],
   soluciones: ['admin', 'contable'],
   finanzas: ['admin', 'contable'],
-  tablero: ['admin', 'contable'],
   compras: ['admin', 'encargado', 'auxiliar'],
   personal: ['admin', 'encargado', 'contable'],
   usuarios: ['admin'],
@@ -182,7 +179,6 @@ export default function AppFase2() {
   const modulos = NAVEGACION.filter(([clave]) => puedeVer(rol, clave))
 
   const contenido: Record<Exclude<Vista, 'dashboard'>, React.ReactNode> = {
-    tablero: <Tablero onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} />,
     clientes: <Clientes />,
     obras: <Obras obraAbrirId={obraAbrirId} onObraAbierta={() => setObraAbrirId(null)} onVerPresupuesto={(id) => { setPresupuestoAbrirId(id); navegar('presupuestos') }} />,
     presupuestos: <Presupuestos presupuestoAbrirId={presupuestoAbrirId} onPresupuestoAbierto={() => setPresupuestoAbrirId(null)} />,

@@ -19,7 +19,7 @@ type AdicionalTablero = { obra_id: number; importe: number; estado: string; tipo
 type Item = { catalogo_id: number | null; cantidad: number; presupuesto_id: number }
 
 // Pestañas del tablero. "Resumen" y "Cuentas por pagar" se quitaron: el tablero abre en "Balance de la empresa".
-type Pestana = 'pyl' | 'caja' | 'personal' | 'gastos' | 'inventario'
+export type Pestana = 'pyl' | 'caja' | 'personal' | 'gastos' | 'inventario'
 const mesActual = () => new Date().toISOString().slice(0, 7)
 const nombreMes = (ym: string) => new Date(`${ym}-01T12:00:00`).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
 const redondear = (n: number) => Math.round(n * 100) / 100
@@ -54,9 +54,12 @@ type TableroProps = {
   onIrA?: (destino: 'gastos' | 'finanzas') => void
   // Abre la ficha de una obra (se usa desde la pestaña Cobranzas).
   onAbrirObra?: (obraId: number) => void
+  // Dentro de Inicio: la pestaña la elige Inicio y no se muestran título ni pestañas propias.
+  pestana?: Pestana
+  embebido?: boolean
 }
 
-function Tablero({ onIrA, onAbrirObra }: TableroProps = {}) {
+function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false }: TableroProps = {}) {
   const [obras, setObras] = useState<Obra[]>([])
   const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([])
   const [pagos, setPagos] = useState<Pago[]>([])
@@ -69,7 +72,8 @@ function Tablero({ onIrA, onAbrirObra }: TableroProps = {}) {
   const [adicionalesTablero, setAdicionalesTablero] = useState<AdicionalTablero[]>([])
   const [items, setItems] = useState<Item[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
-  const [pestana, setPestana] = useState<Pestana>('pyl')
+  const [pestanaPropia, setPestana] = useState<Pestana>(pestanaExterna ?? 'pyl')
+  const pestana = pestanaExterna ?? pestanaPropia
   // Período del Balance y de Gastos fijos (compartido): por defecto siempre el mes actual.
   const [periodo, setPeriodo] = useState<Periodo>('mes')
   const [desdeSel, setDesdeSel] = useState(mesActual())
@@ -434,9 +438,9 @@ function Tablero({ onIrA, onAbrirObra }: TableroProps = {}) {
 
   return (
     <div className="gestionPage">
-      <div className="pageHeader">
+      {!embebido && <div className="pageHeader">
         <div><p className="subtitle">DIRECCIÓN</p><h2>Tablero</h2><p className="welcome">Visión 360: balance, cobranzas, personal e inventario</p></div>
-      </div>
+      </div>}
 
       {onIrA && (
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
@@ -444,13 +448,13 @@ function Tablero({ onIrA, onAbrirObra }: TableroProps = {}) {
         </div>
       )}
 
-      <div className="gestionTabs">
+      {!embebido && <div className="gestionTabs">
         <button className={pestana === 'pyl' ? 'active' : ''} onClick={() => setPestana('pyl')}>Balance de la empresa</button>
         <button className={pestana === 'caja' ? 'active' : ''} onClick={() => setPestana('caja')}>Cobranzas</button>
         <button className={pestana === 'personal' ? 'active' : ''} onClick={() => setPestana('personal')}>Personal</button>
         <button className={pestana === 'gastos' ? 'active' : ''} onClick={() => setPestana('gastos')}>Gastos fijos</button>
         <button className={pestana === 'inventario' ? 'active' : ''} onClick={() => setPestana('inventario')}>Inventario</button>
-      </div>
+      </div>}
 
       {cargando && <p>Cargando tablero...</p>}
       {error && <p className="loginError">{error}</p>}
