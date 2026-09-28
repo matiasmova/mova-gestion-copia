@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { supabase } from './supabase'
 import Calendario from './Calendario'
 import { moneda } from './gestionFormat'
-import { etiquetaObra, claseObra } from './obraEstado'
 import { calcularPersona } from './personalCalculos'
 
 // Pantalla de inicio (Home): resumen rápido de la empresa.
@@ -57,6 +56,11 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
   const verPresupuestos = verFinanzas
 
   const [tab, setTab] = useState<'resumen' | 'calendario'>('resumen')
+  // En el celular las secciones arrancan cerradas para que el inicio sea corto.
+  const [esMovil] = useState(() => typeof window !== 'undefined' && window.matchMedia?.('(max-width: 700px)').matches)
+  const [abiertas, setAbiertas] = useState<Record<string, boolean>>({})
+  const [verTodas, setVerTodas] = useState<Record<string, boolean>>({})
+  const [detalleNeto, setDetalleNeto] = useState(false)
   const [mesSel, setMesSel] = useState(mesActual())
   const [cargando, setCargando] = useState(true)
   const [obras, setObras] = useState<Obra[]>([])
@@ -231,26 +235,78 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
   }, [pagos, costos, gastos, mesSel, personal.debe])
 
   const colorMonto = (v: number) => (v > 0 ? VERDE : v < 0 ? ROJO : undefined)
-  const kpiClick = (destino: Destino) => ({ role: 'button', tabIndex: 0, style: { cursor: 'pointer' }, onClick: () => onNavegar(destino) })
-  const maxBarra = Math.max(1, mes.cobrado, mes.manoObra + mes.otrosCostos + mes.fijos)
+  const salidas = mes.manoObra + mes.otrosCostos + mes.fijos
+  const maxBarra = Math.max(1, mes.cobrado, salidas)
 
   const barraNeto = (etiqueta: string, monto: number, signo: '+' | '−', color: string) => (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 190px) 1fr auto', gap: 10, alignItems: 'center', padding: '6px 0', fontSize: 14 }}>
+    <div className="homeBarra">
       <span>{etiqueta}</span>
       <div className="tabBar"><span style={{ width: `${(monto / maxBarra) * 100}%`, background: color }} /></div>
-      <strong style={{ whiteSpace: 'nowrap', color: signo === '−' && monto > 0 ? ROJO : undefined }}>{signo === '−' && monto > 0 ? '− ' : ''}{moneda(monto)}</strong>
+      <strong style={{ color: signo === '−' && monto > 0 ? ROJO : undefined }}>{signo === '−' && monto > 0 ? '− ' : ''}{moneda(monto)}</strong>
     </div>
   )
 
-  const hayAlertas = obrasInfo.enObservacion.length > 0 || (verFinanzas && obrasInfo.terminadasConSaldo.length > 0) || (verPresupuestos && borradores.length > 0)
+  // Lista con tope: muestra las primeras N filas y un botón para ver el resto.
+  const Filas = ({ clave, items, max = 4 }: { clave: string; items: ReactNode[]; max?: number }) => {
+    const todas = verTodas[clave]
+    return <>
+      {(todas ? items : items.slice(0, max))}
+      {items.length > max && (
+        <button type="button" className="homeVerMas" onClick={() => setVerTodas((v) => ({ ...v, [clave]: !todas }))}>
+          {todas ? 'Ver menos' : `Ver ${items.length - max} más`}
+        </button>
+      )}
+    </>
+  }
 
-  return <div className="fase2Dashboard">
+  // Sección plegable: en el celular arranca cerrada y muestra solo el título y el total.
+  const Seccion = ({ clave, titulo, resumen, alerta, children, onIr, textoIr }: { clave: string; titulo: string; resumen: ReactNode; alerta?: boolean; children: ReactNode; onIr?: () => void; textoIr?: string }) => {
+    const abierta = abiertas[clave] ?? !esMovil
+    return <section className={`homeSeccion ${abierta ? 'abierta' : ''}`}>
+      <button type="button" className="homeSeccionHead" aria-expanded={abierta} onClick={() => setAbiertas((v) => ({ ...v, [clave]: !abierta }))}>
+        <span className="homeSeccionTit">{titulo}</span>
+        <span className={`homeSeccionRes ${alerta ? 'alerta' : ''}`}>{resumen}</span>
+        <span className="homeChevron" aria-hidden>›</span>
+      </button>
+      {abierta && <div className="homeSeccionCuerpo">
+        {children}
+        {onIr && <button type="button" className="homeIr" onClick={onIr}>{textoIr ?? 'Ver detalle →'}</button>}
+      </div>}
+    </section>
+  }
+
+  const alertas: ReactNode[] = [
+    ...(verFinanzas ? obrasInfo.terminadasConSaldo.map((d) => (
+      <div className="fase2Cuenta" key={`t-${d.obra.id}`} role="button" tabIndex={0} onClick={() => onAbrirObra(d.obra.id)}>
+        <div><strong>🔴 {d.obra.nombre_obra}</strong><span>Terminada con saldo · {nombreCli(d.obra.cliente_id)}</span></div>
+        <b style={{ color: ROJO }}>{moneda(d.saldo)}</b>
+      </div>
+    )) : []),
+    // Una obra terminada con saldo ya aparece arriba: no se repite como "en observación".
+    ...obrasInfo.enObservacion.filter((o) => !(verFinanzas && obrasInfo.terminadasConSaldo.some((d) => d.obra.id === o.id))).map((o) => (
+      <div className="fase2Cuenta" key={`o-${o.id}`} role="button" tabIndex={0} onClick={() => onAbrirObra(o.id)}>
+        <div><strong>🟠 {o.nombre_obra}</strong><span>En observación · {nombreCli(o.cliente_id)}</span></div>
+        <b>Revisar →</b>
+      </div>
+    )),
+    ...(verPresupuestos ? borradores.map((p) => {
+      const dias = diasDesde(p.fecha)
+      return (
+        <div className="fase2Cuenta" key={`b-${p.id}`} role="button" tabIndex={0} onClick={() => onNavegar('presupuestos')}>
+          <div><strong>📝 {p.titulo}</strong><span>Borrador sin enviar · {nombreCli(p.cliente_id)}{dias != null ? ` · hace ${dias} día${dias === 1 ? '' : 's'}` : ''}</span></div>
+          <b>{moneda(p.total)}</b>
+        </div>
+      )
+    }) : []),
+  ]
+
+  return <div className="fase2Dashboard homeCompacto">
     <header className="fase2Encabezado">
       <div><p className="subtitle">MOVA GESTIÓN · {rolEtiqueta.toUpperCase()}</p><h2>Hola, {nombre || 'bienvenido'}</h2><p className="welcome">Resumen rápido de tu empresa</p></div>
       <div className="headerActions"><button className="logoutButton" onClick={onSalir}>Cerrar sesión</button><button className="newButton" onClick={() => onNavegar('clientes')}>+ Nuevo</button></div>
     </header>
 
-    <div className="gestionTabs" style={{ marginBottom: 18 }}>
+    <div className="gestionTabs homeTabs">
       <button className={tab === 'resumen' ? 'active' : ''} onClick={() => setTab('resumen')}>Resumen</button>
       <button className={tab === 'calendario' ? 'active' : ''} onClick={() => setTab('calendario')}>📅 Calendario</button>
     </div>
@@ -258,186 +314,170 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
     {tab === 'calendario' && <Calendario obras={obras.map((o) => ({ id: o.id, nombre_obra: o.nombre_obra }))} />}
 
     {tab === 'resumen' && (cargando ? <p>Cargando resumen...</p> : <>
+      {/* ---- Neto del mes: número grande, mes y detalle desplegable ---- */}
       {verFinanzas && (
-        <div className="dashMesFiltro">
-          <label>Ver mes<input type="month" value={mesSel} max={mesActual()} onChange={(e) => e.target.value && setMesSel(e.target.value)} /></label>
-          <span>{nombreMes(mesSel)}{!mes.esMesActual && ' · los previstos se calculan solo para el mes en curso'}</span>
-        </div>
-      )}
-
-      {/* ---- Números principales ---- */}
-      <section className="fase2Kpis" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}>
-        {verFinanzas && (
-          <div className="destacado" {...kpiClick('tablero')}>
-            <span>NETO DEL MES</span>
-            <strong style={{ color: colorMonto(mes.neto) }}>{moneda(mes.neto)}</strong>
-            <small>{mes.esMesActual && (mes.recurrentesMonto > 0 || mes.personalPendiente > 0) ? `Si pagás lo previsto: ${moneda(mes.netoProyectado)}` : 'Cobrado − todos los gastos'}</small>
+        <section className="homeNeto">
+          <div className="homeNetoTop">
+            <div>
+              <span className="homeEtq">Neto de {nombreMes(mesSel)}</span>
+              <strong style={{ color: colorMonto(mes.neto) }}>{moneda(mes.neto)}</strong>
+              <small>
+                {mes.esMesActual && (mes.recurrentesMonto > 0 || mes.personalPendiente > 0)
+                  ? <>Si pagás lo previsto: <b style={{ color: colorMonto(mes.netoProyectado) }}>{moneda(mes.netoProyectado)}</b></>
+                  : 'Cobrado − todos los gastos'}
+              </small>
+            </div>
+            <input type="month" aria-label="Mes" value={mesSel} max={mesActual()} onChange={(e) => e.target.value && setMesSel(e.target.value)} />
           </div>
-        )}
-        <div {...kpiClick('obras')}>
-          <span>OBRAS ACTIVAS</span>
-          <strong>{obrasInfo.activas.length}</strong>
-          <small>{obrasInfo.activas.length ? `${obrasInfo.avancePromedio}% de avance promedio` : 'Con presupuesto aceptado'}</small>
-        </div>
-        <div {...kpiClick('obras')}>
-          <span>EN OBSERVACIÓN</span>
-          <strong style={{ color: obrasInfo.enObservacion.length ? NARANJA : undefined }}>{obrasInfo.enObservacion.length}</strong>
-          <small>{obrasInfo.enObservacion.length ? 'Requieren revisión' : 'Nada para revisar'}</small>
-        </div>
-        {verPresupuestos && (
-          <div {...kpiClick('presupuestos')}>
-            <span>PRESUPUESTOS EN BORRADOR</span>
-            <strong style={{ color: borradores.length ? NARANJA : undefined }}>{borradores.length}</strong>
-            <small>{borradores.length ? 'Sin enviar al cliente' : 'Todos enviados'}</small>
+          <div className="homeNetoBarra" aria-hidden>
+            <span style={{ width: `${(mes.cobrado / maxBarra) * 100}%`, background: '#23935b' }} />
+            <span style={{ width: `${(salidas / maxBarra) * 100}%`, background: '#d0645b' }} />
           </div>
-        )}
-        {verFinanzas && (
-          <div {...kpiClick('tablero')}>
-            <span>TE DEBEN</span>
-            <strong style={{ color: obrasInfo.terminadasConSaldo.length ? ROJO : undefined }}>{moneda(obrasInfo.porCobrar)}</strong>
-            <small>{obrasInfo.deudas.length} obra{obrasInfo.deudas.length === 1 ? '' : 's'} con saldo</small>
+          <div className="homeNetoLeyenda">
+            <span><i style={{ background: '#23935b' }} />Entró {moneda(mes.cobrado)}</span>
+            <span><i style={{ background: '#d0645b' }} />Salió {moneda(salidas)}</span>
+            <button type="button" onClick={() => setDetalleNeto((v) => !v)}>{detalleNeto ? 'Ocultar detalle' : 'Ver detalle'}</button>
           </div>
-        )}
-      </section>
-
-      {/* ---- Neto del mes, en barras ---- */}
-      {verFinanzas && (
-        <section className="fase2Panel" style={{ marginTop: 18 }}>
-          <div className="fase2PanelTitulo"><div><h3>¿Cuánto te quedó en {nombreMes(mesSel)}?</h3><p>Lo cobrado menos todo lo que salió</p></div><button onClick={() => onNavegar('tablero')}>Ver balance →</button></div>
-          <div style={{ padding: '4px 20px 16px' }}>
+          {detalleNeto && <div className="homeNetoDetalle">
             {barraNeto('Cobrado', mes.cobrado, '+', '#23935b')}
             {barraNeto('Mano de obra', mes.manoObra, '−', '#b23b32')}
-            {barraNeto('Materiales y otros costos', mes.otrosCostos, '−', '#d0645b')}
+            {barraNeto('Materiales y otros', mes.otrosCostos, '−', '#d0645b')}
             {barraNeto('Gastos fijos', mes.fijos, '−', '#b86608')}
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--mova-border)', marginTop: 8, paddingTop: 10, fontSize: 15 }}>
-              <strong>Neto</strong>
-              <strong style={{ color: colorMonto(mes.neto) }}>{moneda(mes.neto)}</strong>
-            </div>
             {mes.esMesActual && (mes.recurrentesMonto > 0 || mes.personalPendiente > 0) && (
-              <div style={{ marginTop: 10, fontSize: 13, color: 'var(--mova-muted)' }}>
-                Previsto por pagar este mes:
+              <p>
+                Previsto por pagar:
                 {mes.recurrentesMonto > 0 && <> gastos fijos sin cargar <strong>{moneda(mes.recurrentesMonto)}</strong></>}
                 {mes.recurrentesMonto > 0 && mes.personalPendiente > 0 && ' ·'}
                 {mes.personalPendiente > 0 && <> personal por avance <strong>{moneda(mes.personalPendiente)}</strong></>}
-                {' → '}neto si pagás todo: <strong style={{ color: colorMonto(mes.netoProyectado) }}>{moneda(mes.netoProyectado)}</strong>
-              </div>
+              </p>
             )}
-          </div>
+            <button type="button" className="homeIr" onClick={() => onNavegar('tablero')}>Ver balance →</button>
+          </div>}
         </section>
       )}
 
-      <section className="fase2Paneles">
-        {/* ---- Para mirar ---- */}
-        <div className="fase2Panel">
-          <div className="fase2PanelTitulo"><div><h3>Para mirar</h3><p>Lo que requiere tu atención</p></div></div>
-          {!hayAlertas ? <div className="fase2Vacio"><span>✓</span><p>Todo en orden.</p></div> : <>
-            {verFinanzas && obrasInfo.terminadasConSaldo.map((d) => (
-              <div className="fase2Cuenta" key={`t-${d.obra.id}`} role="button" tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => onAbrirObra(d.obra.id)}>
-                <div><strong>🔴 {d.obra.nombre_obra}</strong><span>Obra terminada con saldo · {nombreCli(d.obra.cliente_id)}</span></div>
-                <b style={{ color: ROJO }}>{moneda(d.saldo)}</b>
-              </div>
-            ))}
-            {obrasInfo.enObservacion.map((o) => (
-              <div className="fase2Cuenta" key={`o-${o.id}`} role="button" tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => onAbrirObra(o.id)}>
-                <div><strong>🟠 {o.nombre_obra}</strong><span>En observación · {nombreCli(o.cliente_id)}</span></div>
-                <b>Revisar →</b>
-              </div>
-            ))}
-            {verPresupuestos && borradores.slice(0, 5).map((p) => {
-              const dias = diasDesde(p.fecha)
-              return (
-                <div className="fase2Cuenta" key={`b-${p.id}`} role="button" tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => onNavegar('presupuestos')}>
-                  <div><strong>📝 {p.titulo}</strong><span>Borrador sin enviar · {nombreCli(p.cliente_id)}{dias != null ? ` · hace ${dias} día${dias === 1 ? '' : 's'}` : ''}</span></div>
-                  <b>{moneda(p.total)}</b>
-                </div>
-              )
-            })}
-          </>}
-        </div>
+      {/* ---- Números clave, en 2 columnas ---- */}
+      <section className="homeKpis">
+        <button type="button" onClick={() => onNavegar('obras')}>
+          <span>Obras activas</span>
+          <strong>{obrasInfo.activas.length}</strong>
+          <small>{obrasInfo.activas.length ? `${obrasInfo.avancePromedio}% avance prom.` : 'Ninguna en proceso'}</small>
+        </button>
+        {verFinanzas && (
+          <button type="button" onClick={() => onNavegar('tablero')}>
+            <span>Te deben</span>
+            <strong style={{ color: obrasInfo.terminadasConSaldo.length ? ROJO : undefined }}>{moneda(obrasInfo.porCobrar)}</strong>
+            <small>{obrasInfo.deudas.length} obra{obrasInfo.deudas.length === 1 ? '' : 's'} con saldo</small>
+          </button>
+        )}
+        {verPersonal && (
+          <button type="button" onClick={() => verFinanzas ? onNavegar('tablero') : onNavegar('obras')}>
+            <span>Le debés al personal</span>
+            <strong style={{ color: personal.debe > 0.5 ? ROJO : undefined }}>{moneda(personal.debe)}</strong>
+            <small>{personal.filas.filter((f) => f.debe > 0.5).length} pendiente{personal.filas.filter((f) => f.debe > 0.5).length === 1 ? '' : 's'}</small>
+          </button>
+        )}
+        {verPresupuestos ? (
+          <button type="button" onClick={() => onNavegar('presupuestos')}>
+            <span>Borradores</span>
+            <strong style={{ color: borradores.length ? NARANJA : undefined }}>{borradores.length}</strong>
+            <small>{borradores.length ? 'Sin enviar' : 'Todos enviados'}</small>
+          </button>
+        ) : (
+          <button type="button" onClick={() => onNavegar('obras')}>
+            <span>En observación</span>
+            <strong style={{ color: obrasInfo.enObservacion.length ? NARANJA : undefined }}>{obrasInfo.enObservacion.length}</strong>
+            <small>{obrasInfo.enObservacion.length ? 'Para revisar' : 'Nada para revisar'}</small>
+          </button>
+        )}
+      </section>
 
-        {/* ---- Obras activas, con barra de avance ---- */}
-        <div className="fase2Panel">
-          <div className="fase2PanelTitulo"><div><h3>Obras activas</h3><p>Avance de cada trabajo</p></div><button onClick={() => onNavegar('obras')}>Ver todas →</button></div>
-          {obrasInfo.activas.length === 0 ? <div className="fase2Vacio"><span>🏠</span><p>No hay obras en proceso con presupuesto aceptado.</p></div>
-            : obrasInfo.activas.slice(0, 6).map((o) => (
-              <div className="fase2Cuenta" key={o.id} role="button" tabIndex={0} style={{ cursor: 'pointer', display: 'block' }} onClick={() => onAbrirObra(o.id)}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                  <div><strong>{o.nombre_obra}</strong><span>{nombreCli(o.cliente_id)} · {o.localidad || 'Sin localidad'}</span></div>
+      {/* ---- Para mirar: siempre abierto, con tope ---- */}
+      <section className="homeSeccion abierta homeAlertas">
+        <div className="homeSeccionHead estatico">
+          <span className="homeSeccionTit">Para mirar</span>
+          <span className={`homeSeccionRes ${alertas.length ? 'alerta' : 'ok'}`}>{alertas.length ? `${alertas.length} ${alertas.length === 1 ? 'cosa' : 'cosas'}` : '✓ Todo en orden'}</span>
+        </div>
+        {alertas.length > 0 && <div className="homeSeccionCuerpo"><Filas clave="alertas" items={alertas} max={3} /></div>}
+      </section>
+
+      <div className="homeGrilla">
+        {/* ---- Obras activas ---- */}
+        <Seccion clave="obras" titulo="Obras activas" resumen={`${obrasInfo.activas.length} · ${obrasInfo.avancePromedio}% prom.`} onIr={() => onNavegar('obras')} textoIr="Ver todas las obras →">
+          {obrasInfo.activas.length === 0 ? <p className="homeVacio">No hay obras en proceso con presupuesto aceptado.</p>
+            : <Filas clave="obras" items={obrasInfo.activas.map((o) => (
+              <div className="fase2Cuenta homeObra" key={o.id} role="button" tabIndex={0} onClick={() => onAbrirObra(o.id)}>
+                <div className="homeObraFila">
+                  <div><strong>{o.nombre_obra}</strong><span>{nombreCli(o.cliente_id)}{o.localidad ? ` · ${o.localidad}` : ''}</span></div>
                   <b>{num(o.porcentaje_avance)}%</b>
                 </div>
-                <div className="tabBar" style={{ marginTop: 6 }}><span style={{ width: `${Math.min(100, num(o.porcentaje_avance))}%`, background: '#2f6fb3' }} /></div>
+                <div className="tabBar"><span style={{ width: `${Math.min(100, num(o.porcentaje_avance))}%`, background: '#2f6fb3' }} /></div>
               </div>
-            ))}
-        </div>
+            ))} />}
+        </Seccion>
 
         {/* ---- Te deben ---- */}
         {verFinanzas && (
-          <div className="fase2Panel">
-            <div className="fase2PanelTitulo"><div><h3>Te deben</h3><p>{moneda(obrasInfo.porCobrar)} en total</p></div><button onClick={() => onNavegar('tablero')}>Ver cobranzas →</button></div>
-            {obrasInfo.deudas.length === 0 ? <div className="fase2Vacio"><span>✓</span><p>Sin saldos pendientes.</p></div>
-              : obrasInfo.deudas.slice(0, 6).map((d) => (
-                <div className="fase2Cuenta" key={d.obra.id} role="button" tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => onAbrirObra(d.obra.id)}>
+          <Seccion clave="deben" titulo="Te deben" resumen={moneda(obrasInfo.porCobrar)} alerta={obrasInfo.terminadasConSaldo.length > 0} onIr={() => onNavegar('tablero')} textoIr="Ver cobranzas →">
+            {obrasInfo.deudas.length === 0 ? <p className="homeVacio">✓ Sin saldos pendientes.</p>
+              : <Filas clave="deben" items={obrasInfo.deudas.map((d) => (
+                <div className="fase2Cuenta" key={d.obra.id} role="button" tabIndex={0} onClick={() => onAbrirObra(d.obra.id)}>
                   <div>
                     <strong>{d.obra.nombre_obra}</strong>
                     <span>
-                      {nombreCli(d.obra.cliente_id)} · <span className={`crmBadge est-${claseObra(d.obra.estado)}`}>{etiquetaObra(d.obra.estado)}</span>{' '}
                       {d.situacion === 'rojo' && <strong style={{ color: ROJO }}>🔴 cobrar ya</strong>}
                       {d.situacion === 'naranja' && <strong style={{ color: NARANJA }}>🟠 falta {moneda(d.faltaAvance)} por avance</strong>}
                       {d.situacion === 'verde' && <span style={{ color: VERDE }}>🟢 al día</span>}
+                      {' · '}{nombreCli(d.obra.cliente_id)}
                     </span>
                   </div>
                   <b>{moneda(d.saldo)}</b>
                 </div>
-              ))}
-          </div>
+              ))} />}
+          </Seccion>
         )}
 
         {/* ---- Pagos al personal ---- */}
         {verPersonal && (
-          <div className="fase2Panel">
-            <div className="fase2PanelTitulo">
-              <div><h3>Pagos al personal</h3><p>Le debés <strong style={{ color: personal.debe > 0 ? ROJO : undefined }}>{moneda(personal.debe)}</strong>{personal.adelantado > 0 && <> · adelantado {moneda(personal.adelantado)}</>}</p></div>
-              {verFinanzas && <button onClick={() => onNavegar('tablero')}>Ver detalle →</button>}
-            </div>
-            {personal.filas.length === 0 ? <div className="fase2Vacio"><span>✓</span><p>{personal.alDia ? 'Todo el personal al día.' : 'Sin personal asignado.'}</p></div> : <>
-              {personal.filas.slice(0, 6).map((f) => (
-                <div className="fase2Cuenta" key={f.clave} role="button" tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => onAbrirObra(f.obraId)}>
+          <Seccion clave="personal" titulo="Pagos al personal" resumen={personal.debe > 0.5 ? `Le debés ${moneda(personal.debe)}` : 'Al día'} alerta={personal.debe > 0.5} onIr={verFinanzas ? () => onNavegar('tablero') : undefined}>
+            {personal.filas.length === 0 ? <p className="homeVacio">{personal.alDia ? '✓ Todo el personal al día.' : 'Sin personal asignado.'}</p> : <>
+              <Filas clave="personal" items={personal.filas.map((f) => (
+                <div className="fase2Cuenta" key={f.clave} role="button" tabIndex={0} onClick={() => onAbrirObra(f.obraId)}>
                   <div><strong>{f.nombre}</strong><span>{f.obra}</span></div>
                   {f.debe > 0.5
-                    ? <b style={{ color: ROJO }}>🔴 Le debés {moneda(f.debe)}</b>
-                    : <b style={{ color: NARANJA }}>🟠 Adelantado {moneda(f.adelantado)}</b>}
+                    ? <b style={{ color: ROJO }}>Le debés {moneda(f.debe)}</b>
+                    : <b style={{ color: NARANJA }}>Adelantado {moneda(f.adelantado)}</b>}
                 </div>
-              ))}
-              {personal.alDia > 0 && <p style={{ padding: '8px 20px', margin: 0, fontSize: 13, color: VERDE }}>🟢 {personal.alDia} asignación{personal.alDia === 1 ? '' : 'es'} al día</p>}
+              ))} />
+              {personal.alDia > 0 && <p className="homeNota" style={{ color: VERDE }}>🟢 {personal.alDia} asignación{personal.alDia === 1 ? '' : 'es'} al día</p>}
             </>}
-          </div>
+          </Seccion>
         )}
 
         {/* ---- Gastos fijos del mes ---- */}
         {verFinanzas && (
-          <div className="fase2Panel">
-            <div className="fase2PanelTitulo"><div><h3>Gastos fijos del mes</h3><p>{moneda(mes.fijos)} · recurrentes {moneda(mes.recurrentesMes)}</p></div><button onClick={() => onNavegar('tablero')}>Ver gastos →</button></div>
+          <Seccion clave="gastos" titulo="Gastos fijos del mes" resumen={moneda(mes.fijos)} alerta={mes.recurrentesPendientes.length > 0} onIr={() => onNavegar('tablero')} textoIr="Ver gastos →">
             {mes.recurrentesPendientes.length > 0 && (
-              <p style={{ padding: '8px 20px 0', margin: 0, fontSize: 13, color: NARANJA }}>
+              <p className="homeNota" style={{ color: NARANJA }}>
                 ⏰ Faltan cargar {mes.recurrentesPendientes.length} recurrente{mes.recurrentesPendientes.length === 1 ? '' : 's'} ({moneda(mes.recurrentesMonto)}). Cargalos desde Tablero → Gastos fijos.
               </p>
             )}
-            {mes.porCategoria.length === 0 ? <div className="fase2Vacio"><span>💸</span><p>Sin gastos fijos cargados este mes.</p></div>
-              : <div style={{ padding: '8px 20px 16px' }}>
+            {mes.porCategoria.length === 0 ? <p className="homeVacio">Sin gastos fijos cargados este mes.</p>
+              : <div className="homeCategorias">
                 {mes.porCategoria.map(([cat, monto]) => {
                   const pct = mes.fijos > 0 ? Math.round((monto / mes.fijos) * 100) : 0
                   return (
-                    <div key={cat} style={{ display: 'grid', gridTemplateColumns: 'minmax(90px, 130px) 1fr auto', gap: 10, alignItems: 'center', padding: '5px 0', fontSize: 13 }}>
-                      <strong>{cat}</strong>
+                    <div key={cat} className="homeBarra">
+                      <span>{cat}</span>
                       <div className="tabBar"><span style={{ width: `${pct}%`, background: NARANJA }} /></div>
-                      <span style={{ whiteSpace: 'nowrap' }}>{moneda(monto)} · {pct}%</span>
+                      <strong>{moneda(monto)} · {pct}%</strong>
                     </div>
                   )
                 })}
               </div>}
-          </div>
+          </Seccion>
         )}
-      </section>
+      </div>
     </>)}
   </div>
 }
