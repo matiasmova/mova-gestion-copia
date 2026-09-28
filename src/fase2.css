@@ -640,3 +640,8 @@
   .homeCompacto .gestionKpis strong{font-size:17px}
   .homeCompacto .gestionKpis small{font-size:11px}
 }
+.pdfPersonalBarra{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px;padding:12px 14px;border:1px solid var(--mova-border);border-radius:12px;background:#fff}
+.pdfPersonalBarra>span{font-size:13px;font-weight:700;color:#374151;margin-right:4px}
+.pdfPersonalBarra button{font-size:13px}
+.pdfPersonalBarra small{font-weight:700}
+.pdfPersonalBarra small.deb{color:#b23b32}.pdfPersonalBarra small.adel{color:#b86608}.pdfPersonalBarra small.ok{color:#23764e}

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from './supabase'
 import { moneda, fechaCorta, hoy } from './gestionFormat'
+import { compartirCuentaPersona } from './pdfPersonal'
 import { calcularPersona } from './personalCalculos'
 import { etiquetaObra, claseObra } from './obraEstado'
 import { confirmarEliminacion } from './confirmar'
@@ -82,6 +83,14 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [formGasto, setFormGasto] = useState<Gasto | null>(null)
+  const [generandoPdf, setGenerandoPdf] = useState<number | null>(null)
+
+  async function pdfPersona(personaId: number) {
+    setGenerandoPdf(personaId)
+    try { await compartirCuentaPersona(personaId) }
+    catch (e) { console.error(e); window.alert('No se pudo generar el PDF. Reintentá.') }
+    finally { setGenerandoPdf(null) }
+  }
   const [cargandoRecurrentes, setCargandoRecurrentes] = useState(false)
 
   useEffect(() => {
@@ -533,6 +542,22 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
           <div><span>SALDO PACTADO PENDIENTE</span><strong>{moneda(totalesPersonal.saldo)}</strong><small>Falta pagar hasta terminar</small></div>
           <div><span>PAGADO A PERSONAL</span><strong>{moneda(totalesPersonal.pagado)}</strong><small>Histórico, todas las obras</small></div>
         </div>
+        {personalDetalle.length > 0 && (
+          <div className="pdfPersonalBarra">
+            <span>📄 Estado de cuenta en PDF para enviar:</span>
+            {Array.from(new Map(personalDetalle.filter((f) => f.personaId != null).map((f) => [f.personaId as number, f])).values()).map((f) => {
+              const debe = personalDetalle.filter((x) => x.personaId === f.personaId).reduce((s, x) => s + x.debe, 0)
+              const adel = personalDetalle.filter((x) => x.personaId === f.personaId).reduce((s, x) => s + x.adelantado, 0)
+              return (
+                <button key={f.personaId} type="button" className="editButton" disabled={generandoPdf === f.personaId}
+                  onClick={() => void pdfPersona(f.personaId as number)}>
+                  {generandoPdf === f.personaId ? 'Generando…' : f.nombre}
+                  {debe > 0.5 ? <small className="deb"> · le debés {moneda(debe)}</small> : adel > 0.5 ? <small className="adel"> · adelantado {moneda(adel)}</small> : <small className="ok"> · al día</small>}
+                </button>
+              )
+            })}
+          </div>
+        )}
         <div className="crmListaWrap">
           <table className="crmLista">
             <thead><tr><th>Persona</th><th>Obra</th><th>Avance</th><th>Modalidad</th><th>Acordado</th><th>Pagado</th><th>Saldo</th><th>Situación</th></tr></thead>
