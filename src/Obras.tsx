@@ -9,6 +9,7 @@ import EstadoObraPDF from './EstadoObraPDF'
 import AdicionalesObra from './AdicionalesObra'
 import PersonalObra from './PersonalObra'
 import RentabilidadObra from './RentabilidadObra'
+import AccesosObra from './AccesosObra'
 import VistaToggle, { useVista } from './VistaToggle'
 import './obrasCard.css'
 import { OBRA_ESTADOS, etiquetaObra, claseObra } from './obraEstado'
@@ -83,7 +84,7 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
   const [obras, setObras] = useState<Obra[]>([])
   const [presupuestosObra, setPresupuestosObra] = useState<{ id: number; obra_id: number | null; total: number | string; estado: string; activo: boolean; titulo: string }[]>([])
   const [informeObra, setInformeObra] = useState<Obra | null>(null)
-  const [seguTab, setSeguTab] = useState<'finanzas' | 'adicionales' | 'personal' | 'rentabilidad' | 'timeline'>('timeline')
+  const [seguTab, setSeguTab] = useState<'finanzas' | 'adicionales' | 'personal' | 'rentabilidad' | 'accesos' | 'timeline'>('timeline')
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -707,6 +708,7 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
               <button className={seguTab === 'rentabilidad' ? 'active' : ''} onClick={() => setSeguTab('rentabilidad')}>📊 Rentabilidad</button>
               <button className={seguTab === 'finanzas' ? 'active' : ''} onClick={() => setSeguTab('finanzas')}>💰 Finanzas</button>
               <button className={seguTab === 'adicionales' ? 'active' : ''} onClick={() => setSeguTab('adicionales')}>🔁 Cambios y adicionales</button>
+              <button className={seguTab === 'accesos' ? 'active' : ''} onClick={() => setSeguTab('accesos')}>🔐 Accesos y claves</button>
             </div>
 
             {seguTab === 'finanzas' && <EconomiaObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} onGenerarPdf={() => setInformeObra(obraSeguimiento)} onCambio={() => setActualizacion(v => v + 1)} />}
@@ -716,6 +718,8 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
             {seguTab === 'personal' && <PersonalObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} avance={Number(obraSeguimiento.porcentaje_avance || 0)} />}
 
             {seguTab === 'rentabilidad' && <RentabilidadObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} avance={Number(obraSeguimiento.porcentaje_avance || 0)} estado={obraSeguimiento.estado ?? undefined} />}
+
+            {seguTab === 'accesos' && <AccesosObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} cliente={obtenerCliente(obraSeguimiento.cliente_id)} obra={obraSeguimiento.nombre_obra} ubicacion={[obraSeguimiento.direccion, obraSeguimiento.localidad].filter(Boolean).join(', ') || null} />}
 
             {seguTab === 'timeline' && (<>
             <div className="seguimientoAcciones">
