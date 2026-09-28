@@ -392,9 +392,20 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
         )}
         {verPersonal && (
           <button type="button" onClick={() => verFinanzas ? setTab('personal') : setAbiertas((v) => ({ ...v, personal: true }))}>
-            <span>Le debés al personal</span>
-            <strong style={{ color: personal.debe > 0.5 ? ROJO : undefined }}>{moneda(personal.debe)}</strong>
-            <small>{personal.filas.filter((f) => f.debe > 0.5).length} pendiente{personal.filas.filter((f) => f.debe > 0.5).length === 1 ? '' : 's'}</small>
+            <span>Personal</span>
+            {personal.debe > 0.5
+              ? <strong style={{ color: ROJO }}>Le debés {moneda(personal.debe)}</strong>
+              : personal.adelantado > 0.5
+                ? <strong style={{ color: NARANJA }}>Adelantado {moneda(personal.adelantado)}</strong>
+                : <strong style={{ color: VERDE }}>Al día</strong>}
+            <small>
+              {personal.debe > 0.5 && personal.adelantado > 0.5 && <b style={{ color: NARANJA }}>Adelantado {moneda(personal.adelantado)} · </b>}
+              {[
+                personal.filas.filter((f) => f.debe > 0.5).length ? `${personal.filas.filter((f) => f.debe > 0.5).length} a pagar` : null,
+                personal.filas.filter((f) => f.debe <= 0.5 && f.adelantado > 0.5).length ? `${personal.filas.filter((f) => f.debe <= 0.5 && f.adelantado > 0.5).length} adelantado` : null,
+                personal.alDia ? `${personal.alDia} al día` : null,
+              ].filter(Boolean).join(' · ') || 'Sin personal asignado'}
+            </small>
           </button>
         )}
         {verPresupuestos ? (
@@ -438,7 +449,7 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
 
         {/* ---- Pagos al personal ---- */}
         {verPersonal && !verFinanzas && (
-          <Seccion clave="personal" titulo="Pagos al personal" resumen={personal.debe > 0.5 ? `Le debés ${moneda(personal.debe)}` : 'Al día'} alerta={personal.debe > 0.5}>
+          <Seccion clave="personal" titulo="Pagos al personal" resumen={personal.debe > 0.5 ? `Le debés ${moneda(personal.debe)}` : personal.adelantado > 0.5 ? `Adelantado ${moneda(personal.adelantado)}` : 'Al día'} alerta={personal.debe > 0.5}>
             {personal.filas.length === 0 ? <p className="homeVacio">{personal.alDia ? '✓ Todo el personal al día.' : 'Sin personal asignado.'}</p> : <>
               <Filas clave="personal" items={personal.filas.map((f) => (
                 <div className="fase2Cuenta" key={f.clave} role="button" tabIndex={0} onClick={() => onAbrirObra(f.obraId)}>
