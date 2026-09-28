@@ -1,12 +1,18 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { supabase } from './supabase'
 import { moneda, fechaCorta, hoy } from './gestionFormat'
+import { confirmarEliminacion } from './confirmar'
 import {
   antesYAhora,
   etiquetaModificacion,
-  ETIQUETA_CAMBIO,
   type CambioTipo,
 } from './presupuestoModificaciones'
+
+// Cambios y adicionales de la obra.
+// · Arriba, el presupuesto aceptado tal como está hoy: cada ítem se modifica o
+//   se quita desde su propia fila, y se pueden agregar ítems.
+// · Después, un adicional rápido en una línea.
+// · Abajo, el historial en tarjetas con aprobar / rechazar / editar / eliminar.
 
 type Adicional = {
   id: number
@@ -36,7 +42,7 @@ type Adicional = {
 
 type PresupuestoAceptado = { id: number; titulo: string; total: number }
 type ItemPresupuesto = { id: number; presupuesto_id: number; descripcion: string; cantidad: number; precio_unitario: number; descuento_pct: number }
-type EstadoItem = { descripcion: string; cantidad: number; precio: number; quitado: boolean; modificado: boolean }
+type EstadoItem = { descripcion: string; cantidad: number; precio: number; quitado: boolean; modificado: boolean; pendiente: boolean }
 
 type Props = {
   obraId: number
@@ -46,13 +52,13 @@ type Props = {
   onCambio?: () => void
 }
 
-// Los que se pueden elegir al cargar un adicional nuevo (los cambios de ítems van por su propio formulario).
-const TIPOS_SELECCIONABLES: Array<[string, string]> = [
+// Tipos del adicional rápido (los cambios de ítems se hacen desde el presupuesto).
+const TIPOS_RAPIDOS: Array<[string, string]> = [
   ['producto', 'Producto extra'],
   ['servicio', 'Servicio extra'],
   ['gasto_extra', 'Gasto extra'],
+  ['bonificacion', 'Descuento'],
   ['ajuste', 'Ajuste'],
-  ['bonificacion', 'Bonificación'],
 ]
 
 const MEDIOS_PAGO: Record<string, string> = {
@@ -70,33 +76,34 @@ const formInicial = {
   importe: '',
   fecha: hoy(),
   observaciones: '',
+  aprobado: false,
   medioPago: 'transferencia',
   proveedor: '',
-  tieneComprobante: false,
   comprobante: null as File | null,
 }
 
-const cambioInicial = {
-  presupuestoId: '',
-  cambioTipo: 'reemplazo' as CambioTipo,
-  itemId: '',
-  descripcion: '',
-  cantidad: '',
-  precio: '',
-  motivo: '',
-  fecha: hoy(),
-  aprobado: 'si',
+// Editor de un ítem del presupuesto (modificar, quitar o agregar).
+type EditorItem = {
+  modo: 'modificar' | 'quitar' | 'agregar'
+  presupuestoId: number
+  itemId: number | null
+  descripcion: string
+  cantidad: string
+  precio: string
+  motivo: string
+  aprobado: boolean
 }
+
+// Edición de un registro del historial.
+type EdicionRegistro = { id: number; descripcion: string; importe: string; cantidad: string; precio: string; motivo: string; observaciones: string; fecha: string }
+
+type Filtro = 'todos' | 'pendiente' | 'aprobado'
 
 const redondear = (n: number) => Math.round(n * 100) / 100
 const numONull = (x: unknown) => (x == null || x === '' ? null : Number(x))
 const precioNeto = (it: ItemPresupuesto) => it.precio_unitario * (1 - (Number(it.descuento_pct) || 0) / 100)
-
-function placeholderImporte(tipo: string) {
-  if (tipo === 'bonificacion') return 'Monto del descuento (se guarda como negativo solo)'
-  if (tipo === 'gasto_extra') return 'Lo que costó el gasto'
-  return 'Negativo = resta al valor de la obra'
-}
+const conSigno = (n: number) => `${n > 0 ? '+ ' : n < 0 ? '− ' : ''}${moneda(Math.abs(n))}`
+const ESTADO_TEXTO: Record<Adicional['estado'], string> = { pendiente: 'Pendiente', aprobado: 'Aprobado', rechazado: 'Rechazado', pagado: 'Pagado' }
 
 function AdicionalesObra({ obraId, puedeEditar = true, onCambio }: Props) {
   const [adicionales, setAdicionales] = useState<Adicional[]>([])
@@ -106,11 +113,14 @@ function AdicionalesObra({ obraId, puedeEditar = true, onCambio }: Props) {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
-  const [mostrarForm, setMostrarForm] = useState<'adicional' | 'cambio' | null>(null)
   const [form, setForm] = useState(formInicial)
-  const [cambioForm, setCambioForm] = useState(cambioInicial)
-  const [guardando, setGuardando] = useState(false)
+  const [masDetalles, setMasDetalles] = useState(false)
+  const [editor, setEditor] = useState<EditorItem | null>(null)
+  const [edicion, setEdicion] = useState<EdicionRegistro | null>(null)
+  const [filtro, setFiltro] = useState<Filtro>('todos')
+  const [guardando, setGuardando] = useState<'adicional' | 'item' | 'edicion' | null>(null)
   const [errorForm, setErrorForm] = useState('')
+  const [errorEditor, setErrorEditor] = useState('')
   const [procesando, setProcesando] = useState<number | null>(null)
   const [comprobanteAbierto, setComprobanteAbierto] = useState<{ id: number; url: string } | null>(null)
   const [abriendoComprobante, setAbriendoComprobante] = useState<number | null>(null)
@@ -197,112 +207,133 @@ function AdicionalesObra({ obraId, puedeEditar = true, onCambio }: Props) {
       .filter((a) => a.tipo === 'cambio' && a.item_id === item.id && a.estado !== 'rechazado')
       .sort((x, y) => (x.fecha ?? '').localeCompare(y.fecha ?? '') || x.id - y.id)
     const ultimo = cambios[cambios.length - 1]
-    const base: EstadoItem = { descripcion: item.descripcion, cantidad: item.cantidad, precio: precioNeto(item), quitado: false, modificado: false }
+    const base: EstadoItem = { descripcion: item.descripcion, cantidad: item.cantidad, precio: precioNeto(item), quitado: false, modificado: false, pendiente: false }
     if (!ultimo) return base
-    if (ultimo.cambio_tipo === 'quitado') return { ...base, quitado: true, modificado: true }
+    const pendiente = ultimo.estado === 'pendiente'
+    if (ultimo.cambio_tipo === 'quitado') return { ...base, quitado: true, modificado: true, pendiente }
     return {
       descripcion: ultimo.descripcion,
       cantidad: ultimo.cantidad_nueva ?? base.cantidad,
       precio: ultimo.precio_nuevo ?? base.precio,
       quitado: false,
       modificado: true,
+      pendiente,
     }
   }
 
-  const presupuestoCambio = presupuestos.length === 1 ? presupuestos[0].id : Number(cambioForm.presupuestoId) || null
-  const itemsDelPresupuesto = items.filter((it) => it.presupuesto_id === presupuestoCambio)
-  const itemElegido = itemsDelPresupuesto.find((it) => it.id === Number(cambioForm.itemId))
-  const estadoElegido = itemElegido ? estadoItem(itemElegido) : null
+  function terminar() {
+    setRevision((v) => v + 1)
+    onCambio?.()
+  }
 
-  // Diferencia de plata del cambio, calculada sola.
-  const cantNueva = Number(cambioForm.cantidad) || 0
-  const precioNuevo = cambioForm.cambioTipo === 'cantidad' ? (estadoElegido?.precio ?? 0) : Number(cambioForm.precio) || 0
-  const importeAnterior = cambioForm.cambioTipo === 'agregado' || !estadoElegido ? 0 : estadoElegido.cantidad * estadoElegido.precio
-  const importeNuevo = cambioForm.cambioTipo === 'quitado' ? 0 : cantNueva * precioNuevo
-  const diferencia = redondear(importeNuevo - importeAnterior)
+  // ---------- Presupuesto: modificar, quitar o agregar ítems ----------
 
-  const cambio = (campo: string, valor: string) =>
-    setForm((actual) => ({ ...actual, [campo]: valor }))
-  const cambioC = (campo: string, valor: string) =>
-    setCambioForm((actual) => ({ ...actual, [campo]: valor }))
-
-  function elegirItem(itemId: string) {
-    const it = itemsDelPresupuesto.find((x) => x.id === Number(itemId))
-    const est = it ? estadoItem(it) : null
-    setCambioForm((actual) => ({
-      ...actual,
-      itemId,
+  function abrirEditor(modo: EditorItem['modo'], presupuestoId: number, item?: ItemPresupuesto) {
+    setErrorEditor('')
+    const est = item ? estadoItem(item) : null
+    setEditor({
+      modo,
+      presupuestoId,
+      itemId: item?.id ?? null,
       descripcion: est?.descripcion ?? '',
-      cantidad: est ? String(est.cantidad) : '',
+      cantidad: est ? String(est.cantidad) : '1',
       precio: est ? String(redondear(est.precio)) : '',
-    }))
+      motivo: '',
+      aprobado: true,
+    })
   }
 
-  function elegirTipoCambio(tipo: CambioTipo) {
-    setCambioForm((actual) => ({
-      ...actual,
-      cambioTipo: tipo,
-      itemId: tipo === 'agregado' ? '' : actual.itemId,
-      descripcion: tipo === 'agregado' ? '' : actual.descripcion,
-      cantidad: tipo === 'agregado' ? '1' : actual.cantidad,
-      precio: tipo === 'agregado' ? '' : actual.precio,
-    }))
+  const itemEditado = editor?.itemId != null ? items.find((it) => it.id === editor.itemId) ?? null : null
+  const estadoEditado = itemEditado ? estadoItem(itemEditado) : null
+  const cantEditor = Number(editor?.cantidad) || 0
+  const precioEditor = Number(editor?.precio) || 0
+  const antesEditor = estadoEditado ? estadoEditado.cantidad * estadoEditado.precio : 0
+  const ahoraEditor = editor?.modo === 'quitar' ? 0 : cantEditor * precioEditor
+  const diferenciaEditor = redondear(ahoraEditor - antesEditor)
+
+  async function guardarItem(evento: FormEvent) {
+    evento.preventDefault()
+    if (!editor) return
+    setErrorEditor('')
+    const { modo } = editor
+    if (modo !== 'agregar' && !estadoEditado) { setErrorEditor('No se encontró el ítem.'); return }
+    if (modo !== 'quitar') {
+      if (!editor.descripcion.trim()) { setErrorEditor('Escribí la descripción del ítem.'); return }
+      if (!(cantEditor > 0)) { setErrorEditor('Ingresá una cantidad mayor que cero.'); return }
+      if (editor.precio === '' || !(precioEditor >= 0)) { setErrorEditor('Ingresá el precio unitario.'); return }
+    }
+    // Qué tipo de cambio es, según lo que se tocó.
+    let cambioTipo: CambioTipo = 'agregado'
+    if (modo === 'quitar') cambioTipo = 'quitado'
+    else if (modo === 'modificar') {
+      const cambioDescripcion = editor.descripcion.trim() !== estadoEditado!.descripcion.trim()
+      const cambioPrecio = Math.abs(precioEditor - estadoEditado!.precio) > 0.005
+      const cambioCantidad = Math.abs(cantEditor - estadoEditado!.cantidad) > 0.0005
+      if (!cambioDescripcion && !cambioPrecio && !cambioCantidad) { setErrorEditor('No cambiaste nada del ítem.'); return }
+      cambioTipo = cambioDescripcion || cambioPrecio ? 'reemplazo' : 'cantidad'
+    }
+
+    setGuardando('item')
+    const { error: fallo } = await supabase.from('adicionales').insert({
+      obra_id: obraId,
+      tipo: 'cambio',
+      descripcion: modo === 'quitar' ? estadoEditado!.descripcion : editor.descripcion.trim(),
+      motivo: editor.motivo.trim() || null,
+      importe: diferenciaEditor,
+      fecha: hoy(),
+      observaciones: null,
+      estado: editor.aprobado ? 'aprobado' : 'pendiente',
+      presupuesto_id: editor.presupuestoId,
+      item_id: modo === 'agregar' ? null : editor.itemId,
+      cambio_tipo: cambioTipo,
+      descripcion_anterior: modo === 'agregar' ? null : estadoEditado!.descripcion,
+      cantidad_anterior: modo === 'agregar' ? null : estadoEditado!.cantidad,
+      precio_anterior: modo === 'agregar' ? null : redondear(estadoEditado!.precio),
+      cantidad_nueva: modo === 'quitar' ? null : cantEditor,
+      precio_nuevo: modo === 'quitar' ? null : redondear(precioEditor),
+    })
+    setGuardando(null)
+    if (fallo) {
+      console.error(fallo)
+      setErrorEditor(
+        fallo.message?.includes('column')
+          ? 'Falta ejecutar supabase-cambios-presupuesto.sql en Supabase (la tabla todavía no tiene las columnas para los cambios).'
+          : `No se pudo guardar el cambio: ${fallo.message || 'volvé a intentar.'}`,
+      )
+      return
+    }
+    setEditor(null)
+    terminar()
   }
 
-  function cambiarTipo(tipo: string) {
-    setForm((actual) => ({
-      ...actual,
-      tipo,
-      // Los campos de pago solo aplican a Gasto extra: los limpiamos al salir de ese tipo.
-      ...(tipo !== 'gasto_extra'
-        ? { medioPago: 'transferencia', proveedor: '', tieneComprobante: false, comprobante: null }
-        : {}),
-    }))
-  }
+  // ---------- Adicional rápido ----------
 
-  function abrirForm(cual: 'adicional' | 'cambio') {
-    setErrorForm('')
-    if (mostrarForm === cual) { setMostrarForm(null); return }
-    setForm(formInicial)
-    setCambioForm({ ...cambioInicial, fecha: hoy() })
-    setMostrarForm(cual)
-  }
-
-  async function guardar(evento: FormEvent) {
+  async function guardarAdicional(evento: FormEvent) {
     evento.preventDefault()
     setErrorForm('')
     const importeIngresado = Number(form.importe)
-    if (!form.descripcion.trim()) {
-      setErrorForm('Escribí una descripción del adicional.')
-      return
-    }
-    if (!Number.isFinite(importeIngresado) || importeIngresado === 0) {
-      setErrorForm('Ingresá un importe distinto de cero.')
-      return
-    }
-    if (form.tipo === 'gasto_extra' && form.tieneComprobante && !form.comprobante) {
-      setErrorForm('Adjuntá el comprobante o desmarcá la casilla.')
-      return
-    }
+    if (!form.descripcion.trim()) { setErrorForm('Escribí una descripción.'); return }
+    if (!Number.isFinite(importeIngresado) || importeIngresado === 0) { setErrorForm('Ingresá un importe distinto de cero.'); return }
 
-    setGuardando(true)
-
+    setGuardando('adicional')
     let comprobante_path: string | null = null
-    if (form.tipo === 'gasto_extra' && form.tieneComprobante && form.comprobante) {
+    if (form.tipo === 'gasto_extra' && form.comprobante) {
       const nombreSeguro = form.comprobante.name.replace(/[^a-zA-Z0-9._-]/g, '_')
       const ruta = `${obraId}/adicional-${Date.now()}-${nombreSeguro}`
       const subida = await supabase.storage.from('comprobantes').upload(ruta, form.comprobante)
       if (subida.error) {
         console.error(subida.error)
         setErrorForm(`No se pudo subir el comprobante: ${subida.error.message || 'volvé a intentar.'}`)
-        setGuardando(false)
+        setGuardando(null)
         return
       }
       comprobante_path = ruta
     }
 
-    // La bonificación siempre resta del valor de la obra, sin importar el signo que haya tipeado.
-    const importe = form.tipo === 'bonificacion' ? -Math.abs(importeIngresado) : importeIngresado
+    // Descuento: siempre resta. Gasto extra: siempre positivo (es un reintegro).
+    const importe = form.tipo === 'bonificacion' ? -Math.abs(importeIngresado) : form.tipo === 'gasto_extra' ? Math.abs(importeIngresado) : importeIngresado
+    // El Gasto extra se carga pendiente: al aprobarlo se genera su costo en la obra.
+    const aprobado = form.aprobado && form.tipo !== 'gasto_extra'
 
     const { error: fallo } = await supabase.from('adicionales').insert({
       obra_id: obraId,
@@ -310,72 +341,26 @@ function AdicionalesObra({ obraId, puedeEditar = true, onCambio }: Props) {
       descripcion: form.descripcion.trim(),
       motivo: form.motivo.trim() || null,
       importe,
-      fecha: form.fecha,
+      fecha: form.fecha || hoy(),
       observaciones: form.observaciones.trim() || null,
-      estado: 'pendiente',
+      estado: aprobado ? 'aprobado' : 'pendiente',
       medio_pago: form.tipo === 'gasto_extra' ? form.medioPago : null,
       proveedor: form.tipo === 'gasto_extra' ? form.proveedor.trim() || null : null,
       comprobante_path,
     })
+    setGuardando(null)
     if (fallo) {
       console.error(fallo)
-      setErrorForm(`No se pudo guardar el adicional: ${fallo.message || 'volvé a intentar.'}`)
-      setGuardando(false)
+      if (comprobante_path) await supabase.storage.from('comprobantes').remove([comprobante_path])
+      setErrorForm(`No se pudo guardar: ${fallo.message || 'volvé a intentar.'}`)
       return
     }
-    setGuardando(false)
-    setForm(formInicial)
-    setMostrarForm(null)
-    setRevision((v) => v + 1)
-    onCambio?.()
+    setForm({ ...formInicial, tipo: form.tipo, fecha: hoy() })
+    setMasDetalles(false)
+    terminar()
   }
 
-  async function guardarCambio(evento: FormEvent) {
-    evento.preventDefault()
-    setErrorForm('')
-    const tipo = cambioForm.cambioTipo
-    if (!presupuestoCambio) { setErrorForm('Elegí el presupuesto que se modifica.'); return }
-    if (tipo !== 'agregado' && !estadoElegido) { setErrorForm('Elegí el ítem del presupuesto que cambia.'); return }
-    if (estadoElegido?.quitado) { setErrorForm('Ese ítem ya fue quitado.'); return }
-    if ((tipo === 'reemplazo' || tipo === 'agregado') && !cambioForm.descripcion.trim()) { setErrorForm('Escribí cómo queda el ítem.'); return }
-    if (tipo !== 'quitado' && !(cantNueva > 0)) { setErrorForm('Ingresá una cantidad mayor que cero.'); return }
-    if ((tipo === 'reemplazo' || tipo === 'agregado') && !(precioNuevo >= 0 && cambioForm.precio !== '')) { setErrorForm('Ingresá el precio unitario.'); return }
-
-    setGuardando(true)
-    const { error: fallo } = await supabase.from('adicionales').insert({
-      obra_id: obraId,
-      tipo: 'cambio',
-      descripcion: tipo === 'reemplazo' || tipo === 'agregado' ? cambioForm.descripcion.trim() : estadoElegido!.descripcion,
-      motivo: cambioForm.motivo.trim() || null,
-      importe: diferencia,
-      fecha: cambioForm.fecha,
-      observaciones: null,
-      estado: cambioForm.aprobado === 'si' ? 'aprobado' : 'pendiente',
-      presupuesto_id: presupuestoCambio,
-      item_id: tipo === 'agregado' ? null : itemElegido!.id,
-      cambio_tipo: tipo,
-      descripcion_anterior: tipo === 'agregado' ? null : estadoElegido!.descripcion,
-      cantidad_anterior: tipo === 'agregado' ? null : estadoElegido!.cantidad,
-      precio_anterior: tipo === 'agregado' ? null : redondear(estadoElegido!.precio),
-      cantidad_nueva: tipo === 'quitado' ? null : cantNueva,
-      precio_nuevo: tipo === 'quitado' ? null : redondear(precioNuevo),
-    })
-    if (fallo) {
-      console.error(fallo)
-      setErrorForm(
-        fallo.message?.includes('column')
-          ? 'Falta ejecutar supabase-cambios-presupuesto.sql en Supabase (la tabla todavía no tiene las columnas para los cambios).'
-          : `No se pudo guardar el cambio: ${fallo.message || 'volvé a intentar.'}`,
-      )
-      setGuardando(false)
-      return
-    }
-    setGuardando(false)
-    setCambioForm(cambioInicial)
-    setMostrarForm(null)
-    setRevision((v) => v + 1)
-    onCambio?.()
-  }
+  // ---------- Historial: estados, edición y borrado ----------
 
   // Al aprobar un Gasto extra, se refleja también como costo de la obra (impacta
   // Movimientos y Rentabilidad); si se desaprueba, el costo asociado se retira para
@@ -423,8 +408,79 @@ function AdicionalesObra({ obraId, puedeEditar = true, onCambio }: Props) {
       return
     }
     setProcesando(null)
-    setRevision((v) => v + 1)
-    onCambio?.()
+    terminar()
+  }
+
+  function abrirEdicion(a: Adicional) {
+    setErrorEditor('')
+    setEdicion({
+      id: a.id,
+      descripcion: a.descripcion,
+      importe: String(a.tipo === 'bonificacion' ? Math.abs(a.importe) : a.importe),
+      cantidad: a.cantidad_nueva != null ? String(a.cantidad_nueva) : '',
+      precio: a.precio_nuevo != null ? String(a.precio_nuevo) : '',
+      motivo: a.motivo ?? '',
+      observaciones: a.observaciones ?? '',
+      fecha: a.fecha?.slice(0, 10) || hoy(),
+    })
+  }
+
+  async function guardarEdicion(a: Adicional) {
+    if (!edicion) return
+    setErrorEditor('')
+    let cambios: Record<string, unknown>
+    if (a.tipo === 'cambio') {
+      const anterior = a.cambio_tipo === 'agregado' ? 0 : (a.cantidad_anterior ?? 0) * (a.precio_anterior ?? 0)
+      if (a.cambio_tipo === 'quitado') {
+        cambios = { motivo: edicion.motivo.trim() || null, fecha: edicion.fecha }
+      } else {
+        const cantidad = Number(edicion.cantidad) || 0
+        const precio = a.cambio_tipo === 'cantidad' ? a.precio_nuevo ?? a.precio_anterior ?? 0 : Number(edicion.precio)
+        if (!(cantidad > 0)) { setErrorEditor('Ingresá una cantidad mayor que cero.'); return }
+        if (!(precio >= 0) || (a.cambio_tipo !== 'cantidad' && edicion.precio === '')) { setErrorEditor('Ingresá el precio unitario.'); return }
+        if (a.cambio_tipo !== 'cantidad' && !edicion.descripcion.trim()) { setErrorEditor('Escribí la descripción.'); return }
+        cambios = {
+          descripcion: a.cambio_tipo === 'cantidad' ? a.descripcion : edicion.descripcion.trim(),
+          cantidad_nueva: cantidad,
+          precio_nuevo: redondear(precio),
+          importe: redondear(cantidad * precio - anterior),
+          motivo: edicion.motivo.trim() || null,
+          fecha: edicion.fecha,
+        }
+      }
+    } else {
+      const valor = Number(edicion.importe)
+      if (!edicion.descripcion.trim()) { setErrorEditor('Escribí una descripción.'); return }
+      if (!Number.isFinite(valor) || valor === 0) { setErrorEditor('Ingresá un importe distinto de cero.'); return }
+      cambios = {
+        descripcion: edicion.descripcion.trim(),
+        importe: a.tipo === 'bonificacion' ? -Math.abs(valor) : a.tipo === 'gasto_extra' ? Math.abs(valor) : valor,
+        motivo: edicion.motivo.trim() || null,
+        observaciones: edicion.observaciones.trim() || null,
+        fecha: edicion.fecha,
+      }
+    }
+    setGuardando('edicion')
+    const { error: fallo } = await supabase.from('adicionales').update(cambios).eq('id', a.id)
+    setGuardando(null)
+    if (fallo) { console.error(fallo); setErrorEditor(`No se pudo guardar: ${fallo.message || 'volvé a intentar.'}`); return }
+    setEdicion(null)
+    terminar()
+  }
+
+  async function eliminar(a: Adicional) {
+    if (!confirmarEliminacion(`¿Eliminar "${a.descripcion}" (${conSigno(a.importe)})?`)) return
+    setProcesando(a.id)
+    const { error: fallo } = await supabase.from('adicionales').delete().eq('id', a.id)
+    if (fallo) {
+      console.error(fallo)
+      setProcesando(null)
+      setError(`No se pudo eliminar: ${fallo.message || 'volvé a intentar.'}`)
+      return
+    }
+    if (a.comprobante_path) await supabase.storage.from('comprobantes').remove([a.comprobante_path])
+    setProcesando(null)
+    terminar()
   }
 
   async function verComprobante(a: Adicional) {
@@ -453,29 +509,56 @@ function AdicionalesObra({ obraId, puedeEditar = true, onCambio }: Props) {
         ? 'adicBadge rechazado'
         : 'adicBadge pendiente'
 
-  const hayItems = items.length > 0
+  const visibles = adicionales.filter((a) =>
+    filtro === 'todos' ? true : filtro === 'pendiente' ? a.estado === 'pendiente' : a.estado === 'aprobado' || a.estado === 'pagado')
+  const cantPendientes = adicionales.filter((a) => a.estado === 'pendiente').length
+
+  // Formulario en línea para modificar / quitar / agregar un ítem.
+  const editorFila = (clave: string) => editor && (
+    <form key={clave} className="caEditor" onSubmit={guardarItem}>
+      {editor.modo === 'quitar' ? (
+        <p className="caEditorTitulo">Quitar <strong>{estadoEditado?.descripcion}</strong> del presupuesto</p>
+      ) : (
+        <div className="caEditorCampos">
+          <label className="caDesc">{editor.modo === 'agregar' ? 'Ítem nuevo' : 'Descripción / modelo'}
+            <input autoFocus value={editor.descripcion} onChange={(e) => setEditor({ ...editor, descripcion: e.target.value })} placeholder="Ej.: Módulo Sonoff 4 canales" />
+          </label>
+          <label>Cantidad
+            <div className="caStepper">
+              <button type="button" aria-label="Restar uno" onClick={() => setEditor({ ...editor, cantidad: String(Math.max(0, redondear((Number(editor.cantidad) || 0) - 1))) })}>−</button>
+              <input type="number" min="0.001" step="0.001" value={editor.cantidad} onChange={(e) => setEditor({ ...editor, cantidad: e.target.value })} />
+              <button type="button" aria-label="Sumar uno" onClick={() => setEditor({ ...editor, cantidad: String(redondear((Number(editor.cantidad) || 0) + 1)) })}>+</button>
+            </div>
+          </label>
+          <label>Precio unitario
+            <input type="number" min="0" step="0.01" value={editor.precio} onChange={(e) => setEditor({ ...editor, precio: e.target.value })} />
+          </label>
+        </div>
+      )}
+      <div className="caEditorCampos">
+        <label className="caDesc">Motivo (opcional)
+          <input value={editor.motivo} onChange={(e) => setEditor({ ...editor, motivo: e.target.value })} placeholder="Ej.: el cliente eligió otro modelo" />
+        </label>
+        <label className="caCheck"><input type="checkbox" checked={editor.aprobado} onChange={(e) => setEditor({ ...editor, aprobado: e.target.checked })} /> Ya lo aprobó el cliente</label>
+      </div>
+      <div className="caEditorPie">
+        <span>
+          {estadoEditado && <>Antes {moneda(antesEditor)} · </>}Ahora {moneda(ahoraEditor)} ·{' '}
+          <strong className={diferenciaEditor > 0 ? 'suma' : diferenciaEditor < 0 ? 'resta' : ''}>{conSigno(diferenciaEditor)}</strong>
+        </span>
+        <div>
+          <button type="button" className="cancelButton" onClick={() => setEditor(null)}>Cancelar</button>
+          <button className={editor.modo === 'quitar' ? 'adicNo caBtnGrande' : 'newButton'} disabled={guardando === 'item'}>
+            {guardando === 'item' ? 'Guardando...' : editor.modo === 'quitar' ? 'Quitar ítem' : editor.modo === 'agregar' ? 'Agregar ítem' : 'Guardar cambio'}
+          </button>
+        </div>
+      </div>
+      {errorEditor && <p className="loginError">{errorEditor}</p>}
+    </form>
+  )
 
   return (
     <section className="obraFotosSeccion" aria-label="Cambios y adicionales de la obra">
-      <div className="seguimientoAcciones">
-        <div>
-          <h3>Cambios y adicionales</h3>
-          <p>El presupuesto aceptado no se modifica: acá se registra cada cambio (modelos, cantidades, ítems agregados o quitados) y cada adicional. Los aprobados ajustan el valor de la obra y aparecen al final del presupuesto.</p>
-        </div>
-        {puedeEditar && (
-          <div className="adicAcciones">
-            {hayItems && (
-              <button type="button" className="newButton" onClick={() => abrirForm('cambio')}>
-                {mostrarForm === 'cambio' ? 'Cancelar' : '🔁 Cambio al presupuesto'}
-              </button>
-            )}
-            <button type="button" className={hayItems ? 'editButton' : 'newButton'} onClick={() => abrirForm('adicional')}>
-              {mostrarForm === 'adicional' ? 'Cancelar' : '+ Nuevo adicional'}
-            </button>
-          </div>
-        )}
-      </div>
-
       {!cargando && !error && (
         <div className="adicResumen">
           <div>
@@ -484,11 +567,9 @@ function AdicionalesObra({ obraId, puedeEditar = true, onCambio }: Props) {
             <small>Presupuestos aceptados</small>
           </div>
           <div>
-            <span>Cambios y adicionales</span>
-            <strong className={aprobados >= 0 ? 'positivo' : 'negativo'}>
-              {aprobados >= 0 ? '+' : ''}{moneda(aprobados)}
-            </strong>
-            <small>Aprobados</small>
+            <span>Cambios aprobados</span>
+            <strong className={aprobados >= 0 ? 'positivo' : 'negativo'}>{conSigno(aprobados)}</strong>
+            <small>Suman o restan al valor</small>
           </div>
           <div className="adicDestacado">
             <span>Valor actualizado</span>
@@ -497,304 +578,223 @@ function AdicionalesObra({ obraId, puedeEditar = true, onCambio }: Props) {
           </div>
           <div>
             <span>Pendientes de aprobar</span>
-            <strong>{moneda(pendientes)}</strong>
-            <small>{adicionales.filter((a) => a.estado === 'pendiente').length} sin resolver</small>
+            <strong>{conSigno(pendientes)}</strong>
+            <small>{cantPendientes} sin resolver</small>
           </div>
         </div>
       )}
 
-      {/* ---- Cambio al presupuesto ---- */}
-      {mostrarForm === 'cambio' && puedeEditar && (
-        <form className="clienteForm adicForm" onSubmit={guardarCambio}>
-          <div className="formGrid">
-            {presupuestos.length > 1 && (
-              <label className="adicAncho">
-                Presupuesto
-                <select value={cambioForm.presupuestoId} onChange={(e) => setCambioForm({ ...cambioInicial, presupuestoId: e.target.value, fecha: cambioForm.fecha })}>
-                  <option value="">Elegí el presupuesto</option>
-                  {presupuestos.map((p) => <option key={p.id} value={p.id}>#{String(p.id).padStart(4, '0')} · {p.titulo}</option>)}
-                </select>
-              </label>
-            )}
-            <label>
-              Qué cambia
-              <select value={cambioForm.cambioTipo} onChange={(e) => elegirTipoCambio(e.target.value as CambioTipo)}>
-                {(Object.keys(ETIQUETA_CAMBIO) as CambioTipo[]).map((t) => <option key={t} value={t}>{ETIQUETA_CAMBIO[t]}</option>)}
-              </select>
-            </label>
-            <label>
-              Fecha
-              <input type="date" value={cambioForm.fecha} onChange={(e) => cambioC('fecha', e.target.value)} />
-            </label>
-
-            {cambioForm.cambioTipo !== 'agregado' && (
-              <label className="adicAncho">
-                Ítem del presupuesto *
-                <select value={cambioForm.itemId} onChange={(e) => elegirItem(e.target.value)}>
-                  <option value="">Elegí el ítem</option>
-                  {itemsDelPresupuesto.map((it) => {
-                    const est = estadoItem(it)
-                    return (
-                      <option key={it.id} value={it.id} disabled={est.quitado}>
-                        {est.descripcion} · {est.cantidad} × {moneda(est.precio)}{est.quitado ? ' (quitado)' : est.modificado ? ' (ya modificado)' : ''}
-                      </option>
-                    )
-                  })}
-                </select>
-              </label>
-            )}
-
-            {(cambioForm.cambioTipo === 'reemplazo' || cambioForm.cambioTipo === 'agregado') && (
-              <label className="adicAncho">
-                {cambioForm.cambioTipo === 'reemplazo' ? 'Nuevo ítem (modelo / descripción) *' : 'Ítem agregado *'}
-                <input value={cambioForm.descripcion} onChange={(e) => cambioC('descripcion', e.target.value)} placeholder="Ej.: Módulo Sonoff 4 canales" />
-              </label>
-            )}
-
-            {cambioForm.cambioTipo !== 'quitado' && (
-              <label>
-                {cambioForm.cambioTipo === 'cantidad' ? 'Cantidad nueva *' : 'Cantidad *'}
-                <input type="number" min="0.001" step="0.001" value={cambioForm.cantidad} onChange={(e) => cambioC('cantidad', e.target.value)} />
-              </label>
-            )}
-
-            {(cambioForm.cambioTipo === 'reemplazo' || cambioForm.cambioTipo === 'agregado') && (
-              <label>
-                Precio unitario *
-                <input type="number" min="0" step="0.01" value={cambioForm.precio} onChange={(e) => cambioC('precio', e.target.value)} />
-              </label>
-            )}
-
-            <label className="adicAncho">
-              Motivo
-              <input value={cambioForm.motivo} onChange={(e) => cambioC('motivo', e.target.value)} placeholder="Ej.: el cliente eligió otro modelo / faltó stock" />
-            </label>
-            <label>
-              ¿Lo aprobó el cliente?
-              <select value={cambioForm.aprobado} onChange={(e) => cambioC('aprobado', e.target.value)}>
-                <option value="si">Sí, ya está aprobado</option>
-                <option value="no">No, queda pendiente</option>
-              </select>
-            </label>
-          </div>
-
-          {(estadoElegido || cambioForm.cambioTipo === 'agregado') && (
-            <div style={{ background: '#f6f7f9', borderRadius: 10, padding: '12px 14px', margin: '4px 0 10px', fontSize: 14 }}>
-              {estadoElegido && <div>Antes: <strong>{estadoElegido.descripcion}</strong> · {estadoElegido.cantidad} × {moneda(estadoElegido.precio)} = {moneda(importeAnterior)}</div>}
-              <div>
-                Ahora: {cambioForm.cambioTipo === 'quitado'
-                  ? <strong>se quita</strong>
-                  : <><strong>{cambioForm.cambioTipo === 'cantidad' ? estadoElegido?.descripcion : cambioForm.descripcion || '—'}</strong> · {cantNueva} × {moneda(precioNuevo)} = {moneda(importeNuevo)}</>}
-              </div>
-              <div style={{ marginTop: 6 }}>
-                Diferencia: <strong style={{ color: diferencia > 0 ? '#b86608' : diferencia < 0 ? '#23764e' : undefined }}>
-                  {diferencia > 0 ? '+ ' : diferencia < 0 ? '− ' : ''}{moneda(Math.abs(diferencia))}
-                </strong>
-                {diferencia !== 0 && <small style={{ color: 'var(--mova-muted)' }}> · {diferencia > 0 ? 'suma' : 'resta'} al valor de la obra</small>}
-              </div>
-            </div>
-          )}
-
-          {errorForm && <p className="loginError">{errorForm}</p>}
-          <div className="formActions">
-            <button type="button" className="cancelButton" onClick={() => setMostrarForm(null)}>Cancelar</button>
-            <button className="newButton" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar cambio'}</button>
-          </div>
-        </form>
-      )}
-
-      {/* ---- Adicional común ---- */}
-      {mostrarForm === 'adicional' && puedeEditar && (
-        <form className="clienteForm adicForm" onSubmit={guardar}>
-          <div className="formGrid">
-            <label>
-              Tipo
-              <select value={form.tipo} onChange={(e) => cambiarTipo(e.target.value)}>
-                {TIPOS_SELECCIONABLES.map(([valor, texto]) => (
-                  <option key={valor} value={valor}>{texto}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Importe *
-              <input
-                type="number"
-                step="0.01"
-                required
-                value={form.importe}
-                onChange={(e) => cambio('importe', e.target.value)}
-                placeholder={placeholderImporte(form.tipo)}
-              />
-            </label>
-            <label>
-              Fecha
-              <input type="date" value={form.fecha} onChange={(e) => cambio('fecha', e.target.value)} />
-            </label>
-            <label className="adicAncho">
-              Descripción *
-              <input
-                value={form.descripcion}
-                onChange={(e) => cambio('descripcion', e.target.value)}
-                placeholder="Ej.: 3 tomas adicionales en cocina"
-              />
-            </label>
-            <label className="adicAncho">
-              Motivo
-              <input
-                value={form.motivo}
-                onChange={(e) => cambio('motivo', e.target.value)}
-                placeholder="Ej.: pedido del cliente / cambio de plano"
-              />
-            </label>
-            <label className="adicAncho">
-              Observaciones
-              <input value={form.observaciones} onChange={(e) => cambio('observaciones', e.target.value)} />
-            </label>
-          </div>
-
-          {form.tipo === 'gasto_extra' && (
-            <div className="formGrid" style={{ marginTop: '4px', paddingTop: '14px', borderTop: '1px dashed #e2e5e9' }}>
-              <label>
-                Cómo se pagó
-                <select value={form.medioPago} onChange={(e) => cambio('medioPago', e.target.value)}>
-                  {Object.entries(MEDIOS_PAGO).map(([valor, texto]) => (
-                    <option key={valor} value={valor}>{texto}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Dónde (proveedor / lugar)
-                <input
-                  value={form.proveedor}
-                  onChange={(e) => cambio('proveedor', e.target.value)}
-                  placeholder="Ej.: Ferretería Pérez"
-                />
-              </label>
-              <label style={{ flexDirection: 'row', alignItems: 'center', gap: '8px' }}>
-                <input
-                  type="checkbox"
-                  checked={form.tieneComprobante}
-                  onChange={(e) =>
-                    setForm((actual) => ({
-                      ...actual,
-                      tieneComprobante: e.target.checked,
-                      comprobante: e.target.checked ? actual.comprobante : null,
-                    }))
-                  }
-                  style={{ width: 'auto' }}
-                />
-                <span>Tengo factura / comprobante</span>
-              </label>
-              {form.tieneComprobante && (
-                <label className="adicAncho">
-                  Adjuntar comprobante
-                  <input
-                    type="file"
-                    accept="image/*,application/pdf"
-                    onChange={(e) =>
-                      setForm((actual) => ({ ...actual, comprobante: e.target.files?.[0] ?? null }))
-                    }
-                  />
-                </label>
-              )}
-            </div>
-          )}
-
-          {errorForm && <p className="loginError">{errorForm}</p>}
-          <div className="formActions">
-            <button type="button" className="cancelButton" onClick={() => setMostrarForm(null)}>Cancelar</button>
-            <button className="newButton" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar adicional'}</button>
-          </div>
-        </form>
-      )}
-
       {cargando && <p role="status">Cargando cambios y adicionales...</p>}
       {error && <p className="loginError" role="alert">{error}</p>}
-      {errorComprobante && <p className="loginError" role="alert">{errorComprobante}</p>}
 
-      {!cargando && !error && (
-        adicionales.length === 0 ? (
-          <p className="adicVacio">Todavía no hay cambios ni adicionales cargados en esta obra.</p>
-        ) : (
-          <div className="gestionTabla" style={{ maxWidth: '100%', overflowX: 'auto' }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Tipo</th>
-                  <th>Detalle</th>
-                  <th>Pago</th>
-                  <th>Importe</th>
-                  <th>Estado</th>
-                  {puedeEditar && <th>Acción</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {adicionales.map((a) => {
-                  const { antes, ahora } = antesYAhora(a, moneda)
-                  return (
-                    <tr key={a.id}>
-                      <td>{fechaCorta(a.fecha)}</td>
-                      <td>{etiquetaModificacion(a)}</td>
-                      <td>
-                        <strong>{a.descripcion}</strong>
-                        {(antes || ahora) && (
-                          <><br /><small>{antes ? `Antes: ${antes}` : ''}{antes && ahora ? ' → ' : ''}{ahora ? `Ahora: ${ahora}` : ''}</small></>
-                        )}
-                        {(a.motivo || a.observaciones) && (
-                          <><br /><small>{[a.motivo, a.observaciones].filter(Boolean).join(' · ')}</small></>
-                        )}
-                      </td>
-                      <td>
-                        {a.tipo === 'gasto_extra' ? (
-                          <>
-                            <small>{[a.medio_pago ? MEDIOS_PAGO[a.medio_pago] ?? a.medio_pago : null, a.proveedor].filter(Boolean).join(' · ') || '—'}</small>
-                            {a.comprobante_path ? (
-                              <div>
-                                <button type="button" className="editButton" disabled={abriendoComprobante !== null} onClick={() => void verComprobante(a)}>
+      {!cargando && !error && <>
+        {/* ---------- Presupuesto con acciones por ítem ---------- */}
+        {presupuestos.length > 0 && (
+          <div className="caBloque">
+            <div className="caBloqueHead">
+              <h4>Presupuesto aceptado</h4>
+              <p>Tocá un ítem para cambiarle el modelo, la cantidad o el precio, o quitarlo.</p>
+            </div>
+            {presupuestos.map((p) => {
+              const itemsP = items.filter((it) => it.presupuesto_id === p.id)
+              const agregados = adicionales.filter((a) => a.tipo === 'cambio' && a.cambio_tipo === 'agregado' && a.presupuesto_id === p.id && a.estado !== 'rechazado')
+              return (
+                <div key={p.id} className="caPresupuesto">
+                  {presupuestos.length > 1 && <p className="caPresTitulo">#{String(p.id).padStart(4, '0')} · {p.titulo}</p>}
+                  <ul className="caItems">
+                    {itemsP.map((it) => {
+                      const est = estadoItem(it)
+                      const abierto = editor?.itemId === it.id
+                      return (
+                        <li key={it.id} className={`${est.quitado ? 'quitado' : ''} ${abierto ? 'abierto' : ''}`}>
+                          <div className="caItem">
+                            <div className="caItemInfo">
+                              <strong>{est.descripcion}</strong>
+                              <small>
+                                {est.quitado ? 'Quitado' : `${est.cantidad} × ${moneda(est.precio)} = ${moneda(est.cantidad * est.precio)}`}
+                                {est.modificado && <span className={`caMarca ${est.pendiente ? 'pend' : ''}`}>{est.pendiente ? 'cambio pendiente' : 'modificado'}</span>}
+                              </small>
+                            </div>
+                            {puedeEditar && !est.quitado && !abierto && (
+                              <div className="caItemAcciones">
+                                <button type="button" className="editButton" onClick={() => abrirEditor('modificar', p.id, it)}>✏️ Cambiar</button>
+                                <button type="button" className="adicNo" onClick={() => abrirEditor('quitar', p.id, it)} aria-label={`Quitar ${est.descripcion}`}>🗑</button>
+                              </div>
+                            )}
+                          </div>
+                          {abierto && editorFila(`ed-${it.id}`)}
+                        </li>
+                      )
+                    })}
+                    {agregados.map((a) => (
+                      <li key={`ag-${a.id}`} className="agregado">
+                        <div className="caItem">
+                          <div className="caItemInfo">
+                            <strong>{a.descripcion}</strong>
+                            <small>{a.cantidad_nueva} × {moneda(a.precio_nuevo ?? 0)} = {moneda(a.importe)}<span className={`caMarca ${a.estado === 'pendiente' ? 'pend' : ''}`}>{a.estado === 'pendiente' ? 'agregado · pendiente' : 'agregado'}</span></small>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  {puedeEditar && (editor?.modo === 'agregar' && editor.presupuestoId === p.id
+                    ? editorFila(`ag-${p.id}`)
+                    : <button type="button" className="caAgregar" onClick={() => abrirEditor('agregar', p.id)}>+ Agregar ítem al presupuesto</button>)}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* ---------- Adicional rápido ---------- */}
+        {puedeEditar && (
+          <form className="caBloque caRapido" onSubmit={guardarAdicional}>
+            <div className="caBloqueHead"><h4>Adicional rápido</h4><p>Algo que no estaba en el presupuesto: un extra, un gasto o un descuento.</p></div>
+            <div className="caChips" role="radiogroup" aria-label="Tipo">
+              {TIPOS_RAPIDOS.map(([valor, texto]) => (
+                <button key={valor} type="button" role="radio" aria-checked={form.tipo === valor} className={form.tipo === valor ? 'activo' : ''} onClick={() => setForm({ ...form, tipo: valor })}>{texto}</button>
+              ))}
+            </div>
+            <div className="caLinea">
+              <input className="caDescInput" value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
+                placeholder={form.tipo === 'gasto_extra' ? 'Ej.: Caño corrugado comprado en obra' : form.tipo === 'bonificacion' ? 'Ej.: Descuento por pago contado' : 'Ej.: 3 tomas adicionales en cocina'} />
+              <input className="caImporte" type="number" step="0.01" value={form.importe} onChange={(e) => setForm({ ...form, importe: e.target.value })}
+                placeholder={form.tipo === 'bonificacion' ? 'Monto a descontar' : form.tipo === 'ajuste' ? 'Importe (− resta)' : 'Importe'} />
+              <button className="newButton" disabled={guardando === 'adicional'}>{guardando === 'adicional' ? 'Guardando...' : 'Agregar'}</button>
+            </div>
+            {form.tipo === 'gasto_extra' && (
+              <div className="caLinea caExtra">
+                <select value={form.medioPago} onChange={(e) => setForm({ ...form, medioPago: e.target.value })} aria-label="Cómo se pagó">
+                  {Object.entries(MEDIOS_PAGO).map(([valor, texto]) => <option key={valor} value={valor}>{texto}</option>)}
+                </select>
+                <input value={form.proveedor} onChange={(e) => setForm({ ...form, proveedor: e.target.value })} placeholder="Dónde (proveedor / lugar)" />
+                <label className="caArchivo">📎 {form.comprobante ? form.comprobante.name : 'Adjuntar comprobante'}
+                  <input type="file" accept="image/*,application/pdf" onChange={(e) => setForm({ ...form, comprobante: e.target.files?.[0] ?? null })} />
+                </label>
+              </div>
+            )}
+            <div className="caOpciones">
+              {form.tipo !== 'gasto_extra'
+                ? <label className="caCheck"><input type="checkbox" checked={form.aprobado} onChange={(e) => setForm({ ...form, aprobado: e.target.checked })} /> Ya lo aprobó el cliente</label>
+                : <small>El gasto extra queda pendiente: al aprobarlo se suma como costo de la obra.</small>}
+              <button type="button" className="caLink" onClick={() => setMasDetalles((v) => !v)}>{masDetalles ? '− menos detalles' : '+ más detalles'}</button>
+            </div>
+            {masDetalles && (
+              <div className="caLinea caExtra">
+                <input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} aria-label="Fecha" />
+                <input value={form.motivo} onChange={(e) => setForm({ ...form, motivo: e.target.value })} placeholder="Motivo (ej.: pedido del cliente)" />
+                <input value={form.observaciones} onChange={(e) => setForm({ ...form, observaciones: e.target.value })} placeholder="Observaciones" />
+              </div>
+            )}
+            {errorForm && <p className="loginError">{errorForm}</p>}
+          </form>
+        )}
+
+        {/* ---------- Historial ---------- */}
+        <div className="caBloque">
+          <div className="caBloqueHead caHistHead">
+            <h4>Historial</h4>
+            <div className="caChips">
+              {([['todos', `Todos (${adicionales.length})`], ['pendiente', `Pendientes (${cantPendientes})`], ['aprobado', 'Aprobados']] as [Filtro, string][]).map(([v, t]) => (
+                <button key={v} type="button" className={filtro === v ? 'activo' : ''} onClick={() => setFiltro(v)}>{t}</button>
+              ))}
+            </div>
+          </div>
+          {errorComprobante && <p className="loginError" role="alert">{errorComprobante}</p>}
+          {visibles.length === 0 ? (
+            <p className="adicVacio">{adicionales.length === 0 ? 'Todavía no hay cambios ni adicionales cargados en esta obra.' : 'No hay registros con este filtro.'}</p>
+          ) : (
+            <div className="caHist">
+              {visibles.map((a) => {
+                const { antes, ahora } = antesYAhora(a, moneda)
+                const editable = puedeEditar && (a.estado === 'pendiente' || a.estado === 'rechazado')
+                const editando = edicion?.id === a.id
+                const esCambio = a.tipo === 'cambio'
+                return (
+                  <article key={a.id} className={`caCard est-${a.estado}`}>
+                    <div className="caCardTop">
+                      <span className="caTipo">{etiquetaModificacion(a)} · {fechaCorta(a.fecha)}</span>
+                      <span className={badge(a.estado)}>{ESTADO_TEXTO[a.estado] ?? a.estado}</span>
+                    </div>
+
+                    {editando && edicion ? (
+                      <div className="caEditor">
+                        <div className="caEditorCampos">
+                          {(!esCambio || a.cambio_tipo === 'reemplazo' || a.cambio_tipo === 'agregado') && (
+                            <label className="caDesc">Descripción<input value={edicion.descripcion} onChange={(e) => setEdicion({ ...edicion, descripcion: e.target.value })} /></label>
+                          )}
+                          {!esCambio && (
+                            <label>{a.tipo === 'bonificacion' ? 'Monto a descontar' : 'Importe'}<input type="number" step="0.01" value={edicion.importe} onChange={(e) => setEdicion({ ...edicion, importe: e.target.value })} /></label>
+                          )}
+                          {esCambio && a.cambio_tipo !== 'quitado' && (
+                            <label>Cantidad<input type="number" min="0.001" step="0.001" value={edicion.cantidad} onChange={(e) => setEdicion({ ...edicion, cantidad: e.target.value })} /></label>
+                          )}
+                          {esCambio && (a.cambio_tipo === 'reemplazo' || a.cambio_tipo === 'agregado') && (
+                            <label>Precio unitario<input type="number" min="0" step="0.01" value={edicion.precio} onChange={(e) => setEdicion({ ...edicion, precio: e.target.value })} /></label>
+                          )}
+                          <label>Fecha<input type="date" value={edicion.fecha} onChange={(e) => setEdicion({ ...edicion, fecha: e.target.value })} /></label>
+                          <label className="caDesc">Motivo<input value={edicion.motivo} onChange={(e) => setEdicion({ ...edicion, motivo: e.target.value })} /></label>
+                          {!esCambio && <label className="caDesc">Observaciones<input value={edicion.observaciones} onChange={(e) => setEdicion({ ...edicion, observaciones: e.target.value })} /></label>}
+                        </div>
+                        {errorEditor && <p className="loginError">{errorEditor}</p>}
+                        <div className="caEditorPie">
+                          <span />
+                          <div>
+                            <button type="button" className="cancelButton" onClick={() => setEdicion(null)}>Cancelar</button>
+                            <button type="button" className="newButton" disabled={guardando === 'edicion'} onClick={() => void guardarEdicion(a)}>{guardando === 'edicion' ? 'Guardando...' : 'Guardar'}</button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="caCardCuerpo">
+                        <div>
+                          <strong>{a.descripcion}</strong>
+                          {(antes || ahora) && <small>{antes ? `Antes: ${antes}` : ''}{antes && ahora ? ' → ' : ''}{ahora ? `Ahora: ${ahora}` : ''}</small>}
+                          {(a.motivo || a.observaciones) && <small>{[a.motivo, a.observaciones].filter(Boolean).join(' · ')}</small>}
+                          {a.tipo === 'gasto_extra' && (
+                            <small>
+                              {[a.medio_pago ? MEDIOS_PAGO[a.medio_pago] ?? a.medio_pago : null, a.proveedor].filter(Boolean).join(' · ') || 'Sin datos de pago'}
+                              {' · '}
+                              {a.comprobante_path ? (
+                                <button type="button" className="caLink" disabled={abriendoComprobante !== null} onClick={() => void verComprobante(a)}>
                                   {abriendoComprobante === a.id ? 'Preparando...' : 'Ver comprobante'}
                                 </button>
-                                {comprobanteAbierto?.id === a.id && (
-                                  <div><a href={comprobanteAbierto.url} target="_blank" rel="noopener noreferrer">Abrir archivo (enlace por 5 minutos)</a></div>
-                                )}
-                              </div>
-                            ) : (
-                              <div><small>Sin comprobante</small></div>
-                            )}
-                          </>
-                        ) : '—'}
-                      </td>
-                      <td className={a.importe < 0 ? 'negativo' : ''}>
-                        <strong>{a.importe >= 0 ? '' : '−'}{moneda(Math.abs(a.importe))}</strong>
-                      </td>
-                      <td><span className={badge(a.estado)}>{a.estado}</span></td>
-                      {puedeEditar && (
-                        <td>
-                          {a.estado === 'pendiente' ? (
-                            <div className="adicAcciones">
-                              <button type="button" className="adicOk" disabled={procesando === a.id} onClick={() => void cambiarEstado(a, 'aprobado')}>Aprobar</button>
-                              <button type="button" className="adicNo" disabled={procesando === a.id} onClick={() => void cambiarEstado(a, 'rechazado')}>Rechazar</button>
-                            </div>
-                          ) : a.estado === 'aprobado' && a.tipo === 'gasto_extra' ? (
-                            <div className="adicAcciones">
-                              <button type="button" className="adicOk" disabled={procesando === a.id} onClick={() => void cambiarEstado(a, 'pagado')}>✓ Pagado</button>
-                              <button type="button" className="editButton" disabled={procesando === a.id} onClick={() => void cambiarEstado(a, 'pendiente')}>Volver a pendiente</button>
-                            </div>
-                          ) : a.estado === 'pagado' ? (
-                            <button type="button" className="editButton" disabled={procesando === a.id} onClick={() => void cambiarEstado(a, 'aprobado')}>Deshacer pago</button>
-                          ) : (
-                            <button type="button" className="editButton" disabled={procesando === a.id} onClick={() => void cambiarEstado(a, 'pendiente')}>Volver a pendiente</button>
+                              ) : 'Sin comprobante'}
+                              {comprobanteAbierto?.id === a.id && <> · <a href={comprobanteAbierto.url} target="_blank" rel="noopener noreferrer">Abrir archivo</a></>}
+                            </small>
                           )}
-                        </td>
-                      )}
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )
-      )}
+                        </div>
+                        <strong className={`caImporteTxt ${a.importe < 0 ? 'resta' : ''}`}>{conSigno(a.importe)}</strong>
+                      </div>
+                    )}
+
+                    {puedeEditar && !editando && (
+                      <div className="caCardAcciones">
+                        {a.estado === 'pendiente' && <>
+                          <button type="button" className="adicOk caBtnGrande" disabled={procesando === a.id} onClick={() => void cambiarEstado(a, 'aprobado')}>✓ Aprobar</button>
+                          <button type="button" className="adicNo caBtnGrande" disabled={procesando === a.id} onClick={() => void cambiarEstado(a, 'rechazado')}>✕ Rechazar</button>
+                        </>}
+                        {a.estado === 'aprobado' && a.tipo === 'gasto_extra' && (
+                          <button type="button" className="adicOk" disabled={procesando === a.id} onClick={() => void cambiarEstado(a, 'pagado')}>✓ Pagado</button>
+                        )}
+                        {a.estado === 'pagado' && (
+                          <button type="button" className="editButton" disabled={procesando === a.id} onClick={() => void cambiarEstado(a, 'aprobado')}>Deshacer pago</button>
+                        )}
+                        {(a.estado === 'aprobado' || a.estado === 'rechazado') && (
+                          <button type="button" className="editButton" disabled={procesando === a.id} onClick={() => void cambiarEstado(a, 'pendiente')}>Volver a pendiente</button>
+                        )}
+                        {editable && <span className="caSep" />}
+                        {editable && <button type="button" className="editButton" onClick={() => abrirEdicion(a)}>✏️ Editar</button>}
+                        {editable && <button type="button" className="adicNo" disabled={procesando === a.id} onClick={() => void eliminar(a)}>🗑 Eliminar</button>}
+                      </div>
+                    )}
+                  </article>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </>}
     </section>
   )
 }

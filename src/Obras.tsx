@@ -10,7 +10,7 @@ import AdicionalesObra from './AdicionalesObra'
 import PersonalObra from './PersonalObra'
 import RentabilidadObra from './RentabilidadObra'
 import AccesosObra from './AccesosObra'
-import ResumenObra, { type TabSeguimiento } from './ResumenObra'
+import ResumenObra, { DonaAvance, TITULO_SECCION, type TabSeguimiento } from './ResumenObra'
 import VistaToggle, { useVista } from './VistaToggle'
 import './obrasCard.css'
 import { OBRA_ESTADOS, etiquetaObra, claseObra } from './obraEstado'
@@ -90,6 +90,7 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
   const [presupuestosObra, setPresupuestosObra] = useState<{ id: number; obra_id: number | null; total: number | string; estado: string; activo: boolean; titulo: string }[]>([])
   const [informeObra, setInformeObra] = useState<Obra | null>(null)
   const [seguTab, setSeguTab] = useState<TabSeguimiento>('resumen')
+  const [menuFicha, setMenuFicha] = useState(false)
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -325,6 +326,7 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
   function abrirSeguimiento(obra: Obra) {
     setObraSeguimiento(obra)
     setSeguTab('resumen')
+    setMenuFicha(false)
     setMostrarNuevoAvance(false)
     setFotoAvance(null)
     setFormularioAvance({
@@ -683,63 +685,35 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
       {obraSeguimiento && (
         <div className="modalOverlay">
           <div className="modalCard obraSeguimientoModal">
-            <div className="modalHeader">
-              <div>
+            <div className="fichaHead">
+              <DonaAvance pct={Number(obraSeguimiento.porcentaje_avance || 0)} size={68} />
+              <div className="fichaHeadInfo">
                 <p className="subtitle">SEGUIMIENTO DE OBRA</p>
                 <h2>{obraSeguimiento.nombre_obra}</h2>
-                <p className="welcome">
+                <p className="fichaHeadCli">
                   {obtenerCliente(obraSeguimiento.cliente_id)}
+                  <span className={`crmBadge est-${claseEstado(obraSeguimiento.estado)}`}>{etiquetaEstado(obraSeguimiento.estado)}</span>
                 </p>
               </div>
-
-              <button
-                type="button"
-                className="closeButton"
-                onClick={cerrarSeguimiento}
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="seguimientoResumen">
-              <div>
-                <span>Estado actual</span>
-                <strong>
-                  {etiquetaEstado(obraSeguimiento.estado)}
-                </strong>
-              </div>
-
-              <div>
-                <span>Avance</span>
-                <strong>
-                  {obraSeguimiento.porcentaje_avance}%
-                </strong>
-              </div>
-
-              <div className="seguimientoProgreso">
-                <span
-                  style={{
-                    width: `${obraSeguimiento.porcentaje_avance}%`,
-                  }}
-                />
+              <div className="fichaHeadAcciones">
+                <button type="button" className="fichaPdf" disabled={!presupuestoAceptado} title="Presupuesto y estado de obra" onClick={() => setInformeObra(obraSeguimiento)}>📄 PDF</button>
+                <div className="fichaMenuWrap">
+                  <button type="button" className="fichaIcono" aria-label="Más opciones" aria-expanded={menuFicha} onClick={() => setMenuFicha((v) => !v)}>⋯</button>
+                  {menuFicha && <div className="fichaMenu" role="menu">
+                    <button type="button" role="menuitem" onClick={() => { setMenuFicha(false); setObraEditando(obraSeguimiento); setMostrarFormulario(true) }}>✏️ Editar datos de la obra</button>
+                    <button type="button" role="menuitem" className="peligro" disabled={eliminandoObra === obraSeguimiento.id} onClick={() => { setMenuFicha(false); void eliminarObra(obraSeguimiento) }}>{eliminandoObra === obraSeguimiento.id ? 'Revisando...' : '🗑 Eliminar obra'}</button>
+                  </div>}
+                </div>
+                <button type="button" className="fichaIcono" aria-label="Cerrar" onClick={cerrarSeguimiento}>×</button>
               </div>
             </div>
 
-            {/* Un solo documento: presupuesto aceptado + modificaciones + pagos + estado de la obra */}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '4px 0 12px' }}>
-              <button type="button" className="newButton" disabled={!presupuestoAceptado} onClick={() => setInformeObra(obraSeguimiento)}>📄 Presupuesto y estado de obra</button>
-              <button type="button" className="editButton" onClick={() => { setObraEditando(obraSeguimiento); setMostrarFormulario(true) }}>✏️ Editar datos de la obra</button>
-            </div>
-
-            <div className="gestionTabs seguTabs">
-              <button className={seguTab === 'resumen' ? 'active' : ''} onClick={() => setSeguTab('resumen')}>📋 Resumen</button>
-              <button className={seguTab === 'timeline' ? 'active' : ''} onClick={() => setSeguTab('timeline')}>🕐 Estados</button>
-              <button className={seguTab === 'personal' ? 'active' : ''} onClick={() => setSeguTab('personal')}>👷 Personal</button>
-              <button className={seguTab === 'rentabilidad' ? 'active' : ''} onClick={() => setSeguTab('rentabilidad')}>📊 Rentabilidad</button>
-              <button className={seguTab === 'finanzas' ? 'active' : ''} onClick={() => setSeguTab('finanzas')}>💰 Finanzas</button>
-              <button className={seguTab === 'adicionales' ? 'active' : ''} onClick={() => setSeguTab('adicionales')}>🔁 Cambios y adicionales</button>
-              <button className={seguTab === 'accesos' ? 'active' : ''} onClick={() => setSeguTab('accesos')}>🔐 Accesos y claves</button>
-            </div>
+            {seguTab !== 'resumen' && (
+              <div className="fichaVolver">
+                <button type="button" onClick={() => setSeguTab('resumen')}>← Volver al resumen</button>
+                <span>{TITULO_SECCION[seguTab]}</span>
+              </div>
+            )}
 
             {seguTab === 'finanzas' && <EconomiaObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} onGenerarPdf={() => setInformeObra(obraSeguimiento)} onCambio={() => setActualizacion(v => v + 1)} />}
 
@@ -754,8 +728,8 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
               obraId={obraSeguimiento.id}
               estado={obraSeguimiento.estado}
               avance={Number(obraSeguimiento.porcentaje_avance || 0)}
-              ultimoAvance={avances[0] ? { fecha: avances[0].fecha, titulo: avances[0].titulo, porcentaje: avances[0].porcentaje } : null}
-              cantidadAvances={cargandoAvances ? 0 : avances.length}
+              avances={avances}
+              cargandoAvances={cargandoAvances}
               tienePresupuesto={!!presupuestoAceptado}
               cuenta={cuenta}
               cargandoCuenta={cargandoCuenta}
@@ -1039,26 +1013,6 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
             </div>
             </>)}
 
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                marginTop: '24px',
-                paddingTop: '16px',
-                borderTop: '1px solid #e2e5e9',
-              }}
-            >
-              <button
-                type="button"
-                className="deactivateButton"
-                disabled={eliminandoObra === obraSeguimiento.id}
-                onClick={() => void eliminarObra(obraSeguimiento)}
-              >
-                {eliminandoObra === obraSeguimiento.id
-                  ? 'Revisando...'
-                  : '🗑 Eliminar obra'}
-              </button>
-            </div>
           </div>
         </div>
       )}

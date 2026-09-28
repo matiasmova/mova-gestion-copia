@@ -470,3 +470,94 @@
 .tabBar{height:8px;border-radius:999px;background:#eef1f4;overflow:hidden}
 .tabBar>span{display:block;height:100%;border-radius:999px}
 @media(max-width:820px){.tabGrid{grid-template-columns:1fr}}
+
+/* ---- Cambios y adicionales (versión rápida) ---- */
+.caBloque{margin:0 0 18px;padding:16px;border:1px solid var(--mova-border);border-radius:14px;background:#fff}
+.caBloqueHead{margin-bottom:12px}
+.caBloqueHead h4{margin:0;font-size:15px}
+.caBloqueHead p{margin:3px 0 0;font-size:13px;color:var(--mova-muted)}
+.caHistHead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
+.caPresTitulo{margin:6px 0;font-size:12px;font-weight:800;color:#8a929e;text-transform:uppercase;letter-spacing:.4px}
+.caItems{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.caItems li{border:1px solid #eef1f4;border-radius:11px;background:#fafbfc}
+.caItems li.abierto{border-color:#e47b00;background:#fff}
+.caItems li.quitado .caItemInfo strong{text-decoration:line-through;color:#9aa1ab}
+.caItems li.agregado{border-style:dashed}
+.caItem{display:flex;align-items:center;gap:10px;padding:9px 12px}
+.caItemInfo{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.caItemInfo strong{font-size:14px;overflow-wrap:anywhere}
+.caItemInfo small{font-size:12.5px;color:var(--mova-muted);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.caMarca{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;padding:2px 7px;border-radius:999px;background:#e4f5eb;color:#23764e}
+.caMarca.pend{background:#fff0de;color:#b86608}
+.caItemAcciones{display:flex;gap:6px;flex-shrink:0}
+.caItemAcciones .editButton{padding:6px 10px;font-size:12.5px}
+.caItemAcciones .adicNo{padding:6px 10px}
+.caAgregar{margin-top:8px;width:100%;padding:10px;border:1.5px dashed #d6dbe1;border-radius:11px;background:none;color:#e47b00;font-weight:700;font-size:13.5px;cursor:pointer}
+.caAgregar:hover{border-color:#e47b00;background:#fff7ed}
+.caEditor{padding:10px 12px 12px;display:flex;flex-direction:column;gap:10px}
+.caPresupuesto > .caEditor{margin-top:8px;border:1px solid #e47b00;border-radius:11px}
+.caEditorTitulo{margin:0;font-size:14px}
+.caEditorCampos{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;align-items:end}
+.caEditorCampos label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:#4b5563}
+.caEditorCampos input{width:100%;box-sizing:border-box}
+.caEditorCampos .caDesc{grid-column:span 1}
+.caEditorCampos .caCheck{flex-direction:row;align-items:center;gap:6px;font-weight:600;grid-column:span 2}
+.caStepper{display:flex;align-items:stretch}
+.caStepper button{width:34px;border:1px solid var(--mova-border);background:#f4f5f7;font-size:17px;font-weight:700;cursor:pointer}
+.caStepper button:first-child{border-radius:8px 0 0 8px}
+.caStepper button:last-child{border-radius:0 8px 8px 0}
+.caStepper input{border-radius:0;text-align:center;min-width:0}
+.caEditorPie{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;font-size:13px;color:#4b5563}
+.caEditorPie > div{display:flex;gap:8px}
+.suma{color:#b86608}.resta{color:#23764e}
+.caChips{display:flex;flex-wrap:wrap;gap:6px}
+.caChips button{border:1px solid var(--mova-border);background:#fff;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer;color:#374151}
+.caChips button.activo{background:#101318;border-color:#101318;color:#fff}
+.caLinea{display:flex;gap:8px;margin-top:10px;align-items:stretch}
+.caLinea input,.caLinea select{min-width:0}
+.caDescInput{flex:1}
+.caImporte{width:160px}
+.caExtra > *{flex:1}
+.caArchivo{display:flex;align-items:center;border:1px dashed var(--mova-border);border-radius:8px;padding:0 10px;font-size:13px;cursor:pointer;color:#4b5563;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.caArchivo input{display:none}
+.caOpciones{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-top:10px;font-size:13px}
+.caOpciones small{color:var(--mova-muted)}
+.caCheck{display:flex;align-items:center;gap:6px;cursor:pointer}
+.caCheck input{width:auto}
+.caLink{border:0;background:none;padding:0;color:#e47b00;font-weight:700;cursor:pointer;font-size:13px}
+.caHist{display:flex;flex-direction:column;gap:10px}
+.caCard{border:1px solid #eef1f4;border-left:3px solid #e47b00;border-radius:11px;padding:11px 13px;background:#fff}
+.caCard.est-aprobado,.caCard.est-pagado{border-left-color:#23935b}
+.caCard.est-rechazado{border-left-color:#cbd2da;opacity:.8}
+.caCardTop{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.caTipo{font-size:11.5px;font-weight:700;color:#8a929e;text-transform:uppercase;letter-spacing:.3px}
+.caCardCuerpo{display:flex;justify-content:space-between;gap:12px;margin-top:6px}
+.caCardCuerpo > div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.caCardCuerpo strong{overflow-wrap:anywhere}
+.caCardCuerpo small{font-size:12.5px;color:var(--mova-muted)}
+.caImporteTxt{white-space:nowrap;font-size:15px;color:#b86608}
+.caImporteTxt.resta{color:#23764e}
+.caCardAcciones{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;align-items:center}
+.caBtnGrande{padding:8px 14px;font-size:13px}
+.caSep{flex:1}
+@media(max-width:640px){
+  .caEditorCampos{grid-template-columns:1fr 1fr}
+  .caEditorCampos .caDesc,.caEditorCampos .caCheck{grid-column:1/-1}
+  .caLinea{flex-wrap:wrap}
+  .caDescInput{flex-basis:100%}
+  .caImporte{flex:1;width:auto}
+  .caExtra > *{flex-basis:100%}
+  .caItem{flex-wrap:wrap}
+  .caCardAcciones .caBtnGrande{flex:1}
+}
+.caBloque input:not([type=checkbox]):not([type=file]),.caBloque select{padding:10px 12px;border:1px solid #d9dce0;border-radius:9px;outline:none;background:#fff;color:#24272b;font:inherit;font-size:14px;box-sizing:border-box}
+.caBloque input:not([type=checkbox]):focus,.caBloque select:focus{border-color:#555b63;box-shadow:0 0 0 3px rgb(50 55 61 / 10%)}
+.caBloque .caStepper input{border-radius:0}
+.caLinea .newButton{white-space:nowrap}
+@media(max-width:640px){
+  .adicResumen{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px}
+  .adicResumen>div{padding:11px}
+  .adicResumen strong{font-size:16px;margin:6px 0 2px}
+  .caItemInfo{min-width:180px}
+  .caItemAcciones{margin-left:auto}
+}
