@@ -15,6 +15,7 @@ import {
   mensajeEliminacionObra,
   resumenEliminacionObra,
 } from './eliminarObra'
+import { confirmarEliminacion } from './confirmar'
 
 type PresupuestoCompleto = PresupuestoEditable & {
   created_at: string
@@ -142,7 +143,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto }: { presupuest
   async function ofrecerEliminarObra(obraId: number, intro: string): Promise<boolean> {
     try {
       const resumen = await resumenEliminacionObra(obraId)
-      if (!window.confirm(mensajeEliminacionObra(nombreObra(obraId), resumen, intro))) return false
+      if (!confirmarEliminacion(mensajeEliminacionObra(nombreObra(obraId), resumen, intro), { escribir: true })) return false
       const resultado = await eliminarObraCompleta(obraId)
       if (!resultado.ok) { window.alert(resultado.mensaje); return false }
       return true
@@ -192,7 +193,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto }: { presupuest
   }
 
   async function eliminar(p: PresupuestoCompleto) {
-    if (!window.confirm(`¿Eliminar definitivamente el presupuesto "${p.titulo}"?\n\nEsto borra el presupuesto y sus ítems. Los cobros registrados se conservan pero quedan sin presupuesto asociado. Esta acción no se puede deshacer.`)) return
+    if (!confirmarEliminacion(`¿Eliminar definitivamente el presupuesto "${p.titulo}"?\n\nEsto borra el presupuesto y sus ítems. Los cobros registrados se conservan pero quedan sin presupuesto asociado. Esta acción no se puede deshacer.`, { escribir: true })) return
     // 0) Si tiene obra vinculada, se ofrece eliminarla (junto con sus cobros).
     if (p.obra_id != null) {
       await ofrecerEliminarObra(p.obra_id, `Al eliminar el presupuesto "${p.titulo}" también podés eliminar su obra vinculada.`)

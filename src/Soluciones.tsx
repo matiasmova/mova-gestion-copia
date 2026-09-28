@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { supabase } from './supabase'
+import { confirmarEliminacion } from './confirmar'
 
 // Catálogo de soluciones: textos de beneficios que se eligen al armar un
 // presupuesto (domótica, WiFi mesh, riego, etc.) y aparecen en el documento
@@ -45,7 +46,7 @@ export default function Soluciones() {
   }
 
   async function eliminar(sol: Solucion) {
-    if (!window.confirm(`¿Eliminar "${sol.titulo}"?\n\nLos presupuestos que ya la tienen no cambian: guardan su propia copia del texto.`)) return
+    if (!confirmarEliminacion(`¿Eliminar "${sol.titulo}"?\n\nLos presupuestos que ya la tienen no cambian: guardan su propia copia del texto.`)) return
     const { error: err } = await supabase.from('soluciones').delete().eq('id', sol.id)
     if (err) { console.error(err); window.alert('No se pudo eliminar.'); return }
     setRevision((v) => v + 1)

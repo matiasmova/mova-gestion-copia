@@ -3,6 +3,7 @@ import { supabase } from './supabase'
 import { moneda, fechaCorta, hoy } from './gestionFormat'
 import { calcularPersona } from './personalCalculos'
 import { etiquetaObra, claseObra } from './obraEstado'
+import { confirmarEliminacion } from './confirmar'
 
 type Obra = { id: number; cliente_id: number; nombre_obra: string; estado: string | null; porcentaje_avance: number | null; activo: boolean }
 type Presupuesto = { id: number; obra_id: number | null; cliente_id: number; titulo: string; total: number; total_pagado: number; saldo: number; estado: string; activo: boolean; fecha: string }
@@ -122,7 +123,7 @@ function Tablero({ onIrA, onAbrirObra }: TableroProps = {}) {
   }
 
   async function eliminarGasto(g: Gasto) {
-    if (!window.confirm(`¿Eliminar el gasto "${g.descripcion || g.categoria}"?`)) return
+    if (!confirmarEliminacion(`¿Eliminar el gasto "${g.descripcion || g.categoria}"?`)) return
     const { error: err } = await supabase.from('gastos_generales').delete().eq('id', g.id)
     if (err) { console.error(err); window.alert('No se pudo eliminar.'); return }
     void recargarGastos()

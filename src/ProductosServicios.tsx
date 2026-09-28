@@ -5,6 +5,7 @@ import ImportarCatalogo from './ImportarCatalogo'
 import ActualizarCotizacion from './ActualizarCotizacion'
 import { dos, gananciaDesdePrecio, precioDesdeGanancia, type ModoGanancia } from './catalogoCalculos'
 import { formatoDinero, formatoDolar, guardarMoneda, leerCotizacion, leerMoneda, type Moneda } from './catalogoMoneda'
+import { confirmarEliminacion } from './confirmar'
 
 export type ProductoServicio = {
   id: number
@@ -383,7 +384,7 @@ function ProductosServicios() {
   async function eliminarSeleccionados() {
     const ids = [...seleccion]
     if (ids.length === 0) return
-    if (!window.confirm(`¿Eliminar ${ids.length} producto(s) del catálogo? Los que estén usados en algún presupuesto no se van a poder borrar.`)) return
+    if (!confirmarEliminacion(`¿Eliminar ${ids.length} producto(s) del catálogo? Los que estén usados en algún presupuesto no se van a poder borrar.`)) return
     setEliminandoMasivo(true)
     const eliminados: number[] = []
     const bloqueados: ProductoServicio[] = []

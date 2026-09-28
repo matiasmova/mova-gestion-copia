@@ -21,6 +21,7 @@ import {
   mensajeEliminacionObra,
   resumenEliminacionObra,
 } from './eliminarObra'
+import { confirmarEliminacion } from './confirmar'
 
 type EstadoObra = 'en_proceso' | 'finalizada' | 'observacion'
 
@@ -355,7 +356,7 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
     try {
       const resumen = await resumenEliminacionObra(obra.id)
 
-      if (!window.confirm(mensajeEliminacionObra(obra.nombre_obra, resumen))) {
+      if (!confirmarEliminacion(mensajeEliminacionObra(obra.nombre_obra, resumen), { escribir: true })) {
         return
       }
 
@@ -1182,7 +1183,7 @@ function EconomiaObra({ obraId, onGenerarPdf, onCambio }: { obraId: number; onGe
   }
 
   async function eliminarCobro(id: number) {
-    if (!window.confirm('¿Eliminar este cobro?')) return
+    if (!confirmarEliminacion('¿Eliminar este cobro?')) return
     const { error: fallo } = await supabase.from('pagos').delete().eq('id', id)
     if (fallo) { console.error(fallo); window.alert('No se pudo eliminar el cobro.'); return }
     setRevision((v) => v + 1)
