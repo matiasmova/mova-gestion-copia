@@ -156,10 +156,27 @@ function Tablero({ onIrA, onAbrirObra }: TableroProps = {}) {
       (acc, m) => ({ ingresos: acc.ingresos + m.ingresos, costosDir: acc.costosDir + m.costosDir, fijos: acc.fijos + m.fijos, resultado: acc.resultado + m.resultado }),
       { ingresos: 0, costosDir: 0, fijos: 0, resultado: 0 },
     )
-    // Un solo mes: el gráfico muestra los 12 meses que terminan en ese mes, como contexto.
-    // Un período: el gráfico muestra exactamente los meses elegidos.
-    const mesesGrafico = rango.meses.length === 1 ? mesesEntre(sumarMeses(rango.hasta, -11), rango.hasta) : rango.meses
-    return { total, grafico: mesesGrafico.map((ym) => ({ ym, ...calc(ym) })) }
+    // Un solo mes: el gráfico muestra ese mes dividido por semanas.
+    // Un período de varios meses: el gráfico muestra un grupo de barras por mes.
+    let grafico: PuntoMes[]
+    if (rango.meses.length === 1) {
+      const ym = rango.desde
+      const [anio, mes] = ym.split('-').map(Number)
+      const diasDelMes = new Date(anio, mes, 0).getDate()
+      const diaDe = (f: string | null | undefined) => Number((f ?? '').slice(8, 10))
+      grafico = []
+      for (let desde = 1, n = 1; desde <= diasDelMes; desde += 7, n++) {
+        const hasta = Math.min(desde + 6, diasDelMes)
+        const enSemana = (f: string | null | undefined) => enMes(f, ym) && diaDe(f) >= desde && diaDe(f) <= hasta
+        const ingresos = pagos.filter((p) => enSemana(p.fecha)).reduce((s, p) => s + p.monto, 0)
+        const costosDir = costos.filter((c) => enSemana(c.fecha)).reduce((s, c) => s + c.monto, 0)
+        const fijos = gastos.filter((g) => enSemana(g.fecha)).reduce((s, g) => s + g.monto, 0)
+        grafico.push({ ym: `${ym}-s${n}`, etiqueta: `Sem ${n} (${desde}–${hasta})`, ingresos, costosDir, fijos, resultado: ingresos - costosDir - fijos })
+      }
+    } else {
+      grafico = rango.meses.map((ym) => ({ ym, ...calc(ym) }))
+    }
+    return { total, grafico }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagos, costos, gastos, rango])
 
@@ -449,8 +466,9 @@ function Tablero({ onIrA, onAbrirObra }: TableroProps = {}) {
 
         <GraficoMensual
           datos={balance.grafico}
-          activos={rango.meses.length === 1 ? [rango.hasta] : []}
-          onSeleccionar={(ym) => { setDesdeSel(ym); setHastaSel(ym); setPeriodo('custom') }}
+          activos={[]}
+          onSeleccionar={rango.meses.length === 1 ? undefined : (ym) => { setDesdeSel(ym); setHastaSel(ym); setPeriodo('custom') }}
+          ayuda={rango.meses.length === 1 ? 'Movimientos del mes, semana por semana.' : 'Tocá un mes para verlo semana por semana.'}
         />
 
         <div className="finBreakdown" style={{ marginTop: 14 }}>
@@ -669,9 +687,9 @@ function Tablero({ onIrA, onAbrirObra }: TableroProps = {}) {
 }
 
 // ---- Gráfico mensual: barras de Ingresos / Costos directos / Gastos fijos + línea de Resultado ----
-type PuntoMes = { ym: string; ingresos: number; costosDir: number; fijos: number; resultado: number }
+type PuntoMes = { ym: string; etiqueta?: string; ingresos: number; costosDir: number; fijos: number; resultado: number }
 
-function GraficoMensual({ datos, activos, onSeleccionar }: { datos: PuntoMes[]; activos: string[]; onSeleccionar: (ym: string) => void }) {
+function GraficoMensual({ datos, activos, onSeleccionar, ayuda }: { datos: PuntoMes[]; activos: string[]; onSeleccionar?: (ym: string) => void; ayuda?: string }) {
   const ancho = 760
   const alto = 220
   const margenIzq = 54
@@ -692,6 +710,8 @@ function GraficoMensual({ datos, activos, onSeleccionar }: { datos: PuntoMes[]; 
   const barraAncho = Math.min(12, grupoAncho / 5)
 
   const etiquetaMes = (ym: string, i: number) => {
+    const punto = datos[i]
+    if (punto?.etiqueta) return punto.etiqueta
     const d = new Date(`${ym}-01T12:00:00`)
     const mes = d.toLocaleDateString('es-AR', { month: 'short' }).replace('.', '')
     return (i === 0 || d.getMonth() === 0) ? `${mes} '${String(d.getFullYear()).slice(2)}` : mes
@@ -707,16 +727,16 @@ function GraficoMensual({ datos, activos, onSeleccionar }: { datos: PuntoMes[]; 
           const cx = margenIzq + grupoAncho * i
           const activo = activos.includes(d.ym)
           return (
-            <g key={d.ym} onClick={() => onSeleccionar(d.ym)} style={{ cursor: 'pointer' }}>
+            <g key={d.ym} onClick={onSeleccionar ? () => onSeleccionar(d.ym) : undefined} style={{ cursor: onSeleccionar ? 'pointer' : undefined }}>
               {activo && <rect x={cx} y={margenSup} width={grupoAncho} height={altoUtil} fill="#fff3e0" />}
               <rect x={cx + grupoAncho / 2 - barraAncho * 1.6} y={Math.min(y(d.ingresos), y0)} width={barraAncho} height={Math.max(1, Math.abs(y(d.ingresos) - y0))} rx={2} fill="#23935b">
-                <title>{`Ingresos ${d.ym}: ${moneda(d.ingresos)}`}</title>
+                <title>{`Ingresos ${d.etiqueta ?? d.ym}: ${moneda(d.ingresos)}`}</title>
               </rect>
               <rect x={cx + grupoAncho / 2 - barraAncho * 0.5} y={Math.min(y(d.costosDir), y0)} width={barraAncho} height={Math.max(1, Math.abs(y(d.costosDir) - y0))} rx={2} fill="#b23b32">
-                <title>{`Costos directos ${d.ym}: ${moneda(d.costosDir)}`}</title>
+                <title>{`Costos directos ${d.etiqueta ?? d.ym}: ${moneda(d.costosDir)}`}</title>
               </rect>
               <rect x={cx + grupoAncho / 2 + barraAncho * 0.6} y={Math.min(y(d.fijos), y0)} width={barraAncho} height={Math.max(1, Math.abs(y(d.fijos) - y0))} rx={2} fill="#b86608">
-                <title>{`Gastos fijos ${d.ym}: ${moneda(d.fijos)}`}</title>
+                <title>{`Gastos fijos ${d.etiqueta ?? d.ym}: ${moneda(d.fijos)}`}</title>
               </rect>
               <text x={cx + grupoAncho / 2} y={alto - 10} textAnchor="middle" fontSize={10} fill="#6b7280">{etiquetaMes(d.ym, i)}</text>
             </g>
@@ -725,7 +745,7 @@ function GraficoMensual({ datos, activos, onSeleccionar }: { datos: PuntoMes[]; 
         <polyline points={lineaPuntos} fill="none" stroke="#1f2937" strokeWidth={2} />
         {datos.map((d, i) => (
           <circle key={`p-${d.ym}`} cx={margenIzq + grupoAncho * i + grupoAncho / 2} cy={y(d.resultado)} r={3.5} fill={d.resultado >= 0 ? '#23935b' : '#b23b32'} stroke="#fff" strokeWidth={1}>
-            <title>{`Resultado ${d.ym}: ${moneda(d.resultado)}`}</title>
+            <title>{`Resultado ${d.etiqueta ?? d.ym}: ${moneda(d.resultado)}`}</title>
           </circle>
         ))}
         <text x={4} y={y(maxV) + 4} fontSize={10} fill="#9aa0a6">{monedaCorta(maxV)}</text>
@@ -737,7 +757,7 @@ function GraficoMensual({ datos, activos, onSeleccionar }: { datos: PuntoMes[]; 
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><i style={{ width: 10, height: 10, borderRadius: 2, background: '#b23b32', display: 'inline-block' }} />Costos directos</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><i style={{ width: 10, height: 10, borderRadius: 2, background: '#b86608', display: 'inline-block' }} />Gastos fijos</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><i style={{ width: 10, height: 10, borderRadius: 2, background: '#1f2937', display: 'inline-block' }} />Resultado</span>
-        <span>Tocá un mes para verlo en detalle.</span>
+        {ayuda && <span>{ayuda}</span>}
       </div>
     </div>
   )
