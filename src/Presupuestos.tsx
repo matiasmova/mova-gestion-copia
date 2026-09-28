@@ -23,6 +23,8 @@ type PresupuestoCompleto = PresupuestoEditable & {
   total_pagado: number
   saldo: number
   activo: boolean
+  // Suma de cambios y adicionales aprobados durante la obra (0 si no hubo).
+  ajustes: number
 }
 
 const ESTADOS = [
@@ -61,11 +63,13 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto }: { presupuest
   async function cargarDatos() {
     setCargando(true)
     setError('')
-    const [rPres, rItems, rClientes, rObras] = await Promise.all([
+    const [rPres, rItems, rClientes, rObras, rPagos, rAdic] = await Promise.all([
       supabase.from('presupuestos').select('id, created_at, cliente_id, obra_id, titulo, descripcion, fecha, validez_dias, estado, etapa_trabajo, subtotal, descuento, total, total_pagado, saldo, notas, activo').eq('activo', true).order('created_at', { ascending: false }),
       supabase.from('presupuesto_items').select('id, presupuesto_id, catalogo_id, tipo, descripcion, cantidad, precio_unitario, costo_unitario, descuento_pct, orden').order('orden', { ascending: true }),
       supabase.from('Clientes').select('id, nombre, apellido').order('nombre', { ascending: true }),
       supabase.from('obras').select('id, cliente_id, nombre_obra').order('nombre_obra', { ascending: true }),
+      supabase.from('pagos').select('monto, presupuesto_id, obra_id'),
+      supabase.from('adicionales').select('*').in('estado', ['aprobado', 'pagado']),
     ])
     if (rPres.error || rItems.error || rClientes.error || rObras.error) {
       console.error(rPres.error || rItems.error || rClientes.error || rObras.error)
@@ -74,16 +78,35 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto }: { presupuest
       return
     }
     const items = (rItems.data ?? []) as Array<ItemPresupuesto & { presupuesto_id: number; orden: number }>
-    const cargados = (rPres.data ?? []).map((p) => ({
+    const base = (rPres.data ?? []).map((p) => ({
       ...p,
       subtotal: Number(p.subtotal), descuento: Number(p.descuento), total: Number(p.total),
-      total_pagado: Number(p.total_pagado), saldo: Number(p.saldo),
+      total_pagado: Number(p.total_pagado), saldo: Number(p.saldo), ajustes: 0,
       items: items.filter((it) => it.presupuesto_id === p.id).map((it) => ({
         id: it.id, catalogo_id: it.catalogo_id ?? null, tipo: it.tipo, descripcion: it.descripcion,
         cantidad: Number(it.cantidad), precio_unitario: Number(it.precio_unitario), costo_unitario: Number(it.costo_unitario),
         descuento_pct: Number(it.descuento_pct ?? 0),
       })),
     })) as PresupuestoCompleto[]
+
+    // Cobrado y saldo reales: cuentan los cobros hechos al presupuesto y también los
+    // cargados a su obra (si la obra tiene un solo presupuesto aceptado). El saldo
+    // incluye los cambios y adicionales aprobados durante la obra.
+    const aceptadosPorObra: Record<number, number> = {}
+    base.forEach((p) => { if (p.estado === 'aceptado' && p.obra_id != null) aceptadosPorObra[p.obra_id] = (aceptadosPorObra[p.obra_id] || 0) + 1 })
+    const pagos = rPagos.error ? null : (rPagos.data ?? [])
+    const adicionales = rAdic.error ? [] : (rAdic.data ?? [])
+    const cargados = base.map((p) => {
+      const unico = p.estado === 'aceptado' && p.obra_id != null && aceptadosPorObra[p.obra_id] === 1
+      const corresponde = (fila: { presupuesto_id?: number | null; obra_id?: number | null }) =>
+        Number(fila.presupuesto_id) === p.id || (unico && fila.presupuesto_id == null && Number(fila.obra_id) === p.obra_id)
+      const ajustes = p.estado === 'aceptado'
+        ? adicionales.filter(corresponde).reduce((s, a) => s + (Number(a.importe) || 0), 0)
+        : 0
+      const pagado = pagos ? pagos.filter(corresponde).reduce((s, x) => s + (Number(x.monto) || 0), 0) : p.total_pagado
+      return { ...p, ajustes, total_pagado: pagado, saldo: Math.max(0, p.total + ajustes - pagado) }
+    })
+
     setClientes((rClientes.data ?? []) as ClienteOpcion[])
     setObras((rObras.data ?? []) as ObraOpcion[])
     setPresupuestos(cargados)
@@ -165,7 +188,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto }: { presupuest
     if (errVinc) { console.error(errVinc); window.alert('La obra se creó pero no se pudo vincular el presupuesto.') }
     setConvirtiendo(null)
     await cargarDatos()
-    window.alert('Obra creada y vinculada. Ya podés cargarle avances, adicionales y cobros desde Obras.')
+    window.alert('Obra creada y vinculada. Ya podés cargarle avances, cambios y cobros desde Obras.')
   }
 
   async function eliminar(p: PresupuestoCompleto) {
@@ -236,7 +259,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto }: { presupuest
       {!cargando && !error && filtrados.length > 0 && vista === 'lista' && (
         <div className="crmListaWrap">
           <table className="crmLista">
-            <thead><tr><th>Código</th><th>Título</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Saldo</th><th>Estado</th></tr></thead>
+            <thead><tr><th>Código</th><th>Título</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Cobrado</th><th>Saldo</th><th>Estado</th></tr></thead>
             <tbody>
               {filtrados.map((p) => (
                 <tr key={p.id} onClick={() => abrirFicha(p)}>
@@ -244,7 +267,8 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto }: { presupuest
                   <td><strong>{p.titulo}</strong></td>
                   <td>{nombreCliente(p.cliente_id)}</td>
                   <td>{fechaCorta(p.fecha)}</td>
-                  <td>{moneda(p.total)}</td>
+                  <td>{moneda(p.total + p.ajustes)}{p.ajustes !== 0 && <><br /><small style={{ color: 'var(--mova-muted)' }}>original {moneda(p.total)}</small></>}</td>
+                  <td>{moneda(p.total_pagado)}</td>
                   <td>{moneda(p.saldo)}</td>
                   <td><span className={`crmBadge est-${p.estado}`}>{etiquetaEstado(p.estado)}</span></td>
                 </tr>
@@ -299,8 +323,8 @@ function TarjetaPresupuesto({ p, cliente, onAbrir, onPDF }: { p: PresupuestoComp
         <span>{p.items.length} ítems</span>
       </div>
       <div className="crmCardEco">
-        <div><span>Total</span><strong>{moneda(p.total)}</strong></div>
-        <div><span>Pagado</span><strong>{moneda(p.total_pagado)}</strong></div>
+        <div><span>{p.ajustes !== 0 ? 'Total con cambios' : 'Total'}</span><strong>{moneda(p.total + p.ajustes)}</strong></div>
+        <div><span>Cobrado</span><strong>{moneda(p.total_pagado)}</strong></div>
         <div><span>Saldo</span><strong className={p.saldo > 0 ? 'pend' : ''}>{moneda(p.saldo)}</strong></div>
       </div>
       <div className="crmCardFoot" onClick={(e) => e.stopPropagation()}>

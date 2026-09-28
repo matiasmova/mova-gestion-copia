@@ -1,22 +1,20 @@
-import type { CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import logo from './assets/mova-logo.jpg'
 import { moneda, fechaCorta } from './gestionFormat'
 import { CONDICIONES_GENERALES } from './condicionesGenerales'
-import { COLOR_MARCA_HEX, type DatosPdf } from './pdfPresupuesto'
-import type { ItemPresupuesto } from './NuevoPresupuesto'
+import { COLOR_MARCA_HEX, agruparPorTipo, type DatosPdf } from './pdfPresupuesto'
+import { formatoPct, importeNeto, partirDescripcion, pctItem } from './presupuestoCalculos'
 import {
-  agruparItems,
-  descuentoItem,
-  descuentoItems,
-  formatoPct,
-  importeBruto,
-  importeNeto,
-  partirDescripcion,
-  pctItem,
-} from './presupuestoCalculos'
+  antesYAhora,
+  cargarResumenModificaciones,
+  etiquetaModificacion,
+  type ResumenModificaciones,
+} from './presupuestoModificaciones'
 
-// Documento del presupuesto (modelo moderno). Se usa en la ficha y en la
-// vista previa, con el mismo orden y los mismos textos que el PDF.
+// Documento del presupuesto en pantalla (ficha y vista previa).
+// Tiene el MISMO diseño que el PDF (pdfPresupuesto.ts): encabezado, cliente/obra,
+// tabla de ítems, totales, modificaciones durante la obra, estado de cuenta,
+// notas, vigencia y condiciones generales.
 
 type Props = {
   datos: DatosPdf
@@ -24,474 +22,262 @@ type Props = {
   embebido?: boolean
 }
 
-const SERIF = 'Georgia, "Times New Roman", Times, serif'
+const NARANJA = COLOR_MARCA_HEX
+const NARANJA_SUAVE = '#FFF4E6'
+const OSCURO = '#101318'
+const TEXTO = '#333a45'
+const GRIS = '#78828f'
+const GRIS_CLARO = '#F4F5F7'
+const CEBRA = '#FAFAFB'
+const LINEA = '#E0E3E8'
+const VERDE = '#23764e'
 
-const estilos: Record<string, CSSProperties> = {
-  documento: {
-    background: '#fff',
-    color: '#101318',
-    border: '1px solid #e2e5e9',
-    borderRadius: '12px',
-    padding: 'clamp(18px, 4vw, 44px)',
-    marginTop: '24px',
-    fontFamily: 'Arial, Helvetica, sans-serif',
-    fontSize: '15px',
-    lineHeight: 1.5,
-    minWidth: 0,
-  },
-  documentoEmbebido: {
-    background: '#fff',
-    color: '#101318',
-    fontFamily: 'Arial, Helvetica, sans-serif',
-    fontSize: '15px',
-    lineHeight: 1.5,
-    minWidth: 0,
-  },
-  encabezado: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    flexWrap: 'wrap',
-    gap: '16px',
-    borderBottom: '1px solid #e2e5e9',
-    paddingBottom: '22px',
-    marginBottom: '28px',
-  },
-  seccion: {
-    color: COLOR_MARCA_HEX,
-    fontSize: '11px',
-    fontWeight: 700,
-    letterSpacing: '2.6px',
-    textTransform: 'uppercase',
-    margin: '0 0 14px',
-  },
-  fila: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    gap: '12px',
-    flexWrap: 'wrap',
-  },
-  importe: {
-    whiteSpace: 'nowrap',
-    flexShrink: 0,
-  },
-  etiquetaGris: {
-    color: '#78828f',
-    fontSize: '11px',
-    fontWeight: 700,
-    letterSpacing: '2.2px',
-    textTransform: 'uppercase',
-    margin: '0 0 16px',
-  },
+const base: CSSProperties = {
+  background: '#fff',
+  color: TEXTO,
+  fontFamily: 'Helvetica, Arial, sans-serif',
+  fontSize: '14px',
+  lineHeight: 1.45,
+  minWidth: 0,
 }
 
-// Con descuento se muestra también el precio de lista del ítem.
-function textoUnidades(item: ItemPresupuesto) {
+const s: Record<string, CSSProperties> = {
+  documento: { ...base, border: `1px solid ${LINEA}`, borderRadius: '12px', padding: 'clamp(16px, 4vw, 40px)', marginTop: '24px' },
+  embebido: base,
+  etiqueta: { fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.6px', textTransform: 'uppercase', color: GRIS },
+  caja: { background: GRIS_CLARO, borderRadius: '4px', padding: '12px 14px', minWidth: 0 },
+  tablaWrap: { overflowX: 'auto', margin: '0 0 6px' },
+  tabla: { width: '100%', minWidth: '520px', borderCollapse: 'collapse', fontSize: '13.5px' },
+  th: { background: OSCURO, color: '#fff', fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.6px', textTransform: 'uppercase', padding: '9px 10px', textAlign: 'left', whiteSpace: 'nowrap' },
+  td: { padding: '9px 10px', borderBottom: `1px solid ${LINEA}`, verticalAlign: 'top' },
+  num: { textAlign: 'right', whiteSpace: 'nowrap' },
+  filaTotal: { display: 'flex', justifyContent: 'space-between', gap: '12px', padding: '4px 12px' },
+  barraTotal: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '12px', background: OSCURO, color: '#fff', padding: '10px 12px', marginTop: '6px' },
+}
+
+function TituloSeccion({ texto }: { texto: string }) {
   return (
-    `${item.cantidad} ${
-      item.cantidad === 1 ? 'unidad' : 'unidades'
-    } × ${moneda(item.precio_unitario)}` +
-    (pctItem(item) > 0
-      ? ` = ${moneda(importeBruto(item))} (precio de lista)`
-      : '')
+    <h4 style={{ borderLeft: `3px solid ${NARANJA}`, paddingLeft: '10px', margin: '0 0 10px', fontSize: '13px', fontWeight: 700, letterSpacing: '0.4px', textTransform: 'uppercase', color: OSCURO }}>
+      {texto}
+    </h4>
   )
 }
 
-function LineaDescuento({ item }: { item: ItemPresupuesto }) {
-  if (pctItem(item) <= 0) return null
+const conSigno = (n: number) => (n < 0 ? `− ${moneda(Math.abs(n))}` : `+ ${moneda(n)}`)
+const colorImporte = (n: number) => (n < 0 ? VERDE : n > 0 ? NARANJA : TEXTO)
 
+function CajaTotales({ filas, total, etiquetaTotal }: { filas: { t: string; v: string; color?: string }[]; total: number; etiquetaTotal: string }) {
   return (
-    <div
-      style={{
-        color: COLOR_MARCA_HEX,
-        fontSize: '13px',
-        fontWeight: 700,
-        marginTop: '3px',
-      }}
-    >
-      Descuento {formatoPct(pctItem(item))}% · − {moneda(descuentoItem(item))}
+    <div style={{ marginLeft: 'auto', width: 'min(320px, 100%)', marginTop: '10px' }}>
+      {filas.map((f) => (
+        <div key={f.t} style={{ ...s.filaTotal, color: f.color ?? TEXTO }}>
+          <span>{f.t}</span><span style={{ whiteSpace: 'nowrap' }}>{f.v}</span>
+        </div>
+      ))}
+      <div style={s.barraTotal}>
+        <strong style={{ fontSize: '13px', letterSpacing: '0.5px' }}>{etiquetaTotal}</strong>
+        <strong style={{ fontSize: '19px', whiteSpace: 'nowrap' }}>{moneda(total)}</strong>
+      </div>
     </div>
   )
 }
 
-export default function DocumentoPresupuesto({
-  datos,
-  embebido = false,
-}: Props) {
-  const codigo = String(datos.id).padStart(4, '0')
-  const grupos = agruparItems(datos.items)
-  const notas = (datos.notas ?? '').trim()
+function SeccionModificaciones({ resumen }: { resumen: ResumenModificaciones }) {
+  const hayCambios = resumen.modificaciones.length > 0
+  const saldoPendiente = resumen.saldo > 0
+  return <>
+    {hayCambios && (
+      <section style={{ marginTop: '32px' }}>
+        <TituloSeccion texto="Modificaciones durante la obra" />
+        <p style={{ color: GRIS, fontSize: '12.5px', margin: '0 0 10px' }}>
+          El presupuesto de arriba se mantiene tal como fue aceptado. Estos son los cambios registrados después:
+        </p>
+        <div style={s.tablaWrap}>
+          <table style={s.tabla}>
+            <thead><tr><th style={{ ...s.th, width: '90px' }}>Fecha</th><th style={s.th}>Concepto</th><th style={{ ...s.th, ...s.num }}>Importe</th></tr></thead>
+            <tbody>
+              {resumen.modificaciones.map((m, i) => {
+                const { antes, ahora } = antesYAhora(m, moneda)
+                return (
+                  <tr key={m.id} style={{ background: i % 2 === 1 ? CEBRA : undefined }}>
+                    <td style={s.td}>{fechaCorta(m.fecha)}</td>
+                    <td style={s.td}>
+                      <div style={{ ...s.etiqueta, fontSize: '10px' }}>{etiquetaModificacion(m)}</div>
+                      <strong style={{ color: OSCURO }}>{m.descripcion}</strong>
+                      {antes && <div style={{ color: GRIS, fontSize: '12px' }}>Antes: {antes}</div>}
+                      {ahora && <div style={{ fontSize: '12px' }}>Ahora: {ahora}</div>}
+                      {m.motivo && <div style={{ color: GRIS, fontSize: '12px' }}>Motivo: {m.motivo}</div>}
+                    </td>
+                    <td style={{ ...s.td, ...s.num }}><strong style={{ color: colorImporte(m.importe) }}>{m.importe === 0 ? moneda(0) : conSigno(m.importe)}</strong></td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        <CajaTotales
+          filas={[
+            { t: 'Total original aceptado', v: moneda(resumen.totalOriginal) },
+            { t: 'Modificaciones', v: conSigno(resumen.totalCambios), color: colorImporte(resumen.totalCambios) },
+          ]}
+          etiquetaTotal="NUEVO TOTAL"
+          total={resumen.nuevoTotal}
+        />
+      </section>
+    )}
 
-  // Los subtotales van a precio de lista; si hay descuentos por ítem
-  // se aclara para que cierre con los importes de cada línea.
-  const sufijoLista =
-    descuentoItems(datos.items) > 0 ? ' (precio de lista)' : ''
+    <section style={{ marginTop: '32px' }}>
+      <TituloSeccion texto="Estado de cuenta" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
+        <div style={s.caja}><div style={s.etiqueta}>{hayCambios ? 'Nuevo total' : 'Total'}</div><strong style={{ fontSize: '19px', color: OSCURO }}>{moneda(resumen.nuevoTotal)}</strong></div>
+        <div style={s.caja}><div style={s.etiqueta}>Cobrado hasta hoy</div><strong style={{ fontSize: '19px', color: VERDE }}>{moneda(resumen.cobrado)}</strong></div>
+        <div style={{ ...s.caja, background: saldoPendiente ? NARANJA : VERDE, color: '#fff' }}>
+          <div style={{ ...s.etiqueta, color: '#fff' }}>{resumen.saldo >= 0 ? 'Saldo pendiente' : 'Saldo a favor'}</div>
+          <strong style={{ fontSize: '19px' }}>{moneda(Math.abs(resumen.saldo))}</strong>
+        </div>
+      </div>
+      <div style={{ color: GRIS, fontSize: '11.5px', marginTop: '6px' }}>Actualizado al {fechaCorta(new Date().toISOString().slice(0, 10))}</div>
+    </section>
+  </>
+}
+
+export default function DocumentoPresupuesto({ datos, embebido = false }: Props) {
+  const codigo = String(datos.id).padStart(4, '0')
+  const grupos = agruparPorTipo(datos.items)
+  const notas = (datos.notas ?? '').trim()
+  const hayObra = !!datos.obra && datos.obra !== 'Sin obra asociada'
+  const hayDescuento = datos.items.some((it) => pctItem(it) > 0)
+  const sumaNeta = datos.items.reduce((acc, it) => acc + importeNeto(it), 0)
+  const bonificacion = Math.round((sumaNeta - Number(datos.total)) * 100) / 100
+  const [resumen, setResumen] = useState<ResumenModificaciones | null>(null)
+
+  useEffect(() => {
+    let vigente = true
+    setResumen(null)
+    if (!datos.id) return
+    cargarResumenModificaciones(datos.id, Number(datos.total) || 0)
+      .then((r) => { if (vigente) setResumen(r) })
+      .catch((e) => console.error(e))
+    return () => { vigente = false }
+  }, [datos.id, datos.total])
+
+  let numero = 0
+  let fila = 0
+  const columnas = hayDescuento ? 6 : 5
 
   return (
-    <div
-      style={embebido ? estilos.documentoEmbebido : estilos.documento}
-    >
-      <div style={estilos.encabezado}>
-        <img
-          src={logo}
-          alt="MOVA Tecnología Smart"
-          style={{
-            width: '170px',
-            maxWidth: '100%',
-            height: 'auto',
-            objectFit: 'contain',
-          }}
-        />
-
-        <div
-          style={{
-            textAlign: 'right',
-            marginLeft: 'auto',
-            color: '#78828f',
-            fontSize: '13px',
-            lineHeight: 1.6,
-          }}
-        >
-          <div>
-            Presupuesto N°{' '}
-            <strong style={{ color: '#101318', fontSize: '15px' }}>
-              {codigo}
-            </strong>
-          </div>
-          <div>
-            {datos.cliente} · {fechaCorta(datos.fecha)}
-          </div>
+    <div style={embebido ? s.embebido : s.documento}>
+      {/* Encabezado */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap' }}>
+        <img src={logo} alt="MOVA Tecnología Smart" style={{ width: '170px', maxWidth: '100%', height: 'auto', objectFit: 'contain' }} />
+        <div style={{ textAlign: 'right', marginLeft: 'auto' }}>
+          <div style={{ color: NARANJA, fontWeight: 700, fontSize: '12px', letterSpacing: '0.8px' }}>PRESUPUESTO</div>
+          <div style={{ color: OSCURO, fontWeight: 700, fontSize: '28px', lineHeight: 1.1, margin: '2px 0 4px' }}>N° {codigo}</div>
+          <div style={{ color: GRIS, fontSize: '12.5px' }}>Fecha: {fechaCorta(datos.fecha)}</div>
           {datos.validez_dias != null && datos.validez_dias > 0 && (
-            <div>
-              Validez: {datos.validez_dias}{' '}
-              {datos.validez_dias === 1 ? 'día' : 'días'}
-            </div>
+            <div style={{ color: GRIS, fontSize: '12.5px' }}>Validez: {datos.validez_dias} {datos.validez_dias === 1 ? 'día' : 'días'}</div>
           )}
         </div>
       </div>
+      <div style={{ height: '3px', background: NARANJA, margin: '18px 0 20px' }} />
 
-      <div style={{ marginBottom: '34px' }}>
-        <h3
-          style={{
-            fontFamily: SERIF,
-            fontWeight: 400,
-            fontSize: '30px',
-            lineHeight: 1.2,
-            margin: '0 0 12px',
-            overflowWrap: 'anywhere',
-          }}
-        >
-          {datos.titulo}
-        </h3>
-
-        {datos.descripcion && (
-          <p
-            style={{
-              color: '#475569',
-              whiteSpace: 'pre-line',
-              overflowWrap: 'anywhere',
-              margin: 0,
-            }}
-          >
-            {datos.descripcion}
-          </p>
-        )}
-
-        {datos.obra && datos.obra !== 'Sin obra asociada' && (
-          <p
-            style={{
-              color: '#78828f',
-              fontSize: '13px',
-              margin: '8px 0 0',
-            }}
-          >
-            Obra: {datos.obra}
-          </p>
-        )}
+      {/* Cliente y obra */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '22px' }}>
+        <div style={s.caja}><div style={s.etiqueta}>Cliente</div><strong style={{ fontSize: '16px', color: OSCURO, overflowWrap: 'anywhere' }}>{datos.cliente}</strong></div>
+        <div style={s.caja}><div style={s.etiqueta}>Obra</div><strong style={{ fontSize: '16px', color: OSCURO, overflowWrap: 'anywhere' }}>{hayObra ? datos.obra : '—'}</strong></div>
       </div>
 
-      {grupos.length === 0 && (
-        <p style={{ color: '#78828f' }}>Sin ítems.</p>
+      {/* Título */}
+      <h3 style={{ fontSize: '21px', fontWeight: 700, color: OSCURO, margin: '0 0 6px', overflowWrap: 'anywhere' }}>{datos.titulo}</h3>
+      {datos.descripcion && <p style={{ color: GRIS, margin: '0 0 16px', whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>{datos.descripcion}</p>}
+
+      {/* Ítems */}
+      {grupos.length === 0 ? <p style={{ color: GRIS }}>Sin ítems.</p> : (
+        <div style={s.tablaWrap}>
+          <table style={s.tabla}>
+            <thead>
+              <tr>
+                <th style={{ ...s.th, width: '34px' }}>#</th>
+                <th style={s.th}>Descripción</th>
+                <th style={{ ...s.th, ...s.num }}>Cant.</th>
+                <th style={{ ...s.th, ...s.num }}>P. unitario</th>
+                {hayDescuento && <th style={{ ...s.th, ...s.num }}>Desc.</th>}
+                <th style={{ ...s.th, ...s.num }}>Importe</th>
+              </tr>
+            </thead>
+            <tbody>
+              {grupos.map((g) => [
+                <tr key={`g-${g.clave}`}>
+                  <td colSpan={columnas} style={{ background: NARANJA_SUAVE, color: NARANJA, fontWeight: 700, fontSize: '10.5px', letterSpacing: '0.6px', textTransform: 'uppercase', padding: '6px 10px' }}>{g.titulo}</td>
+                </tr>,
+                ...g.items.map((it) => {
+                  numero++
+                  const zebra = fila++ % 2 === 1
+                  const { titulo, detalle } = partirDescripcion(it.descripcion)
+                  return (
+                    <tr key={`${g.clave}-${it.id ?? numero}`} style={{ background: zebra ? CEBRA : undefined }}>
+                      <td style={{ ...s.td, color: GRIS }}>{String(numero).padStart(2, '0')}</td>
+                      <td style={s.td}>
+                        <strong style={{ color: OSCURO, overflowWrap: 'anywhere' }}>{titulo}</strong>
+                        {detalle && <div style={{ color: GRIS, fontSize: '12px', whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>{detalle}</div>}
+                      </td>
+                      <td style={{ ...s.td, ...s.num }}>{Number(it.cantidad)}</td>
+                      <td style={{ ...s.td, ...s.num }}>{moneda(it.precio_unitario)}</td>
+                      {hayDescuento && <td style={{ ...s.td, ...s.num, color: pctItem(it) > 0 ? NARANJA : GRIS }}>{pctItem(it) > 0 ? `${formatoPct(pctItem(it))}%` : '—'}</td>}
+                      <td style={{ ...s.td, ...s.num }}><strong style={{ color: OSCURO }}>{moneda(importeNeto(it))}</strong></td>
+                    </tr>
+                  )
+                }),
+              ])}
+            </tbody>
+          </table>
+        </div>
       )}
 
-      {grupos.map((grupo) => (
-        <section key={grupo.clave} style={{ marginBottom: '34px' }}>
-          <h4 style={estilos.seccion}>{grupo.titulo}</h4>
+      {/* Totales */}
+      <CajaTotales
+        filas={[
+          { t: 'Subtotal', v: moneda(sumaNeta) },
+          ...(bonificacion > 0.5 ? [{ t: 'Bonificación', v: `− ${moneda(bonificacion)}`, color: NARANJA }] : []),
+        ]}
+        etiquetaTotal="TOTAL"
+        total={Number(datos.total)}
+      />
 
-          {grupo.items.map((item, i) => {
-            const { titulo, detalle } = partirDescripcion(
-              item.descripcion
-            )
+      {resumen && <SeccionModificaciones resumen={resumen} />}
 
-            // Dispositivos: número grande, nombre destacado y descripción.
-            if (grupo.clave === 'dispositivos') {
-              return (
-                <div
-                  key={item.id ?? i}
-                  style={{
-                    display: 'flex',
-                    gap: '16px',
-                    padding: '18px 0',
-                    borderBottom: '1px solid #edf0f3',
-                    breakInside: 'avoid',
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: '22px',
-                      lineHeight: 1.1,
-                      color: '#cdd0d5',
-                      width: '34px',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {String(i + 1).padStart(2, '0')}
-                  </span>
-
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={estilos.fila}>
-                      <strong
-                        style={{
-                          flex: '1 1 220px',
-                          fontSize: '16px',
-                          overflowWrap: 'anywhere',
-                        }}
-                      >
-                        {titulo}
-                      </strong>
-
-                      <strong style={estilos.importe}>
-                        {moneda(importeNeto(item))}
-                      </strong>
-                    </div>
-
-                    {detalle && (
-                      <p
-                        style={{
-                          color: '#64748b',
-                          fontSize: '14px',
-                          margin: '5px 0 0',
-                          whiteSpace: 'pre-line',
-                          overflowWrap: 'anywhere',
-                        }}
-                      >
-                        {detalle}
-                      </p>
-                    )}
-
-                    <div
-                      style={{
-                        color: '#78828f',
-                        fontSize: '13px',
-                        marginTop: '6px',
-                      }}
-                    >
-                      {textoUnidades(item)}
-                    </div>
-
-                    <LineaDescuento item={item} />
-                  </div>
-                </div>
-              )
-            }
-
-            // Mano de obra y otros: filas compactas con línea punteada.
-            const mostrarUnidades =
-              Number(item.cantidad) !== 1 || pctItem(item) > 0
-
-            return (
-              <div
-                key={item.id ?? i}
-                style={{
-                  padding: '12px 0',
-                  borderBottom: '1px dotted #b8bdc6',
-                  breakInside: 'avoid',
-                }}
-              >
-                <div style={estilos.fila}>
-                  <span
-                    style={{
-                      flex: '1 1 220px',
-                      overflowWrap: 'anywhere',
-                    }}
-                  >
-                    {titulo}
-                  </span>
-
-                  <strong style={estilos.importe}>
-                    {moneda(importeNeto(item))}
-                  </strong>
-                </div>
-
-                {detalle && (
-                  <div
-                    style={{
-                      color: '#78828f',
-                      fontSize: '13px',
-                      marginTop: '2px',
-                      whiteSpace: 'pre-line',
-                      overflowWrap: 'anywhere',
-                    }}
-                  >
-                    {detalle}
-                  </div>
-                )}
-
-                {mostrarUnidades && (
-                  <div
-                    style={{
-                      color: '#78828f',
-                      fontSize: '13px',
-                      marginTop: '2px',
-                    }}
-                  >
-                    {textoUnidades(item)}
-                  </div>
-                )}
-
-                <LineaDescuento item={item} />
-              </div>
-            )
-          })}
-        </section>
-      ))}
-
-      <section style={{ marginTop: '8px' }}>
-        {grupos.map((grupo) => (
-          <div
-            key={grupo.clave}
-            style={{
-              ...estilos.fila,
-              color: '#78828f',
-              marginBottom: '10px',
-            }}
-          >
-            <span>
-              Subtotal {grupo.titulo.toLowerCase()}
-              {sufijoLista}
-            </span>
-            <span style={estilos.importe}>
-              {moneda(grupo.subtotal)}
-            </span>
-          </div>
-        ))}
-
-        {datos.descuento > 0 && (
-          <div
-            style={{
-              ...estilos.fila,
-              color: COLOR_MARCA_HEX,
-              marginBottom: '10px',
-            }}
-          >
-            <span>Bonificación aplicada</span>
-            <strong style={estilos.importe}>
-              − {moneda(datos.descuento)}
-            </strong>
+      {/* Notas y vigencia */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '32px' }}>
+        {notas && (
+          <div style={s.caja}>
+            <div style={{ ...s.etiqueta, color: NARANJA, marginBottom: '4px' }}>Notas</div>
+            <div style={{ fontSize: '13px', whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>{notas}</div>
           </div>
         )}
-
-        <div
-          style={{
-            ...estilos.fila,
-            borderTop: '2px solid #101318',
-            marginTop: '18px',
-            paddingTop: '16px',
-            alignItems: 'baseline',
-          }}
-        >
-          <span
-            style={{
-              fontSize: '14px',
-              fontWeight: 700,
-              letterSpacing: '1.5px',
-            }}
-          >
-            TOTAL FINAL
-          </span>
-          <span
-            style={{
-              ...estilos.importe,
-              fontSize: '22px',
-              fontWeight: 700,
-            }}
-          >
-            {moneda(datos.total)}
-          </span>
+        <div style={s.caja}>
+          <div style={{ ...s.etiqueta, color: NARANJA, marginBottom: '4px' }}>Vigencia</div>
+          <div style={{ fontSize: '13px' }}>Este presupuesto tiene una validez de {datos.validez_dias ?? 10} días corridos desde su emisión.</div>
         </div>
-      </section>
+      </div>
 
-      {notas && (
-        <section
-          style={{
-            marginTop: '34px',
-            paddingTop: '22px',
-            borderTop: '1px solid #e2e5e9',
-          }}
-        >
-          <h4 style={estilos.etiquetaGris}>Notas</h4>
-
-          <p
-            style={{
-              margin: 0,
-              whiteSpace: 'pre-line',
-              overflowWrap: 'anywhere',
-              color: '#475569',
-              fontSize: '14px',
-            }}
-          >
-            {notas}
-          </p>
+      {/* Condiciones generales */}
+      {CONDICIONES_GENERALES.length > 0 && (
+        <section style={{ marginTop: '28px' }}>
+          <TituloSeccion texto="Condiciones generales" />
+          {CONDICIONES_GENERALES.map((c) => (
+            <div key={c.titulo} style={{ marginBottom: '10px', breakInside: 'avoid' }}>
+              <strong style={{ color: OSCURO, fontSize: '13px' }}>{c.titulo}</strong>
+              <p style={{ margin: '2px 0 0', color: GRIS, fontSize: '12.5px', overflowWrap: 'anywhere' }}>{c.texto}</p>
+            </div>
+          ))}
         </section>
       )}
 
-      <section
-        style={{
-          marginTop: '34px',
-          paddingTop: '22px',
-          borderTop: '1px solid #e2e5e9',
-          fontSize: '14px',
-          lineHeight: 1.6,
-        }}
-      >
-        <h4 style={estilos.etiquetaGris}>Condiciones generales</h4>
-
-        {CONDICIONES_GENERALES.map((condicion) => (
-          <div
-            key={condicion.titulo}
-            style={{ marginBottom: '18px', breakInside: 'avoid' }}
-          >
-            <strong style={{ color: '#101318' }}>
-              {condicion.titulo}
-            </strong>
-
-            <p
-              style={{
-                margin: '5px 0 0',
-                color: '#475569',
-                overflowWrap: 'anywhere',
-              }}
-            >
-              {condicion.texto}
-            </p>
-          </div>
-        ))}
-      </section>
-
-      <footer
-        style={{
-          borderTop: '1px solid #e2e5e9',
-          paddingTop: '18px',
-          marginTop: '30px',
-          fontSize: '12px',
-          color: '#78828f',
-          textAlign: 'center',
-          overflowWrap: 'anywhere',
-        }}
-      >
-        MOVA TECNOLOGÍA SMART · www.movaelectronica.com.ar ·
-        @mova.smart · +54 9 261 555 7970
+      {/* Pie */}
+      <footer style={{ marginTop: '28px', paddingTop: '10px', borderTop: `1px solid ${LINEA}`, position: 'relative', fontSize: '12px' }}>
+        <span style={{ position: 'absolute', top: '-2px', left: 0, width: '46px', height: '2px', background: NARANJA }} />
+        <strong style={{ color: OSCURO }}>MOVA Tecnología Smart · Espacios inteligentes</strong>
+        <div style={{ color: GRIS, overflowWrap: 'anywhere' }}>www.movaelectronica.com.ar · IG @mova.smart · +54 9 261 555 7970</div>
       </footer>
     </div>
   )

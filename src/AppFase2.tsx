@@ -33,7 +33,7 @@ const NAVEGACION = [
   ['catalogo', '📦', 'Productos y servicios'],
   ['compras', '🧾', 'Compras'],
   ['personal', '👷', 'Personal'],
-  ['finanzas', '💰', 'Finanzas'],
+  ['finanzas', '💰', 'Movimientos'],
   ['notificaciones', '🔔', 'Notificaciones'],
   ['usuarios', '🛡️', 'Usuarios'],
   ['configuracion', '⚙️', 'Configuración'],
@@ -66,6 +66,7 @@ export default function AppFase2() {
   const [avisoReset, setAvisoReset] = useState('')
   const [vista, setVista] = useState<Vista>('dashboard')
   const [obraAbrirId, setObraAbrirId] = useState<number | null>(null)
+  const [presupuestoAbrirId, setPresupuestoAbrirId] = useState<number | null>(null)
   const [menuAbierto, setMenuAbierto] = useState(false)
   const [rol, setRol] = useState<Rol>('auxiliar')
   const [nombreUsuario, setNombreUsuario] = useState('')
@@ -170,8 +171,8 @@ export default function AppFase2() {
   const contenido: Record<Exclude<Vista, 'dashboard'>, React.ReactNode> = {
     tablero: <Tablero onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} />,
     clientes: <Clientes />,
-    obras: <Obras obraAbrirId={obraAbrirId} onObraAbierta={() => setObraAbrirId(null)} />,
-    presupuestos: <Presupuestos />,
+    obras: <Obras obraAbrirId={obraAbrirId} onObraAbierta={() => setObraAbrirId(null)} onVerPresupuesto={(id) => { setPresupuestoAbrirId(id); navegar('presupuestos') }} />,
+    presupuestos: <Presupuestos presupuestoAbrirId={presupuestoAbrirId} onPresupuestoAbierto={() => setPresupuestoAbrirId(null)} />,
     catalogo: <ProductosServicios />,
     finanzas: <Finanzas onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} />,
     compras: <Compras />,

@@ -219,19 +219,6 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
     ? presupuestosObra.filter((p) => p.obra_id != null && Number(p.obra_id) === Number(obraSeguimiento.id) && p.activo !== false)
     : []
 
-  // TEMPORAL: diagnóstico para ver por qué no aparece el botón "Ver presupuesto".
-  // Se puede borrar este bloque una vez resuelto.
-  if (obraSeguimiento) {
-    // eslint-disable-next-line no-console
-    console.log('[debug presupuestos] obra abierta:', obraSeguimiento.id, obraSeguimiento.nombre_obra)
-    // eslint-disable-next-line no-console
-    console.log('[debug presupuestos] total presupuestos cargados:', presupuestosObra.length)
-    // eslint-disable-next-line no-console
-    console.log('[debug presupuestos] presupuestos (id, obra_id, activo, estado):', presupuestosObra.map((p) => [p.id, p.obra_id, p.activo, p.estado]))
-    // eslint-disable-next-line no-console
-    console.log('[debug presupuestos] coinciden con esta obra:', presupuestosDeObra.length)
-  }
-
   function cerrarFormulario() {
     setMostrarFormulario(false)
     setObraEditando(null)
@@ -241,6 +228,16 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
     cerrarFormulario()
     setActualizacion((valor) => valor + 1)
   }
+
+  // Si la obra abierta se editó, se actualiza con los datos nuevos al recargar.
+  useEffect(() => {
+    if (!obraSeguimiento) return
+    const actualizada = obras.find((o) => o.id === obraSeguimiento.id)
+    if (actualizada && (actualizada.nombre_obra !== obraSeguimiento.nombre_obra || actualizada.cliente_id !== obraSeguimiento.cliente_id)) {
+      setObraSeguimiento({ ...obraSeguimiento, nombre_obra: actualizada.nombre_obra, cliente_id: actualizada.cliente_id, direccion: actualizada.direccion, localidad: actualizada.localidad })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [obras])
 
   async function cargarAvances(obraId: number) {
     setCargandoAvances(true)
@@ -308,11 +305,6 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
     })
     cargarAvances(obra.id)
     cargarImagenes(obra.id)
-  }
-
-  function abrirEn(obra: Obra, tab: typeof seguTab) {
-    setSeguTab(tab)
-    abrirSeguimiento(obra)
   }
 
   function cerrarSeguimiento() {
@@ -599,7 +591,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
                 <div className="crmKanbanHead"><h3>{s.t}</h3><span className="cuenta">{cols.length}</span></div>
                 <div className="crmKanbanBody">
                   {cols.length === 0 ? <div className="crmKanbanVacio">—</div> : cols.map((obra) => (
-                    <div className="crmCard" key={obra.id} onClick={() => abrirSeguimiento(obra)}>
+                    <div className="crmCard" key={obra.id} onClick={() => { setSeguTab('timeline'); abrirSeguimiento(obra) }} style={{ cursor: 'pointer' }}>
                       <div className="crmCardTop">
                         <div><h3>{obra.nombre_obra}</h3><p className="crmCardCli">{obtenerCliente(obra.cliente_id)}</p></div>
                         <span className={`crmBadge est-${claseObra(obra.estado)}`}>{etiquetaObra(obra.estado)}</span>
@@ -614,25 +606,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
                         <div><span>Cobrado</span><strong>{dineroFicha(economia[obra.id]?.cobrado ?? 0)}</strong></div>
                         <div><span>Pendiente</span><strong className={(economia[obra.id]?.pendiente ?? 0) > 0 ? 'pend' : ''}>{dineroFicha(economia[obra.id]?.pendiente ?? 0)}</strong></div>
                       </div>
-                      <div className="obraCardAccesos" onClick={(e) => e.stopPropagation()}>
-                        <button type="button" title="Finanzas" onClick={() => abrirEn(obra, 'finanzas')}>💰</button>
-                        <button type="button" title="Rentabilidad" onClick={() => abrirEn(obra, 'rentabilidad')}>📊</button>
-                        <button type="button" title="Personal" onClick={() => abrirEn(obra, 'personal')}>👷</button>
-                        <button type="button" title="Adicionales" onClick={() => abrirEn(obra, 'adicionales')}>➕</button>
-                      </div>
-                      <div className="crmCardFoot" onClick={(e) => e.stopPropagation()}>
-                        <button className="crmFootPrimary" onClick={() => abrirSeguimiento(obra)}>Ver ficha</button>
-                        <button onClick={() => setInformeObra(obra)}>📄 Informe</button>
-                        <button onClick={() => setPagosPdf(obra)}>🧾 Pagos</button>
-                        <button onClick={() => { setObraEditando(obra); setMostrarFormulario(true) }}>Editar</button>
-                        <button
-                          title="Eliminar obra"
-                          disabled={eliminandoObra === obra.id}
-                          onClick={() => void eliminarObra(obra)}
-                        >
-                          {eliminandoObra === obra.id ? 'Revisando...' : '🗑 Eliminar'}
-                        </button>
-                      </div>
+                      <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--mova-muted)', textAlign: 'right' }}>Tocá para abrir la ficha →</p>
                     </div>
                   ))}
                 </div>
@@ -661,31 +635,6 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
             </tbody>
           </table>
         </div>
-      )}
-
-      {mostrarFormulario && (
-        <NuevaObra
-          clientes={clientes}
-          obra={obraEditando}
-          onCancelar={cerrarFormulario}
-          onGuardada={obraGuardada}
-        />
-      )}
-
-      {informeObra && (
-        <InformeObra
-          obra={informeObra}
-          cliente={obtenerCliente(informeObra.cliente_id)}
-          onCerrar={() => setInformeObra(null)}
-        />
-      )}
-
-      {pagosPdf && (
-        <ResumenPagosPDF
-          obra={pagosPdf}
-          cliente={obtenerCliente(pagosPdf.cliente_id)}
-          onCerrar={() => setPagosPdf(null)}
-        />
       )}
 
       {obraSeguimiento && (
@@ -733,27 +682,23 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
               </div>
             </div>
 
-            {onVerPresupuesto && presupuestosDeObra.length > 0 && (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-                {presupuestosDeObra.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className="editButton"
-                    onClick={() => onVerPresupuesto(p.id)}
-                  >
-                    📄 {p.titulo || `Presupuesto #${p.id}`} · {etiquetaEstadoPresupuesto(p.estado)}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '4px 0 12px' }}>
+              <button type="button" className="editButton" onClick={() => setInformeObra(obraSeguimiento)}>📄 Informe de avance</button>
+              <button type="button" className="editButton" onClick={() => setPagosPdf(obraSeguimiento)}>🧾 Comprobante de pagos</button>
+              <button type="button" className="editButton" onClick={() => { setObraEditando(obraSeguimiento); setMostrarFormulario(true) }}>✏️ Editar datos</button>
+              {onVerPresupuesto && presupuestosDeObra.map((p) => (
+                <button key={p.id} type="button" className="editButton" onClick={() => { cerrarSeguimiento(); onVerPresupuesto(p.id) }}>
+                  📋 {p.titulo || `Presupuesto #${p.id}`} · {etiquetaEstadoPresupuesto(p.estado)}
+                </button>
+              ))}
+            </div>
 
             <div className="gestionTabs seguTabs">
               <button className={seguTab === 'timeline' ? 'active' : ''} onClick={() => setSeguTab('timeline')}>🕐 Estados</button>
               <button className={seguTab === 'personal' ? 'active' : ''} onClick={() => setSeguTab('personal')}>👷 Personal</button>
               <button className={seguTab === 'rentabilidad' ? 'active' : ''} onClick={() => setSeguTab('rentabilidad')}>📊 Rentabilidad</button>
               <button className={seguTab === 'finanzas' ? 'active' : ''} onClick={() => setSeguTab('finanzas')}>💰 Finanzas</button>
-              <button className={seguTab === 'adicionales' ? 'active' : ''} onClick={() => setSeguTab('adicionales')}>➕ Adicionales</button>
+              <button className={seguTab === 'adicionales' ? 'active' : ''} onClick={() => setSeguTab('adicionales')}>🔁 Cambios y adicionales</button>
             </div>
 
             {seguTab === 'finanzas' && <EconomiaObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} onGenerarPdf={() => setPagosPdf(obraSeguimiento)} />}
@@ -1077,6 +1022,31 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
           </div>
         </div>
       )}
+      {mostrarFormulario && (
+        <NuevaObra
+          clientes={clientes}
+          obra={obraEditando}
+          onCancelar={cerrarFormulario}
+          onGuardada={obraGuardada}
+        />
+      )}
+
+      {informeObra && (
+        <InformeObra
+          obra={informeObra}
+          cliente={obtenerCliente(informeObra.cliente_id)}
+          onCerrar={() => setInformeObra(null)}
+        />
+      )}
+
+      {pagosPdf && (
+        <ResumenPagosPDF
+          obra={pagosPdf}
+          cliente={obtenerCliente(pagosPdf.cliente_id)}
+          onCerrar={() => setPagosPdf(null)}
+        />
+      )}
+
     </div>
   )
 }
