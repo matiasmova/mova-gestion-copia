@@ -3,6 +3,7 @@ import { supabase } from './supabase'
 import { moneda, fechaCorta } from './gestionFormat'
 import type { ItemPresupuesto } from './NuevoPresupuesto'
 import DocumentoPresupuesto from './DocumentoPresupuesto'
+import { cargarResumenModificaciones, type ResumenModificaciones } from './presupuestoModificaciones'
 import {
   generarPdfPresupuesto,
   type DatosPdf,
@@ -93,6 +94,7 @@ export default function PresupuestoFicha({
 
   const [pdfListo, setPdfListo] = useState<PdfListo | null>(null)
   const [errorPdf, setErrorPdf] = useState('')
+  const [resumen, setResumen] = useState<ResumenModificaciones | null>(null)
   const [reintento, setReintento] = useState(0)
   const [compartiendo, setCompartiendo] = useState(false)
 
@@ -115,6 +117,8 @@ export default function PresupuestoFicha({
     obra,
   }), [
     presupuesto.id,
+    presupuesto.estado,
+    presupuesto.obra_id,
     presupuesto.titulo,
     presupuesto.descripcion,
     presupuesto.fecha,
@@ -150,13 +154,18 @@ export default function PresupuestoFicha({
 
     setPdfListo(null)
     setErrorPdf('')
+    setResumen(null)
+    if (presupuesto.estado === 'aceptado' && presupuesto.obra_id != null) { setPagos([]); setCargando(true) }
 
     async function prepararPdf() {
       try {
-        const blob = await generarPdfPresupuesto(datosPdf)
+        const cuenta = await cargarResumenModificaciones(datosPdf.id, datosPdf.total)
+        const blob = await generarPdfPresupuesto({ ...datosPdf, resumen: cuenta })
 
         if (cancelado) return
 
+        setResumen(cuenta)
+        if (cuenta) { setPagos(cuenta.pagos); setCargando(false); setErrorPagos('') }
         urlCreada = URL.createObjectURL(blob)
 
         setPdfListo({
@@ -167,7 +176,9 @@ export default function PresupuestoFicha({
       } catch (error) {
         if (cancelado) return
         console.error(error)
-        setErrorPdf('No se pudo preparar el archivo PDF.')
+        setErrorPdf('No se pudo cargar el documento completo. No se generó un PDF con datos parciales.')
+        setCargando(false)
+        setErrorPagos('No se pudieron verificar los pagos del documento.')
       }
     }
 
@@ -181,6 +192,8 @@ export default function PresupuestoFicha({
 
   useEffect(() => {
     let cancelado = false
+
+    if (presupuesto.estado === 'aceptado' && presupuesto.obra_id != null) return
 
     async function cargar() {
       setCargando(true)
@@ -222,7 +235,7 @@ export default function PresupuestoFicha({
     return () => {
       cancelado = true
     }
-  }, [presupuesto.id, presupuesto.obra_id])
+  }, [presupuesto.id, presupuesto.obra_id, presupuesto.estado])
 
   function descargarPdf() {
     if (!pdfActual) return
@@ -355,7 +368,7 @@ export default function PresupuestoFicha({
               onClick={descargarPdf}
               disabled={!pdfActual}
             >
-              📄 Descargar PDF
+              {presupuesto.estado === 'aceptado' && presupuesto.obra_id ? '📄 Descargar estado de obra' : '📄 Descargar PDF'}
             </button>
 
             <button
@@ -472,16 +485,16 @@ export default function PresupuestoFicha({
 
           <div className="fichaKpis">
             <div>
-              <span>TOTAL</span>
-              <strong>{moneda(presupuesto.total)}</strong>
+              <span>{resumen ? 'TOTAL ACTUALIZADO DE LA OBRA' : 'TOTAL ORIGINAL'}</span>
+              <strong>{moneda(resumen?.nuevoTotal ?? presupuesto.total)}</strong>
             </div>
             <div>
               <span>PAGADO</span>
-              <strong>{moneda(presupuesto.total_pagado)}</strong>
+              <strong>{resumen ? moneda(resumen.cobrado) : cargando || errorPagos ? '—' : moneda(pagos.reduce((s, p) => s + p.monto, 0))}</strong>
             </div>
             <div className="alerta">
-              <span>SALDO</span>
-              <strong>{moneda(presupuesto.saldo)}</strong>
+              <span>{resumen && resumen.saldo < 0 ? 'SALDO A FAVOR' : 'SALDO TOTAL'}</span>
+              <strong>{resumen ? moneda(Math.abs(resumen.saldo)) : presupuesto.estado === 'aceptado' && presupuesto.obra_id ? '—' : moneda(presupuesto.saldo)}</strong>
             </div>
             <div>
               <span>ÍTEMS</span>
@@ -489,7 +502,8 @@ export default function PresupuestoFicha({
             </div>
           </div>
 
-          <DocumentoPresupuesto datos={datosPdf} />
+          {resumen && <p>Reintegros pendientes incluidos en el saldo: {moneda(resumen.gastoExtraPendiente)}. {resumen.otrosPresupuestos.length > 0 && 'El estado de cuenta comprende todos los presupuestos aceptados de la obra.'}</p>}
+          {pdfActual && <DocumentoPresupuesto datos={datosPdf} archivoUrl={pdfActual.url} />}
 
           <div className="fichaRel">
             <div className="fichaRelHead">

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import DocumentoPresupuesto from './DocumentoPresupuesto'
 import {
   generarPdfPresupuesto,
@@ -32,7 +32,9 @@ export default function PresupuestoPDF({
   obra,
   onCerrar,
 }: Props) {
-  const [generando, setGenerando] = useState(false)
+  const [generando, setGenerando] = useState(true)
+  const [archivoUrl, setArchivoUrl] = useState('')
+  const [errorPdf, setErrorPdf] = useState('')
 
   const codigo = `#${presupuesto.id.toString().padStart(4, '0')}`
 
@@ -54,30 +56,24 @@ export default function PresupuestoPDF({
     [presupuesto, cliente, obra],
   )
 
-  // Descarga el mismo archivo PDF que la ficha (Descargar / Compartir).
-  async function descargar() {
-    if (generando) return
+  useEffect(() => {
+    let vigente = true
+    let creada = ''
+    setGenerando(true); setArchivoUrl(''); setErrorPdf('')
+    generarPdfPresupuesto(datos).then(blob => {
+      if (!vigente) return
+      creada = URL.createObjectURL(blob); setArchivoUrl(creada)
+    }).catch(e => { console.error(e); if (vigente) setErrorPdf('No se pudo cargar el documento completo. Volvé a abrirlo para reintentar.') })
+      .finally(() => { if (vigente) setGenerando(false) })
+    return () => { vigente = false; if (creada) URL.revokeObjectURL(creada) }
+  }, [datos])
 
-    setGenerando(true)
-
-    try {
-      const blob = await generarPdfPresupuesto(datos)
-      const url = URL.createObjectURL(blob)
-      const enlace = document.createElement('a')
-
-      enlace.href = url
-      enlace.download = `Presupuesto-${String(presupuesto.id).padStart(4, '0')}.pdf`
-      document.body.appendChild(enlace)
-      enlace.click()
-      enlace.remove()
-
-      setTimeout(() => URL.revokeObjectURL(url), 4000)
-    } catch (error) {
-      console.error(error)
-      window.alert('No se pudo generar el PDF.')
-    } finally {
-      setGenerando(false)
-    }
+  function descargar() {
+    if (!archivoUrl) return
+    const enlace = document.createElement('a')
+    enlace.href = archivoUrl
+    enlace.download = `Presupuesto-${String(presupuesto.id).padStart(4, '0')}.pdf`
+    enlace.click()
   }
 
   return (
@@ -93,7 +89,7 @@ export default function PresupuestoPDF({
           <button
             className="pdfBtnPrimary"
             onClick={descargar}
-            disabled={generando}
+            disabled={generando || !archivoUrl}
           >
             {generando ? 'Generando...' : '⬇ Descargar PDF'}
           </button>
@@ -101,7 +97,9 @@ export default function PresupuestoPDF({
       </div>
 
       <div className="pdfDoc">
-        <DocumentoPresupuesto datos={datos} embebido />
+        {errorPdf && <p role="alert">{errorPdf}</p>}
+        {generando && <p role="status">Preparando documento…</p>}
+        {archivoUrl && <DocumentoPresupuesto datos={datos} archivoUrl={archivoUrl} embebido />}
       </div>
     </div>
   )

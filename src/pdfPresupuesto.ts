@@ -6,6 +6,8 @@ import { importeNeto, partirDescripcion, pctItem, formatoPct } from './presupues
 import { antesYAhora, cargarResumenModificaciones, etiquetaModificacion } from './presupuestoModificaciones'
 import { cargarSolucionesPresupuesto, type SolucionPresupuesto } from './presupuestoSoluciones'
 import { CONDICIONES_GENERALES } from './condicionesGenerales'
+import { fechaDocumento, otrosOriginales, seccionesSeguimiento, type SeccionSeguimiento } from './seccionesSeguimiento'
+import type { ResumenModificaciones } from './presupuestoModificaciones'
 
 export const GRUPOS_DOCUMENTO: Record<string, string> = {
   producto: 'Productos y equipos', servicio: 'Servicios', material: 'Materiales',
@@ -31,6 +33,7 @@ export type DatosPdf = {
   items: ItemPresupuesto[]; cliente: string; obra: string
   // Opcional: si no se pasan, se leen del presupuesto guardado.
   soluciones?: SolucionPresupuesto[]
+  resumen?: ResumenModificaciones | null
 }
 
 // Color de marca en hex, usado también en la vista en pantalla.
@@ -72,8 +75,7 @@ export async function generarPdfPresupuesto(d: DatosPdf): Promise<Blob> {
   let logo: Awaited<ReturnType<typeof pdf.embedPng>> | null = null
   try { logo = await pdf.embedPng(await fetch(logoUrl).then((r) => r.arrayBuffer())) } catch { logo = null }
 
-  let resumen: Awaited<ReturnType<typeof cargarResumenModificaciones>> = null
-  try { resumen = await cargarResumenModificaciones(d.id, Number(d.total) || 0) } catch (e) { console.error(e); resumen = null }
+  const resumen = d.resumen !== undefined ? d.resumen : await cargarResumenModificaciones(d.id, Number(d.total) || 0)
   let soluciones: SolucionPresupuesto[] = d.soluciones ?? []
   if (!d.soluciones) { try { soluciones = await cargarSolucionesPresupuesto(d.id) } catch (e) { console.error(e) } }
 
@@ -142,10 +144,11 @@ export async function generarPdfPresupuesto(d: DatosPdf): Promise<Blob> {
     const lw = 150, lh = lw * (logo.height / logo.width)
     page.drawImage(logo, { x: M, y: y - lh + 6, width: lw, height: lh })
   }
-  derecha('PRESUPUESTO', M + CW, y, F_CHICO, bold, NARANJA); y -= 20
+  derecha(resumen ? 'PRESUPUESTO Y ESTADO DE OBRA' : 'PRESUPUESTO', M + CW, y, F_CHICO, bold, NARANJA); y -= 20
   derecha(`N° ${codigo}`, M + CW, y, F_GRANDE, bold, OSCURO); y -= 15
   derecha(`Fecha: ${fechaCorta(d.fecha)}`, M + CW, y, F_CHICO, font, GRIS); y -= 11
   if (d.validez_dias) { derecha(`Validez: ${d.validez_dias} ${d.validez_dias === 1 ? 'día' : 'días'}`, M + CW, y, F_CHICO, font, GRIS); y -= 11 }
+  if (resumen) { derecha(fechaDocumento(resumen), M + CW, y, F_CHICO, font, GRIS); y -= 12 }
   y -= 8
   linea(M, y, M + CW, 0.8, LINEA)
   rect(M, y - 0.4, 60, 1.6, NARANJA)
@@ -168,29 +171,30 @@ export async function generarPdfPresupuesto(d: DatosPdf): Promise<Blob> {
   if (d.descripcion) for (const r of partir(d.descripcion, F_NORMAL, CW)) { lugar(13); texto(r, M, y, F_NORMAL, font, GRIS); y -= 13 }
   y -= 12
 
+  if (resumen) {
+    lugar(45)
+    texto(`Avance registrado: ${resumen.porcentaje}% · Pendiente de pago hoy: ${moneda(resumen.cuenta.pendienteHoy)}`, M, y, F_NORMAL, bold, OSCURO)
+    y -= 18
+    if (resumen.cuenta.anticipoPendiente > 0 && !['finalizada', 'observacion'].includes(resumen.estado) && resumen.porcentaje < 100) {
+      const aviso = partir(`ANTICIPO PENDIENTE: la obra está en ejecución y el anticipo del 70% no figura cubierto. Falta registrar ${moneda(resumen.cuenta.anticipoPendiente)}. Solicitamos regularizarlo a la brevedad.`, F_NORMAL, CW - 24)
+      const alto = aviso.length * 13 + 16
+      lugar(alto + 12)
+      rect(M, y - alto + 10, CW, alto, NARANJA_SUAVE)
+      let yy = y - 3
+      for (const r of aviso) { texto(r, M + 12, yy, F_NORMAL, font, TEXTO); yy -= 13 }
+      y -= alto + 12
+    }
+  }
+
   // ---------- Qué vas a disfrutar (soluciones elegidas) ----------
   if (soluciones.length) {
     lugar(70)
     titulo('Qué vas a disfrutar con este proyecto')
-    const colW = (CW - 12) / 2
-    for (let i = 0; i < soluciones.length; i += 2) {
-      const par = soluciones.slice(i, i + 2)
-      const bloques = par.map((s) => ({ tit: partir(s.titulo, F_NORMAL, colW - 34, bold), desc: partir(s.descripcion, F_CHICO + 0.5, colW - 34) }))
-      const alto = Math.max(...bloques.map((b) => b.tit.length * 12 + b.desc.length * 10.5)) + 20
-      lugar(alto + 8)
-      bloques.forEach((b, j) => {
-        const x = M + j * (colW + 12)
-        rect(x, y - alto + 12, colW, alto, rgb(1, 1, 1), LINEA)
-        // tilde en círculo naranja
-        page.drawCircle({ x: x + 16, y: y - 1, size: 6, color: NARANJA })
-        page.drawLine({ start: { x: x + 13, y: y - 1 }, end: { x: x + 15.3, y: y - 3.4 }, thickness: 1.3, color: rgb(1, 1, 1) })
-        page.drawLine({ start: { x: x + 15.3, y: y - 3.4 }, end: { x: x + 19.3, y: y + 1.6 }, thickness: 1.3, color: rgb(1, 1, 1) })
-        let yy = y - 2
-        for (const r of b.tit) { texto(r, x + 28, yy, F_NORMAL, bold, OSCURO); yy -= 12 }
-        yy -= 1
-        for (const r of b.desc) { texto(r, x + 28, yy, F_CHICO + 0.5, font, GRIS); yy -= 10.5 }
-      })
-      y -= alto + 8
+    for (const sol of soluciones) {
+      lugar(40)
+      for (const r of partir(sol.titulo, F_NORMAL, CW - 20, bold)) { lugar(14); texto(r, M + 10, y, F_NORMAL, bold, OSCURO); y -= 14 }
+      for (const r of partir(sol.descripcion, F_NORMAL, CW - 20)) { lugar(13); texto(r, M + 10, y, F_NORMAL, font, GRIS); y -= 13 }
+      y -= 10
     }
     y -= 10
   }
@@ -252,9 +256,21 @@ export async function generarPdfPresupuesto(d: DatosPdf): Promise<Blob> {
   cajaTotal(totX, totW, 'TOTAL', moneda(d.total))
   y -= 14
 
+  const seccionTexto = (seccion: SeccionSeguimiento) => {
+    lugar(55); titulo(seccion.titulo)
+    for (const parrafo of seccion.lineas) {
+      for (const renglon of partir(parrafo, F_NORMAL, CW - 20)) {
+        lugar(14); texto(renglon, M + 10, y, F_NORMAL, font, TEXTO); y -= 14
+      }
+      y -= 6
+    }
+    y -= 8
+  }
+  if (resumen) for (const seccion of otrosOriginales(resumen)) seccionTexto(seccion)
+
   // ---------- Modificaciones durante la obra ----------
   if (resumen) {
-    const hayCambios = resumen.modificaciones.length > 0
+    const hayCambios = resumen.modificaciones.length > 0 || resumen.otrosPresupuestos.length > 0
     if (hayCambios) {
       lugar(90)
       titulo('Modificaciones durante la obra')
@@ -299,19 +315,23 @@ export async function generarPdfPresupuesto(d: DatosPdf): Promise<Blob> {
     const saldoPendiente = resumen.saldo > 0
     const tarjetas = [
       { e: hayCambios ? 'NUEVO TOTAL' : 'TOTAL', v: moneda(resumen.nuevoTotal), fondo: GRIS_CLARO, acento: LINEA, color: OSCURO },
-      { e: 'COBRADO HASTA HOY', v: moneda(resumen.cobrado), fondo: GRIS_CLARO, acento: LINEA, color: VERDE },
-      { e: resumen.saldo >= 0 ? 'SALDO PENDIENTE' : 'SALDO A FAVOR', v: moneda(Math.abs(resumen.saldo)), fondo: saldoPendiente ? NARANJA_SUAVE : VERDE_SUAVE, acento: saldoPendiente ? NARANJA : VERDE, color: saldoPendiente ? NARANJA : VERDE },
+      { e: 'PAGOS REGISTRADOS', v: moneda(resumen.cobrado), fondo: GRIS_CLARO, acento: LINEA, color: VERDE },
+      { e: resumen.saldo >= 0 ? 'SALDO TOTAL' : 'SALDO A FAVOR', v: moneda(Math.abs(resumen.saldo)), fondo: saldoPendiente ? NARANJA_SUAVE : VERDE_SUAVE, acento: saldoPendiente ? NARANJA : VERDE, color: saldoPendiente ? NARANJA : VERDE },
     ]
     tarjetas.forEach((t, i) => {
       const x = M + i * (tW + 10)
       rect(x, y - tH + 12, tW, tH, t.fondo)
       rect(x, y - tH + 12, 2.5, tH, t.acento)
       texto(t.e, x + 12, y - 2, F_CHICO, bold, GRIS)
-      texto(t.v, x + 12, y - 22, F_GRANDE, bold, t.color)
+      texto(t.v, x + 12, y - 22, Math.min(F_GRANDE, (tW - 24) / bold.widthOfTextAtSize(win(t.v), 1)), bold, t.color)
     })
     y -= tH + 4
-    texto(`Actualizado al ${fechaCorta(new Date().toISOString().slice(0, 10))}`, M, y, F_CHICO, font, GRIS)
+    texto(`Reintegros pendientes incluidos en el saldo: ${moneda(resumen.gastoExtraPendiente)}`, M, y, F_CHICO, font, GRIS)
     y -= 24
+    lugar(36)
+    texto(`Avance de obra: ${resumen.porcentaje}%`, M, y, F_NORMAL, bold, OSCURO); y -= 15
+    rect(M, y, CW, 6, LINEA); rect(M, y, CW * resumen.porcentaje / 100, 6, NARANJA); y -= 26
+    for (const seccion of seccionesSeguimiento(resumen)) seccionTexto(seccion)
   }
 
   // ---------- Notas, vigencia y condiciones generales ----------
@@ -332,16 +352,20 @@ export async function generarPdfPresupuesto(d: DatosPdf): Promise<Blob> {
   y -= altoCajas + 16
 
   if (CONDICIONES_GENERALES.length) {
-    lugar(60)
+    const altoCondiciones = 18 + CONDICIONES_GENERALES.reduce((alto, c) => alto + 18 + partir(c.texto, F_CHICO + 0.5, CW).length * 10.5, 0)
+    lugar(Math.min(altoCondiciones + 20, H - M - PIE - 35))
     titulo('Condiciones generales')
     for (const cond of CONDICIONES_GENERALES) {
-      const renglones = partir(cond.texto, F_CHICO + 0.5, CW)
+      const renglones = partir(cond.titulo === 'Variaciones de precios' ? `El presupuesto tendrá una vigencia de ${d.validez_dias ?? 10} días corridos desde su emisión. Transcurrido dicho plazo, Mova podrá actualizar los valores antes de la aceptación.` : cond.texto, F_CHICO + 0.5, CW)
       lugar(14 + renglones.length * 10.5)
       texto(cond.titulo, M, y, F_NORMAL, bold, OSCURO); y -= 12
       for (const r of renglones) { texto(r, M, y, F_CHICO + 0.5, font, GRIS); y -= 10.5 }
       y -= 6
     }
   }
+
+  lugar(24)
+  texto(`Documento emitido: ${new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}`, M, y, F_CHICO, font, GRIS)
 
   // ---------- Pie en todas las páginas ----------
   const paginas = pdf.getPages()

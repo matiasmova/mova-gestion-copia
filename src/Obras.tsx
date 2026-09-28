@@ -5,11 +5,10 @@ import {
 } from 'react'
 import { supabase } from './supabase'
 import NuevaObra from './NuevaObra'
-import InformeObra from './InformeObra'
+import EstadoObraPDF from './EstadoObraPDF'
 import AdicionalesObra from './AdicionalesObra'
 import PersonalObra from './PersonalObra'
 import RentabilidadObra from './RentabilidadObra'
-import ResumenPagosPDF from './ResumenPagosPDF'
 import VistaToggle, { useVista } from './VistaToggle'
 import './obrasCard.css'
 import { OBRA_ESTADOS, etiquetaObra, claseObra } from './obraEstado'
@@ -118,7 +117,6 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
   // Si los presupuestos no se pudieron cargar, se muestran todas las obras
   // (mejor ver de más que esconder obras por un error de conexión).
   const [presupuestosOk, setPresupuestosOk] = useState(true)
-  const [pagosPdf, setPagosPdf] = useState<Obra | null>(null)
   const [eliminandoObra, setEliminandoObra] = useState<number | null>(null)
   const [vista, setVista] = useVista('obras', 'kanban')
   // Finanzas de la obra abierta: se recargan al cambiar de pestaña o al guardar.
@@ -683,8 +681,8 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
             </div>
 
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '4px 0 12px' }}>
-              <button type="button" className="editButton" onClick={() => setInformeObra(obraSeguimiento)}>📄 Informe de avance</button>
-              <button type="button" className="editButton" onClick={() => setPagosPdf(obraSeguimiento)}>🧾 Comprobante de pagos</button>
+              <button type="button" className="editButton" onClick={() => setInformeObra(obraSeguimiento)}>📄 Estado de obra</button>
+              <button type="button" className="editButton" onClick={() => setInformeObra(obraSeguimiento)}>🧾 Comprobante de pagos</button>
               <button type="button" className="editButton" onClick={() => { setObraEditando(obraSeguimiento); setMostrarFormulario(true) }}>✏️ Editar datos</button>
               {onVerPresupuesto && presupuestosDeObra.map((p) => (
                 <button key={p.id} type="button" className="editButton" onClick={() => { cerrarSeguimiento(); onVerPresupuesto(p.id) }}>
@@ -701,13 +699,13 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
               <button className={seguTab === 'adicionales' ? 'active' : ''} onClick={() => setSeguTab('adicionales')}>🔁 Cambios y adicionales</button>
             </div>
 
-            {seguTab === 'finanzas' && <EconomiaObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} onGenerarPdf={() => setPagosPdf(obraSeguimiento)} />}
+            {seguTab === 'finanzas' && <EconomiaObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} onGenerarPdf={() => setInformeObra(obraSeguimiento)} onCambio={() => setActualizacion(v => v + 1)} />}
 
-            {seguTab === 'adicionales' && <AdicionalesObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} />}
+            {seguTab === 'adicionales' && <AdicionalesObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} onCambio={() => setActualizacion(v => v + 1)} />}
 
             {seguTab === 'personal' && <PersonalObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} avance={Number(obraSeguimiento.porcentaje_avance || 0)} />}
 
-            {seguTab === 'rentabilidad' && <RentabilidadObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} avance={Number(obraSeguimiento.porcentaje_avance || 0)} />}
+            {seguTab === 'rentabilidad' && <RentabilidadObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} avance={Number(obraSeguimiento.porcentaje_avance || 0)} estado={obraSeguimiento.estado ?? undefined} />}
 
             {seguTab === 'timeline' && (<>
             <div className="seguimientoAcciones">
@@ -872,16 +870,18 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
             )}
 
             {(() => {
-              const hoy = situacionCobro(finanzasSeg.valorProgresivo, finanzasSeg.gastoExtraPendiente, finanzasSeg.cobros, Number(obraSeguimiento.porcentaje_avance || 0))
+              const hoy = situacionCobro(finanzasSeg.valorProgresivo, finanzasSeg.gastoExtraPendiente, finanzasSeg.cobros, Number(obraSeguimiento.porcentaje_avance || 0), undefined, ['finalizada', 'observacion'].includes(obraSeguimiento.estado ?? ''), finanzasSeg.totalOriginal)
+              if (finanzasSeg.cargando) return <p role="status">Cargando cuenta…</p>
+              if (finanzasSeg.error) return <p role="alert">{finanzasSeg.error}</p>
               if (finanzasSeg.valor <= 0 && finanzasSeg.cobros.length === 0) return null
               return (
                 <div style={{ margin: '4px 0 18px' }}>
                   <div className="seguimientoResumen">
-                    <div><span>Valor de la obra</span><strong>{dineroFicha(finanzasSeg.valor)}</strong></div>
-                    <div><span>Corresponde cobrar ({hoy.pct}%)</span><strong>{dineroFicha(hoy.corresponde)}</strong></div>
+                    <div><span>Obra + reintegros pendientes</span><strong>{dineroFicha(finanzasSeg.valor)}</strong></div>
+                    <div><span>Exigible por acuerdo 70/30</span><strong>{dineroFicha(hoy.corresponde)}</strong></div>
                     <div><span>Cobrado hasta hoy</span><strong>{dineroFicha(hoy.cobrado)}</strong></div>
                     <div>
-                      <span>{hoy.diferencia > 0 ? 'Adelanto del cliente' : hoy.diferencia < 0 ? 'Falta cobrar por avance' : 'Cobros al día'}</span>
+                      <span>{hoy.diferencia > 0 ? 'Adelanto del cliente' : hoy.diferencia < 0 ? 'Pendiente de pago hoy' : 'Cobros al día'}</span>
                       <strong style={{ color: hoy.diferencia > 0 ? '#1f7a4d' : hoy.diferencia < 0 ? '#c2410c' : undefined }}>{dineroFicha(Math.abs(hoy.diferencia))}</strong>
                     </div>
                   </div>
@@ -963,36 +963,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
                         )
                       })()}
 
-                      {(finanzasSeg.valor > 0 || finanzasSeg.cobros.length > 0) && (() => {
-                        const sit = situacionCobro(finanzasSeg.valorProgresivo, finanzasSeg.gastoExtraPendiente, finanzasSeg.cobros, Number(avance.porcentaje), avance.fecha)
-                        const color = sit.diferencia > 0 ? '#1f7a4d' : sit.diferencia < 0 ? '#c2410c' : '#4b525c'
-                        return (
-                          <div
-                            style={{
-                              display: 'flex',
-                              flexWrap: 'wrap',
-                              gap: '6px 18px',
-                              marginTop: '10px',
-                              paddingTop: '10px',
-                              borderTop: '1px dashed #e2e5e9',
-                              fontSize: '13px',
-                              color: '#64748b',
-                            }}
-                          >
-                            <span>💰 Al {sit.pct}% corresponde cobrar <strong style={{ color: '#101318' }}>{dineroFicha(sit.corresponde)}</strong></span>
-                            <span>Cobrado a esa fecha <strong style={{ color: '#101318' }}>{dineroFicha(sit.cobrado)}</strong></span>
-                            <span style={{ color }}>
-                              <strong>
-                                {sit.diferencia > 0
-                                  ? `Adelanto ${dineroFicha(sit.diferencia)}`
-                                  : sit.diferencia < 0
-                                    ? `Falta cobrar ${dineroFicha(-sit.diferencia)}`
-                                    : 'Al día'}
-                              </strong>
-                            </span>
-                          </div>
-                        )
-                      })()}
+                      <p style={{ color: '#64748b', fontSize: 12 }}>Avance informativo. El estado de cuenta actualizado figura arriba y en el documento de la obra.</p>
                     </div>
                   </article>
                 ))}
@@ -1032,20 +1003,14 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
       )}
 
       {informeObra && (
-        <InformeObra
+        <EstadoObraPDF
           obra={informeObra}
           cliente={obtenerCliente(informeObra.cliente_id)}
           onCerrar={() => setInformeObra(null)}
         />
       )}
 
-      {pagosPdf && (
-        <ResumenPagosPDF
-          obra={pagosPdf}
-          cliente={obtenerCliente(pagosPdf.cliente_id)}
-          onCerrar={() => setPagosPdf(null)}
-        />
-      )}
+
 
     </div>
   )
@@ -1123,7 +1088,7 @@ const ESTADO_ADIC_LABEL: Record<string, string> = {
 // los movimientos de Adicionales (se editan en esa pestaña) y generar el
 // comprobante en PDF. El resto de los números (valor de obra, corresponde
 // cobrar, costos, compras) se ve todo junto en Rentabilidad.
-function EconomiaObra({ obraId, onGenerarPdf }: { obraId: number; onGenerarPdf: () => void }) {
+function EconomiaObra({ obraId, onGenerarPdf, onCambio }: { obraId: number; onGenerarPdf: () => void; onCambio: () => void }) {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
@@ -1147,6 +1112,7 @@ function EconomiaObra({ obraId, onGenerarPdf }: { obraId: number; onGenerarPdf: 
     setMostrarCobro(false)
     setCobroForm({ monto: '', fecha: new Date().toISOString().slice(0, 10), medio_pago: 'transferencia', referencia: '' })
     setRevision((v) => v + 1)
+    onCambio()
   }
 
   async function eliminarCobro(id: number) {
@@ -1154,6 +1120,7 @@ function EconomiaObra({ obraId, onGenerarPdf }: { obraId: number; onGenerarPdf: 
     const { error: fallo } = await supabase.from('pagos').delete().eq('id', id)
     if (fallo) { console.error(fallo); window.alert('No se pudo eliminar el cobro.'); return }
     setRevision((v) => v + 1)
+    onCambio()
   }
 
   useEffect(() => {
@@ -1175,16 +1142,16 @@ function EconomiaObra({ obraId, onGenerarPdf }: { obraId: number; onGenerarPdf: 
       }
       setCargando(false)
     }
-    void cargar()
+    void cargar().catch(fallo => { console.error(fallo); if (vigente) { setError('No se pudo cargar la cuenta. Reintentá.'); setCargando(false) } })
     return () => { vigente = false }
   }, [obraId, revision])
 
   return <section className="obraFotosSeccion" aria-label="Finanzas de la obra">
     <div className="seguimientoAcciones">
-      <div><h3>Finanzas de la obra</h3><p>Registrá los cobros del cliente y generá su comprobante. Los números completos de la obra están en Rentabilidad.</p></div>
+      <div><h3>Finanzas de la obra</h3><p>Registrá aquí los pagos de la obra. Los reintegros de gastos se marcan como Pagado en Adicionales: no los cargues también como un cobro, porque se descontarían dos veces.</p></div>
       <div className="adicAcciones">
         <button type="button" className="newButton" onClick={() => setMostrarCobro((v) => !v)}>{mostrarCobro ? 'Cancelar' : '💵 Registrar cobro'}</button>
-        <button type="button" className="editButton" onClick={onGenerarPdf}>📄 Generar comprobante</button>
+        <button type="button" className="editButton" onClick={onGenerarPdf}>📄 Estado de obra</button>
         <button type="button" className="editButton" disabled={cargando} onClick={() => setRevision((valor) => valor + 1)}>Actualizar</button>
       </div>
     </div>

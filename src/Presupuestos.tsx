@@ -71,7 +71,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto }: { presupuest
       supabase.from('pagos').select('monto, presupuesto_id, obra_id'),
       supabase.from('adicionales').select('*').in('estado', ['aprobado', 'pagado']),
     ])
-    if (rPres.error || rItems.error || rClientes.error || rObras.error) {
+    if (rPres.error || rItems.error || rClientes.error || rObras.error || rPagos.error || rAdic.error) {
       console.error(rPres.error || rItems.error || rClientes.error || rObras.error)
       setError('No se pudieron cargar los presupuestos.')
       setCargando(false)
@@ -101,7 +101,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto }: { presupuest
       const corresponde = (fila: { presupuesto_id?: number | null; obra_id?: number | null }) =>
         Number(fila.presupuesto_id) === p.id || (unico && fila.presupuesto_id == null && Number(fila.obra_id) === p.obra_id)
       const ajustes = p.estado === 'aceptado'
-        ? adicionales.filter(corresponde).reduce((s, a) => s + (Number(a.importe) || 0), 0)
+        ? adicionales.filter(a => a.estado === 'aprobado').filter(corresponde).reduce((s, a) => s + (Number(a.importe) || 0), 0)
         : 0
       const pagado = pagos ? pagos.filter(corresponde).reduce((s, x) => s + (Number(x.monto) || 0), 0) : p.total_pagado
       return { ...p, ajustes, total_pagado: pagado, saldo: Math.max(0, p.total + ajustes - pagado) }
