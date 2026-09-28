@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { supabase } from './supabase'
 import type { EstadoPresupuesto } from './estadoObra'
+import { calcularPersona, type AsignacionCalc, type JornalCalc } from './personalCalculos'
 
 // Resumen de la obra: la ficha abre acá. Arriba "Qué falta" y abajo seis
 // tarjetas con mini gráficos; cada una abre el detalle completo de su sección.
@@ -31,8 +32,12 @@ type Props = {
   onIr: (tab: TabSeguimiento) => void
 }
 
+// Una persona del equipo, con los mismos números que la sección Personal.
+type MiembroEquipo = { id: number; nombre: string; rol: string | null; pagado: number; falta: number; adelanto: number; faltaValor: boolean }
+
 type Datos = {
   personal: number
+  equipo: MiembroEquipo[]
   jornales: number
   fotos: number
   accesos: number | null
@@ -56,16 +61,17 @@ async function contar(tabla: string, obraId: number) {
   return count ?? 0
 }
 
-async function cargarDatos(obraId: number): Promise<Datos> {
-  const [personal, jornales, fotos, accesos, rAdic, rCostos, rCompras] = await Promise.all([
-    contar('obra_asignaciones', obraId).catch(() => 0),
-    contar('jornales', obraId).catch(() => 0),
+async function cargarDatos(obraId: number, avance: number): Promise<Datos> {
+  const [rAsig, rJorn, fotos, accesos, rAdic, rCostos, rCompras, rPres] = await Promise.all([
+    supabase.from('obra_asignaciones').select('id,personal_id,rol_en_obra,modalidad,valor_acordado').eq('obra_id', obraId),
+    supabase.from('jornales').select('personal_id,jornada,horas').eq('obra_id', obraId),
     contar('obra_imagenes', obraId).catch(() => 0),
     // Si la tabla de accesos todavía no existe, se muestra como no disponible.
     contar('obra_accesos', obraId).catch(() => null),
-    supabase.from('adicionales').select('estado,tipo').eq('obra_id', obraId),
-    supabase.from('costos').select('monto').eq('obra_id', obraId),
+    supabase.from('adicionales').select('estado,tipo,importe').eq('obra_id', obraId),
+    supabase.from('costos').select('monto,tipo,personal_id').eq('obra_id', obraId),
     supabase.from('materiales').select('cantidad,precio_unitario').eq('obra_id', obraId),
+    supabase.from('presupuestos').select('total,estado,activo').eq('obra_id', obraId),
   ])
   const adic = { aprobados: 0, pendientes: 0, rechazados: 0 }
   for (const a of (rAdic.data ?? []) as { estado: string }[]) {
@@ -76,7 +82,37 @@ async function cargarDatos(obraId: number): Promise<Datos> {
   const gastado =
     ((rCostos.data ?? []) as { monto: number | string }[]).reduce((s, c) => s + (Number(c.monto) || 0), 0) +
     ((rCompras.data ?? []) as { cantidad: number | string; precio_unitario: number | string }[]).reduce((s, c) => s + (Number(c.cantidad) || 0) * (Number(c.precio_unitario) || 0), 0)
-  return { personal, jornales, fotos, accesos, adic, gastado }
+
+  // Equipo: igual que la sección Personal (personalCalculos.ts).
+  type Asig = AsignacionCalc & { id: number; rol_en_obra: string | null }
+  const asignaciones = ((rAsig.data ?? []) as Asig[]).map((a) => ({ ...a, valor_acordado: a.valor_acordado == null ? null : Number(a.valor_acordado) }))
+  const jornalesObra = ((rJorn.data ?? []) as JornalCalc[]).map((j) => ({ ...j, jornada: Number(j.jornada), horas: j.horas == null ? null : Number(j.horas) }))
+  const pagosPersonal = ((rCostos.data ?? []) as { monto: number | string; tipo: string; personal_id: number | null }[])
+    .filter((c) => c.personal_id != null && (c.tipo === 'mano_obra' || c.tipo === 'terciarizado'))
+    .map((c) => ({ personal_id: c.personal_id, monto: Number(c.monto) || 0 }))
+  const valorObra =
+    ((rPres.data ?? []) as { total: number | string; estado: string; activo: boolean }[]).filter((p) => p.activo !== false && p.estado === 'aceptado').reduce((s, p) => s + (Number(p.total) || 0), 0) +
+    ((rAdic.data ?? []) as { importe: number | string; estado: string; tipo: string }[]).filter((a) => a.estado === 'aprobado' && a.tipo !== 'gasto_extra').reduce((s, a) => s + (Number(a.importe) || 0), 0)
+  const ids = asignaciones.map((a) => a.personal_id).filter((id): id is number => id != null)
+  const rPers = ids.length
+    ? await supabase.from('personal').select('id,nombre,apellido,especialidad,costo_dia').in('id', ids)
+    : { data: [], error: null }
+  const personas = ((rPers.data ?? []) as { id: number; nombre: string; apellido: string | null; especialidad: string | null; costo_dia: number | string | null }[])
+  const equipo: MiembroEquipo[] = asignaciones.map((a) => {
+    const per = personas.find((x) => x.id === a.personal_id)
+    const c = calcularPersona(a, per ? { id: per.id, costo_dia: per.costo_dia == null ? null : Number(per.costo_dia) } : undefined, pagosPersonal, jornalesObra, valorObra, avance)
+    return {
+      id: a.id,
+      nombre: per ? `${per.nombre} ${per.apellido ?? ''}`.trim() : 'Persona',
+      rol: a.rol_en_obra || per?.especialidad || null,
+      pagado: c.pagado,
+      falta: c.totalContrato != null ? Math.max(c.totalContrato - c.pagado, 0) : Math.max(c.diferencia, 0),
+      adelanto: c.totalContrato != null ? Math.max(c.pagado - c.totalContrato, 0) : Math.max(-c.diferencia, 0),
+      faltaValor: c.faltaValor,
+    }
+  })
+  const jornales = jornalesObra.reduce((s, j) => s + (j.jornada || 0), 0)
+  return { personal: equipo.length, equipo, jornales, fotos, accesos, adic, gastado }
 }
 
 // Gráfico circular de avance (lo usa también el encabezado de la ficha).
@@ -113,9 +149,9 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
   useEffect(() => {
     let vigente = true
     setDatos(null)
-    void cargarDatos(obraId).then((d) => { if (vigente) setDatos(d) }).catch((e) => console.error(e))
+    void cargarDatos(obraId, avance).then((d) => { if (vigente) setDatos(d) }).catch((e) => console.error(e))
     return () => { vigente = false }
-  }, [obraId])
+  }, [obraId, avance])
 
   const terminada = estado === 'finalizada' || estado === 'observacion' || avance >= 100
   const cerca = terminada || avance >= 80
@@ -157,7 +193,7 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
           <div className="orSpark" aria-hidden>
             {serie.map((a, i) => <span key={i} title={`${fecha(a.fecha)} · ${a.porcentaje}%`}><i style={{ height: `${Math.max(4, Math.min(100, a.porcentaje))}%` }} /></span>)}
           </div>
-          <small>{fecha(ultimo.fecha)} · {ultimo.porcentaje}% · {avances.length} {avances.length === 1 ? 'registro' : 'registros'}</small>
+          <small>{fecha(ultimo.fecha)} · {ultimo.porcentaje}% · {avances.length} {avances.length === 1 ? 'registro' : 'registros'}{datos ? ` · ${datos.fotos} ${datos.fotos === 1 ? 'foto' : 'fotos'}` : ''}</small>
         </> : <><strong className="orValor">Sin avances</strong><small>Tocá para cargar el primero</small></>}
       </Tarjeta>
 
@@ -196,15 +232,29 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
         })()}
       </Tarjeta>
 
-      {/* Equipo */}
+      {/* Equipo: cada persona con lo pagado y lo que falta */}
       <Tarjeta icono="👷" titulo="Equipo" onClick={() => onIr('personal')}>
-        {!datos ? <small>Cargando…</small> : <>
-          <strong className="orValor">{datos.personal === 0 ? 'Sin asignar' : `${datos.personal} ${datos.personal === 1 ? 'persona' : 'personas'}`}</strong>
-          <div className="orChips">
-            <span>{datos.jornales} {datos.jornales === 1 ? 'jornal' : 'jornales'}</span>
-            <span>{datos.fotos} {datos.fotos === 1 ? 'foto' : 'fotos'}</span>
-          </div>
-        </>}
+        {!datos ? <small>Cargando…</small> : datos.equipo.length === 0 ? <><strong className="orValor">Sin asignar</strong><small>Tocá para asignar personal</small></> : (() => {
+          const pagado = datos.equipo.reduce((s, m) => s + m.pagado, 0)
+          const falta = datos.equipo.reduce((s, m) => s + m.falta, 0)
+          const visibles = datos.equipo.slice(0, 4)
+          return <>
+            <strong className="orValor">{dinero(pagado)} <em>pagado · {datos.equipo.length} {datos.equipo.length === 1 ? 'persona' : 'personas'}</em></strong>
+            <Barra partes={[{ valor: pagado, color: VERDE }, { valor: falta, color: NARANJA }]} />
+            <ul className="orEquipo">
+              {visibles.map((m) => <li key={m.id}>
+                <span className="orEquipoNom">{m.nombre}{m.rol && <em>{m.rol}</em>}</span>
+                <span className={`orEquipoSaldo ${m.falta > 0.5 ? 'pend' : 'ok'}`}>
+                  {m.faltaValor ? 'Falta cargar valor' : m.falta > 0.5 ? `Falta ${dinero(m.falta)}` : m.adelanto > 0.5 ? `Adelantado ${dinero(m.adelanto)}` : 'Al día'}
+                </span>
+              </li>)}
+            </ul>
+            <small>
+              {datos.equipo.length > visibles.length ? `y ${datos.equipo.length - visibles.length} más · ` : ''}
+              {datos.jornales.toLocaleString('es-AR')} {datos.jornales === 1 ? 'jornal cargado' : 'jornales cargados'}
+            </small>
+          </>
+        })()}
       </Tarjeta>
 
       {/* Cambios y adicionales */}
