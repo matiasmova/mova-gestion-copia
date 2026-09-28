@@ -1,0 +1,195 @@
+/* =====================================================================
+   Menú lateral moderno (se carga encima de fase2.css).
+   Solo cambia colores, espaciados y efectos: la posición y el
+   comportamiento en celular siguen siendo los de fase2.css.
+   ===================================================================== */
+
+.fase2App .fase2Sidebar {
+  background:
+    radial-gradient(120% 60% at 0% 0%, rgba(253, 64, 62, 0.10) 0%, rgba(253, 64, 62, 0) 60%),
+    linear-gradient(180deg, #14171f 0%, #0b0d12 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Logo en tarjeta blanca */
+.fase2App .fase2Sidebar .fase2Logo {
+  background: #fff;
+  border-radius: 16px;
+  padding: 12px 14px;
+  margin: 18px 16px 10px;
+  box-shadow: 0 10px 30px -14px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.fase2App .fase2Sidebar .fase2Logo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 58px;
+  object-fit: contain;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* Lista de secciones */
+.fase2App .fase2Sidebar nav {
+  overflow-y: auto;
+  padding: 4px 0 12px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+.fase2App .fase2Sidebar nav::-webkit-scrollbar { width: 6px; }
+.fase2App .fase2Sidebar nav::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 6px; }
+
+.fase2App .fase2Sidebar .menuGrupo {
+  display: block;
+  padding: 16px 26px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.32);
+}
+
+/* Cada opción */
+.fase2App .fase2Sidebar nav button.menuItem {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: calc(100% - 24px);
+  margin: 2px 12px;
+  padding: 8px 12px 8px 8px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #aeb4c0;
+  font-size: 14.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+.fase2App .fase2Sidebar nav button.menuItem .menuIcono {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #c8cdd6;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.fase2App .fase2Sidebar nav button.menuItem .menuTexto {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Al pasar el mouse */
+.fase2App .fase2Sidebar nav button.menuItem:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  transform: translateX(2px);
+}
+.fase2App .fase2Sidebar nav button.menuItem:hover .menuIcono {
+  background: rgba(253, 64, 62, 0.16);
+  color: #ff7a6e;
+}
+
+/* Seleccionada */
+.fase2App .fase2Sidebar nav button.menuItem.active {
+  background: linear-gradient(135deg, rgba(253, 64, 62, 0.24) 0%, rgba(228, 123, 0, 0.12) 100%);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(253, 64, 62, 0.35), 0 10px 26px -14px rgba(253, 64, 62, 0.75);
+  transform: none;
+}
+.fase2App .fase2Sidebar nav button.menuItem.active::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 9px;
+  bottom: 9px;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: linear-gradient(180deg, #fd403e 0%, #e47b00 100%);
+  box-shadow: 0 0 12px rgba(253, 64, 62, 0.8);
+}
+.fase2App .fase2Sidebar nav button.menuItem.active .menuIcono {
+  background: linear-gradient(135deg, #fd403e 0%, #e47b00 100%);
+  color: #fff;
+  box-shadow: 0 6px 16px -6px rgba(253, 64, 62, 0.9);
+}
+.fase2App .fase2Sidebar nav button.menuItem:focus-visible {
+  outline: 2px solid rgba(253, 64, 62, 0.7);
+  outline-offset: 2px;
+}
+
+/* Usuario abajo */
+.fase2App .fase2Sidebar .fase2Usuario {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 12px 14px;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.fase2App .fase2Sidebar .fase2Usuario > div {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #fd403e 0%, #e47b00 100%);
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
+  box-shadow: 0 6px 16px -8px rgba(253, 64, 62, 0.9);
+}
+.fase2App .fase2Sidebar .fase2Usuario > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.fase2App .fase2Sidebar .fase2Usuario strong {
+  color: #fff;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fase2App .fase2Sidebar .fase2Usuario small {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 11.5px;
+}
+.fase2App .fase2Sidebar .fase2Usuario button {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #c8cdd6;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.fase2App .fase2Sidebar .fase2Usuario button:hover {
+  background: rgba(253, 64, 62, 0.2);
+  color: #ff7a6e;
+}
+
+/* Botón de menú en el celular */
+.fase2App .fase2MenuButton {
+  border: 0;
+  border-radius: 12px;
+  background: #14171f;
+  color: #fff;
+  box-shadow: 0 8px 20px -10px rgba(0, 0, 0, 0.6);
+}

@@ -15,6 +15,8 @@ import Usuarios from './Usuarios'
 import HomeResumen from './HomeResumen'
 import logo from './assets/mova-logo.png'
 import './fase2.css'
+import './menu.css'
+import IconoMenu from './iconosMenu'
 
 type Rol = 'admin' | 'encargado' | 'auxiliar' | 'contable'
 const ROLES: Record<Rol, string> = {
@@ -25,19 +27,27 @@ const ROLES_VALIDOS: Rol[] = ['admin', 'encargado', 'auxiliar', 'contable']
 // Gastos fijos ya no está en el menú: se cargan y consultan desde
 // Tablero → pestaña "Gastos fijos".
 const NAVEGACION = [
-  ['dashboard', '▦', 'Home'],
-  ['tablero', '📊', 'Tablero'],
-  ['clientes', '👤', 'Clientes'],
-  ['presupuestos', '📄', 'Presupuestos'],
-  ['obras', '🏠', 'Obras'],
-  ['catalogo', '📦', 'Productos y servicios'],
-  ['compras', '🧾', 'Compras'],
-  ['personal', '👷', 'Personal'],
-  ['finanzas', '💰', 'Movimientos'],
-  ['notificaciones', '🔔', 'Notificaciones'],
-  ['usuarios', '🛡️', 'Usuarios'],
-  ['configuracion', '⚙️', 'Configuración'],
+  ['dashboard', 'principal', 'Home'],
+  ['tablero', 'principal', 'Tablero'],
+  ['clientes', 'comercial', 'Clientes'],
+  ['presupuestos', 'comercial', 'Presupuestos'],
+  ['obras', 'comercial', 'Obras'],
+  ['catalogo', 'operacion', 'Productos y servicios'],
+  ['compras', 'operacion', 'Compras'],
+  ['personal', 'operacion', 'Personal'],
+  ['finanzas', 'operacion', 'Movimientos'],
+  ['notificaciones', 'sistema', 'Notificaciones'],
+  ['usuarios', 'sistema', 'Usuarios'],
+  ['configuracion', 'sistema', 'Configuración'],
 ] as const
+
+// Secciones del menú, en orden.
+const GRUPOS_MENU: [string, string][] = [
+  ['principal', 'Principal'],
+  ['comercial', 'Comercial'],
+  ['operacion', 'Operación'],
+  ['sistema', 'Sistema'],
+]
 
 type Vista = (typeof NAVEGACION)[number][0]
 
@@ -180,11 +190,27 @@ export default function AppFase2() {
   }
 
   return <div className="fase2App">
-    <button className="fase2MenuButton" onClick={() => setMenuAbierto((v) => !v)}>☰</button>
+    <button className="fase2MenuButton" aria-label="Abrir menú" onClick={() => setMenuAbierto((v) => !v)}><IconoMenu nombre="menu" tamano={22} /></button>
     <aside className={`fase2Sidebar ${menuAbierto ? 'abierto' : ''}`}>
-      <div className="fase2Logo"><img src={logo} alt="MOVA" /><span>ESPACIOS INTELIGENTES</span></div>
-      <nav>{modulos.map(([clave, icono, titulo]) => <button key={clave} className={vistaSegura === clave ? 'active' : ''} onClick={() => navegar(clave)}><span>{icono}</span>{titulo}</button>)}</nav>
-      <div className="fase2Usuario"><div>{(nombreUsuario[0] ?? 'M').toUpperCase()}</div><span><strong>{nombreUsuario || 'Usuario'}</strong><small>{ROLES[rol]}</small></span><button title="Cerrar sesión" onClick={salir}>⏻</button></div>
+      <div className="fase2Logo"><img src={logo} alt="MOVA Tecnología Smart" /></div>
+      <nav>
+        {GRUPOS_MENU.map(([grupo, etiqueta]) => {
+          const delGrupo = modulos.filter(([, g]) => g === grupo)
+          if (delGrupo.length === 0) return null
+          return (
+            <div key={grupo}>
+              <span className="menuGrupo">{etiqueta}</span>
+              {delGrupo.map(([clave, , titulo]) => (
+                <button key={clave} className={`menuItem ${vistaSegura === clave ? 'active' : ''}`} aria-current={vistaSegura === clave ? 'page' : undefined} onClick={() => navegar(clave)}>
+                  <span className="menuIcono"><IconoMenu nombre={clave} /></span>
+                  <span className="menuTexto">{titulo}</span>
+                </button>
+              ))}
+            </div>
+          )
+        })}
+      </nav>
+      <div className="fase2Usuario"><div>{(nombreUsuario[0] ?? 'M').toUpperCase()}</div><span><strong>{nombreUsuario || 'Usuario'}</strong><small>{ROLES[rol]}</small></span><button title="Cerrar sesión" aria-label="Cerrar sesión" onClick={salir}><IconoMenu nombre="salir" /></button></div>
     </aside>
     <main className="fase2Main">
       {vistaSegura === 'dashboard'
