@@ -12,7 +12,8 @@ import RentabilidadObra from './RentabilidadObra'
 import VistaToggle, { useVista } from './VistaToggle'
 import './obrasCard.css'
 import { OBRA_ESTADOS, etiquetaObra, claseObra } from './obraEstado'
-import { useFinanzasObra, leerFinanzasObra, situacionCobro } from './finanzasObra'
+import { leerFinanzasObra } from './finanzasObra'
+import { cargarEstadoPresupuesto, mensajeEstado, type EstadoPresupuesto } from './estadoObra'
 import {
   eliminarObraCompleta,
   mensajeEliminacionObra,
@@ -68,11 +69,6 @@ type FiltroEstado = 'todos' | EstadoObra
 
 type ResumenEco = { valor: number; cobrado: number; pendiente: number }
 
-const ESTADOS_PRESUPUESTO: Record<string, string> = {
-  borrador: 'Borrador', enviado: 'Enviado', aceptado: 'Aceptado', rechazado: 'Rechazado',
-}
-const etiquetaEstadoPresupuesto = (v: string) => ESTADOS_PRESUPUESTO[v] ?? v
-
 const avanceInicial = {
   fecha: new Date().toISOString().slice(0, 10),
   titulo: '',
@@ -81,9 +77,11 @@ const avanceInicial = {
   porcentaje: 0,
 }
 
-function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?: number | null; onObraAbierta?: () => void; onVerPresupuesto?: (presupuestoId: number) => void } = {}) {
+// onVerPresupuesto se sigue aceptando por compatibilidad, pero la ficha de la obra
+// ya no lo usa: todo se ve en un único documento (presupuesto y estado de obra).
+function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; onObraAbierta?: () => void; onVerPresupuesto?: (presupuestoId: number) => void } = {}) {
   const [obras, setObras] = useState<Obra[]>([])
-  const [presupuestosObra, setPresupuestosObra] = useState<{ id: number; obra_id: number | null; estado: string; activo: boolean; titulo: string }[]>([])
+  const [presupuestosObra, setPresupuestosObra] = useState<{ id: number; obra_id: number | null; total: number | string; estado: string; activo: boolean; titulo: string }[]>([])
   const [informeObra, setInformeObra] = useState<Obra | null>(null)
   const [seguTab, setSeguTab] = useState<'finanzas' | 'adicionales' | 'personal' | 'rentabilidad' | 'timeline'>('timeline')
   const [clientes, setClientes] = useState<Cliente[]>([])
@@ -119,8 +117,10 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
   const [presupuestosOk, setPresupuestosOk] = useState(true)
   const [eliminandoObra, setEliminandoObra] = useState<number | null>(null)
   const [vista, setVista] = useVista('obras', 'kanban')
-  // Finanzas de la obra abierta: se recargan al cambiar de pestaña o al guardar.
-  const finanzasSeg = useFinanzasObra(obraSeguimiento?.id ?? null, `${seguTab}-${actualizacion}`)
+  // Estado de cuenta de la obra abierta: el MISMO cálculo que el documento.
+  const [cuenta, setCuenta] = useState<EstadoPresupuesto | null>(null)
+  const [cargandoCuenta, setCargandoCuenta] = useState(false)
+  const [errorCuenta, setErrorCuenta] = useState('')
 
   useEffect(() => {
     async function cargarDatos() {
@@ -154,7 +154,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
             .order('nombre', { ascending: true }),
 
           supabase.from('presupuestos').select('id, obra_id, total, estado, activo, titulo'),
-          supabase.from('adicionales').select('obra_id, importe, estado'),
+          supabase.from('adicionales').select('obra_id, importe, estado, tipo'),
           supabase.from('pagos').select('monto, obra_id, presupuesto_id'),
         ])
 
@@ -181,6 +181,26 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
 
     cargarDatos()
   }, [actualizacion])
+
+  // Presupuesto aceptado de la obra abierta (el documento vivo).
+  const presupuestoAceptado = obraSeguimiento
+    ? presupuestosObra.find((p) => Number(p.obra_id) === Number(obraSeguimiento.id) && p.activo !== false && p.estado === 'aceptado') ?? null
+    : null
+
+  // Estado de cuenta de la obra abierta: se recarga al guardar o cambiar de pestaña.
+  useEffect(() => {
+    let vigente = true
+    setCuenta(null)
+    setErrorCuenta('')
+    if (!presupuestoAceptado) return
+    setCargandoCuenta(true)
+    cargarEstadoPresupuesto(presupuestoAceptado.id, Number(presupuestoAceptado.total) || 0)
+      .then((e) => { if (vigente) setCuenta(e) })
+      .catch((fallo) => { console.error(fallo); if (vigente) setErrorCuenta('No se pudo cargar el estado de cuenta.') })
+      .finally(() => { if (vigente) setCargandoCuenta(false) })
+    return () => { vigente = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presupuestoAceptado?.id, presupuestoAceptado?.total, seguTab, actualizacion])
 
   // Abrir automáticamente una obra cuando se llega desde otro módulo (ej. Finanzas)
   useEffect(() => {
@@ -211,11 +231,6 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
 
   const etiquetaEstado = etiquetaObra
   const claseEstado = claseObra
-
-  // Presupuestos activos vinculados a la obra que está abierta en el modal de seguimiento.
-  const presupuestosDeObra = obraSeguimiento
-    ? presupuestosObra.filter((p) => p.obra_id != null && Number(p.obra_id) === Number(obraSeguimiento.id) && p.activo !== false)
-    : []
 
   function cerrarFormulario() {
     setMostrarFormulario(false)
@@ -602,7 +617,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
                       <div className="crmCardEco">
                         <div><span>Valor</span><strong>{dineroFicha(economia[obra.id]?.valor ?? 0)}</strong></div>
                         <div><span>Cobrado</span><strong>{dineroFicha(economia[obra.id]?.cobrado ?? 0)}</strong></div>
-                        <div><span>Pendiente</span><strong className={(economia[obra.id]?.pendiente ?? 0) > 0 ? 'pend' : ''}>{dineroFicha(economia[obra.id]?.pendiente ?? 0)}</strong></div>
+                        <div><span>Saldo</span><strong className={(economia[obra.id]?.pendiente ?? 0) > 0 ? 'pend' : ''}>{dineroFicha(economia[obra.id]?.pendiente ?? 0)}</strong></div>
                       </div>
                       <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--mova-muted)', textAlign: 'right' }}>Tocá para abrir la ficha →</p>
                     </div>
@@ -617,7 +632,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
       {!cargando && !error && obrasFiltradas.length > 0 && vista === 'lista' && (
         <div className="crmListaWrap">
           <table className="crmLista">
-            <thead><tr><th>Obra</th><th>Cliente</th><th>Avance</th><th>Valor</th><th>Cobrado</th><th>Pendiente</th><th>Estado</th></tr></thead>
+            <thead><tr><th>Obra</th><th>Cliente</th><th>Avance</th><th>Valor</th><th>Cobrado</th><th>Saldo</th><th>Estado</th></tr></thead>
             <tbody>
               {obrasFiltradas.map((obra) => (
                 <tr key={obra.id} onClick={() => abrirSeguimiento(obra)}>
@@ -680,15 +695,10 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
               </div>
             </div>
 
+            {/* Un solo documento: presupuesto aceptado + modificaciones + pagos + estado de la obra */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '4px 0 12px' }}>
-              <button type="button" className="editButton" onClick={() => setInformeObra(obraSeguimiento)}>📄 Estado de obra</button>
-              <button type="button" className="editButton" onClick={() => setInformeObra(obraSeguimiento)}>🧾 Comprobante de pagos</button>
-              <button type="button" className="editButton" onClick={() => { setObraEditando(obraSeguimiento); setMostrarFormulario(true) }}>✏️ Editar datos</button>
-              {onVerPresupuesto && presupuestosDeObra.map((p) => (
-                <button key={p.id} type="button" className="editButton" onClick={() => { cerrarSeguimiento(); onVerPresupuesto(p.id) }}>
-                  📋 {p.titulo || `Presupuesto #${p.id}`} · {etiquetaEstadoPresupuesto(p.estado)}
-                </button>
-              ))}
+              <button type="button" className="newButton" disabled={!presupuestoAceptado} onClick={() => setInformeObra(obraSeguimiento)}>📄 Presupuesto y estado de obra</button>
+              <button type="button" className="editButton" onClick={() => { setObraEditando(obraSeguimiento); setMostrarFormulario(true) }}>✏️ Editar datos de la obra</button>
             </div>
 
             <div className="gestionTabs seguTabs">
@@ -869,22 +879,24 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
               </form>
             )}
 
-            {(() => {
-              const hoy = situacionCobro(finanzasSeg.valorProgresivo, finanzasSeg.gastoExtraPendiente, finanzasSeg.cobros, Number(obraSeguimiento.porcentaje_avance || 0), undefined, ['finalizada', 'observacion'].includes(obraSeguimiento.estado ?? ''), finanzasSeg.totalOriginal)
-              if (finanzasSeg.cargando) return <p role="status">Cargando cuenta…</p>
-              if (finanzasSeg.error) return <p role="alert">{finanzasSeg.error}</p>
-              if (finanzasSeg.valor <= 0 && finanzasSeg.cobros.length === 0) return null
+            {/* Estado de cuenta: los mismos números que el documento */}
+            {!presupuestoAceptado ? null : cargandoCuenta ? <p role="status">Cargando cuenta…</p> : errorCuenta ? <p role="alert">{errorCuenta}</p> : cuenta && (() => {
+              const msg = mensajeEstado(cuenta, dineroFicha)
               return (
                 <div style={{ margin: '4px 0 18px' }}>
                   <div className="seguimientoResumen">
-                    <div><span>Obra + reintegros pendientes</span><strong>{dineroFicha(finanzasSeg.valor)}</strong></div>
-                    <div><span>Exigible por acuerdo 70/30</span><strong>{dineroFicha(hoy.corresponde)}</strong></div>
-                    <div><span>Cobrado hasta hoy</span><strong>{dineroFicha(hoy.cobrado)}</strong></div>
+                    <div><span>Total de la obra</span><strong>{dineroFicha(cuenta.totalActualizado)}</strong></div>
+                    <div><span>Ya pagó</span><strong style={{ color: '#1f7a4d' }}>{dineroFicha(cuenta.cobrado)}</strong></div>
                     <div>
-                      <span>{hoy.diferencia > 0 ? 'Adelanto del cliente' : hoy.diferencia < 0 ? 'Pendiente de pago hoy' : 'Cobros al día'}</span>
-                      <strong style={{ color: hoy.diferencia > 0 ? '#1f7a4d' : hoy.diferencia < 0 ? '#c2410c' : undefined }}>{dineroFicha(Math.abs(hoy.diferencia))}</strong>
+                      <span>{cuenta.adelanto > 0.5 ? 'Adelanto del cliente' : 'Pendiente a hoy'}</span>
+                      <strong style={{ color: cuenta.pendienteHoy > 0.5 ? '#c2410c' : '#1f7a4d' }}>{dineroFicha(cuenta.adelanto > 0.5 ? cuenta.adelanto : cuenta.pendienteHoy)}</strong>
                     </div>
+                    <div><span>Saldo para terminar</span><strong>{dineroFicha(Math.max(0, cuenta.saldoTotal))}</strong></div>
                   </div>
+                  <p style={{ margin: '8px 0 0', fontSize: 13, fontWeight: 600, color: msg.tono === 'ok' ? '#1f7a4d' : '#c2410c' }}>
+                    {msg.tono === 'ok' ? '✓' : '⚠'} {msg.titulo}
+                    {cuenta.gastoExtraPendiente > 0.5 && <span style={{ fontWeight: 400, color: '#64748b' }}> · Reintegros pendientes aparte: {dineroFicha(cuenta.gastoExtraPendiente)}</span>}
+                  </p>
                 </div>
               )
             })()}
@@ -909,7 +921,9 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
                 )}
 
               {!cargandoAvances &&
-                avances.map((avance) => (
+                avances.map((avance) => {
+                  const paso = cuenta?.linea.find((p) => p.avanceId === avance.id)
+                  return (
                   <article
                     className="timelineItem"
                     key={avance.id}
@@ -963,10 +977,17 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
                         )
                       })()}
 
-                      <p style={{ color: '#64748b', fontSize: 12 }}>Avance informativo. El estado de cuenta actualizado figura arriba y en el documento de la obra.</p>
+                      {paso && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 18px', marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed #e2e5e9', fontSize: '13px', color: '#64748b' }}>
+                          <span>Este avance suma <strong style={{ color: '#101318' }}>{dineroFicha(paso.importe)}</strong></span>
+                          <span>A pagar hasta acá <strong style={{ color: '#101318' }}>{dineroFicha(paso.acumulado)}</strong></span>
+                          <strong style={{ color: paso.estado === 'ok' ? '#1f7a4d' : '#c2410c' }}>{paso.estado === 'ok' ? '✓ Al día' : `⚠ Falta ${dineroFicha(paso.falta)}`}</strong>
+                        </div>
+                      )}
                     </div>
                   </article>
-                ))}
+                  )
+                })}
             </div>
             </>)}
 
@@ -1006,19 +1027,18 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto }: { obraAbrirId?:
         <EstadoObraPDF
           obra={informeObra}
           cliente={obtenerCliente(informeObra.cliente_id)}
-          onCerrar={() => setInformeObra(null)}
+          onCerrar={() => { setInformeObra(null); setActualizacion((v) => v + 1) }}
         />
       )}
-
-
-
     </div>
   )
 }
 
+// Valor = presupuesto aceptado + cambios/adicionales aprobados (sin Gasto extra,
+// que es un reintegro aparte). Saldo = valor − cobrado. Igual que el documento.
 function calcularEconomia(
   presupuestos: Array<{ id: number; obra_id: number | null; total: number | string; estado: string; activo: boolean }>,
-  adicionales: Array<{ obra_id: number | null; importe: number | string; estado: string }>,
+  adicionales: Array<{ obra_id: number | null; importe: number | string; estado: string; tipo?: string | null }>,
   pagos: Array<{ monto: number | string; obra_id: number | null; presupuesto_id: number | null }>,
 ): Record<number, ResumenEco> {
   const mapa: Record<number, ResumenEco> = {}
@@ -1031,7 +1051,7 @@ function calcularEconomia(
     if (p.activo !== false && p.estado === 'aceptado') asegurar(p.obra_id).valor += Number(p.total) || 0
   }
   for (const a of adicionales) {
-    if (a.obra_id == null || a.estado !== 'aprobado') continue
+    if (a.obra_id == null || a.estado !== 'aprobado' || a.tipo === 'gasto_extra') continue
     asegurar(a.obra_id).valor += Number(a.importe) || 0
   }
   for (const pago of pagos) {
@@ -1084,10 +1104,9 @@ const ESTADO_ADIC_LABEL: Record<string, string> = {
   aprobado: 'Aprobado', pagado: 'Pagado', rechazado: 'Rechazado', pendiente: 'Pendiente',
 }
 
-// Pestaña Finanzas, simplificada: solo registrar los cobros del cliente, ver
-// los movimientos de Adicionales (se editan en esa pestaña) y generar el
-// comprobante en PDF. El resto de los números (valor de obra, corresponde
-// cobrar, costos, compras) se ve todo junto en Rentabilidad.
+// Pestaña Finanzas, simplificada: solo registrar los cobros del cliente y ver
+// los movimientos de Adicionales (se editan en esa pestaña). El documento con
+// todo (presupuesto, pagos y estado de la obra) se abre con el botón de arriba.
 function EconomiaObra({ obraId, onGenerarPdf, onCambio }: { obraId: number; onGenerarPdf: () => void; onCambio: () => void }) {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -1148,10 +1167,10 @@ function EconomiaObra({ obraId, onGenerarPdf, onCambio }: { obraId: number; onGe
 
   return <section className="obraFotosSeccion" aria-label="Finanzas de la obra">
     <div className="seguimientoAcciones">
-      <div><h3>Finanzas de la obra</h3><p>Registrá aquí los pagos de la obra. Los reintegros de gastos se marcan como Pagado en Adicionales: no los cargues también como un cobro, porque se descontarían dos veces.</p></div>
+      <div><h3>Finanzas de la obra</h3><p>Registrá aquí los pagos de la obra. Los reintegros de gastos se marcan como Pagado en Cambios y adicionales: no los cargues también como un cobro, porque se descontarían dos veces.</p></div>
       <div className="adicAcciones">
         <button type="button" className="newButton" onClick={() => setMostrarCobro((v) => !v)}>{mostrarCobro ? 'Cancelar' : '💵 Registrar cobro'}</button>
-        <button type="button" className="editButton" onClick={onGenerarPdf}>📄 Estado de obra</button>
+        <button type="button" className="editButton" onClick={onGenerarPdf}>📄 Presupuesto y estado de obra</button>
         <button type="button" className="editButton" disabled={cargando} onClick={() => setRevision((valor) => valor + 1)}>Actualizar</button>
       </div>
     </div>
@@ -1182,9 +1201,9 @@ function EconomiaObra({ obraId, onGenerarPdf, onCambio }: { obraId: number; onGe
         </table></div>
       )}
 
-      <h4 style={{ marginTop: '22px' }}>Movimientos registrados en Adicionales</h4>
-      <p className="gestionAyuda" style={{ marginTop: 0 }}>Se cargan y editan en la pestaña Adicionales; acá solo se muestran.</p>
-      {movimientos.length === 0 ? <p className="adicVacio">Todavía no hay adicionales cargados en esta obra.</p> : (
+      <h4 style={{ marginTop: '22px' }}>Movimientos registrados en Cambios y adicionales</h4>
+      <p className="gestionAyuda" style={{ marginTop: 0 }}>Se cargan y editan en la pestaña Cambios y adicionales; acá solo se muestran.</p>
+      {movimientos.length === 0 ? <p className="adicVacio">Todavía no hay cambios ni adicionales cargados en esta obra.</p> : (
         <div className="gestionTabla" style={{ maxWidth: '100%', overflowX: 'auto' }}><table>
           <thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Importe</th><th>Estado</th></tr></thead>
           <tbody>{movimientos.map((m) => <tr key={m.id}>
