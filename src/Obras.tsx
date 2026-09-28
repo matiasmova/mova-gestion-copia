@@ -10,6 +10,7 @@ import AdicionalesObra from './AdicionalesObra'
 import PersonalObra from './PersonalObra'
 import RentabilidadObra from './RentabilidadObra'
 import AccesosObra from './AccesosObra'
+import ResumenObra, { type TabSeguimiento } from './ResumenObra'
 import VistaToggle, { useVista } from './VistaToggle'
 import './obrasCard.css'
 import { OBRA_ESTADOS, etiquetaObra, claseObra } from './obraEstado'
@@ -70,6 +71,9 @@ type FiltroEstado = 'todos' | EstadoObra
 
 type ResumenEco = { valor: number; cobrado: number; pendiente: number }
 
+// Datos para los avisos de las tarjetas del tablero.
+type AvisosObra = { adicPendientes: number; personal: number; accesos: number }
+
 const avanceInicial = {
   fecha: new Date().toISOString().slice(0, 10),
   titulo: '',
@@ -84,7 +88,7 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
   const [obras, setObras] = useState<Obra[]>([])
   const [presupuestosObra, setPresupuestosObra] = useState<{ id: number; obra_id: number | null; total: number | string; estado: string; activo: boolean; titulo: string }[]>([])
   const [informeObra, setInformeObra] = useState<Obra | null>(null)
-  const [seguTab, setSeguTab] = useState<'finanzas' | 'adicionales' | 'personal' | 'rentabilidad' | 'accesos' | 'timeline'>('timeline')
+  const [seguTab, setSeguTab] = useState<TabSeguimiento>('resumen')
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -113,6 +117,7 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
   const [imagenes, setImagenes] = useState<ImagenObra[]>([])
   const [fotoAvance, setFotoAvance] = useState<File | null>(null)
   const [economia, setEconomia] = useState<Record<number, ResumenEco>>({})
+  const [avisosBase, setAvisosBase] = useState<{ datos: Record<number, AvisosObra>; hayAccesos: boolean }>({ datos: {}, hayAccesos: false })
   // Si los presupuestos no se pudieron cargar, se muestran todas las obras
   // (mejor ver de más que esconder obras por un error de conexión).
   const [presupuestosOk, setPresupuestosOk] = useState(true)
@@ -128,7 +133,7 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
       setCargando(true)
       setError('')
 
-      const [resultadoObras, resultadoClientes, rPresupuestos, rAdicionales, rPagos] =
+      const [resultadoObras, resultadoClientes, rPresupuestos, rAdicionales, rPagos, rAsignaciones, rAccesos] =
         await Promise.all([
           supabase
             .from('obras')
@@ -157,6 +162,8 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
           supabase.from('presupuestos').select('id, obra_id, total, estado, activo, titulo'),
           supabase.from('adicionales').select('obra_id, importe, estado, tipo'),
           supabase.from('pagos').select('monto, obra_id, presupuesto_id'),
+          supabase.from('obra_asignaciones').select('obra_id'),
+          supabase.from('obra_accesos').select('obra_id'),
         ])
 
       if (resultadoObras.error || resultadoClientes.error) {
@@ -175,6 +182,13 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
           rAdicionales.error ? [] : rAdicionales.data ?? [],
           rPagos.error ? [] : rPagos.data ?? [],
         ))
+        const datos: Record<number, AvisosObra> = {}
+        const aviso = (id: number) => (datos[id] ??= { adicPendientes: 0, personal: 0, accesos: 0 })
+        for (const a of rAdicionales.data ?? []) if (a.obra_id != null && a.estado === 'pendiente') aviso(a.obra_id).adicPendientes++
+        for (const a of rAsignaciones.data ?? []) if (a.obra_id != null) aviso(a.obra_id).personal++
+        for (const a of rAccesos.data ?? []) if (a.obra_id != null) aviso(a.obra_id).accesos++
+        // Sin la tabla de accesos (SQL sin correr) no se avisa "sin accesos".
+        setAvisosBase({ datos, hayAccesos: !rAccesos.error })
       }
 
       setCargando(false)
@@ -309,6 +323,7 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
 
   function abrirSeguimiento(obra: Obra) {
     setObraSeguimiento(obra)
+    setSeguTab('resumen')
     setMostrarNuevoAvance(false)
     setFotoAvance(null)
     setFormularioAvance({
@@ -543,6 +558,18 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
     return coincideBusqueda && coincideEstado
   })
 
+  // Avisos cortos de cada tarjeta: lo que necesita atención sin abrir la obra.
+  function avisosDe(obra: Obra): string[] {
+    const a = avisosBase.datos[obra.id] ?? { adicPendientes: 0, personal: 0, accesos: 0 }
+    const avance = Number(obra.porcentaje_avance || 0)
+    const terminada = obra.estado === 'finalizada' || obra.estado === 'observacion' || avance >= 100
+    const lista: string[] = []
+    if (a.adicPendientes > 0) lista.push(`${a.adicPendientes} por aprobar`)
+    if (!terminada && a.personal === 0) lista.push('Sin personal')
+    if (avisosBase.hayAccesos && a.accesos === 0 && (terminada || avance >= 80)) lista.push('Sin accesos')
+    return lista
+  }
+
   return (
     <div className="obrasPage">
       <div className="pageHeader">
@@ -605,7 +632,7 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
                 <div className="crmKanbanHead"><h3>{s.t}</h3><span className="cuenta">{cols.length}</span></div>
                 <div className="crmKanbanBody">
                   {cols.length === 0 ? <div className="crmKanbanVacio">—</div> : cols.map((obra) => (
-                    <div className="crmCard" key={obra.id} onClick={() => { setSeguTab('timeline'); abrirSeguimiento(obra) }} style={{ cursor: 'pointer' }}>
+                    <div className="crmCard" key={obra.id} onClick={() => abrirSeguimiento(obra)} style={{ cursor: 'pointer' }}>
                       <div className="crmCardTop">
                         <div><h3>{obra.nombre_obra}</h3><p className="crmCardCli">{obtenerCliente(obra.cliente_id)}</p></div>
                         <span className={`crmBadge est-${claseObra(obra.estado)}`}>{etiquetaObra(obra.estado)}</span>
@@ -615,6 +642,7 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
                         <span>{Number(obra.porcentaje_avance || 0)}% avance</span>
                       </div>
                       <div className="crmBarra"><span style={{ width: `${Number(obra.porcentaje_avance || 0)}%` }} /></div>
+                      <AvisosTarjeta avisos={avisosDe(obra)} />
                       <div className="crmCardEco">
                         <div><span>Valor</span><strong>{dineroFicha(economia[obra.id]?.valor ?? 0)}</strong></div>
                         <div><span>Cobrado</span><strong>{dineroFicha(economia[obra.id]?.cobrado ?? 0)}</strong></div>
@@ -643,7 +671,7 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
                   <td>{dineroFicha(economia[obra.id]?.valor ?? 0)}</td>
                   <td>{dineroFicha(economia[obra.id]?.cobrado ?? 0)}</td>
                   <td>{dineroFicha(economia[obra.id]?.pendiente ?? 0)}</td>
-                  <td><span className={`crmBadge est-${claseObra(obra.estado)}`}>{etiquetaObra(obra.estado)}</span></td>
+                  <td><span className={`crmBadge est-${claseObra(obra.estado)}`}>{etiquetaObra(obra.estado)}</span><AvisosTarjeta avisos={avisosDe(obra)} /></td>
                 </tr>
               ))}
             </tbody>
@@ -703,6 +731,7 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
             </div>
 
             <div className="gestionTabs seguTabs">
+              <button className={seguTab === 'resumen' ? 'active' : ''} onClick={() => setSeguTab('resumen')}>📋 Resumen</button>
               <button className={seguTab === 'timeline' ? 'active' : ''} onClick={() => setSeguTab('timeline')}>🕐 Estados</button>
               <button className={seguTab === 'personal' ? 'active' : ''} onClick={() => setSeguTab('personal')}>👷 Personal</button>
               <button className={seguTab === 'rentabilidad' ? 'active' : ''} onClick={() => setSeguTab('rentabilidad')}>📊 Rentabilidad</button>
@@ -718,6 +747,20 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
             {seguTab === 'personal' && <PersonalObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} avance={Number(obraSeguimiento.porcentaje_avance || 0)} />}
 
             {seguTab === 'rentabilidad' && <RentabilidadObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} avance={Number(obraSeguimiento.porcentaje_avance || 0)} estado={obraSeguimiento.estado ?? undefined} />}
+
+            {seguTab === 'resumen' && <ResumenObra
+              key={obraSeguimiento.id}
+              obraId={obraSeguimiento.id}
+              estado={obraSeguimiento.estado}
+              avance={Number(obraSeguimiento.porcentaje_avance || 0)}
+              ultimoAvance={avances[0] ? { fecha: avances[0].fecha, titulo: avances[0].titulo, porcentaje: avances[0].porcentaje } : null}
+              cantidadAvances={cargandoAvances ? 0 : avances.length}
+              tienePresupuesto={!!presupuestoAceptado}
+              cuenta={cuenta}
+              cargandoCuenta={cargandoCuenta}
+              dinero={dineroFicha}
+              onIr={setSeguTab}
+            />}
 
             {seguTab === 'accesos' && <AccesosObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} cliente={obtenerCliente(obraSeguimiento.cliente_id)} obra={obraSeguimiento.nombre_obra} ubicacion={[obraSeguimiento.direccion, obraSeguimiento.localidad].filter(Boolean).join(', ') || null} />}
 
@@ -1221,6 +1264,11 @@ function EconomiaObra({ obraId, onGenerarPdf, onCambio }: { obraId: number; onGe
       )}
     </>}
   </section>
+}
+
+function AvisosTarjeta({ avisos }: { avisos: string[] }) {
+  if (!avisos.length) return null
+  return <div className="obraAvisos">{avisos.map((t) => <span key={t}>⚠ {t}</span>)}</div>
 }
 
 export default Obras
