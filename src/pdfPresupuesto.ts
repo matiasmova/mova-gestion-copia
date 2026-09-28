@@ -4,6 +4,7 @@ import { moneda, fechaCorta } from './gestionFormat'
 import type { ItemPresupuesto } from './NuevoPresupuesto'
 import { importeNeto, partirDescripcion, pctItem, formatoPct } from './presupuestoCalculos'
 import { antesYAhora, cargarResumenModificaciones, etiquetaModificacion } from './presupuestoModificaciones'
+import { cargarSolucionesPresupuesto, type SolucionPresupuesto } from './presupuestoSoluciones'
 import { CONDICIONES_GENERALES } from './condicionesGenerales'
 
 export const GRUPOS_DOCUMENTO: Record<string, string> = {
@@ -28,24 +29,28 @@ export type DatosPdf = {
   id: number; titulo: string; descripcion?: string | null; fecha: string; validez_dias?: number | null
   subtotal: number; descuento: number; total: number; notas?: string | null
   items: ItemPresupuesto[]; cliente: string; obra: string
+  // Opcional: si no se pasan, se leen del presupuesto guardado.
+  soluciones?: SolucionPresupuesto[]
 }
 
-// Color de marca en hex, usado también fuera del PDF (por ejemplo en
-// DocumentoPresupuesto.tsx, la vista previa en pantalla) para que ambos
-// coincidan exactamente.
+// Color de marca en hex, usado también en la vista en pantalla.
 export const COLOR_MARCA_HEX = '#E47B00'
 
 // Paleta
 const NARANJA = rgb(0.894, 0.482, 0)
-const NARANJA_SUAVE = rgb(1, 0.957, 0.902)
+const NARANJA_SUAVE = rgb(1, 0.965, 0.925)
 const OSCURO = rgb(0.063, 0.075, 0.094)
 const TEXTO = rgb(0.2, 0.23, 0.27)
 const GRIS = rgb(0.47, 0.51, 0.56)
-const GRIS_CLARO = rgb(0.957, 0.961, 0.969)
-const CEBRA = rgb(0.98, 0.98, 0.985)
-const LINEA = rgb(0.88, 0.89, 0.91)
+const GRIS_CLARO = rgb(0.965, 0.969, 0.976)
+const LINEA = rgb(0.9, 0.91, 0.93)
 const VERDE = rgb(0.137, 0.463, 0.306)
-const BLANCO = rgb(1, 1, 1)
+const VERDE_SUAVE = rgb(0.925, 0.965, 0.945)
+
+// Solo tres tamaños de letra en todo el documento.
+const F_GRANDE = 17
+const F_NORMAL = 9.5
+const F_CHICO = 7.5
 
 // Sanitiza a caracteres que las fuentes estándar (WinAnsi) pueden dibujar.
 function win(s: string): string {
@@ -67,27 +72,28 @@ export async function generarPdfPresupuesto(d: DatosPdf): Promise<Blob> {
   let logo: Awaited<ReturnType<typeof pdf.embedPng>> | null = null
   try { logo = await pdf.embedPng(await fetch(logoUrl).then((r) => r.arrayBuffer())) } catch { logo = null }
 
-  // Cambios durante la obra y estado de cuenta (solo si el presupuesto está aceptado y hay algo que mostrar).
   let resumen: Awaited<ReturnType<typeof cargarResumenModificaciones>> = null
   try { resumen = await cargarResumenModificaciones(d.id, Number(d.total) || 0) } catch (e) { console.error(e); resumen = null }
+  let soluciones: SolucionPresupuesto[] = d.soluciones ?? []
+  if (!d.soluciones) { try { soluciones = await cargarSolucionesPresupuesto(d.id) } catch (e) { console.error(e) } }
 
   const W = 595.28, H = 841.89, M = 40
-  const CW = W - 2 * M // ancho útil
-  const PIE = M + 34 // debajo de esto va el pie de página
+  const CW = W - 2 * M
+  const PIE = M + 34
   const codigo = String(d.id).padStart(4, '0')
   let page: PDFPage = pdf.addPage([W, H])
   let y = H - M
 
-  // ---------- Utilidades de dibujo ----------
+  // ---------- Utilidades ----------
   const texto = (t: string, x: number, yy: number, size: number, f: PDFFont = font, color: RGB = TEXTO) =>
     page.drawText(win(t), { x, y: yy, size, font: f, color })
   const derecha = (t: string, right: number, yy: number, size: number, f: PDFFont = font, color: RGB = TEXTO) => {
     const s = win(t); page.drawText(s, { x: right - f.widthOfTextAtSize(s, size), y: yy, size, font: f, color })
   }
-  const rect = (x: number, yy: number, w: number, h: number, color: RGB) => page.drawRectangle({ x, y: yy, width: w, height: h, color })
+  const rect = (x: number, yy: number, w: number, h: number, color: RGB, borde?: RGB) =>
+    page.drawRectangle({ x, y: yy, width: w, height: h, color, ...(borde ? { borderColor: borde, borderWidth: 0.7 } : {}) })
   const linea = (x1: number, yy: number, x2: number, grosor = 0.6, color: RGB = LINEA) =>
     page.drawLine({ start: { x: x1, y: yy }, end: { x: x2, y: yy }, thickness: grosor, color })
-  // Parte un texto en renglones que entren en maxW.
   const partir = (t: string, size: number, maxW: number, f: PDFFont = font): string[] => {
     const salida: string[] = []
     for (const crudo of win(t).split('\n')) {
@@ -102,46 +108,92 @@ export async function generarPdfPresupuesto(d: DatosPdf): Promise<Blob> {
     return salida.filter((r, i, arr) => r !== '' || (i > 0 && i < arr.length - 1))
   }
   const titulo = (t: string) => {
-    rect(M, y - 3, 3, 14, NARANJA)
-    texto(t.toUpperCase(), M + 10, y, 10.5, bold, OSCURO)
+    rect(M, y - 2, 3, 12, NARANJA)
+    texto(t.toUpperCase(), M + 10, y, F_NORMAL, bold, OSCURO)
     y -= 18
   }
   const nuevaPagina = () => {
     page = pdf.addPage([W, H]); y = H - M
-    texto(`Presupuesto N° ${codigo} · ${d.cliente}`, M, y, 8, font, GRIS)
-    derecha('continuación', M + CW, y, 8, font, GRIS)
+    texto(`Presupuesto N° ${codigo} · ${d.cliente}`, M, y, F_CHICO, font, GRIS)
+    derecha('continuación', M + CW, y, F_CHICO, font, GRIS)
     y -= 10; linea(M, y, M + CW); y -= 20
   }
   const lugar = (alto: number) => { if (y - alto < PIE) { nuevaPagina(); return true } return false }
+  // Caja de total: fondo suave, acento naranja a la izquierda, etiqueta chica y monto grande.
+  const cajaTotal = (x: number, w: number, etiqueta: string, monto: string) => {
+    rect(x, y - 16, w, 34, NARANJA_SUAVE)
+    rect(x, y - 16, 2.5, 34, NARANJA)
+    texto(etiqueta, x + 12, y - 5, F_CHICO, bold, NARANJA)
+    derecha(monto, x + w - 10, y - 7, F_GRANDE, bold, OSCURO)
+    y -= 34
+  }
+  const encabezadoFila = (celdas: { t: string; x: number; der?: boolean }[]) => {
+    rect(M, y - 6, CW, 20, GRIS_CLARO)
+    linea(M, y - 6, M + CW, 0.8, NARANJA)
+    for (const c of celdas) {
+      if (c.der) derecha(c.t, c.x, y, F_CHICO, bold, GRIS)
+      else texto(c.t, c.x, y, F_CHICO, bold, GRIS)
+    }
+    y -= 22
+  }
 
   // ---------- Encabezado ----------
   if (logo) {
     const lw = 150, lh = lw * (logo.height / logo.width)
     page.drawImage(logo, { x: M, y: y - lh + 6, width: lw, height: lh })
   }
-  derecha('PRESUPUESTO', M + CW, y, 10, bold, NARANJA); y -= 24
-  derecha(`N° ${codigo}`, M + CW, y, 22, bold, OSCURO); y -= 18
-  derecha(`Fecha: ${fechaCorta(d.fecha)}`, M + CW, y, 9, font, GRIS); y -= 12
-  if (d.validez_dias) { derecha(`Validez: ${d.validez_dias} ${d.validez_dias === 1 ? 'día' : 'días'}`, M + CW, y, 9, font, GRIS); y -= 12 }
-  y -= 10
-  rect(M, y, CW, 2.5, NARANJA); y -= 22
+  derecha('PRESUPUESTO', M + CW, y, F_CHICO, bold, NARANJA); y -= 20
+  derecha(`N° ${codigo}`, M + CW, y, F_GRANDE, bold, OSCURO); y -= 15
+  derecha(`Fecha: ${fechaCorta(d.fecha)}`, M + CW, y, F_CHICO, font, GRIS); y -= 11
+  if (d.validez_dias) { derecha(`Validez: ${d.validez_dias} ${d.validez_dias === 1 ? 'día' : 'días'}`, M + CW, y, F_CHICO, font, GRIS); y -= 11 }
+  y -= 8
+  linea(M, y, M + CW, 0.8, LINEA)
+  rect(M, y - 0.4, 60, 1.6, NARANJA)
+  y -= 22
 
   // ---------- Cliente y obra ----------
   const cajaW = (CW - 12) / 2
   const hayObra = !!d.obra && d.obra !== 'Sin obra asociada'
-  rect(M, y - 34, cajaW, 48, GRIS_CLARO)
-  rect(M + cajaW + 12, y - 34, cajaW, 48, GRIS_CLARO)
-  texto('CLIENTE', M + 12, y, 7.5, bold, GRIS)
-  texto('OBRA', M + cajaW + 24, y, 7.5, bold, GRIS)
-  y -= 17
-  texto(partir(d.cliente, 12, cajaW - 24, bold)[0] ?? '', M + 12, y, 12, bold, OSCURO)
-  texto(partir(hayObra ? d.obra : '—', 12, cajaW - 24, bold)[0] ?? '', M + cajaW + 24, y, 12, bold, OSCURO)
-  y -= 42
+  rect(M, y - 26, cajaW, 40, GRIS_CLARO)
+  rect(M + cajaW + 12, y - 26, cajaW, 40, GRIS_CLARO)
+  texto('CLIENTE', M + 12, y, F_CHICO, bold, GRIS)
+  texto('OBRA', M + cajaW + 24, y, F_CHICO, bold, GRIS)
+  y -= 15
+  texto(partir(d.cliente, F_NORMAL, cajaW - 24, bold)[0] ?? '', M + 12, y, F_NORMAL, bold, OSCURO)
+  texto(partir(hayObra ? d.obra : '—', F_NORMAL, cajaW - 24, bold)[0] ?? '', M + cajaW + 24, y, F_NORMAL, bold, OSCURO)
+  y -= 36
 
   // ---------- Título y descripción ----------
-  for (const r of partir(d.titulo, 16, CW, bold)) { texto(r, M, y, 16, bold, OSCURO); y -= 20 }
-  if (d.descripcion) for (const r of partir(d.descripcion, 9.5, CW)) { lugar(13); texto(r, M, y, 9.5, font, GRIS); y -= 13 }
-  y -= 10
+  for (const r of partir(d.titulo, F_GRANDE, CW, bold)) { texto(r, M, y, F_GRANDE, bold, OSCURO); y -= 21 }
+  if (d.descripcion) for (const r of partir(d.descripcion, F_NORMAL, CW)) { lugar(13); texto(r, M, y, F_NORMAL, font, GRIS); y -= 13 }
+  y -= 12
+
+  // ---------- Qué vas a disfrutar (soluciones elegidas) ----------
+  if (soluciones.length) {
+    lugar(70)
+    titulo('Qué vas a disfrutar con este proyecto')
+    const colW = (CW - 12) / 2
+    for (let i = 0; i < soluciones.length; i += 2) {
+      const par = soluciones.slice(i, i + 2)
+      const bloques = par.map((s) => ({ tit: partir(s.titulo, F_NORMAL, colW - 34, bold), desc: partir(s.descripcion, F_CHICO + 0.5, colW - 34) }))
+      const alto = Math.max(...bloques.map((b) => b.tit.length * 12 + b.desc.length * 10.5)) + 20
+      lugar(alto + 8)
+      bloques.forEach((b, j) => {
+        const x = M + j * (colW + 12)
+        rect(x, y - alto + 12, colW, alto, rgb(1, 1, 1), LINEA)
+        // tilde en círculo naranja
+        page.drawCircle({ x: x + 16, y: y - 1, size: 6, color: NARANJA })
+        page.drawLine({ start: { x: x + 13, y: y - 1 }, end: { x: x + 15.3, y: y - 3.4 }, thickness: 1.3, color: rgb(1, 1, 1) })
+        page.drawLine({ start: { x: x + 15.3, y: y - 3.4 }, end: { x: x + 19.3, y: y + 1.6 }, thickness: 1.3, color: rgb(1, 1, 1) })
+        let yy = y - 2
+        for (const r of b.tit) { texto(r, x + 28, yy, F_NORMAL, bold, OSCURO); yy -= 12 }
+        yy -= 1
+        for (const r of b.desc) { texto(r, x + 28, yy, F_CHICO + 0.5, font, GRIS); yy -= 10.5 }
+      })
+      y -= alto + 8
+    }
+    y -= 10
+  }
 
   // ---------- Tabla de ítems ----------
   const hayDescuento = d.items.some((it) => pctItem(it) > 0)
@@ -151,68 +203,54 @@ export async function generarPdfPresupuesto(d: DatosPdf): Promise<Blob> {
   const xCant = xPU - 86
   const xDescr = M + 30
   const anchoDescr = xCant - 38 - xDescr
-
-  const encabezadoTabla = () => {
-    rect(M, y - 7, CW, 22, OSCURO)
-    texto('#', M + 10, y, 7.5, bold, BLANCO)
-    texto('DESCRIPCIÓN', xDescr, y, 7.5, bold, BLANCO)
-    derecha('CANT.', xCant, y, 7.5, bold, BLANCO)
-    derecha('P. UNITARIO', xPU, y, 7.5, bold, BLANCO)
-    if (hayDescuento) derecha('DESC.', xDesc, y, 7.5, bold, BLANCO)
-    derecha('IMPORTE', xImp, y, 7.5, bold, BLANCO)
-    y -= 22
-  }
-
-  const grupos = agruparPorTipo(d.items)
+  const encabezadoTabla = () => encabezadoFila([
+    { t: '#', x: M + 10 }, { t: 'DESCRIPCIÓN', x: xDescr }, { t: 'CANT.', x: xCant, der: true },
+    { t: 'P. UNITARIO', x: xPU, der: true }, ...(hayDescuento ? [{ t: 'DESC.', x: xDesc, der: true }] : []), { t: 'IMPORTE', x: xImp, der: true },
+  ])
 
   lugar(60)
+  titulo('Detalle del presupuesto')
   encabezadoTabla()
   let numero = 0
-  let fila = 0
   let sumaNeta = 0
-  for (const g of grupos) {
+  for (const g of agruparPorTipo(d.items)) {
     if (lugar(40)) encabezadoTabla()
-    rect(M, y - 6, CW, 18, NARANJA_SUAVE)
-    texto(g.titulo.toUpperCase(), M + 10, y, 7.5, bold, NARANJA)
-    y -= 18
+    texto(g.titulo.toUpperCase(), M + 10, y, F_CHICO, bold, NARANJA)
+    y -= 16
     for (const it of g.items) {
       numero++
       const { titulo: tit, detalle } = partirDescripcion(it.descripcion)
-      const renglonesTit = partir(tit, 9.5, anchoDescr, bold)
-      const renglonesDet = detalle ? partir(detalle, 8, anchoDescr) : []
-      const alto = renglonesTit.length * 12 + renglonesDet.length * 10.5 + 10
+      const renglonesTit = partir(tit, F_NORMAL, anchoDescr, bold)
+      const renglonesDet = detalle ? partir(detalle, F_CHICO, anchoDescr) : []
+      const alto = renglonesTit.length * 12 + renglonesDet.length * 10 + 10
       if (lugar(alto)) encabezadoTabla()
-      if (fila % 2 === 1) rect(M, y - alto + 12, CW, alto, CEBRA)
-      fila++
       const neto = importeNeto(it)
       sumaNeta += neto
-      texto(String(numero).padStart(2, '0'), M + 10, y, 8.5, font, GRIS)
-      derecha(`${Number(it.cantidad)}`, xCant, y, 9.5, font, TEXTO)
-      derecha(moneda(it.precio_unitario), xPU, y, 9.5, font, TEXTO)
-      if (hayDescuento) derecha(pctItem(it) > 0 ? `${formatoPct(pctItem(it))}%` : '—', xDesc, y, 9.5, font, pctItem(it) > 0 ? NARANJA : GRIS)
-      derecha(moneda(neto), xImp, y, 9.5, bold, OSCURO)
+      texto(String(numero).padStart(2, '0'), M + 10, y, F_NORMAL, font, GRIS)
+      derecha(`${Number(it.cantidad)}`, xCant, y, F_NORMAL, font, TEXTO)
+      derecha(moneda(it.precio_unitario), xPU, y, F_NORMAL, font, TEXTO)
+      if (hayDescuento) derecha(pctItem(it) > 0 ? `${formatoPct(pctItem(it))}%` : '—', xDesc, y, F_NORMAL, font, pctItem(it) > 0 ? NARANJA : GRIS)
+      derecha(moneda(neto), xImp, y, F_NORMAL, bold, OSCURO)
       let yy = y
-      for (const r of renglonesTit) { texto(r, xDescr, yy, 9.5, bold, OSCURO); yy -= 12 }
-      for (const r of renglonesDet) { texto(r, xDescr, yy + 1, 8, font, GRIS); yy -= 10.5 }
+      for (const r of renglonesTit) { texto(r, xDescr, yy, F_NORMAL, bold, OSCURO); yy -= 12 }
+      for (const r of renglonesDet) { texto(r, xDescr, yy + 1, F_CHICO, font, GRIS); yy -= 10 }
       y -= alto
-      linea(M, y + 11, M + CW, 0.4)
+      linea(M, y + 11, M + CW, 0.5)
     }
   }
-  y -= 6
+  y -= 8
 
   // ---------- Totales ----------
   const bonificacion = Math.round((sumaNeta - d.total) * 100) / 100
   const totW = 250, totX = M + CW - totW
-  lugar(90)
-  texto('Subtotal', totX + 12, y, 9.5, font, TEXTO); derecha(moneda(sumaNeta), xImp, y, 9.5, font, TEXTO); y -= 16
+  lugar(80)
+  texto('Subtotal', totX + 12, y, F_NORMAL, font, GRIS); derecha(moneda(sumaNeta), xImp, y, F_NORMAL, font, TEXTO); y -= 15
   if (bonificacion > 0.5) {
-    texto('Bonificación', totX + 12, y, 9.5, font, NARANJA); derecha(`- ${moneda(bonificacion)}`, xImp, y, 9.5, font, NARANJA); y -= 16
+    texto('Bonificación', totX + 12, y, F_NORMAL, font, NARANJA); derecha(`- ${moneda(bonificacion)}`, xImp, y, F_NORMAL, font, NARANJA); y -= 15
   }
-  y -= 4
-  rect(totX, y - 10, totW, 28, OSCURO)
-  texto('TOTAL', totX + 12, y, 11, bold, BLANCO)
-  derecha(moneda(d.total), xImp, y - 1, 14, bold, BLANCO)
-  y -= 40
+  y -= 8
+  cajaTotal(totX, totW, 'TOTAL', moneda(d.total))
+  y -= 14
 
   // ---------- Modificaciones durante la obra ----------
   if (resumen) {
@@ -220,73 +258,59 @@ export async function generarPdfPresupuesto(d: DatosPdf): Promise<Blob> {
     if (hayCambios) {
       lugar(90)
       titulo('Modificaciones durante la obra')
-      for (const r of partir('El presupuesto de arriba se mantiene tal como fue aceptado. Estos son los cambios registrados después:', 8.5, CW)) { texto(r, M, y, 8.5, font, GRIS); y -= 11 }
-      y -= 6
-
+      for (const r of partir('El presupuesto de arriba se mantiene tal como fue aceptado. Estos son los cambios registrados después:', F_CHICO, CW)) { texto(r, M, y, F_CHICO, font, GRIS); y -= 10 }
+      y -= 8
       const xFecha = M + 10
       const xConc = M + 78
       const anchoConc = xImp - 100 - xConc
-      const encabezadoMods = () => {
-        rect(M, y - 7, CW, 22, OSCURO)
-        texto('FECHA', xFecha, y, 7.5, bold, BLANCO)
-        texto('CONCEPTO', xConc, y, 7.5, bold, BLANCO)
-        derecha('IMPORTE', xImp, y, 7.5, bold, BLANCO)
-        y -= 22
-      }
+      const encabezadoMods = () => encabezadoFila([{ t: 'FECHA', x: xFecha }, { t: 'CONCEPTO', x: xConc }, { t: 'IMPORTE', x: xImp, der: true }])
       encabezadoMods()
-      resumen.modificaciones.forEach((m, i) => {
+      for (const m of resumen.modificaciones) {
         const { antes, ahora } = antesYAhora(m, moneda)
         const renglones: { t: string; size: number; f: PDFFont; color: RGB }[] = [
-          { t: etiquetaModificacion(m).toUpperCase(), size: 7, f: bold, color: GRIS },
-          ...partir(m.descripcion, 9.5, anchoConc, bold).map((t) => ({ t, size: 9.5, f: bold, color: OSCURO })),
-          ...(antes ? partir(`Antes: ${antes}`, 8, anchoConc).map((t) => ({ t, size: 8, f: font, color: GRIS })) : []),
-          ...(ahora ? partir(`Ahora: ${ahora}`, 8, anchoConc).map((t) => ({ t, size: 8, f: font, color: TEXTO })) : []),
-          ...(m.motivo ? partir(`Motivo: ${m.motivo}`, 8, anchoConc).map((t) => ({ t, size: 8, f: font, color: GRIS })) : []),
+          { t: etiquetaModificacion(m).toUpperCase(), size: F_CHICO, f: bold, color: GRIS },
+          ...partir(m.descripcion, F_NORMAL, anchoConc, bold).map((t) => ({ t, size: F_NORMAL, f: bold, color: OSCURO })),
+          ...(antes ? partir(`Antes: ${antes}`, F_CHICO, anchoConc).map((t) => ({ t, size: F_CHICO, f: font, color: GRIS })) : []),
+          ...(ahora ? partir(`Ahora: ${ahora}`, F_CHICO, anchoConc).map((t) => ({ t, size: F_CHICO, f: font, color: TEXTO })) : []),
+          ...(m.motivo ? partir(`Motivo: ${m.motivo}`, F_CHICO, anchoConc).map((t) => ({ t, size: F_CHICO, f: font, color: GRIS })) : []),
         ]
         const alto = renglones.reduce((s, r) => s + r.size + 3, 0) + 10
         if (lugar(alto)) encabezadoMods()
-        if (i % 2 === 1) rect(M, y - alto + 12, CW, alto, CEBRA)
-        texto(fechaCorta(m.fecha), xFecha, y, 8.5, font, TEXTO)
-        const colorImp = m.importe < 0 ? VERDE : m.importe > 0 ? NARANJA : TEXTO
-        derecha(m.importe === 0 ? moneda(0) : conSigno(m.importe), xImp, y, 9.5, bold, colorImp)
+        texto(fechaCorta(m.fecha), xFecha, y, F_NORMAL, font, TEXTO)
+        derecha(m.importe === 0 ? moneda(0) : conSigno(m.importe), xImp, y, F_NORMAL, bold, m.importe < 0 ? VERDE : m.importe > 0 ? NARANJA : TEXTO)
         let yy = y
         for (const r of renglones) { texto(r.t, xConc, yy, r.size, r.f, r.color); yy -= r.size + 3 }
         y -= alto
-        linea(M, y + 11, M + CW, 0.4)
-      })
-      y -= 6
-
+        linea(M, y + 11, M + CW, 0.5)
+      }
+      y -= 8
       lugar(80)
-      texto('Total original aceptado', totX + 12, y, 9.5, font, TEXTO); derecha(moneda(resumen.totalOriginal), xImp, y, 9.5, font, TEXTO); y -= 16
-      texto('Modificaciones', totX + 12, y, 9.5, font, TEXTO); derecha(conSigno(resumen.totalCambios), xImp, y, 9.5, font, resumen.totalCambios < 0 ? VERDE : NARANJA); y -= 20
-      rect(totX, y - 10, totW, 28, OSCURO)
-      texto('NUEVO TOTAL', totX + 12, y, 11, bold, BLANCO)
-      derecha(moneda(resumen.nuevoTotal), xImp, y - 1, 14, bold, BLANCO)
-      y -= 40
+      texto('Total original aceptado', totX + 12, y, F_NORMAL, font, GRIS); derecha(moneda(resumen.totalOriginal), xImp, y, F_NORMAL, font, TEXTO); y -= 15
+      texto('Modificaciones', totX + 12, y, F_NORMAL, font, GRIS); derecha(conSigno(resumen.totalCambios), xImp, y, F_NORMAL, font, resumen.totalCambios < 0 ? VERDE : NARANJA); y -= 23
+      cajaTotal(totX, totW, 'NUEVO TOTAL', moneda(resumen.nuevoTotal))
+      y -= 14
     }
 
     // ---------- Estado de cuenta ----------
     lugar(84)
     titulo('Estado de cuenta')
-    const tarjetaW = (CW - 20) / 3
-    const tarjetaH = 54
-    const tarjetas: { etiqueta: string; valor: string; fondo: RGB; colorTexto: RGB; colorEtiqueta: RGB }[] = [
-      { etiqueta: hayCambios ? 'NUEVO TOTAL' : 'TOTAL', valor: moneda(resumen.nuevoTotal), fondo: GRIS_CLARO, colorTexto: OSCURO, colorEtiqueta: GRIS },
-      { etiqueta: 'COBRADO HASTA HOY', valor: moneda(resumen.cobrado), fondo: GRIS_CLARO, colorTexto: VERDE, colorEtiqueta: GRIS },
-      {
-        etiqueta: resumen.saldo >= 0 ? 'SALDO PENDIENTE' : 'SALDO A FAVOR',
-        valor: moneda(Math.abs(resumen.saldo)),
-        fondo: resumen.saldo > 0 ? NARANJA : VERDE, colorTexto: BLANCO, colorEtiqueta: BLANCO,
-      },
+    const tW = (CW - 20) / 3
+    const tH = 46
+    const saldoPendiente = resumen.saldo > 0
+    const tarjetas = [
+      { e: hayCambios ? 'NUEVO TOTAL' : 'TOTAL', v: moneda(resumen.nuevoTotal), fondo: GRIS_CLARO, acento: LINEA, color: OSCURO },
+      { e: 'COBRADO HASTA HOY', v: moneda(resumen.cobrado), fondo: GRIS_CLARO, acento: LINEA, color: VERDE },
+      { e: resumen.saldo >= 0 ? 'SALDO PENDIENTE' : 'SALDO A FAVOR', v: moneda(Math.abs(resumen.saldo)), fondo: saldoPendiente ? NARANJA_SUAVE : VERDE_SUAVE, acento: saldoPendiente ? NARANJA : VERDE, color: saldoPendiente ? NARANJA : VERDE },
     ]
     tarjetas.forEach((t, i) => {
-      const x = M + i * (tarjetaW + 10)
-      rect(x, y - tarjetaH + 12, tarjetaW, tarjetaH, t.fondo)
-      texto(t.etiqueta, x + 12, y - 4, 7.5, bold, t.colorEtiqueta)
-      texto(t.valor, x + 12, y - 26, 14, bold, t.colorTexto)
+      const x = M + i * (tW + 10)
+      rect(x, y - tH + 12, tW, tH, t.fondo)
+      rect(x, y - tH + 12, 2.5, tH, t.acento)
+      texto(t.e, x + 12, y - 2, F_CHICO, bold, GRIS)
+      texto(t.v, x + 12, y - 22, F_GRANDE, bold, t.color)
     })
-    y -= tarjetaH + 4
-    texto(`Actualizado al ${fechaCorta(new Date().toISOString().slice(0, 10))}`, M, y, 7.5, font, GRIS)
+    y -= tH + 4
+    texto(`Actualizado al ${fechaCorta(new Date().toISOString().slice(0, 10))}`, M, y, F_CHICO, font, GRIS)
     y -= 24
   }
 
@@ -295,15 +319,15 @@ export async function generarPdfPresupuesto(d: DatosPdf): Promise<Blob> {
   const vigencia = `Este presupuesto tiene una validez de ${d.validez_dias ?? 10} días corridos desde su emisión.`
   const cajas = [...(notas ? [{ t: 'NOTAS', texto: notas }] : []), { t: 'VIGENCIA', texto: vigencia }]
   const colW = cajas.length === 2 ? (CW - 12) / 2 : CW
-  const renglonesCajas = cajas.map((c) => partir(c.texto, 8.5, colW - 24))
-  const altoCajas = Math.max(...renglonesCajas.map((r) => r.length)) * 11.5 + 34
+  const renglonesCajas = cajas.map((c) => partir(c.texto, F_NORMAL, colW - 24))
+  const altoCajas = Math.max(...renglonesCajas.map((r) => r.length)) * 12.5 + 32
   lugar(altoCajas + 10)
   cajas.forEach((c, i) => {
     const x = M + i * (colW + 12)
     rect(x, y - altoCajas + 12, colW, altoCajas, GRIS_CLARO)
-    texto(c.t, x + 12, y - 4, 7.5, bold, NARANJA)
-    let yc = y - 20
-    for (const r of renglonesCajas[i]) { texto(r, x + 12, yc, 8.5, font, TEXTO); yc -= 11.5 }
+    texto(c.t, x + 12, y - 2, F_CHICO, bold, NARANJA)
+    let yc = y - 18
+    for (const r of renglonesCajas[i]) { texto(r, x + 12, yc, F_NORMAL, font, TEXTO); yc -= 12.5 }
   })
   y -= altoCajas + 16
 
@@ -311,10 +335,10 @@ export async function generarPdfPresupuesto(d: DatosPdf): Promise<Blob> {
     lugar(60)
     titulo('Condiciones generales')
     for (const cond of CONDICIONES_GENERALES) {
-      const renglones = partir(cond.texto, 8, CW)
+      const renglones = partir(cond.texto, F_CHICO + 0.5, CW)
       lugar(14 + renglones.length * 10.5)
-      texto(cond.titulo, M, y, 8.5, bold, OSCURO); y -= 12
-      for (const r of renglones) { texto(r, M, y, 8, font, GRIS); y -= 10.5 }
+      texto(cond.titulo, M, y, F_NORMAL, bold, OSCURO); y -= 12
+      for (const r of renglones) { texto(r, M, y, F_CHICO + 0.5, font, GRIS); y -= 10.5 }
       y -= 6
     }
   }
@@ -323,11 +347,11 @@ export async function generarPdfPresupuesto(d: DatosPdf): Promise<Blob> {
   const paginas = pdf.getPages()
   paginas.forEach((p, i) => {
     p.drawLine({ start: { x: M, y: M + 22 }, end: { x: W - M, y: M + 22 }, thickness: 0.6, color: LINEA })
-    p.drawRectangle({ x: M, y: M + 21.5, width: 40, height: 1.5, color: NARANJA })
-    p.drawText(win('MOVA Tecnología Smart · Espacios inteligentes'), { x: M, y: M + 9, size: 7.5, font: bold, color: OSCURO })
-    p.drawText(win('www.movaelectronica.com.ar · IG @mova.smart · +54 9 261 555 7970'), { x: M, y: M - 1, size: 7, font, color: GRIS })
+    p.drawRectangle({ x: M, y: M + 21.4, width: 40, height: 1.4, color: NARANJA })
+    p.drawText(win('MOVA Tecnología Smart'), { x: M, y: M + 9, size: F_CHICO, font: bold, color: OSCURO })
+    p.drawText(win('www.movaelectronica.com.ar · IG @mova.smart · +54 9 261 555 7970'), { x: M, y: M - 1, size: F_CHICO, font, color: GRIS })
     const pag = win(`Página ${i + 1} de ${paginas.length}`)
-    p.drawText(pag, { x: W - M - font.widthOfTextAtSize(pag, 7.5), y: M + 9, size: 7.5, font, color: GRIS })
+    p.drawText(pag, { x: W - M - font.widthOfTextAtSize(pag, F_CHICO), y: M + 9, size: F_CHICO, font, color: GRIS })
   })
 
   const bytes = await pdf.save()

@@ -4,6 +4,7 @@ import { supabase } from './supabase'
 import Clientes from './Clientes'
 import Obras from './Obras'
 import Presupuestos from './Presupuestos'
+import Soluciones from './Soluciones'
 import ProductosServicios from './ProductosServicios'
 import Finanzas from './Finanzas'
 import Compras from './Compras'
@@ -32,6 +33,7 @@ const NAVEGACION = [
   ['clientes', 'comercial', 'Clientes'],
   ['presupuestos', 'comercial', 'Presupuestos'],
   ['obras', 'comercial', 'Obras'],
+  ['soluciones', 'comercial', 'Soluciones'],
   ['catalogo', 'operacion', 'Productos y servicios'],
   ['compras', 'operacion', 'Compras'],
   ['personal', 'operacion', 'Personal'],
@@ -55,6 +57,7 @@ type Vista = (typeof NAVEGACION)[number][0]
 const PERMISOS: Partial<Record<Vista, Rol[]>> = {
   clientes: ['admin', 'encargado', 'contable'],
   presupuestos: ['admin', 'contable'],
+  soluciones: ['admin', 'contable'],
   finanzas: ['admin', 'contable'],
   tablero: ['admin', 'contable'],
   compras: ['admin', 'encargado', 'auxiliar'],
@@ -184,6 +187,7 @@ export default function AppFase2() {
     obras: <Obras obraAbrirId={obraAbrirId} onObraAbierta={() => setObraAbrirId(null)} onVerPresupuesto={(id) => { setPresupuestoAbrirId(id); navegar('presupuestos') }} />,
     presupuestos: <Presupuestos presupuestoAbrirId={presupuestoAbrirId} onPresupuestoAbierto={() => setPresupuestoAbrirId(null)} />,
     catalogo: <ProductosServicios />,
+    soluciones: <Soluciones />,
     finanzas: <Finanzas onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} />,
     compras: <Compras />,
     personal: <Personal />, notificaciones: <Notificaciones />, usuarios: <Usuarios />, configuracion: <Configuracion />,

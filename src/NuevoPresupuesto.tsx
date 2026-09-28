@@ -8,6 +8,8 @@ import {
   pctItem,
   redondear,
 } from './presupuestoCalculos'
+import { cargarSoluciones, type Solucion } from './Soluciones'
+import { cargarSolucionesPresupuesto, type SolucionPresupuesto } from './presupuestoSoluciones'
 
 export type ClienteOpcion = {
   id: number
@@ -78,6 +80,9 @@ const itemVacio: ItemPresupuesto = {
   descuento_pct: 0,
 }
 
+// Título automático a partir de las soluciones elegidas.
+const tituloDesdeSoluciones = (lista: SolucionPresupuesto[]) => lista.map((s) => s.titulo).join(' + ')
+
 function NuevoPresupuesto({
   clientes,
   obras,
@@ -92,6 +97,8 @@ function NuevoPresupuesto({
     presupuesto?.obra_id?.toString() ?? '',
   )
   const [titulo, setTitulo] = useState(presupuesto?.titulo ?? '')
+  // Si el título ya existe o se escribe a mano, las soluciones no lo pisan.
+  const [tituloManual, setTituloManual] = useState(!!presupuesto?.titulo)
   const [descripcion, setDescripcion] = useState(
     presupuesto?.descripcion ?? '',
   )
@@ -129,6 +136,11 @@ function NuevoPresupuesto({
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
 
+  // Soluciones (textos de beneficios) del catálogo y las elegidas para este presupuesto.
+  const [catalogoSoluciones, setCatalogoSoluciones] = useState<Solucion[]>([])
+  const [soluciones, setSoluciones] = useState<SolucionPresupuesto[]>([])
+  const [teniaSoluciones, setTeniaSoluciones] = useState(false)
+
   useEffect(() => {
     async function cargarCatalogo() {
       const { data, error: errorCatalogo } = await supabase
@@ -152,6 +164,38 @@ function NuevoPresupuesto({
 
     cargarCatalogo()
   }, [])
+
+  useEffect(() => {
+    let vigente = true
+    void cargarSoluciones().then((lista) => { if (vigente) setCatalogoSoluciones(lista) })
+    if (presupuesto?.id) {
+      void cargarSolucionesPresupuesto(presupuesto.id).then((lista) => {
+        if (!vigente) return
+        setSoluciones(lista)
+        setTeniaSoluciones(lista.length > 0)
+      })
+    }
+    return () => { vigente = false }
+  }, [presupuesto?.id])
+
+  const solucionesParaAgregar = catalogoSoluciones.filter(
+    (sol) => !soluciones.some((elegida) => elegida.titulo === sol.titulo),
+  )
+
+  function cambiarSoluciones(nuevas: SolucionPresupuesto[]) {
+    setSoluciones(nuevas)
+    if (!tituloManual) setTitulo(tituloDesdeSoluciones(nuevas))
+  }
+
+  function agregarSolucion(id: string) {
+    const sol = catalogoSoluciones.find((s) => s.id === Number(id))
+    if (!sol) return
+    cambiarSoluciones([...soluciones, { titulo: sol.titulo, descripcion: sol.descripcion }])
+  }
+
+  function quitarSolucion(tituloSolucion: string) {
+    cambiarSoluciones(soluciones.filter((s) => s.titulo !== tituloSolucion))
+  }
 
   const obrasDisponibles = obras.filter(
     (obra) => Number(obra.cliente_id) === Number(clienteId),
@@ -277,7 +321,7 @@ function NuevoPresupuesto({
     }
 
     if (!titulo.trim()) {
-      setError('Ingresá un título para el presupuesto.')
+      setError('Ingresá un título para el presupuesto (o elegí una solución).')
       return
     }
 
@@ -317,6 +361,9 @@ function NuevoPresupuesto({
       ...(!presupuesto && { total_pagado: 0, etapa_trabajo: 'sin_iniciar' }),
       notas: notas.trim() || null,
       activo: true,
+      // Copia de las soluciones elegidas (solo se envía si se usan, así no falla
+      // si todavía no se ejecutó supabase-soluciones.sql).
+      ...((soluciones.length > 0 || teniaSoluciones) && { soluciones }),
     }
 
     let presupuestoId = presupuesto?.id
@@ -329,7 +376,11 @@ function NuevoPresupuesto({
 
       if (errorPresupuesto) {
         console.error(errorPresupuesto)
-        setError('No se pudo actualizar el presupuesto.')
+        setError(
+          errorPresupuesto.message?.includes('soluciones')
+            ? 'Falta ejecutar supabase-soluciones.sql en Supabase para guardar las soluciones.'
+            : 'No se pudo actualizar el presupuesto.',
+        )
         setGuardando(false)
         return
       }
@@ -354,7 +405,11 @@ function NuevoPresupuesto({
 
       if (errorPresupuesto || !data) {
         console.error(errorPresupuesto)
-        setError('No se pudo crear el presupuesto.')
+        setError(
+          errorPresupuesto?.message?.includes('soluciones')
+            ? 'Falta ejecutar supabase-soluciones.sql en Supabase para guardar las soluciones.'
+            : 'No se pudo crear el presupuesto.',
+        )
         setGuardando(false)
         return
       }
@@ -458,11 +513,56 @@ function NuevoPresupuesto({
               </select>
             </label>
 
+            {(catalogoSoluciones.length > 0 || soluciones.length > 0) && (
+              <div className="formFull" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ margin: 0 }}>
+                  Soluciones del proyecto
+                  <select
+                    value=""
+                    onChange={(evento) => agregarSolucion(evento.target.value)}
+                    disabled={solucionesParaAgregar.length === 0}
+                  >
+                    <option value="">
+                      {solucionesParaAgregar.length === 0 ? 'Ya elegiste todas las soluciones' : '+ Elegí una solución para agregarla…'}
+                    </option>
+                    {solucionesParaAgregar.map((sol) => (
+                      <option key={sol.id} value={sol.id}>{sol.titulo}</option>
+                    ))}
+                  </select>
+                </label>
+                {soluciones.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {soluciones.map((sol) => (
+                      <span
+                        key={sol.titulo}
+                        title={sol.descripcion}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 6px 5px 12px', borderRadius: '999px', background: 'linear-gradient(135deg, rgba(253,64,62,0.12), rgba(228,123,0,0.12))', border: '1px solid rgba(228,123,0,0.35)', color: '#8a3d00', fontSize: '13px', fontWeight: 600 }}
+                      >
+                        ✓ {sol.titulo}
+                        <button
+                          type="button"
+                          onClick={() => quitarSolucion(sol.titulo)}
+                          aria-label={`Quitar ${sol.titulo}`}
+                          style={{ border: 0, background: 'rgba(255,255,255,0.8)', color: '#8a3d00', width: '20px', height: '20px', borderRadius: '50%', cursor: 'pointer', lineHeight: 1, fontSize: '14px' }}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <small style={{ color: 'var(--mova-muted)', fontSize: '12px' }}>
+                  Aparecen en el presupuesto en "Qué vas a disfrutar con este proyecto".
+                  {!tituloManual && soluciones.length > 0 && ' El título se arma solo con lo que elegís; podés editarlo.'}
+                </small>
+              </div>
+            )}
+
             <label className="formFull">
               Título del presupuesto *
               <input
                 value={titulo}
-                onChange={(evento) => setTitulo(evento.target.value)}
+                onChange={(evento) => { setTitulo(evento.target.value); setTituloManual(evento.target.value.trim() !== '') }}
                 placeholder="Ej.: Instalación domótica integral"
                 required
               />
