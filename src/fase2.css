@@ -650,3 +650,9 @@
 .vpPagina{max-width:100%;height:auto;background:#fff;border-radius:4px;box-shadow:0 12px 40px rgb(0 0 0/35%)}
 .vpMensaje{margin:24px auto;max-width:560px;text-align:center;color:#e8ebef;font-size:14px}
 @media(max-width:600px){.vpBarra{flex-direction:column;align-items:stretch;gap:8px;padding:10px 12px}.vpBarra>div{justify-content:space-between}.vpBarra button{flex:1;padding:9px 6px}}
+/* Nuevo presupuesto: crear cliente / obra sin salir */
+.npEtiqueta{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.npNuevo{border:0;background:none;padding:0;color:var(--mova-orange);font-weight:700;font-size:12.5px;cursor:pointer;white-space:nowrap}
+.npNuevo:disabled{color:#b4bac2;cursor:not-allowed}
+.npAyuda{display:block;margin-top:5px;color:var(--mova-muted);font-size:11.5px;font-weight:400;line-height:1.4}
+.modalOverlay+.modalOverlay,body>.modalOverlay:last-child{z-index:1400}

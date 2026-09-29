@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from './supabase'
 import {
   descuentoItem,
@@ -10,11 +11,15 @@ import {
 } from './presupuestoCalculos'
 import { cargarSoluciones, type Solucion } from './Soluciones'
 import { cargarSolucionesPresupuesto, type SolucionPresupuesto } from './presupuestoSoluciones'
+import NuevoCliente from './NuevoCliente'
+import NuevaObra from './NuevaObra'
 
 export type ClienteOpcion = {
   id: number
   nombre: string
   apellido: string | null
+  direccion?: string | null
+  localidad?: string | null
 }
 
 export type ObraOpcion = {
@@ -96,6 +101,10 @@ function NuevoPresupuesto({
   const [obraId, setObraId] = useState(
     presupuesto?.obra_id?.toString() ?? '',
   )
+  // Clientes y obras creados desde acá se suman a la lista sin salir del presupuesto.
+  const [clientesLista, setClientesLista] = useState<ClienteOpcion[]>(clientes)
+  const [obrasLista, setObrasLista] = useState<ObraOpcion[]>(obras)
+  const [creando, setCreando] = useState<'cliente' | 'obra' | null>(null)
   const [titulo, setTitulo] = useState(presupuesto?.titulo ?? '')
   // Si el título ya existe o se escribe a mano, las soluciones no lo pisan.
   const [tituloManual, setTituloManual] = useState(!!presupuesto?.titulo)
@@ -197,14 +206,14 @@ function NuevoPresupuesto({
     cambiarSoluciones(soluciones.filter((s) => s.titulo !== tituloSolucion))
   }
 
-  const obrasDisponibles = obras.filter(
+  const obrasDisponibles = obrasLista.filter(
     (obra) => Number(obra.cliente_id) === Number(clienteId),
   )
 
   function cambiarCliente(nuevoClienteId: string) {
     setClienteId(nuevoClienteId)
 
-    const obrasDelCliente = obras.filter(
+    const obrasDelCliente = obrasLista.filter(
       (obra) =>
         Number(obra.cliente_id) === Number(nuevoClienteId),
     )
@@ -475,10 +484,39 @@ function NuevoPresupuesto({
           </button>
         </div>
 
+        {creando === 'cliente' && createPortal(
+          <NuevoCliente
+            onCancelar={() => setCreando(null)}
+            onGuardado={() => setCreando(null)}
+            onCreado={(nuevo) => {
+              setClientesLista((lista) => [...lista, nuevo].sort((a, b) => a.nombre.localeCompare(b.nombre)))
+              setClienteId(String(nuevo.id))
+              setObraId('')
+              setCreando(null)
+            }}
+          />,
+          document.body,
+        )}
+        {creando === 'obra' && createPortal(
+          <NuevaObra
+            clientes={clientesLista}
+            clienteInicial={clientesLista.find((c) => c.id === Number(clienteId)) ?? null}
+            onCancelar={() => setCreando(null)}
+            onGuardada={() => setCreando(null)}
+            onCreada={(nueva) => {
+              setObrasLista((lista) => [...lista, nueva])
+              setClienteId(String(nueva.cliente_id))
+              setObraId(String(nueva.id))
+              setCreando(null)
+            }}
+          />,
+          document.body,
+        )}
+
         <form className="presupuestoForm" onSubmit={guardar}>
           <div className="formGrid">
             <label>
-              Cliente *
+              <span className="npEtiqueta">Cliente *<button type="button" className="npNuevo" onClick={(e) => { e.preventDefault(); setCreando('cliente') }}>+ Nuevo cliente</button></span>
               <select
                 value={clienteId}
                 onChange={(evento) =>
@@ -488,7 +526,7 @@ function NuevoPresupuesto({
               >
                 <option value="">Seleccionar cliente</option>
 
-                {clientes.map((cliente) => (
+                {clientesLista.map((cliente) => (
                   <option key={cliente.id} value={cliente.id}>
                     {cliente.nombre} {cliente.apellido ?? ''}
                   </option>
@@ -497,7 +535,7 @@ function NuevoPresupuesto({
             </label>
 
             <label>
-              Obra
+              <span className="npEtiqueta">Obra<button type="button" className="npNuevo" disabled={!clienteId} title={clienteId ? undefined : 'Primero elegí el cliente'} onClick={(e) => { e.preventDefault(); setCreando('obra') }}>+ Nueva obra</button></span>
               <select
                 value={obraId}
                 onChange={(evento) => setObraId(evento.target.value)}
@@ -511,6 +549,13 @@ function NuevoPresupuesto({
                   </option>
                 ))}
               </select>
+              {clienteId && (
+                <small className="npAyuda">
+                  {obrasDisponibles.length
+                    ? '¿Otro trabajo en una obra que ya tiene? Elegí esa obra: al aceptarlo se suma a lo que ya tiene. Si es algo aparte, creá una obra nueva.'
+                    : 'Este cliente todavía no tiene obras. Podés crear una o dejarlo sin obra.'}
+                </small>
+              )}
             </label>
 
             {(catalogoSoluciones.length > 0 || soluciones.length > 0) && (

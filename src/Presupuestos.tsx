@@ -67,7 +67,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto }: { presupuest
     const [rPres, rItems, rClientes, rObras, rPagos, rAdic] = await Promise.all([
       supabase.from('presupuestos').select('id, created_at, cliente_id, obra_id, titulo, descripcion, fecha, validez_dias, estado, etapa_trabajo, subtotal, descuento, total, total_pagado, saldo, notas, activo').eq('activo', true).order('created_at', { ascending: false }),
       supabase.from('presupuesto_items').select('id, presupuesto_id, catalogo_id, tipo, descripcion, cantidad, precio_unitario, costo_unitario, descuento_pct, orden').order('orden', { ascending: true }),
-      supabase.from('Clientes').select('id, nombre, apellido').order('nombre', { ascending: true }),
+      supabase.from('Clientes').select('id, nombre, apellido, direccion, localidad').order('nombre', { ascending: true }),
       supabase.from('obras').select('id, cliente_id, nombre_obra').order('nombre_obra', { ascending: true }),
       supabase.from('pagos').select('monto, presupuesto_id, obra_id'),
       supabase.from('adicionales').select('*').in('estado', ['aprobado', 'pagado']),

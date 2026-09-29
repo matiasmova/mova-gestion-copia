@@ -28,6 +28,8 @@ type NuevoClienteProps = {
   cliente?: ClienteEditable | null
   onGuardado: () => void
   onGuardarYCrearObra?: (cliente: ClienteParaObra) => void
+  /** Si se pasa, al crear un cliente nuevo se devuelve el cliente creado (lo usa Nuevo presupuesto). */
+  onCreado?: (cliente: ClienteParaObra) => void
   onCancelar: () => void
 }
 
@@ -35,6 +37,7 @@ function NuevoCliente({
   cliente,
   onGuardado,
   onGuardarYCrearObra,
+  onCreado,
   onCancelar,
 }: NuevoClienteProps) {
   const [formulario, setFormulario] = useState({
@@ -171,6 +174,11 @@ function NuevoCliente({
 
     if (crearObraDespues && onGuardarYCrearObra) {
       onGuardarYCrearObra(data as ClienteParaObra)
+      return
+    }
+
+    if (onCreado) {
+      onCreado(data as ClienteParaObra)
       return
     }
 
