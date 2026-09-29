@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase'
 import { moneda, fechaCorta } from './gestionFormat'
 import { etiquetaObra } from './obraEstado'
+import { numeroWhatsApp } from './whatsapp'
 
 export type ClienteFichaData = {
   id: number
@@ -84,8 +85,8 @@ export default function ClienteFicha({ cliente, onCerrar, onEditar, onNuevaObra,
   const cobrado = pagos.reduce((s, p) => s + p.monto, 0)
   const saldo = Math.max(0, contratado - cobrado)
 
-  const telDigits = (cliente.telefono || '').replace(/\D/g, '')
-  const waLink = telDigits ? `https://wa.me/${telDigits.startsWith('54') ? telDigits : '549' + telDigits}` : ''
+  const waNumero = numeroWhatsApp(cliente.telefono)
+  const waLink = waNumero ? `https://wa.me/${waNumero}` : ''
 
   return (
     <div className="modalOverlay">

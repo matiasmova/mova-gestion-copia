@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { Pedido } from './BuscadorGlobal'
 import { supabase } from './supabase'
 import NuevoCliente, {
   type ClienteParaObra,
@@ -25,9 +26,9 @@ type Cliente = {
 
 type FiltroEstado = 'todos' | 'activos' | 'inactivos'
 
-type Props = { onAbrirObra?: (id: number) => void; onAbrirPresupuesto?: (id: number) => void }
+type Props = { onAbrirObra?: (id: number) => void; onAbrirPresupuesto?: (id: number) => void; pedido?: Pedido | null; onPedidoAtendido?: () => void }
 
-function Clientes({ onAbrirObra, onAbrirPresupuesto }: Props = {}) {
+function Clientes({ onAbrirObra, onAbrirPresupuesto, pedido, onPedidoAtendido }: Props = {}) {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -48,6 +49,18 @@ function Clientes({ onAbrirObra, onAbrirPresupuesto }: Props = {}) {
   const [filtroEstado, setFiltroEstado] =
     useState<FiltroEstado>('activos')
   const [vista, setVista] = useVista('clientes', 'kanban')
+
+  // Pedido del buscador general o del botón "+".
+  useEffect(() => {
+    if (!pedido) return
+    if (pedido.accion === 'nuevo') { setClienteEditando(null); setMostrarFormulario(true); onPedidoAtendido?.(); return }
+    if (pedido.accion === 'abrir' && clientes.length > 0) {
+      const c = clientes.find((x) => x.id === pedido.id)
+      if (c) setFichaCliente(c)
+      onPedidoAtendido?.()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedido, clientes])
 
   const clientesFiltrados = clientes.filter((cliente) => {
     const textoCliente = `

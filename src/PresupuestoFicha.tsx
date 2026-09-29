@@ -1,3 +1,4 @@
+import { linkWhatsApp, mensajeEnvioPresupuesto } from './whatsapp'
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from './supabase'
 import { moneda } from './gestionFormat'
@@ -46,6 +47,7 @@ export type DatosObra = {
 type Props = {
   presupuesto: PresupuestoFichaData
   cliente: string
+  telefono?: string | null
   obra: string
   convirtiendo?: boolean
   onCerrar: () => void
@@ -74,6 +76,7 @@ const ESTADOS = [
 export default function PresupuestoFicha({
   presupuesto,
   cliente,
+  telefono,
   obra,
   convirtiendo,
   onCerrar,
@@ -92,6 +95,13 @@ export default function PresupuestoFicha({
   const [compartiendo, setCompartiendo] = useState(false)
 
   const codigo = codigoPresupuesto(presupuesto.id)
+
+  // Abre WhatsApp con el mensaje listo. El PDF se adjunta con "Compartir PDF".
+  function enviarWhatsApp() {
+    const url = linkWhatsApp(telefono, mensajeEnvioPresupuesto({ cliente, titulo: presupuesto.titulo, codigo, validezDias: presupuesto.validez_dias ?? null }))
+    if (url) window.open(url, '_blank', 'noopener')
+    if (presupuesto.estado === 'borrador' && window.confirm('¿Lo marco como Enviado?')) onCambiarEstado('enviado')
+  }
   const cambioEstado = estadoLocal !== presupuesto.estado
 
   const base = useMemo<DatosPdf>(() => ({
@@ -230,6 +240,7 @@ export default function PresupuestoFicha({
             <button type="button" className="editButton" onClick={compartir} disabled={!listo || compartiendo}>
               {compartiendo ? 'Compartiendo...' : '📲 Compartir PDF'}
             </button>
+            <button type="button" className="editButton waButton" onClick={enviarWhatsApp} title={telefono ? `Escribirle al ${telefono}` : 'El cliente no tiene teléfono: elegís el contacto en WhatsApp'}>💬 WhatsApp</button>
             <button type="button" className="deactivateButton" onClick={onEliminar}>Eliminar</button>
           </div>
 

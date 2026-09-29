@@ -227,3 +227,49 @@
   color: #101318;
   box-shadow: 0 8px 20px -12px rgba(16, 19, 24, 0.35);
 }
+
+/* ===== Buscador general ===== */
+.fase2App .menuBuscar{display:flex;align-items:center;gap:8px;width:calc(100% - 24px);margin:0 12px 10px;padding:9px 12px;border:1px solid #eceef2;border-radius:10px;background:#f7f8fa;color:#697382;font:inherit;font-size:13.5px;cursor:pointer;text-align:left}
+.fase2App .menuBuscar span{flex:1}
+.fase2App .menuBuscar kbd{font-size:10.5px;padding:2px 5px;border:1px solid #dde1e7;border-radius:5px;background:#fff;color:#8a93a0}
+.fase2App .menuBuscar:hover{border-color:#e47b00;color:#101318}
+.fase2BuscarMovil{display:none}
+@media(max-width:900px){
+  .fase2App .fase2BuscarMovil{position:fixed;z-index:1150;top:12px;left:62px;right:12px;height:42px;display:flex;align-items:center;gap:8px;padding:0 14px;border:1px solid #eceef2;border-radius:12px;background:#fff;color:#8a93a0;font:inherit;font-size:14px;box-shadow:0 8px 20px -12px rgba(16,19,24,.35);cursor:pointer}
+}
+.bgOverlay{position:fixed;inset:0;z-index:3000;background:rgba(16,19,24,.45);display:flex;justify-content:center;align-items:flex-start;padding:10vh 16px 16px}
+.bgCaja{width:100%;max-width:620px;max-height:78vh;display:flex;flex-direction:column;background:#fff;border-radius:16px;box-shadow:0 30px 60px -20px rgba(0,0,0,.45);overflow:hidden}
+.bgEntrada{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid #eef1f4;color:#8a93a0}
+.bgEntrada input{flex:1;border:0;outline:0;font:inherit;font-size:16px;padding:4px 0;background:transparent;color:#14181e;min-width:0}
+.bgCerrar{border:1px solid #e3e6eb;border-radius:6px;background:#f7f8fa;color:#697382;font-size:11px;padding:3px 7px;cursor:pointer}
+.bgLista{overflow:auto;padding:6px 8px 10px}
+.bgGrupo{margin:10px 8px 4px;font-size:10.5px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:#9099a6}
+.bgItem{display:flex;align-items:center;gap:12px;width:100%;padding:9px 10px;border:0;border-radius:10px;background:transparent;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.bgItem.activo{background:#fff4e6}
+.bgIcono{flex:0 0 32px;height:32px;border-radius:9px;background:#f3f5f8;display:flex;align-items:center;justify-content:center;color:#4a5361}
+.bgItem.activo .bgIcono{background:#e47b00;color:#fff}
+.bgTexto{flex:1;min-width:0;display:flex;flex-direction:column}
+.bgTexto strong{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bgTexto small{font-size:12px;color:#8a93a0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bgIr{color:#b0b7c2;font-size:20px}
+.bgEstado{margin:10px;color:#8a93a0;font-size:13px}
+.bgEstado kbd{font-size:11px;padding:1px 5px;border:1px solid #dde1e7;border-radius:4px;background:#f7f8fa}
+
+/* ===== Botón "+" de acciones rápidas ===== */
+.bmFondo{position:fixed;inset:0;z-index:1290;background:rgba(16,19,24,.25)}
+.bmWrap{position:fixed;z-index:1300;right:22px;bottom:22px;display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+.bmBoton{width:58px;height:58px;border:0;border-radius:50%;background:#e47b00;color:#fff;font-size:32px;line-height:1;cursor:pointer;box-shadow:0 12px 26px -10px rgba(228,123,0,.8);display:flex;align-items:center;justify-content:center;transition:transform .15s}
+.bmBoton span{display:block;margin-top:-3px;transition:transform .15s}
+.bmWrap.abierto .bmBoton{background:#14181e;box-shadow:0 12px 26px -10px rgba(0,0,0,.6)}
+.bmWrap.abierto .bmBoton span{transform:rotate(45deg)}
+.bmMenu{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.bmMenu button{display:flex;align-items:center;gap:10px;border:0;background:transparent;font:inherit;cursor:pointer;padding:0}
+.bmMenu button span{padding:7px 12px;border-radius:9px;background:#fff;color:#14181e;font-size:14px;font-weight:700;box-shadow:0 6px 18px -8px rgba(0,0,0,.35)}
+.bmMenu button i{width:44px;height:44px;border-radius:50%;background:#fff;color:#e47b00;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px -8px rgba(0,0,0,.35);font-style:normal}
+.bmMenu button:hover i{background:#e47b00;color:#fff}
+@media(max-width:900px){.bmWrap{right:16px;bottom:18px}.bmBoton{width:54px;height:54px}}
+@media print{.bmWrap,.fase2BuscarMovil{display:none!important}}
+/* Con una ventana abierta, el "+" y el buscador del celular no tapan nada. */
+body:has(.modalOverlay) .bmWrap,body:has(.modalOverlay) .fase2BuscarMovil,body:has(.bgOverlay) .bmWrap{display:none}
+/* Espacio al final para que el "+" no tape lo último de la página. */
+.fase2Main{padding-bottom:96px}

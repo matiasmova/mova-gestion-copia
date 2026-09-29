@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import type { Pedido } from './BuscadorGlobal'
 import { supabase } from './supabase'
 import { fechaCorta, moneda, hoy } from './gestionFormat'
 import { confirmarEliminacion } from './confirmar'
@@ -53,11 +54,18 @@ async function abrirComprobante(ruta: string) {
   else window.location.href = data.signedUrl
 }
 
-function Compras() {
+function Compras({ pedido, onPedidoAtendido }: { pedido?: Pedido | null; onPedidoAtendido?: () => void } = {}) {
   const [obras, setObras] = useState<Obra[]>([])
   const [materiales, setMateriales] = useState<Material[]>([])
   const [pestana, setPestana] = useState<Pestana>('lista')
   const [formulario, setFormulario] = useState<{ compra: Material | null } | null>(null)
+  // Pedido del buscador general o del botón "+".
+  useEffect(() => {
+    if (!pedido) return
+    if (pedido.accion === 'nuevo') setFormulario({ compra: null })
+    onPedidoAtendido?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedido])
   const [actualizacion, setActualizacion] = useState(0)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')

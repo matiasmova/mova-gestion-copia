@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import type { Pedido } from './BuscadorGlobal'
 import { supabase } from './supabase'
 import { fechaCorta, hoy, moneda } from './gestionFormat'
 import { estadoPush, activarPush, desactivarPush, type EstadoPush } from './push'
@@ -61,7 +62,7 @@ export function momentoAviso(fecha: string, hora: string | null, avisoMin: numbe
 const textoAviso = (e: Evento) =>
   e.aviso_min == null ? 'Sin aviso' : AVISOS.find(([v]) => v === String(e.aviso_min))?.[1] ?? `${e.aviso_min} min antes`
 
-export default function Agenda() {
+export default function Agenda({ pedido, onPedidoAtendido }: { pedido?: Pedido | null; onPedidoAtendido?: () => void } = {}) {
   const [vista, setVista] = useState<Vista>('proximos')
   const [eventos, setEventos] = useState<Evento[]>([])
   const [obras, setObras] = useState<Opcion[]>([])
@@ -70,6 +71,13 @@ export default function Agenda() {
   const [error, setError] = useState('')
   const [tick, setTick] = useState(0)
   const [form, setForm] = useState<{ evento?: Evento; fecha?: string } | null>(null)
+  // Pedido del buscador general o del botón "+".
+  useEffect(() => {
+    if (!pedido) return
+    if (pedido.accion === 'nuevo') setForm({})
+    onPedidoAtendido?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedido])
   const [verHechos, setVerHechos] = useState(false)
   const [push, setPush] = useState<EstadoPush | 'cargando' | 'procesando'>('cargando')
   const [pushMsg, setPushMsg] = useState('')

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, TIPO_LINK_AUTH } from './supabase'
 import Clientes from './Clientes'
@@ -18,6 +18,7 @@ import logo from './assets/mova-logo.png'
 import './fase2.css'
 import './menu.css'
 import IconoMenu from './iconosMenu'
+import { BuscadorGlobal, BotonMas, type Pedido, type Ir } from './BuscadorGlobal'
 
 import { ROLES, ROLES_VALIDOS, NAVEGACION, GRUPOS_MENU, puedeVer, type Rol, type Vista } from './permisos'
 
@@ -36,6 +37,9 @@ export default function AppFase2() {
   const [obraAbrirId, setObraAbrirId] = useState<number | null>(null)
   const [presupuestoAbrirId, setPresupuestoAbrirId] = useState<number | null>(null)
   const [menuAbierto, setMenuAbierto] = useState(false)
+  const [buscadorAbierto, setBuscadorAbierto] = useState(false)
+  // Pedido del buscador o del botón "+" para el módulo de destino (abrir algo o crear nuevo).
+  const [pedido, setPedido] = useState<(Pedido & { vista: Vista }) | null>(null)
   const [rol, setRol] = useState<Rol>('auxiliar')
   const [nombreUsuario, setNombreUsuario] = useState('')
 
@@ -100,6 +104,22 @@ export default function AppFase2() {
     setIngresando(false)
   }
 
+  // Ctrl+K (o Cmd+K) abre el buscador desde cualquier pantalla.
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setBuscadorAbierto(true) } }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [])
+
+  const ir: Ir = useCallback((destino, p) => {
+    if (p?.accion === 'abrir' && destino === 'obras' && p.id != null) setObraAbrirId(p.id)
+    else if (p?.accion === 'abrir' && destino === 'presupuestos' && p.id != null) setPresupuestoAbrirId(p.id)
+    else if (p) setPedido({ ...p, vista: destino, n: Date.now() })
+    setVista(destino); setMenuAbierto(false)
+  }, [])
+  const pedidoPara = (v: Vista) => (pedido?.vista === v ? pedido : null)
+  const pedidoAtendido = () => setPedido(null)
+
   async function salir() { await supabase.auth.signOut(); setVista('dashboard') }
   function navegar(destino: Vista) { setVista(destino); setMenuAbierto(false) }
 
@@ -148,22 +168,25 @@ export default function AppFase2() {
   const modulos = NAVEGACION.filter(([clave]) => puedeVer(rol, clave))
 
   const contenido: Record<Exclude<Vista, 'dashboard'>, React.ReactNode> = {
-    clientes: <Clientes
+    clientes: <Clientes pedido={pedidoPara('clientes')} onPedidoAtendido={pedidoAtendido}
       onAbrirObra={puedeVer(rol, 'obras') ? (id) => { setObraAbrirId(id); navegar('obras') } : undefined}
       onAbrirPresupuesto={puedeVer(rol, 'presupuestos') ? (id) => { setPresupuestoAbrirId(id); navegar('presupuestos') } : undefined} />,
     obras: <Obras obraAbrirId={obraAbrirId} onObraAbierta={() => setObraAbrirId(null)} onVerPresupuesto={(id) => { setPresupuestoAbrirId(id); navegar('presupuestos') }} />,
-    presupuestos: <Presupuestos presupuestoAbrirId={presupuestoAbrirId} onPresupuestoAbierto={() => setPresupuestoAbrirId(null)} />,
-    catalogo: <ProductosServicios />,
+    presupuestos: <Presupuestos pedido={pedidoPara('presupuestos')} onPedidoAtendido={pedidoAtendido} presupuestoAbrirId={presupuestoAbrirId} onPresupuestoAbierto={() => setPresupuestoAbrirId(null)} />,
+    catalogo: <ProductosServicios pedido={pedidoPara('catalogo')} onPedidoAtendido={pedidoAtendido} />,
     soluciones: <Soluciones />,
-    finanzas: <Finanzas onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} />,
-    compras: <Compras />,
-    personal: <Personal />, agenda: <Agenda />, usuarios: <Usuarios />, configuracion: <Configuracion />,
+    finanzas: <Finanzas pedido={pedidoPara('finanzas')} onPedidoAtendido={pedidoAtendido} onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} />,
+    compras: <Compras pedido={pedidoPara('compras')} onPedidoAtendido={pedidoAtendido} />,
+    personal: <Personal />, agenda: <Agenda pedido={pedidoPara('agenda')} onPedidoAtendido={pedidoAtendido} />, usuarios: <Usuarios />, configuracion: <Configuracion />,
   }
 
   return <div className="fase2App">
     <button className="fase2MenuButton" aria-label="Abrir menú" onClick={() => setMenuAbierto((v) => !v)}><IconoMenu nombre="menu" tamano={22} /></button>
     <aside className={`fase2Sidebar ${menuAbierto ? 'abierto' : ''}`}>
       <div className="fase2Logo"><img src={logo} alt="MOVA Tecnología Smart" /></div>
+      <button type="button" className="menuBuscar" onClick={() => { setMenuAbierto(false); setBuscadorAbierto(true) }}>
+        <IconoMenu nombre="buscar" /><span>Buscar…</span><kbd>Ctrl K</kbd>
+      </button>
       <nav>
         {GRUPOS_MENU.map(([grupo, etiqueta]) => {
           const delGrupo = modulos.filter(([, g]) => g === grupo)
@@ -183,6 +206,9 @@ export default function AppFase2() {
       </nav>
       <div className="fase2Usuario"><div>{(nombreUsuario[0] ?? 'M').toUpperCase()}</div><span><strong>{nombreUsuario || 'Usuario'}</strong><small>{ROLES[rol]}</small></span><button title="Cerrar sesión" aria-label="Cerrar sesión" onClick={salir}><IconoMenu nombre="salir" /></button></div>
     </aside>
+    <button type="button" className="fase2BuscarMovil" aria-label="Buscar" onClick={() => setBuscadorAbierto(true)}><IconoMenu nombre="buscar" tamano={20} /><span>Buscar</span></button>
+    <BuscadorGlobal rol={rol} abierto={buscadorAbierto} onCerrar={() => setBuscadorAbierto(false)} ir={ir} />
+    <BotonMas rol={rol} ir={ir} />
     <main className="fase2Main">
       {vistaSegura === 'dashboard'
         ? <HomeResumen nombre={nombreUsuario} rol={rol} rolEtiqueta={ROLES[rol]} onNavegar={navegar} onSalir={salir} onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} />
