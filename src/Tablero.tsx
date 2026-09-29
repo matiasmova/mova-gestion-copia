@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from './supabase'
 import { moneda, fechaCorta, hoy } from './gestionFormat'
-import { compartirCuentaPersona } from './pdfPersonal'
+import { armarPdfCuenta } from './pdfPersonal'
+import VistaPreviaPdf from './VistaPreviaPdf'
 import { calcularPersona } from './personalCalculos'
 import { etiquetaObra, claseObra } from './obraEstado'
 import { confirmarEliminacion } from './confirmar'
@@ -83,14 +84,7 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [formGasto, setFormGasto] = useState<Gasto | null>(null)
-  const [generandoPdf, setGenerandoPdf] = useState<number | null>(null)
-
-  async function pdfPersona(personaId: number) {
-    setGenerandoPdf(personaId)
-    try { await compartirCuentaPersona(personaId) }
-    catch (e) { console.error(e); window.alert('No se pudo generar el PDF. Reintentá.') }
-    finally { setGenerandoPdf(null) }
-  }
+  const [previaPdf, setPreviaPdf] = useState<{ id: number; nombre: string } | null>(null)
   const [cargandoRecurrentes, setCargandoRecurrentes] = useState(false)
 
   useEffect(() => {
@@ -549,9 +543,9 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
               const debe = personalDetalle.filter((x) => x.personaId === f.personaId).reduce((s, x) => s + x.debe, 0)
               const adel = personalDetalle.filter((x) => x.personaId === f.personaId).reduce((s, x) => s + x.adelantado, 0)
               return (
-                <button key={f.personaId} type="button" className="editButton" disabled={generandoPdf === f.personaId}
-                  onClick={() => void pdfPersona(f.personaId as number)}>
-                  {generandoPdf === f.personaId ? 'Generando…' : f.nombre}
+                <button key={f.personaId} type="button" className="editButton"
+                  onClick={() => setPreviaPdf({ id: f.personaId as number, nombre: f.nombre })}>
+                  {f.nombre}
                   {debe > 0.5 ? <small className="deb"> · le debés {moneda(debe)}</small> : adel > 0.5 ? <small className="adel"> · adelantado {moneda(adel)}</small> : <small className="ok"> · al día</small>}
                 </button>
               )
@@ -711,6 +705,7 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
         <p className="gestionAyuda">Rotación = unidades vendidas (en presupuestos aceptados, histórico) ÷ stock actual. <strong>Sin movimiento</strong> y <strong>baja</strong> = capital dormido a revisar (liquidar/no reponer). <strong>Agotado</strong> = se vendió todo, evaluá reponer.</p>
       </>}
 
+      {previaPdf && <VistaPreviaPdf titulo={`Estado de cuenta · ${previaPdf.nombre}`} generar={() => armarPdfCuenta(previaPdf.id)} onCerrar={() => setPreviaPdf(null)} />}
       {formGasto && <FormularioGasto gasto={formGasto} onCancelar={() => setFormGasto(null)} onGuardado={() => { setFormGasto(null); void recargarGastos() }} />}
     </div>
   )

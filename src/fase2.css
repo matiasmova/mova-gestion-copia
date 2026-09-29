@@ -645,3 +645,8 @@
 .pdfPersonalBarra button{font-size:13px}
 .pdfPersonalBarra small{font-weight:700}
 .pdfPersonalBarra small.deb{color:#b23b32}.pdfPersonalBarra small.adel{color:#b86608}.pdfPersonalBarra small.ok{color:#23764e}
+/* Vista previa de PDF (páginas dibujadas con pdf.js) */
+.vpPaginas{display:flex;flex-direction:column;align-items:center;gap:16px;padding:20px 12px}
+.vpPagina{max-width:100%;height:auto;background:#fff;border-radius:4px;box-shadow:0 12px 40px rgb(0 0 0/35%)}
+.vpMensaje{margin:24px auto;max-width:560px;text-align:center;color:#e8ebef;font-size:14px}
+@media(max-width:600px){.vpBarra{flex-direction:column;align-items:stretch;gap:8px;padding:10px 12px}.vpBarra>div{justify-content:space-between}.vpBarra button{flex:1;padding:9px 6px}}

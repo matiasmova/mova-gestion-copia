@@ -352,6 +352,12 @@ export async function generarPdfCuentaPersona(c: CuentaPersona): Promise<Blob> {
   return new Blob([bytes as unknown as BlobPart], { type: 'application/pdf' })
 }
 
+// Genera el PDF de la persona (para la vista previa).
+export async function armarPdfCuenta(personaId: number): Promise<{ blob: Blob; nombre: string }> {
+  const cuenta = await cargarCuentaPersona(personaId)
+  return { blob: await generarPdfCuentaPersona(cuenta), nombre: nombreArchivoCuenta(cuenta) }
+}
+
 // Genera el PDF de la persona y lo comparte (WhatsApp, mail…) o lo descarga.
 export async function compartirCuentaPersona(personaId: number): Promise<void> {
   const cuenta = await cargarCuentaPersona(personaId)

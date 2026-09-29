@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { supabase } from './supabase'
 import { moneda } from './gestionFormat'
 import { calcularPersona } from './personalCalculos'
-import { compartirCuentaPersona } from './pdfPersonal'
+import { armarPdfCuenta } from './pdfPersonal'
+import VistaPreviaPdf from './VistaPreviaPdf'
 
 type Persona = { id: number; nombre: string; apellido: string | null; tipo: string; telefono: string | null; costo_dia: number | null; especialidad: string | null; modalidad_pago: string | null; activo: boolean }
 type Obra = { id: number; nombre_obra: string }
@@ -21,14 +22,7 @@ function Personal() {
   const [personaAsignando, setPersonaAsignando] = useState<Persona | null>(null)
   const [actualizacion, setActualizacion] = useState(0)
   const [error, setError] = useState('')
-  const [generandoPdf, setGenerandoPdf] = useState<number | null>(null)
-
-  async function pdfCuenta(persona: Persona) {
-    setGenerandoPdf(persona.id)
-    try { await compartirCuentaPersona(persona.id) }
-    catch (e) { console.error(e); window.alert('No se pudo generar el PDF. Reintentá.') }
-    finally { setGenerandoPdf(null) }
-  }
+  const [previaPdf, setPreviaPdf] = useState<{ id: number; nombre: string } | null>(null)
 
   useEffect(() => {
     async function cargar() {
@@ -55,8 +49,9 @@ function Personal() {
 
   return <div className="gestionPage"><div className="pageHeader"><div><p className="subtitle">RECURSOS HUMANOS</p><h2>Personal</h2><p className="welcome">Obreros, auxiliares y terceros</p></div><button className="newButton" onClick={() => setMostrarNuevo(true)}>+ Nuevo</button></div>
     {error && <p className="loginError">{error}</p>}
-    {!error && <div className="clientesPanel">{personas.length === 0 ? <div className="empty"><span>👷</span><h3>Sin personal cargado</h3></div> : personas.map((persona) => <div className="clienteItem" key={persona.id}><div className="clienteAvatar">{persona.nombre.charAt(0).toUpperCase()}</div><div className="clienteInfo"><strong>{persona.nombre} {persona.apellido}</strong><span>{persona.especialidad ? `${persona.especialidad} · ` : ''}{persona.telefono || 'Sin teléfono'} · {persona.costo_dia ? `${moneda(persona.costo_dia)}/día` : 'Costo a convenir'}</span><small>{persona.modalidad_pago ? `${MODALIDADES[persona.modalidad_pago] ?? persona.modalidad_pago} · ` : ''}Asignado a: {obrasDe(persona.id) || 'sin obras'}</small></div><div className="clienteActions"><span className="estadoActivo">{persona.tipo}</span><button className="editButton" disabled={generandoPdf === persona.id} onClick={() => void pdfCuenta(persona)}>{generandoPdf === persona.id ? 'Generando…' : '📄 Cuenta PDF'}</button><button className="editButton" onClick={() => setPersonaAsignando(persona)}>Asignar a obra</button><button className="editButton" onClick={() => setPersonaEditando(persona)}>Editar</button><button className="adicNo" onClick={() => eliminarPersona(persona)}>Eliminar</button></div></div>)}</div>}
+    {!error && <div className="clientesPanel">{personas.length === 0 ? <div className="empty"><span>👷</span><h3>Sin personal cargado</h3></div> : personas.map((persona) => <div className="clienteItem" key={persona.id}><div className="clienteAvatar">{persona.nombre.charAt(0).toUpperCase()}</div><div className="clienteInfo"><strong>{persona.nombre} {persona.apellido}</strong><span>{persona.especialidad ? `${persona.especialidad} · ` : ''}{persona.telefono || 'Sin teléfono'} · {persona.costo_dia ? `${moneda(persona.costo_dia)}/día` : 'Costo a convenir'}</span><small>{persona.modalidad_pago ? `${MODALIDADES[persona.modalidad_pago] ?? persona.modalidad_pago} · ` : ''}Asignado a: {obrasDe(persona.id) || 'sin obras'}</small></div><div className="clienteActions"><span className="estadoActivo">{persona.tipo}</span><button className="editButton" onClick={() => setPreviaPdf({ id: persona.id, nombre: `${persona.nombre} ${persona.apellido ?? ''}`.trim() })}>📄 Cuenta PDF</button><button className="editButton" onClick={() => setPersonaAsignando(persona)}>Asignar a obra</button><button className="editButton" onClick={() => setPersonaEditando(persona)}>Editar</button><button className="adicNo" onClick={() => eliminarPersona(persona)}>Eliminar</button></div></div>)}</div>}
     <ManoObra revision={actualizacion} />
+    {previaPdf && <VistaPreviaPdf titulo={`Estado de cuenta · ${previaPdf.nombre}`} generar={() => armarPdfCuenta(previaPdf.id)} onCerrar={() => setPreviaPdf(null)} />}
     {mostrarNuevo && <FormularioPersona onCancelar={() => setMostrarNuevo(false)} onGuardado={() => { setMostrarNuevo(false); setActualizacion((v) => v + 1) }} />}
     {personaEditando && <FormularioPersona persona={personaEditando} onCancelar={() => setPersonaEditando(null)} onGuardado={() => { setPersonaEditando(null); setActualizacion((v) => v + 1) }} />}
     {personaAsignando && <FormularioAsignacion persona={personaAsignando} obras={obras} onCancelar={() => setPersonaAsignando(null)} onGuardado={() => { setPersonaAsignando(null); setActualizacion((v) => v + 1) }} />}

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { supabase } from './supabase'
 import { AVISO_ACCESOS, generarPdfAccesos, nombreArchivoAccesos } from './pdfAccesos'
+import VistaPreviaPdf from './VistaPreviaPdf'
 import { confirmarEliminacion } from './confirmar'
 
 // Accesos de la obra: apps, usuarios y contraseñas creadas por el instalador.
@@ -29,7 +30,7 @@ export default function AccesosObra({ obraId, cliente, obra, ubicacion }: Props)
   const [editando, setEditando] = useState<Acceso | null>(null)
   const [form, setForm] = useState(VACIO)
   const [guardando, setGuardando] = useState(false)
-  const [generando, setGenerando] = useState(false)
+  const [verPdf, setVerPdf] = useState(false)
   const [verClaves, setVerClaves] = useState(false)
   const [revision, setRevision] = useState(0)
 
@@ -90,30 +91,6 @@ export default function AccesosObra({ obraId, cliente, obra, ubicacion }: Props)
     return { blob, nombre: nombreArchivoAccesos(cliente, obra) }
   }
 
-  function bajar(blob: Blob, nombre: string) {
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = nombre; a.click()
-    setTimeout(() => URL.revokeObjectURL(url), 4000)
-  }
-
-  async function descargar() {
-    setGenerando(true)
-    try { const { blob, nombre } = await armarPdf(); bajar(blob, nombre) }
-    catch (e) { console.error(e); window.alert('No se pudo generar el PDF. Reintentá.') }
-    finally { setGenerando(false) }
-  }
-
-  async function compartir() {
-    setGenerando(true)
-    try {
-      const { blob, nombre } = await armarPdf()
-      const file = new File([blob], nombre, { type: 'application/pdf' })
-      if (navigator.canShare?.({ files: [file] }) && navigator.share) await navigator.share({ files: [file], title: `Resumen de accesos · ${obra}` })
-      else bajar(blob, nombre)
-    } catch (e) { if (!(e instanceof Error && e.name === 'AbortError')) window.alert('No se pudo compartir. Usá Descargar PDF.') }
-    finally { setGenerando(false) }
-  }
-
   const oculta = (s: string | null) => (s ? (verClaves ? s : '•'.repeat(Math.min(s.length, 10))) : '—')
 
   return <section className="obraFotosSeccion" aria-label="Accesos y claves">
@@ -121,8 +98,7 @@ export default function AccesosObra({ obraId, cliente, obra, ubicacion }: Props)
       <div><h3>Accesos y claves</h3><p>Cargá las apps, usuarios y contraseñas que configuraste en la instalación. Generá el PDF para entregarle al cliente el resumen de sus claves.</p></div>
       <div className="adicAcciones">
         <button type="button" className="newButton" onClick={() => (mostrarForm ? cerrarForm() : abrirNuevo())}>{mostrarForm ? 'Cancelar' : '➕ Agregar acceso'}</button>
-        <button type="button" className="editButton" disabled={!accesos.length || generando} onClick={() => void descargar()}>{generando ? 'Generando…' : '📄 Descargar PDF'}</button>
-        <button type="button" className="editButton" disabled={!accesos.length || generando} onClick={() => void compartir()}>Compartir</button>
+        <button type="button" className="editButton" disabled={!accesos.length} onClick={() => setVerPdf(true)}>📄 Ver PDF</button>
       </div>
     </div>
 
@@ -162,5 +138,6 @@ export default function AccesosObra({ obraId, cliente, obra, ubicacion }: Props)
       </>}
       <p className="gestionAyuda" style={{ marginTop: 12 }}><strong>Aviso que se imprime al pie del PDF:</strong> {AVISO_ACCESOS.join(' ')}</p>
     </>}
+    {verPdf && <VistaPreviaPdf titulo={`Resumen de accesos · ${obra}`} generar={armarPdf} onCerrar={() => setVerPdf(false)} />}
   </section>
 }
