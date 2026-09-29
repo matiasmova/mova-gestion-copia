@@ -177,7 +177,7 @@ export default function AppFase2() {
     soluciones: <Soluciones />,
     finanzas: <Finanzas pedido={pedidoPara('finanzas')} onPedidoAtendido={pedidoAtendido} onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} />,
     compras: <Compras pedido={pedidoPara('compras')} onPedidoAtendido={pedidoAtendido} />,
-    personal: <Personal />, agenda: <Agenda pedido={pedidoPara('agenda')} onPedidoAtendido={pedidoAtendido} />, usuarios: <Usuarios />, configuracion: <Configuracion />,
+    personal: <Personal pedido={pedidoPara('personal')} onPedidoAtendido={pedidoAtendido} />, agenda: <Agenda pedido={pedidoPara('agenda')} onPedidoAtendido={pedidoAtendido} />, usuarios: <Usuarios />, configuracion: <Configuracion />,
   }
 
   return <div className="fase2App">

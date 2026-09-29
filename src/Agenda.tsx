@@ -364,16 +364,21 @@ function FormEvento({ evento, fecha, obras, clientes, onCancelar, onGuardado }: 
 // ---------- Alertas automáticas (antes: Notificaciones) ----------
 type ObraAlerta = { id: number; nombre_obra: string; fecha_fin_estimada: string | null }
 type PresupuestoAlerta = { id: number; titulo: string; obra_id: number | null; saldo: number }
+type SeguroAlerta = { id: number; nombre: string; apellido: string | null; seguro: string | null; seguro_vencimiento: string | null }
 
 function AlertasAutomaticas() {
   const [obras, setObras] = useState<ObraAlerta[]>([])
   const [presupuestos, setPresupuestos] = useState<PresupuestoAlerta[]>([])
+  const [seguros, setSeguros] = useState<SeguroAlerta[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
     let vigente = true
     async function cargar() {
+      // Seguros / ART del personal (si falta el SQL de Personal, no hay alertas de esto).
+      void supabase.from('personal').select('id,nombre,apellido,seguro,seguro_vencimiento').eq('activo', true).not('seguro_vencimiento', 'is', null)
+        .then(({ data, error: e }) => { if (vigente && !e) setSeguros((data ?? []) as SeguroAlerta[]) })
       const [o, p] = await Promise.all([
         supabase.from('obras').select('id,nombre_obra,fecha_fin_estimada').eq('activo', true).eq('estado', 'en_proceso'),
         supabase.from('presupuestos').select('id,titulo,obra_id,saldo').eq('activo', true).eq('estado', 'aceptado'),
@@ -394,6 +399,7 @@ function AlertasAutomaticas() {
   const alertas = [
     ...obras.filter((o) => o.fecha_fin_estimada && o.fecha_fin_estimada < hoyStr).map((o) => ({ clave: `v${o.id}`, icono: '⏰', titulo: `${o.nombre_obra} — plazo vencido`, detalle: `Fin estimado: ${fechaCorta(o.fecha_fin_estimada)}`, urgente: true })),
     ...obras.filter((o) => o.fecha_fin_estimada && o.fecha_fin_estimada >= hoyStr && o.fecha_fin_estimada <= en7).map((o) => ({ clave: `p${o.id}`, icono: '⏰', titulo: `${o.nombre_obra} — vence pronto`, detalle: `Fin estimado: ${fechaCorta(o.fecha_fin_estimada)}`, urgente: false })),
+    ...seguros.filter((s) => s.seguro_vencimiento && s.seguro_vencimiento <= sumarDias(hoyStr, 15)).map((s) => ({ clave: `s${s.id}`, icono: '🦺', titulo: `${s.nombre} ${s.apellido ?? ''} — ${s.seguro || 'seguro / ART'} ${s.seguro_vencimiento! < hoyStr ? 'vencido' : 'por vencer'}`, detalle: `Vence: ${fechaCorta(s.seguro_vencimiento)}`, urgente: s.seguro_vencimiento! < hoyStr })),
     ...presupuestos.filter((p) => p.saldo > 0).map((p) => ({ clave: `c${p.id}`, icono: '💰', titulo: `Saldo por cobrar — ${p.titulo}`, detalle: `${nombreObra(p.obra_id)} · ${moneda(p.saldo)} pendiente`, urgente: false })),
   ]
 
