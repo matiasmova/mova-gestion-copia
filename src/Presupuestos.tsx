@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { Pedido } from './BuscadorGlobal'
 import { supabase } from './supabase'
 import NuevoPresupuesto, {
   type ClienteOpcion,
@@ -16,6 +17,7 @@ import {
   resumenEliminacionObra,
 } from './eliminarObra'
 import { confirmarEliminacion } from './confirmar'
+import SeguimientoPresupuestos from './SeguimientoPresupuestos'
 
 type PresupuestoCompleto = PresupuestoEditable & {
   created_at: string
@@ -26,6 +28,9 @@ type PresupuestoCompleto = PresupuestoEditable & {
   activo: boolean
   // Suma de cambios y adicionales aprobados durante la obra (0 si no hubo).
   ajustes: number
+  // Seguimiento (columnas nuevas: si falta el SQL quedan vacías).
+  enviado_at?: string | null
+  seguimiento_at?: string | null
 }
 
 const ESTADOS = [
@@ -36,7 +41,7 @@ const ESTADOS = [
 ]
 const etiquetaEstado = (v: string) => ESTADOS.find((e) => e.v === v)?.t ?? v
 
-function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto }: { presupuestoAbrirId?: number | null; onPresupuestoAbierto?: () => void } = {}) {
+function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedidoAtendido }: { presupuestoAbrirId?: number | null; onPresupuestoAbierto?: () => void; pedido?: Pedido | null; onPedidoAtendido?: () => void } = {}) {
   const [presupuestos, setPresupuestos] = useState<PresupuestoCompleto[]>([])
   const [clientes, setClientes] = useState<ClienteOpcion[]>([])
   const [obras, setObras] = useState<ObraOpcion[]>([])
@@ -50,6 +55,8 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto }: { presupuest
   const [pdfPresupuesto, setPdfPresupuesto] = useState<PresupuestoCompleto | null>(null)
   const [ficha, setFicha] = useState<PresupuestoCompleto | null>(null)
   const [convirtiendo, setConvirtiendo] = useState<number | null>(null)
+  const [telefonos, setTelefonos] = useState<Record<number, string | null>>({})
+  const [faltaSqlSeguimiento, setFaltaSqlSeguimiento] = useState(false)
 
   useEffect(() => { cargarDatos() }, [])
 
@@ -60,6 +67,13 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto }: { presupuest
     if (p) { setFicha(p); onPresupuestoAbierto?.() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [presupuestoAbrirId, presupuestos])
+
+  // Pedido del buscador general o del botón "+".
+  useEffect(() => {
+    if (!pedido) return
+    if (pedido.accion === 'nuevo') { abrirNuevo(); onPedidoAtendido?.() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedido])
 
   async function cargarDatos() {
     setCargando(true)
@@ -72,6 +86,14 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto }: { presupuest
       supabase.from('pagos').select('monto, presupuesto_id, obra_id'),
       supabase.from('adicionales').select('*').in('estado', ['aprobado', 'pagado']),
     ])
+    // Teléfonos (para WhatsApp) y fechas de envío/seguimiento: si fallan, la pantalla sigue igual.
+    const [rTel, rSeg] = await Promise.all([
+      supabase.from('Clientes').select('id, telefono'),
+      supabase.from('presupuestos').select('id, enviado_at, seguimiento_at').eq('activo', true),
+    ])
+    setTelefonos(Object.fromEntries(((rTel.data ?? []) as { id: number; telefono: string | null }[]).map((c) => [c.id, c.telefono])))
+    setFaltaSqlSeguimiento(!!rSeg.error)
+    const seg = new Map(((rSeg.data ?? []) as { id: number; enviado_at: string | null; seguimiento_at: string | null }[]).map((x) => [x.id, x]))
     if (rPres.error || rItems.error || rClientes.error || rObras.error || rPagos.error || rAdic.error) {
       console.error(rPres.error || rItems.error || rClientes.error || rObras.error)
       setError('No se pudieron cargar los presupuestos.')
@@ -105,7 +127,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto }: { presupuest
         ? adicionales.filter(a => a.estado === 'aprobado').filter(corresponde).reduce((s, a) => s + (Number(a.importe) || 0), 0)
         : 0
       const pagado = pagos ? pagos.filter(corresponde).reduce((s, x) => s + (Number(x.monto) || 0), 0) : p.total_pagado
-      return { ...p, ajustes, total_pagado: pagado, saldo: Math.max(0, p.total + ajustes - pagado) }
+      return { ...p, ajustes, total_pagado: pagado, saldo: Math.max(0, p.total + ajustes - pagado), enviado_at: seg.get(p.id)?.enviado_at ?? null, seguimiento_at: seg.get(p.id)?.seguimiento_at ?? null }
     })
 
     setClientes((rClientes.data ?? []) as ClienteOpcion[])
@@ -166,13 +188,23 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto }: { presupuest
     } else if (eraAceptado && !seraAceptado) {
       for (const it of itemsStock) await supabase.rpc('descontar_stock', { p_id: it.catalogo_id, p_cant: -Number(it.cantidad) })
     }
-    setPresupuestos((prev) => prev.map((x) => (x.id === p.id ? { ...x, estado: nuevo } : x)))
-    setFicha((f) => (f && f.id === p.id ? { ...f, estado: nuevo } : f))
+    const enviado = nuevo === 'enviado' && p.estado !== 'enviado' ? { enviado_at: new Date().toISOString() } : {}
+    setPresupuestos((prev) => prev.map((x) => (x.id === p.id ? { ...x, estado: nuevo, ...enviado } : x)))
+    setFicha((f) => (f && f.id === p.id ? { ...f, estado: nuevo, ...enviado } : f))
     // Si se rechaza un presupuesto que ya tenía obra, se ofrece eliminarla.
     if (nuevo === 'rechazado' && p.obra_id != null) {
       const eliminada = await ofrecerEliminarObra(p.obra_id, 'El presupuesto pasó a Rechazado y tiene una obra vinculada.')
       if (eliminada) await cargarDatos()
     }
+  }
+
+  // Anota que se hizo el seguimiento (WhatsApp o "ya lo seguí"): deja de avisar por unos días.
+  async function marcarSeguido(id: number) {
+    const ahora = new Date().toISOString()
+    setPresupuestos((prev) => prev.map((x) => (x.id === id ? { ...x, seguimiento_at: ahora } : x)))
+    if (faltaSqlSeguimiento) return
+    const { error: err } = await supabase.from('presupuestos').update({ seguimiento_at: ahora }).eq('id', id)
+    if (err) console.error(err)
   }
 
   async function convertirEnObra(p: PresupuestoCompleto, datos?: DatosObra) {
@@ -220,6 +252,18 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto }: { presupuest
         </div>
         <button className="newButton" onClick={abrirNuevo}>+ Nuevo presupuesto</button>
       </div>
+
+      {!cargando && !error && (
+        <SeguimientoPresupuestos
+          presupuestos={presupuestos}
+          nombreCliente={nombreCliente}
+          telefonoCliente={(id) => telefonos[id] ?? null}
+          onAbrir={(id) => { const p = presupuestos.find((x) => x.id === id); if (p) abrirFicha(p) }}
+          onSeguido={(id) => void marcarSeguido(id)}
+          onRechazar={(id) => { const p = presupuestos.find((x) => x.id === id); if (p && window.confirm(`¿Pasar "${p.titulo}" a Rechazado?`)) void cambiarEstado(p, 'rechazado') }}
+        />
+      )}
+      {faltaSqlSeguimiento && !cargando && <p className="gestionAyuda">Para recordar cuándo se envió y cuándo hiciste el último seguimiento, corré el SQL de Seguimiento (fase 17) en Supabase.</p>}
 
       <div className="crmToolbar">
         <div className="crmFiltros">
@@ -289,6 +333,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto }: { presupuest
         <PresupuestoFicha
           presupuesto={ficha}
           cliente={nombreCliente(ficha.cliente_id)}
+          telefono={telefonos[ficha.cliente_id] ?? null}
           obra={nombreObra(ficha.obra_id)}
           convirtiendo={convirtiendo === ficha.id}
           onCerrar={() => setFicha(null)}

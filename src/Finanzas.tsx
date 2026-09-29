@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import type { Pedido } from './BuscadorGlobal'
 import { supabase } from './supabase'
 import { fechaCorta, moneda, hoy } from './gestionFormat'
 import { confirmarEliminacion } from './confirmar'
@@ -53,7 +54,7 @@ const nombreMes = (ym: string) => new Date(`${ym}-01T12:00:00`).toLocaleDateStri
 const nombreMesCorto = (ym: string) => new Date(`${ym}-01T12:00:00`).toLocaleDateString('es-AR', { month: 'short', year: 'numeric' }).replace('.', '')
 const normalizar = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
 
-function Finanzas({ onAbrirObra }: { onAbrirObra?: (obraId: number) => void } = {}) {
+function Finanzas({ onAbrirObra, pedido, onPedidoAtendido }: { onAbrirObra?: (obraId: number) => void; pedido?: Pedido | null; onPedidoAtendido?: () => void } = {}) {
   const [obras, setObras] = useState<Obra[]>([])
   const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([])
   const [pagos, setPagos] = useState<Pago[]>([])
@@ -63,6 +64,14 @@ function Finanzas({ onAbrirObra }: { onAbrirObra?: (obraId: number) => void } = 
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [formulario, setFormulario] = useState<'pago' | 'costo' | null>(null)
   const [pagoEditar, setPagoEditar] = useState<Pago | null>(null)
+  // Pedido del buscador general o del botón "+".
+  useEffect(() => {
+    if (!pedido) return
+    if (pedido.accion === 'cobro') { setPagoEditar(null); setFormulario('pago') }
+    else if (pedido.accion === 'gasto') setFormulario('costo')
+    onPedidoAtendido?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedido])
   const [actualizacion, setActualizacion] = useState(0)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')

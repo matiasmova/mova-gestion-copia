@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import type { Pedido } from './BuscadorGlobal'
 import { supabase } from './supabase'
 import VistaToggle, { useVista } from './VistaToggle'
 import ImportarCatalogo from './ImportarCatalogo'
@@ -95,7 +96,7 @@ function precioFinalUnidad(el: { precio_venta: number; aplica_descuento: boolean
 const nivelStock = (el: ProductoServicio) =>
   el.tipo !== 'producto' ? 'na' : el.stock <= 0 ? 'sin' : el.stock <= (el.stock_minimo ?? 5) ? 'bajo' : 'ok'
 
-function ProductosServicios() {
+function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | null; onPedidoAtendido?: () => void } = {}) {
   const [elementos, setElementos] = useState<ProductoServicio[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -297,6 +298,18 @@ function ProductosServicios() {
     setAplicaDescuento(false); setDescuentoTipo('porcentaje'); setDescuentoValor('')
     setFotoUrl(null); setFotoPreview(''); setErrorFormulario('')
   }
+  // Pedido del buscador general o del botón "+".
+  useEffect(() => {
+    if (!pedido) return
+    if (pedido.accion === 'nuevo') { abrirNuevo(); onPedidoAtendido?.(); return }
+    if (pedido.accion === 'abrir' && elementos.length > 0) {
+      const el = elementos.find((x) => x.id === pedido.id)
+      if (el) { setPestana('catalogo'); void abrirEdicion(el) }
+      onPedidoAtendido?.()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedido, elementos])
+
   function abrirNuevo() { setEditando(null); limpiarFormulario(); setMostrarFormulario(true) }
   async function abrirEdicion(el: ProductoServicio) {
     if (modoEdicion) return

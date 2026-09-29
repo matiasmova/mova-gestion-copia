@@ -17,6 +17,9 @@ const TRAZOS: Record<string, string[]> = {
   configuracion: ['M4 6h10', 'M18 6h2', 'M4 12h4', 'M12 12h8', 'M4 18h12', 'M20 18h0', 'M16 4v4', 'M10 10v4', 'M18 16v4'],
   salir: ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5', 'M21 12H9'],
   menu: ['M4 6h16', 'M4 12h16', 'M4 18h16'],
+  cobro: ['M12 3v12', 'm7 10 5 5 5-5', 'M5 21h14'],
+  gasto: ['M12 21V9', 'm7 14 5-5 5 5', 'M5 3h14'],
+  buscar: ['M11 18a7 7 0 1 1 0-14 7 7 0 0 1 0 14', 'm20 20-4-4'],
 }
 
 export default function IconoMenu({ nombre, tamano = 18 }: { nombre: string; tamano?: number }) {

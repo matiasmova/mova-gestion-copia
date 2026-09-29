@@ -1,3 +1,4 @@
+import GraficosInicio from './GraficosInicio'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { supabase } from './supabase'
 import { TIPOS_EVENTO } from './Agenda'
@@ -15,7 +16,7 @@ import { calcularPersona } from './personalCalculos'
 
 type Rol = 'admin' | 'encargado' | 'auxiliar' | 'contable'
 type Destino = 'obras' | 'presupuestos' | 'clientes' | 'agenda'
-type TabInicio = 'resumen' | Pestana
+type TabInicio = 'resumen' | 'graficos' | Pestana
 
 type Obra = { id: number; cliente_id: number; nombre_obra: string; localidad: string | null; estado: string | null; porcentaje_avance: number | null; activo: boolean }
 type Cliente = { id: number; nombre: string; apellido: string | null }
@@ -325,7 +326,7 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
 
   const pestanas: [TabInicio, string][] = [
     ['resumen', 'Resumen'],
-    ...(verFinanzas ? [['pyl', 'Balance'], ['caja', 'Cobranzas'], ['personal', 'Personal'], ['gastos', 'Gastos fijos'], ['inventario', 'Inventario']] as [TabInicio, string][] : []),
+    ...(verFinanzas ? [['graficos', '📊 Gráficos'], ['pyl', 'Balance'], ['caja', 'Cobranzas'], ['personal', 'Personal'], ['gastos', 'Gastos fijos'], ['inventario', 'Inventario']] as [TabInicio, string][] : []),
   ]
 
   return <div className="fase2Dashboard homeCompacto">
@@ -340,7 +341,8 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
       ))}
     </div>
 
-    {tab !== 'resumen' && verFinanzas && (
+    {tab === 'graficos' && verFinanzas && <GraficosInicio onIr={(v) => onNavegar(v)} />}
+    {tab !== 'resumen' && tab !== 'graficos' && verFinanzas && (
       <Tablero embebido pestana={tab} onAbrirObra={onAbrirObra} />
     )}
 
