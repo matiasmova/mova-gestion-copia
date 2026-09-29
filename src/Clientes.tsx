@@ -25,7 +25,9 @@ type Cliente = {
 
 type FiltroEstado = 'todos' | 'activos' | 'inactivos'
 
-function Clientes() {
+type Props = { onAbrirObra?: (id: number) => void; onAbrirPresupuesto?: (id: number) => void }
+
+function Clientes({ onAbrirObra, onAbrirPresupuesto }: Props = {}) {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -288,6 +290,8 @@ function Clientes() {
         <ClienteFicha
           cliente={fichaCliente}
           onCerrar={() => setFichaCliente(null)}
+          onAbrirObra={onAbrirObra}
+          onAbrirPresupuesto={onAbrirPresupuesto}
           onEditar={() => {
             setClienteEditando(fichaCliente)
             setMostrarFormulario(true)

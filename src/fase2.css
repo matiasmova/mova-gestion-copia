@@ -230,8 +230,8 @@
 .fichaAcciones{display:flex;gap:8px;flex-wrap:wrap}
 .fichaAcciones a{display:inline-flex;align-items:center;text-decoration:none}
 .fichaKpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-.fichaKpis>div{border:1px solid var(--mova-border);border-radius:12px;padding:14px;background:#fff}
-.fichaKpis>div span{font-size:10px;font-weight:800;letter-spacing:1px;color:#9099a6}
+.fichaKpis>div,.fichaKpis>button{border:1px solid var(--mova-border);border-radius:12px;padding:14px;background:#fff}
+.fichaKpis>div span,.fichaKpis>button span{font-size:10px;font-weight:800;letter-spacing:1px;color:#9099a6}
 .fichaKpis strong{display:block;margin-top:6px;font-size:18px;font-variant-numeric:tabular-nums;color:#14181e}
 .fichaKpis .alerta{border-color:#f1c38d;background:#fff6e9}
 .fichaKpis .alerta strong{color:var(--mova-orange)}
@@ -240,7 +240,7 @@
 .fichaRelHead{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--mova-border);background:#f7f8fa}
 .fichaRelHead h3{margin:0;font-size:13px}
 .fichaRelHead span{font-size:11px;font-weight:700;color:var(--mova-muted);background:#fff;border:1px solid var(--mova-border);border-radius:999px;padding:1px 8px}
-.fichaRow{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid #eef1f4}
+.fichaRow{width:100%;box-sizing:border-box;border:0;background:#fff;font:inherit;color:inherit;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid #eef1f4}
 .fichaRow:last-child{border-bottom:0}
 .fichaRow strong{display:block;font-size:13px}
 .fichaRow small{color:var(--mova-muted);font-size:11.5px}
@@ -939,3 +939,18 @@ button.comprobanteCard{padding:0;text-align:left;font:inherit;cursor:pointer;wid
 }
 .prMoneda .segTipo{align-self:flex-start}
 .catalogoForm label.caCheck{flex-direction:row;align-items:center;font-weight:600;margin-top:8px}
+
+/* Ficha de cliente: filas y totales clickeables */
+.fichaKpis>button{font:inherit;text-align:left;cursor:pointer;transition:border-color .12s}
+.fichaKpis>button:hover{border-color:var(--mova-orange)}
+.fichaRow>div{flex:1;min-width:0}
+button.fichaRow:not(:disabled){cursor:pointer}
+button.fichaRow:not(:disabled):hover{background:#fff8ef}
+button.fichaRow:disabled{cursor:default;opacity:1}
+.fichaIr{color:#b0b7c2;font-size:20px;line-height:1;font-weight:400}
+button.fichaRow:not(:disabled):hover .fichaIr{color:var(--mova-orange)}
+@media(max-width:760px){
+  .fichaKpis{grid-template-columns:1fr 1fr;gap:8px}
+  .fichaKpis>div,.fichaKpis>button{padding:10px 12px}
+  .fichaKpis strong{font-size:15px}
+}
