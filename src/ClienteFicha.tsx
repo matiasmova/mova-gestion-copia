@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase'
 import { moneda, fechaCorta } from './gestionFormat'
 import { etiquetaObra } from './obraEstado'
@@ -20,19 +20,32 @@ export type ClienteFichaData = {
 
 type Obra = { id: number; nombre_obra: string; estado: string | null; porcentaje_avance: number | null }
 type Presupuesto = { id: number; titulo: string; estado: string; total: number; total_pagado: number; saldo: number; fecha: string }
-type Pago = { id: number; monto: number; fecha: string; medio_pago: string | null }
+type Pago = { id: number; monto: number; fecha: string; medio_pago: string | null; obra_id: number | null; presupuesto_id: number | null }
 
 type Props = {
   cliente: ClienteFichaData
   onCerrar: () => void
   onEditar: () => void
   onNuevaObra: () => void
+  // Si no se pasan (el usuario no tiene acceso), las filas no son clickeables.
+  onAbrirObra?: (id: number) => void
+  onAbrirPresupuesto?: (id: number) => void
 }
 
 const claseEstadoObra = (e: string | null) =>
   e === 'finalizada' ? 'fin' : e === 'observacion' ? 'pausa' : 'ejecucion'
 
-export default function ClienteFicha({ cliente, onCerrar, onEditar, onNuevaObra }: Props) {
+export default function ClienteFicha({ cliente, onCerrar, onEditar, onNuevaObra, onAbrirObra, onAbrirPresupuesto }: Props) {
+  const refObras = useRef<HTMLDivElement>(null)
+  const refPres = useRef<HTMLDivElement>(null)
+  const refCobros = useRef<HTMLDivElement>(null)
+  const irA = (r: React.RefObject<HTMLDivElement | null>) => r.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  // Un cobro lleva a su obra (ahí están los cobros) o, si no tiene, a su presupuesto.
+  const abrirCobro = (pg: Pago) => {
+    if (pg.obra_id && onAbrirObra) onAbrirObra(pg.obra_id)
+    else if (pg.presupuesto_id && onAbrirPresupuesto) onAbrirPresupuesto(pg.presupuesto_id)
+  }
+  const cobroAbrible = (pg: Pago) => !!((pg.obra_id && onAbrirObra) || (pg.presupuesto_id && onAbrirPresupuesto))
   const [obras, setObras] = useState<Obra[]>([])
   const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([])
   const [pagos, setPagos] = useState<Pago[]>([])
@@ -56,7 +69,7 @@ export default function ClienteFicha({ cliente, onCerrar, onEditar, onNuevaObra 
       if (presIds.length) filtros.push(`presupuesto_id.in.(${presIds.join(',')})`)
       if (obraIds.length) filtros.push(`obra_id.in.(${obraIds.join(',')})`)
       if (filtros.length) {
-        const pg = await supabase.from('pagos').select('id,monto,fecha,medio_pago').or(filtros.join(','))
+        const pg = await supabase.from('pagos').select('id,monto,fecha,medio_pago,obra_id,presupuesto_id').or(filtros.join(','))
         setPagos(((pg.data ?? []) as any[]).map((x) => ({ ...x, monto: Number(x.monto) })) as Pago[])
       } else {
         setPagos([])
@@ -111,40 +124,43 @@ export default function ClienteFicha({ cliente, onCerrar, onEditar, onNuevaObra 
           </div>
 
           <div className="fichaKpis">
-            <div><span>OBRAS</span><strong>{obras.length}</strong></div>
-            <div><span>CONTRATADO</span><strong>{moneda(contratado)}</strong></div>
-            <div><span>COBRADO</span><strong>{moneda(cobrado)}</strong></div>
-            <div className="alerta"><span>SALDO</span><strong>{moneda(saldo)}</strong></div>
+            <button type="button" onClick={() => irA(refObras)}><span>OBRAS</span><strong>{obras.length}</strong></button>
+            <button type="button" onClick={() => irA(refPres)}><span>CONTRATADO</span><strong>{moneda(contratado)}</strong></button>
+            <button type="button" onClick={() => irA(refCobros)}><span>COBRADO</span><strong>{moneda(cobrado)}</strong></button>
+            <button type="button" className="alerta" onClick={() => irA(refPres)}><span>SALDO</span><strong>{moneda(saldo)}</strong></button>
           </div>
 
           {cargando ? <p style={{ color: 'var(--mova-muted)' }}>Cargando información del cliente...</p> : (
             <div className="fichaRelaciones">
-              <div className="fichaRel">
+              <div className="fichaRel" ref={refObras}>
                 <div className="fichaRelHead"><h3>Obras</h3><span>{obras.length}</span></div>
                 {obras.length === 0 ? <p className="fichaVacio">Sin obras.</p> : obras.map((o) => (
-                  <div className="fichaRow" key={o.id}>
+                  <button type="button" className="fichaRow" key={o.id} disabled={!onAbrirObra} onClick={() => onAbrirObra?.(o.id)}>
                     <div><strong>{o.nombre_obra}</strong><small>{Number(o.porcentaje_avance || 0)}% de avance</small></div>
                     <em className={`fichaEstado ${claseEstadoObra(o.estado)}`}>{etiquetaObra(o.estado)}</em>
-                  </div>
+                    {onAbrirObra && <b className="fichaIr" aria-hidden>›</b>}
+                  </button>
                 ))}
               </div>
 
-              <div className="fichaRel">
+              <div className="fichaRel" ref={refPres}>
                 <div className="fichaRelHead"><h3>Presupuestos</h3><span>{presupuestos.length}</span></div>
                 {presupuestos.length === 0 ? <p className="fichaVacio">Sin presupuestos.</p> : presupuestos.map((p) => (
-                  <div className="fichaRow" key={p.id}>
+                  <button type="button" className="fichaRow" key={p.id} disabled={!onAbrirPresupuesto} onClick={() => onAbrirPresupuesto?.(p.id)}>
                     <div><strong>{p.titulo}</strong><small>{fechaCorta(p.fecha)} · saldo {moneda(p.saldo)}</small></div>
                     <em className={`fichaEstado ${p.estado === 'aceptado' ? 'fin' : p.estado === 'rechazado' ? 'pausa' : 'pendiente'}`}>{p.estado}</em>
-                  </div>
+                    {onAbrirPresupuesto && <b className="fichaIr" aria-hidden>›</b>}
+                  </button>
                 ))}
               </div>
 
-              <div className="fichaRel">
+              <div className="fichaRel" ref={refCobros}>
                 <div className="fichaRelHead"><h3>Cobros</h3><span>{pagos.length}</span></div>
                 {pagos.length === 0 ? <p className="fichaVacio">Sin cobros registrados.</p> : pagos.map((pg) => (
-                  <div className="fichaRow" key={pg.id}>
-                    <div><strong>{moneda(pg.monto)}</strong><small>{fechaCorta(pg.fecha)}{pg.medio_pago ? ` · ${pg.medio_pago}` : ''}</small></div>
-                  </div>
+                  <button type="button" className="fichaRow" key={pg.id} disabled={!cobroAbrible(pg)} onClick={() => abrirCobro(pg)}>
+                    <div><strong>{moneda(pg.monto)}</strong><small>{fechaCorta(pg.fecha)}{pg.medio_pago ? ` · ${pg.medio_pago}` : ''}{pg.obra_id ? ` · ${obras.find((o) => o.id === pg.obra_id)?.nombre_obra ?? 'obra'}` : ''}</small></div>
+                    {cobroAbrible(pg) && <b className="fichaIr" aria-hidden>›</b>}
+                  </button>
                 ))}
               </div>
             </div>

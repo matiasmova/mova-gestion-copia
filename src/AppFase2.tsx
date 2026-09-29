@@ -148,7 +148,9 @@ export default function AppFase2() {
   const modulos = NAVEGACION.filter(([clave]) => puedeVer(rol, clave))
 
   const contenido: Record<Exclude<Vista, 'dashboard'>, React.ReactNode> = {
-    clientes: <Clientes />,
+    clientes: <Clientes
+      onAbrirObra={puedeVer(rol, 'obras') ? (id) => { setObraAbrirId(id); navegar('obras') } : undefined}
+      onAbrirPresupuesto={puedeVer(rol, 'presupuestos') ? (id) => { setPresupuestoAbrirId(id); navegar('presupuestos') } : undefined} />,
     obras: <Obras obraAbrirId={obraAbrirId} onObraAbierta={() => setObraAbrirId(null)} onVerPresupuesto={(id) => { setPresupuestoAbrirId(id); navegar('presupuestos') }} />,
     presupuestos: <Presupuestos presupuestoAbrirId={presupuestoAbrirId} onPresupuestoAbierto={() => setPresupuestoAbrirId(null)} />,
     catalogo: <ProductosServicios />,
