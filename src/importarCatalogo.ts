@@ -25,6 +25,8 @@ export type OpcionesImportacion = {
   // Al cambiar el costo de un producto existente sin precio en la hoja,
   // mantener la relación actual entre precio y costo.
   recalcularPrecio: boolean
+  // false si todavía no se corrió el SQL de moneda por producto (no se envían esas columnas).
+  conMoneda?: boolean
 }
 
 export type AccionFila = 'crear' | 'actualizar' | 'sinCambios' | 'error'
@@ -52,7 +54,7 @@ export type Plan = {
 type Campo =
   | 'codigo' | 'nombre' | 'tipo' | 'categoria' | 'proveedor' | 'unidad'
   | 'costo' | 'costoUsd' | 'ganancia' | 'lista' | 'ventaUsd' | 'stock' | 'stockMinimo'
-  | 'iva' | 'link' | 'foto' | 'descripcion'
+  | 'iva' | 'link' | 'foto' | 'descripcion' | 'moneda' | 'nombrePresupuesto'
 
 const ETIQUETA_CAMPO: Record<Campo, string> = {
   codigo: 'Código', nombre: 'Nombre', tipo: 'Tipo', categoria: 'Categoría',
@@ -60,6 +62,7 @@ const ETIQUETA_CAMPO: Record<Campo, string> = {
   costoUsd: 'Precio de compra (USD)', ganancia: '% de ganancia',
   lista: 'Precio de lista', ventaUsd: 'Precio de venta (USD)', stock: 'Stock', stockMinimo: 'Stock mínimo',
   iva: 'IVA', link: 'Link de compra', foto: 'Foto (link)', descripcion: 'Descripción',
+  moneda: 'Moneda', nombrePresupuesto: 'Nombre en presupuesto',
 }
 
 // Encabezados aceptados (se comparan sin tildes, mayúsculas ni símbolos).
@@ -80,7 +83,9 @@ const ALIAS: Record<Campo, string[]> = {
   iva: ['iva', 'ivapct', 'alicuota', 'alicuotaiva'],
   link: ['linkdecompra', 'linkcompra', 'link', 'url', 'enlace'],
   foto: ['foto', 'imagen', 'fotourl', 'imagenurl', 'urlfoto', 'urlimagen', 'linkfoto', 'linkdefoto'],
-  descripcion: ['descripcion', 'detalle', 'descripciondetallada'],
+  descripcion: ['descripcion', 'detalle', 'descripciondetallada', 'descripcioninterna', 'detalleinterno'],
+  moneda: ['moneda', 'divisa', 'monedadelprecio'],
+  nombrePresupuesto: ['nombreenpresupuesto', 'nombrepresupuesto', 'nombreparaelpresupuesto', 'nombrecomercial', 'nombrecliente', 'comoapareceenelpresupuesto', 'enpresupuesto'],
 }
 
 const UNIDADES = ['unidad', 'metro', 'hora', 'servicio', 'kit', 'boca', 'circuito']
@@ -320,22 +325,42 @@ export function planificarDesdeFilas(
     const stockMinimo = numero('stockMinimo')
     const iva = numero('iva')
 
-    if (costoUsd !== undefined) {
-      if (costoUsd === 0) {
+    // Moneda de la fila: con "USD" en la columna Moneda, los precios de compra y
+    // de lista de la fila están en dólares. Sin columna Moneda, una fila con
+    // columnas en USD también queda como producto en dólares.
+    let costoUsdF = costoUsd
+    let ventaUsdF = ventaUsd
+    let monedaFila: 'ARS' | 'USD' | undefined
+    const monedaBruta = celda('moneda')
+    if (monedaBruta) {
+      const m = normalizar(monedaBruta)
+      if (/^(usd|us|dolar|dolares|u\$s|uss)/.test(m) || m === 'u') monedaFila = 'USD'
+      else if (/^(ars|peso|pesos|\$)/.test(m) || m === '') monedaFila = 'ARS'
+      else errores.push(`Moneda "${monedaBruta}" no válida (usá ARS o USD).`)
+    }
+    if (monedaFila === 'USD') {
+      if (costoUsdF === undefined && costoNuevo !== undefined) { costoUsdF = costoNuevo; costoNuevo = undefined }
+      if (ventaUsdF === undefined && lista !== undefined) { ventaUsdF = lista; lista = undefined }
+    } else if (monedaFila === undefined && (costoUsd !== undefined || ventaUsd !== undefined)) {
+      monedaFila = 'USD'
+    }
+    const costoUsdOriginal = costoUsdF
+    if (costoUsdF !== undefined) {
+      if (costoUsdF === 0) {
         avisos.push('Costo en USD igual a 0: se ignoró.')
       } else if (!(opciones.cotizacion > 0)) {
         errores.push('La hoja tiene costos en dólares: ingresá la cotización del dólar.')
       } else if (costoNuevo === undefined) {
-        costoNuevo = dos(costoUsd * opciones.cotizacion)
+        costoNuevo = dos(costoUsdF * opciones.cotizacion)
       }
     }
-    if (ventaUsd !== undefined) {
-      if (ventaUsd === 0) {
+    if (ventaUsdF !== undefined) {
+      if (ventaUsdF === 0) {
         avisos.push('Precio de venta en USD igual a 0: se ignoró.')
       } else if (!(opciones.cotizacion > 0)) {
         errores.push('La hoja tiene precio de venta en dólares: ingresá la cotización del dólar.')
       } else if (lista === undefined) {
-        lista = dos(ventaUsd * opciones.cotizacion)
+        lista = dos(ventaUsdF * opciones.cotizacion)
       }
     }
     if (costoNuevo === 0) { costoNuevo = undefined; avisos.push('Costo igual a 0: se ignoró.') }
@@ -360,6 +385,7 @@ export function planificarDesdeFilas(
     const categoria = celda('categoria') || undefined
     const proveedor = celda('proveedor') || undefined
     const descripcion = celda('descripcion') || undefined
+    const nombrePresupuesto = celda('nombrePresupuesto') || undefined
     let link = celda('link') || undefined
     if (link && !/^https?:\/\//i.test(link)) { avisos.push('El link no empieza con http: se ignoró.'); link = undefined }
     let foto = celda('foto') || undefined
@@ -429,6 +455,17 @@ export function planificarDesdeFilas(
       }
     }
 
+    // Productos en dólares: se guardan también los valores en USD (así se
+    // recalculan solos cuando cambia la cotización).
+    const esUsd = monedaFila === 'USD' && opciones.cotizacion > 0
+    const precioUsdFinal = esUsd ? (ventaUsdF !== undefined && ventaUsdF > 0 ? ventaUsdF : lista !== undefined ? dos(lista / opciones.cotizacion) : undefined) : undefined
+    const costoUsdFinal = esUsd ? (costoUsdOriginal !== undefined && costoUsdOriginal > 0 ? costoUsdOriginal : undefined) : undefined
+    const extrasMoneda: Record<string, unknown> = opciones.conMoneda === false ? {} : {
+      ...(monedaFila ? { moneda: esUsd ? 'USD' : 'ARS' } : {}),
+      ...(esUsd ? { costo_usd: costoUsdFinal ?? null, precio_usd: precioUsdFinal ?? null } : monedaFila === 'ARS' ? { costo_usd: null, precio_usd: null } : {}),
+      ...(nombrePresupuesto !== undefined ? { nombre_presupuesto: nombrePresupuesto } : {}),
+    }
+
     // ── Crear
     if (!existente) {
       if (!nombre) {
@@ -444,6 +481,7 @@ export function planificarDesdeFilas(
         costoNuevo !== undefined ? `Compra ${dinero(costoNuevo)}` : '',
         lista !== undefined ? `Lista ${dinero(lista)}${listaRecalculada ? ` (${listaRecalculada})` : ''}` : '',
         stock !== undefined ? `Stock ${stock}` : '',
+        esUsd ? `En dólares${precioUsdFinal ? ` (lista US$ ${precioUsdFinal})` : ''}` : '',
       ].filter(Boolean)
       resultado.push({
         linea, accion: 'crear', nombre, codigo, avisos, cambios,
@@ -453,6 +491,7 @@ export function planificarDesdeFilas(
           unidad: unidad ?? 'unidad', precio_venta: lista ?? 0, costo_unitario: costoNuevo ?? 0,
           stock: stock ?? 0, stock_minimo: stockMinimo ?? 5, iva_pct: iva ?? 21,
           foto_url: foto ?? null, aplica_descuento: false, descuento_pct: 0, descuento_monto: 0, activo: true,
+          ...extrasMoneda,
         },
       })
       continue
@@ -485,6 +524,12 @@ export function planificarDesdeFilas(
     cambiaTxt('link_compra', 'Link', link, existente.link_compra)
     cambiaTxt('foto_url', 'Foto', foto, existente.foto_url)
     cambiaTxt('descripcion', 'Descripción', descripcion, existente.descripcion)
+    cambiaTxt('nombre_presupuesto', 'En presupuesto', nombrePresupuesto, existente.nombre_presupuesto ?? null)
+    if (opciones.conMoneda !== false && monedaFila && (esUsd ? 'USD' : 'ARS') !== existente.moneda) { datos.moneda = esUsd ? 'USD' : 'ARS'; cambios.push(`Moneda → ${esUsd ? 'USD' : 'ARS'}`) }
+    if (opciones.conMoneda !== false && esUsd) {
+      if (costoUsdFinal !== undefined && Math.abs(costoUsdFinal - (existente.costo_usd ?? 0)) >= 0.005) { datos.costo_usd = costoUsdFinal; cambios.push(`Compra US$ ${existente.costo_usd ?? 0} → ${costoUsdFinal}`) }
+      if (precioUsdFinal !== undefined && Math.abs(precioUsdFinal - (existente.precio_usd ?? 0)) >= 0.005) { datos.precio_usd = precioUsdFinal; cambios.push(`Lista US$ ${existente.precio_usd ?? 0} → ${precioUsdFinal}`) }
+    }
 
     resultado.push(
       cambios.length === 0
@@ -575,4 +620,85 @@ export function plantillaCsv(): string {
   ]
   // "\uFEFF" = marca BOM, para que Excel abra el CSV con tildes correctas.
   return '\uFEFF' + filas.map((f) => f.join(';')).join('\r\n') + '\r\n'
+}
+
+// Plantilla en Excel: hoja "Productos" con ejemplos y hoja "Instrucciones".
+export function descargarPlantillaXlsx() {
+  const encabezados = ['Código', 'Nombre', 'Nombre en presupuesto', 'Tipo', 'Categoría', 'Proveedor', 'Unidad', 'Moneda', 'Precio de compra', '% de ganancia', 'Precio de lista', 'Stock', 'Stock mínimo', 'IVA', 'Link de compra', 'Foto (link)', 'Descripción']
+  const ejemplos = [
+    ['DECO-X20-3', 'TP-Link Deco X20 AX1800 (pack x3)', 'Red mesh WiFi 6', 'producto', 'Redes', 'TP-Link', 'kit', 'USD', 180, 40, '', 4, 1, 21, '', '', 'Cobertura 550 m². Configurar en modo router.'],
+    ['SON-4CH', 'Sonoff 4CH R3', 'Domótica de iluminación', 'producto', 'Domótica', 'Sonoff', 'unidad', 'USD', 18.5, '', 35, 12, 5, 21, '', '', 'Módulo 4 canales WiFi, 10A por canal.'],
+    ['RIEGO-8Z', 'Controlador de riego WiFi 8 zonas', 'Domótica para riego', 'producto', 'Riego', 'Tuya', 'unidad', 'ARS', 95000, 45, '', 3, 1, 21, '', '', ''],
+    ['INST-BOCA', 'Instalación por boca', 'Instalación y configuración', 'servicio', 'Mano de obra', '', 'boca', 'ARS', '', '', 18000, '', '', 21, '', '', 'Colocación, cableado y puesta en marcha.'],
+  ]
+  const hoja = XLSX.utils.aoa_to_sheet([encabezados, ...ejemplos])
+  hoja['!cols'] = encabezados.map((h) => ({ wch: Math.max(12, h.length + 2) }))
+  const instrucciones = [
+    ['Cómo completar la plantilla'],
+    [''],
+    ['• Una fila por producto o servicio. Solo "Código" o "Nombre" son obligatorios.'],
+    ['• Si el código ya existe en la app, se actualiza solo lo que completes; si no existe, se crea.'],
+    ['• Nombre: nombre interno (marca, modelo). "Nombre en presupuesto": lo único que ve el cliente (ej.: Red mesh WiFi 6).'],
+    ['• Tipo: producto o servicio.  Unidad: unidad, metro, hora, servicio, kit, boca o circuito.'],
+    ['• Moneda: ARS o USD. Con USD, "Precio de compra" y "Precio de lista" van en dólares y el precio en pesos se actualiza solo con la cotización.'],
+    ['• Precio de lista: si lo dejás vacío y ponés "% de ganancia", se calcula desde el precio de compra.'],
+    ['• IVA: 0, 10,5, 21 o 27.  Stock mínimo: con cuánto stock te avisa que falta reponer.'],
+    ['• Descripción: detalle interno, no sale en el presupuesto. Las fotos se suben desde la ficha de cada producto (o un link en "Foto (link)").'],
+    ['• Borrá las filas de ejemplo antes de subir, o cambialas por tus productos.'],
+  ]
+  const hojaInst = XLSX.utils.aoa_to_sheet(instrucciones)
+  hojaInst['!cols'] = [{ wch: 120 }]
+  const libro = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(libro, hoja, 'Productos')
+  XLSX.utils.book_append_sheet(libro, hojaInst, 'Instrucciones')
+  XLSX.writeFile(libro, 'plantilla-productos-mova.xlsx')
+}
+
+// Texto pegado (desde Excel, una web o un PDF): filas por línea y columnas por
+// tabulación, punto y coma o 2+ espacios.
+export function filasDesdeTextoPegado(texto: string): FilaCruda[] {
+  if (texto.includes('\t') || texto.includes(';')) return parsearCsv(texto)
+  return texto.split(/\r?\n/).map((l, i) => ({ celdas: l.trim().split(/\s{2,}/), linea: i + 1 })).filter((f) => f.celdas.some((c) => c.trim()))
+}
+
+// PDF (lista de precios de un proveedor): se extrae el texto de cada página y
+// se arma una tabla por posición (misma altura = misma fila; separación grande
+// = otra columna). Se busca la fila de títulos para empezar. Es aproximado:
+// siempre se revisa el resultado antes de importar.
+export async function leerFilasDesdePdf(archivo: File): Promise<FilaCruda[]> {
+  const pdfjs = await import('pdfjs-dist')
+  const { default: workerUrl } = await import('pdfjs-dist/build/pdf.worker.min.mjs?url')
+  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(await archivo.arrayBuffer()), isEvalSupported: false }).promise
+  const filas: FilaCruda[] = []
+  let linea = 1
+  for (let n = 1; n <= doc.numPages; n++) {
+    const pagina = await doc.getPage(n)
+    const contenido = await pagina.getTextContent()
+    type Trozo = { x: number; y: number; w: number; t: string }
+    const trozos: Trozo[] = (contenido.items as { str: string; transform: number[]; width: number }[])
+      .filter((it) => it.str && it.str.trim())
+      .map((it) => ({ x: it.transform[4], y: it.transform[5], w: it.width, t: it.str.trim() }))
+    trozos.sort((a, b) => b.y - a.y || a.x - b.x)
+    const renglones: Trozo[][] = []
+    for (const t of trozos) {
+      const r = renglones.find((g) => Math.abs(g[0].y - t.y) < 3)
+      if (r) r.push(t); else renglones.push([t])
+    }
+    for (const r of renglones) {
+      r.sort((a, b) => a.x - b.x)
+      const celdas: string[] = []
+      let fin = -Infinity
+      for (const t of r) {
+        if (celdas.length && t.x - fin < 8) celdas[celdas.length - 1] += ` ${t.t}`
+        else celdas.push(t.t)
+        fin = t.x + t.w
+      }
+      filas.push({ celdas, linea: linea++ })
+    }
+  }
+  // Empieza en la primera fila que parezca de títulos (tiene nombre/código/producto).
+  const clave = new Set([...ALIAS.codigo, ...ALIAS.nombre].map(normalizar))
+  const inicio = filas.findIndex((f) => f.celdas.some((c) => clave.has(normalizar(c))))
+  return inicio >= 0 ? filas.slice(inicio) : filas
 }

@@ -6,6 +6,7 @@ import ActualizarCotizacion from './ActualizarCotizacion'
 import { dos, gananciaDesdePrecio, precioDesdeGanancia, type ModoGanancia } from './catalogoCalculos'
 import { formatoDinero, formatoDolar, guardarMoneda, leerCotizacion, leerMoneda, type Moneda } from './catalogoMoneda'
 import { confirmarEliminacion } from './confirmar'
+import { cargarConfig } from './config'
 
 export type ProductoServicio = {
   id: number
@@ -28,6 +29,13 @@ export type ProductoServicio = {
   descuento_pct: number
   descuento_monto: number
   activo: boolean
+  // Moneda en la que se carga el precio. En USD, costo_unitario/precio_venta
+  // (pesos) se calculan con la cotización y se recalculan al cambiarla.
+  moneda: 'ARS' | 'USD'
+  costo_usd: number | null
+  precio_usd: number | null
+  // Cómo aparece en el presupuesto (genérico, sin marca ni detalle interno).
+  nombre_presupuesto: string | null
   fotoView?: string | null
 }
 
@@ -95,6 +103,20 @@ function ProductosServicios() {
   const [tipoFiltro, setTipoFiltro] = useState<TipoFiltro>('todos')
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoFiltro>('activos')
   const [soloStockBajo, setSoloStockBajo] = useState(false)
+  // Pestaña y filtros avanzados
+  const [pestana, setPestana] = useState<'catalogo' | 'stock'>('catalogo')
+  const [verFiltros, setVerFiltros] = useState(false)
+  const [fCategoria, setFCategoria] = useState('todas')
+  const [fProveedor, setFProveedor] = useState('todos')
+  const [fMoneda, setFMoneda] = useState<'todas' | 'ARS' | 'USD'>('todas')
+  const [fStock, setFStock] = useState<'todos' | 'sin' | 'bajo' | 'ok'>('todos')
+  const [fFoto, setFFoto] = useState<'todas' | 'con' | 'sin'>('todas')
+  const [fRotacion, setFRotacion] = useState<'todos' | 'parados' | 'vendidos'>('todos')
+  const [orden, setOrden] = useState<'nombre' | 'precioAsc' | 'precioDesc' | 'stock' | 'vendidos' | 'inversion'>('nombre')
+  // Ventas (presupuestos aceptados) por producto, para rotación.
+  const [ventas, setVentas] = useState<Record<number, { unidades: number; veces: number; ultima: string | null; fechas: { f: string; c: number }[] }>>({})
+  const [diasVendidos, setDiasVendidos] = useState(90)
+  const [diasParado, setDiasParado] = useState(90)
   const [vista, setVista] = useVista('productos', 'kanban')
 
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
@@ -105,6 +127,9 @@ function ProductosServicios() {
   const [errorFormulario, setErrorFormulario] = useState('')
 
   const [tipo, setTipo] = useState<'producto' | 'servicio'>('producto')
+  const [monedaProd, setMonedaProd] = useState<'ARS' | 'USD'>('ARS')
+  const [nombrePresupuesto, setNombrePresupuesto] = useState('')
+  const [faltaSqlMoneda, setFaltaSqlMoneda] = useState(false)
   const [codigo, setCodigo] = useState('')
   const [nombre, setNombre] = useState('')
   const [descripcion, setDescripcion] = useState('')
@@ -144,10 +169,13 @@ function ProductosServicios() {
   async function cargarCatalogo() {
     setCargando(true)
     setError('')
-    const { data, error: errorConsulta } = await supabase
-      .from('productos_servicios')
-      .select(`id, created_at, codigo, tipo, nombre, descripcion, categoria, unidad, precio_venta, costo_unitario, stock, stock_minimo, proveedor, link_compra, iva_pct, foto_url, aplica_descuento, descuento_pct, descuento_monto, activo`)
-      .order('nombre', { ascending: true })
+    void cargarConfig().then(() => setCotizacion(leerCotizacion()))
+    const columnas = 'id, created_at, codigo, tipo, nombre, descripcion, categoria, unidad, precio_venta, costo_unitario, stock, stock_minimo, proveedor, link_compra, iva_pct, foto_url, aplica_descuento, descuento_pct, descuento_monto, activo'
+    let consulta = await supabase.from('productos_servicios').select(`${columnas}, moneda, costo_usd, precio_usd, nombre_presupuesto`).order('nombre', { ascending: true })
+    // Si todavía no se corrió el SQL de moneda por producto, se lee como antes (todo en pesos).
+    setFaltaSqlMoneda(!!consulta.error)
+    if (consulta.error) consulta = await supabase.from('productos_servicios').select(columnas).order('nombre', { ascending: true }) as typeof consulta
+    const { data, error: errorConsulta } = consulta
     if (errorConsulta) {
       console.error(errorConsulta)
       setError('Falta ejecutar supabase-productos-fase-9.sql en Supabase.')
@@ -161,6 +189,10 @@ function ProductosServicios() {
       descuento_pct: Number(el.descuento_pct ?? 0), descuento_monto: Number(el.descuento_monto ?? 0),
       iva_pct: Number(el.iva_pct ?? 21),
       aplica_descuento: !!el.aplica_descuento, fotoView: null as string | null,
+      moneda: (el as { moneda?: string }).moneda === 'USD' ? 'USD' : 'ARS',
+      costo_usd: (el as { costo_usd?: number | null }).costo_usd == null ? null : Number((el as { costo_usd?: number }).costo_usd),
+      precio_usd: (el as { precio_usd?: number | null }).precio_usd == null ? null : Number((el as { precio_usd?: number }).precio_usd),
+      nombre_presupuesto: (el as { nombre_presupuesto?: string | null }).nombre_presupuesto ?? null,
     })) as ProductoServicio[]
     // Resolver la foto: si es URL http la usamos directo; si es un path del storage, firmamos.
     const conFoto = await Promise.all(base.map(async (el) => {
@@ -171,18 +203,76 @@ function ProductosServicios() {
     }))
     setElementos(conFoto)
     setCargando(false)
+    void cargarVentas()
   }
+
+  // Cuánto salió cada producto en presupuestos aceptados (y cuándo fue la última vez).
+  async function cargarVentas() {
+    const rP = await supabase.from('presupuestos').select('id, fecha, estado, activo').eq('estado', 'aceptado')
+    if (rP.error) return
+    const aceptados = new Map(((rP.data ?? []) as { id: number; fecha: string | null; activo: boolean }[]).filter((p) => p.activo !== false).map((p) => [p.id, p.fecha ?? '']))
+    if (aceptados.size === 0) { setVentas({}); return }
+    const items: { catalogo_id: number | null; cantidad: number; presupuesto_id: number }[] = []
+    const ids = [...aceptados.keys()]
+    for (let i = 0; i < ids.length; i += 200) {
+      const r = await supabase.from('presupuesto_items').select('catalogo_id, cantidad, presupuesto_id').in('presupuesto_id', ids.slice(i, i + 200)).not('catalogo_id', 'is', null)
+      if (!r.error) items.push(...((r.data ?? []) as typeof items))
+    }
+    const mapa: Record<number, { unidades: number; veces: number; ultima: string | null; fechas: { f: string; c: number }[] }> = {}
+    for (const it of items) {
+      if (it.catalogo_id == null) continue
+      const f = (aceptados.get(it.presupuesto_id) ?? '').slice(0, 10)
+      const v = (mapa[it.catalogo_id] ??= { unidades: 0, veces: 0, ultima: null, fechas: [] })
+      v.unidades += Number(it.cantidad) || 0
+      v.veces++
+      v.fechas.push({ f, c: Number(it.cantidad) || 0 })
+      if (f && (!v.ultima || f > v.ultima)) v.ultima = f
+    }
+    setVentas(mapa)
+  }
+
+  const hoyMs = Date.now()
+  const diasDesde = (f: string | null) => (f ? Math.floor((hoyMs - new Date(`${f}T12:00:00`).getTime()) / 86400000) : null)
+  const vendidasEn = (id: number, dias: number) => (ventas[id]?.fechas ?? []).filter((x) => { const d = diasDesde(x.f); return d != null && d <= dias }).reduce((s, x) => s + x.c, 0)
+  const estaParado = (el: ProductoServicio) => {
+    if (el.tipo !== 'producto' || !el.activo || el.stock <= 0) return false
+    const d = diasDesde(ventas[el.id]?.ultima ?? null)
+    return d == null || d > diasParado
+  }
+  const categorias = useMemo(() => Array.from(new Set(elementos.map((e) => e.categoria?.trim()).filter((x): x is string => !!x))).sort(), [elementos])
+  const proveedoresLista = useMemo(() => Array.from(new Set(elementos.map((e) => e.proveedor?.trim()).filter((x): x is string => !!x))).sort(), [elementos])
+  const filtrosAvanzadosActivos = [fCategoria !== 'todas', fProveedor !== 'todos', fMoneda !== 'todas', fStock !== 'todos', fFoto !== 'todas', fRotacion !== 'todos'].filter(Boolean).length
+  function limpiarFiltrosAvanzados() { setFCategoria('todas'); setFProveedor('todos'); setFMoneda('todas'); setFStock('todos'); setFFoto('todas'); setFRotacion('todos'); setOrden('nombre') }
 
   const elementosFiltrados = useMemo(() => {
     const texto = busqueda.trim().toLowerCase()
-    return elementos.filter((el) => {
-      const coincideBusqueda = !texto || (el.codigo ?? '').toLowerCase().includes(texto) || el.nombre.toLowerCase().includes(texto) || (el.descripcion ?? '').toLowerCase().includes(texto) || (el.categoria ?? '').toLowerCase().includes(texto) || (el.proveedor ?? '').toLowerCase().includes(texto)
+    const lista = elementos.filter((el) => {
+      const coincideBusqueda = !texto || (el.codigo ?? '').toLowerCase().includes(texto) || el.nombre.toLowerCase().includes(texto) || (el.nombre_presupuesto ?? '').toLowerCase().includes(texto) || (el.descripcion ?? '').toLowerCase().includes(texto) || (el.categoria ?? '').toLowerCase().includes(texto) || (el.proveedor ?? '').toLowerCase().includes(texto)
       const coincideTipo = tipoFiltro === 'todos' || el.tipo === tipoFiltro
       const coincideEstado = estadoFiltro === 'todos' || (estadoFiltro === 'activos' && el.activo) || (estadoFiltro === 'inactivos' && !el.activo)
       const coincideStock = !soloStockBajo || nivelStock(el) === 'bajo' || nivelStock(el) === 'sin'
-      return coincideBusqueda && coincideTipo && coincideEstado && coincideStock
+      if (!(coincideBusqueda && coincideTipo && coincideEstado && coincideStock)) return false
+      if (fCategoria !== 'todas' && (el.categoria?.trim() ?? '') !== fCategoria) return false
+      if (fProveedor !== 'todos' && (el.proveedor?.trim() ?? '') !== fProveedor) return false
+      if (fMoneda !== 'todas' && el.moneda !== fMoneda) return false
+      if (fStock !== 'todos' && nivelStock(el) !== fStock) return false
+      if (fFoto === 'con' && !el.foto_url) return false
+      if (fFoto === 'sin' && el.foto_url) return false
+      if (fRotacion === 'parados' && !estaParado(el)) return false
+      if (fRotacion === 'vendidos' && !(vendidasEn(el.id, diasVendidos) > 0)) return false
+      return true
     })
-  }, [elementos, busqueda, tipoFiltro, estadoFiltro, soloStockBajo])
+    const cmp: Record<typeof orden, (a: ProductoServicio, b: ProductoServicio) => number> = {
+      nombre: (a, b) => a.nombre.localeCompare(b.nombre),
+      precioAsc: (a, b) => a.precio_venta - b.precio_venta,
+      precioDesc: (a, b) => b.precio_venta - a.precio_venta,
+      stock: (a, b) => a.stock - b.stock,
+      vendidos: (a, b) => vendidasEn(b.id, diasVendidos) - vendidasEn(a.id, diasVendidos),
+      inversion: (a, b) => b.costo_unitario * b.stock - a.costo_unitario * a.stock,
+    }
+    return lista.sort(cmp[orden])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elementos, busqueda, tipoFiltro, estadoFiltro, soloStockBajo, fCategoria, fProveedor, fMoneda, fStock, fFoto, fRotacion, orden, ventas, diasVendidos, diasParado])
 
   const inversionStock = elementos.filter((el) => el.tipo === 'producto' && el.activo).reduce((s, el) => s + el.costo_unitario * el.stock, 0)
   const bajos = elementos.filter((el) => el.activo && (nivelStock(el) === 'bajo' || nivelStock(el) === 'sin'))
@@ -201,6 +291,7 @@ function ProductosServicios() {
   }
 
   function limpiarFormulario() {
+    setMonedaProd('ARS'); setNombrePresupuesto('')
     setTipo('producto'); setCodigo(''); setNombre(''); setDescripcion(''); setCategoria(''); setProveedor(''); setLinkCompra('')
     setUnidad('unidad'); setPrecioCompra(''); setGananciaPct(''); setPrecioLista(''); setStock(''); setStockMinimo('5'); setIvaPct('21')
     setAplicaDescuento(false); setDescuentoTipo('porcentaje'); setDescuentoValor('')
@@ -212,9 +303,13 @@ function ProductosServicios() {
     setEditando(el)
     setTipo(el.tipo); setCodigo(el.codigo ?? ''); setNombre(el.nombre); setDescripcion(el.descripcion ?? ''); setCategoria(el.categoria ?? '')
     setProveedor(el.proveedor ?? ''); setLinkCompra(el.link_compra ?? ''); setUnidad(el.unidad)
-    setPrecioCompra(el.costo_unitario ? String(el.costo_unitario) : '')
-    setPrecioLista(el.precio_venta ? String(el.precio_venta) : '')
-    setGananciaPct(el.costo_unitario > 0 && el.precio_venta > 0 ? String(dos(gananciaDesdePrecio(el.costo_unitario, el.precio_venta, modoGanancia))) : '')
+    setMonedaProd(el.moneda); setNombrePresupuesto(el.nombre_presupuesto ?? '')
+    // En un producto en dólares, los precios del formulario son en dólares.
+    const compra = el.moneda === 'USD' ? el.costo_usd ?? 0 : el.costo_unitario
+    const lista = el.moneda === 'USD' ? el.precio_usd ?? 0 : el.precio_venta
+    setPrecioCompra(compra ? String(compra) : '')
+    setPrecioLista(lista ? String(lista) : '')
+    setGananciaPct(compra > 0 && lista > 0 ? String(dos(gananciaDesdePrecio(compra, lista, modoGanancia))) : '')
     setStock(String(el.stock)); setStockMinimo(String(el.stock_minimo ?? 5)); setIvaPct(String(el.iva_pct ?? 21))
     setAplicaDescuento(el.aplica_descuento); setDescuentoTipo(el.descuento_monto > 0 ? 'monto' : 'porcentaje')
     setDescuentoValor(String(el.descuento_monto > 0 ? el.descuento_monto : el.descuento_pct))
@@ -270,13 +365,19 @@ function ProductosServicios() {
   async function guardar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault(); setErrorFormulario('')
     if (!nombre.trim()) { setErrorFormulario('Ingresá el nombre del producto o servicio.'); return }
+    if (monedaProd === 'USD' && faltaSqlMoneda) { setErrorFormulario('Para cargar productos en dólares falta correr el SQL de Productos en Supabase.'); return }
+    if (monedaProd === 'USD' && !(cotizacion > 0)) { setErrorFormulario('Para cargar precios en dólares, primero cargá la cotización (botón 💲).'); return }
     setGuardando(true)
+    const enUsd = monedaProd === 'USD'
+    const compraNum = Number(precioCompra || 0)
+    const listaNum = Number(precioLista || 0)
     const descuentoPct = aplicaDescuento && descuentoTipo === 'porcentaje' ? Number(descuentoValor || 0) : 0
     const descuentoMonto = aplicaDescuento && descuentoTipo === 'monto' ? Number(descuentoValor || 0) : 0
     const datos = {
       tipo, codigo: codigo.trim() || null, nombre: nombre.trim(), descripcion: descripcion.trim() || null, categoria: categoria.trim() || null,
       proveedor: proveedor.trim() || null, link_compra: linkCompra.trim() || null, unidad,
-      precio_venta: Number(precioLista || 0), costo_unitario: Number(precioCompra || 0),
+      precio_venta: enUsd ? dos(listaNum * cotizacion) : listaNum, costo_unitario: enUsd ? dos(compraNum * cotizacion) : compraNum,
+      ...(faltaSqlMoneda ? {} : { moneda: monedaProd, costo_usd: enUsd ? compraNum : null, precio_usd: enUsd ? listaNum : null, nombre_presupuesto: nombrePresupuesto.trim() || null }),
       stock: Number(stock || 0), stock_minimo: Number(stockMinimo || 0), iva_pct: Number(ivaPct || 21),
       foto_url: fotoUrl, aplica_descuento: aplicaDescuento, descuento_pct: descuentoPct, descuento_monto: descuentoMonto,
     }
@@ -322,8 +423,12 @@ function ProductosServicios() {
   }
 
   async function persistirCampo(id: number, campo: string, valor: unknown) {
+    return persistirCampos(id, { [campo]: valor })
+  }
+
+  async function persistirCampos(id: number, cambios: Record<string, unknown>) {
     setEstadoFila((s) => ({ ...s, [id]: 'guardando' }))
-    const { error: err } = await supabase.from('productos_servicios').update({ [campo]: valor }).eq('id', id)
+    const { error: err } = await supabase.from('productos_servicios').update(cambios).eq('id', id)
     if (err) {
       console.error(err)
       setEstadoFila((s) => ({ ...s, [id]: 'error' }))
@@ -420,10 +525,11 @@ function ProductosServicios() {
   // el IVA se suma solo cuando el cliente pide factura.
   const simDescuentoPct = aplicaDescuento && descuentoTipo === 'porcentaje' ? Number(descuentoValor || 0) : 0
   const simDescuentoMonto = aplicaDescuento && descuentoTipo === 'monto' ? Number(descuentoValor || 0) : 0
-  const simPrecioFinal = precioFinalUnidad({ precio_venta: Number(precioLista || 0), aplica_descuento: aplicaDescuento, descuento_pct: simDescuentoPct, descuento_monto: simDescuentoMonto })
-  const simGanancia = simPrecioFinal - Number(precioCompra || 0)
+  const factorSim = monedaProd === 'USD' && cotizacion > 0 ? cotizacion : 1
+  const simPrecioFinal = precioFinalUnidad({ precio_venta: Number(precioLista || 0) * factorSim, aplica_descuento: aplicaDescuento, descuento_pct: simDescuentoPct, descuento_monto: simDescuentoMonto })
+  const simGanancia = simPrecioFinal - Number(precioCompra || 0) * factorSim
   const simMargen = simPrecioFinal > 0 ? (simGanancia / simPrecioFinal) * 100 : 0
-  const simInversion = Number(precioCompra || 0) * Number(stock || 0)
+  const simInversion = Number(precioCompra || 0) * factorSim * Number(stock || 0)
   const simIvaPct = Number(ivaPct || 0)
   const simConIva = simPrecioFinal * (1 + simIvaPct / 100)
   const margenIgualAPct = modoGanancia === 'margen' && Number(gananciaPct || 0) >= 100
@@ -448,6 +554,7 @@ function ProductosServicios() {
           )}
         </div>
         <h3>{el.nombre}</h3>
+        {el.nombre_presupuesto && <small className="prodPres" title="Así aparece en el presupuesto">📄 {el.nombre_presupuesto}</small>}
         {el.codigo && <small className="prodCat">Cód. {el.codigo}</small>}
         <small className="prodCat">{el.categoria || el.descripcion || 'Sin categoría'}{el.proveedor ? ` · ${el.proveedor}` : ''}</small>
         <div className="prodPrecio">
@@ -456,6 +563,7 @@ function ProductosServicios() {
             <span className="prodBadgeDesc">{el.descuento_pct > 0 ? `-${el.descuento_pct}%` : `-${mostrar(el.descuento_monto)}`}</span>
           </>) : <strong>{mostrar(el.precio_venta)}</strong>}
         </div>
+        {el.moneda === 'USD' && <small className="prodUsd">US$ {formatoDolar(el.precio_usd ?? 0).replace('$', '').trim()} · compra US$ {formatoDolar(el.costo_usd ?? 0).replace('$', '').trim()} · sigue al dólar</small>}
         {el.iva_pct > 0 && <small className="prodCat">Sin IVA · con IVA {String(el.iva_pct).replace('.', ',')}%: {mostrar(final * (1 + el.iva_pct / 100))}</small>}
         <div className="prodDatos">
           <span>Compra <b>{mostrar(el.costo_unitario)}</b></span>
@@ -484,11 +592,35 @@ function ProductosServicios() {
           <button className={`editButton ${modoEdicion ? 'active' : ''}`} onClick={() => (modoEdicion ? salirEdicion() : entrarEdicion())}>
             {modoEdicion ? '✕ Salir de edición' : '✏️ Edición rápida'}
           </button>
-          {!modoEdicion && <button className="editButton" onClick={() => setMostrarImportar(true)}>⬆ Importar CSV</button>}
+          {!modoEdicion && <button className="editButton" onClick={() => setMostrarImportar(true)}>⬆ Importar (Excel, CSV, PDF)</button>}
           {!modoEdicion && <button className="newButton" onClick={abrirNuevo}>+ Nuevo</button>}
         </div>
       </div>
 
+      <div className="gestionTabs homeTabs">
+        <button className={pestana === 'catalogo' ? 'active' : ''} onClick={() => setPestana('catalogo')}>📦 Catálogo</button>
+        <button className={pestana === 'stock' ? 'active' : ''} onClick={() => setPestana('stock')}>📊 Stock y rotación{bajos.length ? ` · ⚠ ${bajos.length}` : ''}</button>
+      </div>
+      {faltaSqlMoneda && !cargando && <p className="gestionAyuda usFalta">Falta correr el SQL de Productos en Supabase: hasta entonces todo queda en pesos y no se guarda el "nombre en presupuesto".</p>}
+
+      {pestana === 'stock' && !cargando && !error && (
+        <StockRotacion
+          elementos={elementos}
+          ventas={ventas}
+          diasVendidos={diasVendidos}
+          diasParado={diasParado}
+          onDiasVendidos={setDiasVendidos}
+          onDiasParado={setDiasParado}
+          vendidasEn={vendidasEn}
+          estaParado={estaParado}
+          diasDesde={diasDesde}
+          mostrar={mostrar}
+          onEditar={(el) => { setPestana('catalogo'); void abrirEdicion(el) }}
+          onMinimo={(el, v) => { actualizarCampoLocal(el.id, 'stock_minimo', v); void persistirCampo(el.id, 'stock_minimo', v) }}
+        />
+      )}
+
+      {pestana === 'catalogo' && <>
       {!cargando && !error && (
         <div className="prodKpis">
           <div><span>INVERSIÓN EN STOCK</span><strong>{mostrar(inversionStock)}</strong><small>Precio de compra × stock</small></div>
@@ -534,6 +666,36 @@ function ProductosServicios() {
         {!modoEdicion && <VistaToggle vista={vista} onCambio={setVista} />}
       </div>
 
+      {!modoEdicion && (
+        <div className="prFiltrosBarra">
+          <button type="button" className={`editButton ${verFiltros || filtrosAvanzadosActivos ? 'active' : ''}`} onClick={() => setVerFiltros((v) => !v)}>
+            🔎 Filtros avanzados{filtrosAvanzadosActivos ? ` (${filtrosAvanzadosActivos})` : ''}
+          </button>
+          <label>Ordenar
+            <select value={orden} onChange={(e) => setOrden(e.target.value as typeof orden)}>
+              <option value="nombre">Nombre (A-Z)</option>
+              <option value="precioAsc">Precio: menor a mayor</option>
+              <option value="precioDesc">Precio: mayor a menor</option>
+              <option value="stock">Menos stock primero</option>
+              <option value="vendidos">Más vendidos ({diasVendidos} días)</option>
+              <option value="inversion">Más plata invertida</option>
+            </select>
+          </label>
+          <small>{elementosFiltrados.length} de {elementos.length}</small>
+          {filtrosAvanzadosActivos > 0 && <button type="button" className="caLink" onClick={limpiarFiltrosAvanzados}>Limpiar filtros ✕</button>}
+        </div>
+      )}
+      {!modoEdicion && verFiltros && (
+        <div className="prFiltros">
+          <label>Categoría<select value={fCategoria} onChange={(e) => setFCategoria(e.target.value)}><option value="todas">Todas</option>{categorias.map((c) => <option key={c} value={c}>{c}</option>)}</select></label>
+          <label>Proveedor / marca<select value={fProveedor} onChange={(e) => setFProveedor(e.target.value)}><option value="todos">Todos</option>{proveedoresLista.map((c) => <option key={c} value={c}>{c}</option>)}</select></label>
+          <label>Moneda<select value={fMoneda} onChange={(e) => setFMoneda(e.target.value as typeof fMoneda)}><option value="todas">Pesos y dólares</option><option value="ARS">Solo en pesos</option><option value="USD">Solo en dólares</option></select></label>
+          <label>Stock<select value={fStock} onChange={(e) => setFStock(e.target.value as typeof fStock)}><option value="todos">Todos</option><option value="sin">Sin stock</option><option value="bajo">Stock bajo</option><option value="ok">Stock OK</option></select></label>
+          <label>Foto<select value={fFoto} onChange={(e) => setFFoto(e.target.value as typeof fFoto)}><option value="todas">Con y sin foto</option><option value="con">Con foto</option><option value="sin">Sin foto</option></select></label>
+          <label>Rotación<select value={fRotacion} onChange={(e) => setFRotacion(e.target.value as typeof fRotacion)}><option value="todos">Todos</option><option value="vendidos">Se vendieron en {diasVendidos} días</option><option value="parados">Parados (+{diasParado} días sin salir)</option></select></label>
+        </div>
+      )}
+
       {moneda === 'USD' && cotizacion <= 0 && !modoEdicion && (
         <p className="gestionAyuda">Para ver los valores en dólares, cargá primero la cotización con el botón "Cargar cotización".</p>
       )}
@@ -574,7 +736,7 @@ function ProductosServicios() {
                     <td><strong>{el.nombre}</strong>{el.codigo && <><br /><small>{el.codigo}</small></>}</td>
                     <td>{el.proveedor || '—'}</td>
                     <td>{mostrar(el.costo_unitario)}</td>
-                    <td>{mostrar(final)}</td>
+                    <td>{mostrar(final)}{el.moneda === 'USD' && <><br /><small className="prodUsdMini">US$ {formatoDolar(el.precio_usd ?? 0).replace('$', '').trim()}</small></>}</td>
                     <td>{mostrar(final - el.costo_unitario)}</td>
                     <td>{el.tipo === 'producto' ? <span className={`crmBadge ${nivel === 'sin' ? 'est-rechazado' : nivel === 'bajo' ? 'est-observacion' : 'est-aceptado'}`}>{el.stock}</span> : '—'}</td>
                   </tr>
@@ -609,7 +771,7 @@ function ProductosServicios() {
               <tr>
                 <th><input type="checkbox" checked={elementosFiltrados.length > 0 && elementosFiltrados.every((el) => seleccion.has(el.id))} onChange={alternarSeleccionTodos} /></th>
                 <th>Código</th><th>Nombre</th><th>Tipo</th><th>Categoría</th><th>Proveedor</th><th>Unidad</th>
-                <th>P. compra ($)</th><th>P. lista ($)</th><th>IVA</th><th>Stock</th><th>Stock mín.</th><th>Activo</th>
+                <th>P. compra</th><th>P. lista</th><th>IVA</th><th>Stock</th><th>Stock mín.</th><th>Activo</th>
               </tr>
             </thead>
             <tbody>
@@ -635,8 +797,13 @@ function ProductosServicios() {
                       {UNIDADES.map((u) => <option key={u} value={u}>{u[0].toUpperCase() + u.slice(1)}</option>)}
                     </select>
                   </td>
-                  <td><input type="number" min="0" step="0.01" value={el.costo_unitario} onChange={(e) => actualizarCampoLocal(el.id, 'costo_unitario', Number(e.target.value))} onBlur={(e) => persistirCampo(el.id, 'costo_unitario', Number(e.target.value || 0))} style={{ width: '95px' }} /></td>
-                  <td><input type="number" min="0" step="0.01" value={el.precio_venta} onChange={(e) => actualizarCampoLocal(el.id, 'precio_venta', Number(e.target.value))} onBlur={(e) => persistirCampo(el.id, 'precio_venta', Number(e.target.value || 0))} style={{ width: '95px' }} /></td>
+                  {el.moneda === 'USD' ? <>
+                    <td><small className="prodUsdMini">US$</small><input type="number" min="0" step="0.01" value={el.costo_usd ?? 0} onChange={(e) => actualizarCampoLocal(el.id, 'costo_usd', Number(e.target.value))} onBlur={(e) => { const v = Number(e.target.value || 0); actualizarCampoLocal(el.id, 'costo_unitario', dos(v * cotizacion)); void persistirCampos(el.id, { costo_usd: v, costo_unitario: dos(v * cotizacion) }) }} style={{ width: '85px' }} /></td>
+                    <td><small className="prodUsdMini">US$</small><input type="number" min="0" step="0.01" value={el.precio_usd ?? 0} onChange={(e) => actualizarCampoLocal(el.id, 'precio_usd', Number(e.target.value))} onBlur={(e) => { const v = Number(e.target.value || 0); actualizarCampoLocal(el.id, 'precio_venta', dos(v * cotizacion)); void persistirCampos(el.id, { precio_usd: v, precio_venta: dos(v * cotizacion) }) }} style={{ width: '85px' }} /></td>
+                  </> : <>
+                    <td><input type="number" min="0" step="0.01" value={el.costo_unitario} onChange={(e) => actualizarCampoLocal(el.id, 'costo_unitario', Number(e.target.value))} onBlur={(e) => persistirCampo(el.id, 'costo_unitario', Number(e.target.value || 0))} style={{ width: '95px' }} /></td>
+                    <td><input type="number" min="0" step="0.01" value={el.precio_venta} onChange={(e) => actualizarCampoLocal(el.id, 'precio_venta', Number(e.target.value))} onBlur={(e) => persistirCampo(el.id, 'precio_venta', Number(e.target.value || 0))} style={{ width: '95px' }} /></td>
+                  </>}
                   <td>
                     <select value={el.iva_pct} onChange={(e) => { const v = Number(e.target.value); actualizarCampoLocal(el.id, 'iva_pct', v); void persistirCampo(el.id, 'iva_pct', v) }}>
                       <option value={21}>21%</option><option value={10.5}>10,5%</option><option value={27}>27%</option><option value={0}>0%</option>
@@ -650,16 +817,19 @@ function ProductosServicios() {
             </tbody>
           </table>
           <p className="gestionAyuda">
-            Los cambios se guardan solos al salir de cada campo (Tab o clic afuera). Los precios acá siempre están en pesos.
+            Los cambios se guardan solos al salir de cada campo (Tab o clic afuera). Los productos en dólares se editan en US$ y se pasan a pesos con la cotización.
             Foto, descuento y link se editan desde la ficha completa (salí de la edición rápida y tocá "Editar" en el producto).
           </p>
         </div>
       )}
 
+      </>}
+
       {mostrarImportar && (
         <ImportarCatalogo
           existentes={elementos}
           modoInicial={modoGanancia}
+          conMoneda={!faltaSqlMoneda}
           onCerrar={() => setMostrarImportar(false)}
           onTerminado={() => { void cargarCatalogo() }}
         />
@@ -689,7 +859,8 @@ function ProductosServicios() {
                   </select>
                 </label>
                 <label>Código / SKU<input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="Ej.: QS-1234 (para importar desde hoja)" /></label>
-                <label>Nombre *<input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej.: Módulo inteligente" required /></label>
+                <label>Nombre interno *<input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej.: TP-Link Deco X20 AX1800 (pack x3)" required /></label>
+                <label>Cómo aparece en el presupuesto<input value={nombrePresupuesto} onChange={(e) => setNombrePresupuesto(e.target.value)} placeholder="Ej.: Red mesh WiFi 6 · Domótica de iluminación" /><small className="npAyuda">El cliente ve solo esto (sin marca, modelo, foto ni detalle). Si lo dejás vacío, sale el nombre interno.</small></label>
                 <label>Categoría<input value={categoria} onChange={(e) => setCategoria(e.target.value)} placeholder="Ej.: Domótica" /></label>
                 <label>Proveedor<input value={proveedor} onChange={(e) => setProveedor(e.target.value)} placeholder="Ej.: Tuya / Sonoff" /></label>
 
@@ -706,9 +877,19 @@ function ProductosServicios() {
                   </small>
                 </div>
 
-                <label>Precio de compra<input type="number" min="0" step="0.01" value={precioCompra} onChange={(e) => cambiarCompra(e.target.value)} placeholder="0,00" /></label>
+                <div className="formFull prMoneda">
+                  <span>Precio cargado en:</span>
+                  <div className="segTipo">
+                    <button type="button" className={monedaProd === 'ARS' ? 'active' : ''} onClick={() => setMonedaProd('ARS')}>$ Pesos</button>
+                    <button type="button" className={monedaProd === 'USD' ? 'active' : ''} onClick={() => setMonedaProd('USD')}>US$ Dólares</button>
+                  </div>
+                  <small>{monedaProd === 'USD'
+                    ? cotizacion > 0 ? `Se guarda en dólares y se pasa a pesos con la cotización (USD 1 = $ ${String(cotizacion).replace('.', ',')}). Si la cotización cambia, este precio se actualiza solo.` : 'Primero cargá la cotización con el botón 💲.'
+                    : 'Precio fijo en pesos: no cambia con la cotización.'}</small>
+                </div>
+                <label>Precio de compra{monedaProd === 'USD' ? ' (US$)' : ' ($)'}<input type="number" min="0" step="0.01" value={precioCompra} onChange={(e) => cambiarCompra(e.target.value)} placeholder="0,00" /></label>
                 <label>{modoGanancia === 'margen' ? '% de margen (sobre la venta)' : '% de recargo (sobre el costo)'}<input type="number" step="0.1" max={modoGanancia === 'margen' ? 99.9 : undefined} value={gananciaPct} onChange={(e) => cambiarGanancia(e.target.value)} placeholder="Ej.: 50" /></label>
-                <label>Precio de lista (sin IVA)<input type="number" min="0" step="0.01" value={precioLista} onChange={(e) => cambiarLista(e.target.value)} placeholder="0,00" /></label>
+                <label>Precio de lista sin IVA{monedaProd === 'USD' ? ' (US$)' : ' ($)'}<input type="number" min="0" step="0.01" value={precioLista} onChange={(e) => cambiarLista(e.target.value)} placeholder="0,00" />{monedaProd === 'USD' && cotizacion > 0 && Number(precioLista) > 0 && <small className="npAyuda">≈ {formatoDinero(Number(precioLista) * cotizacion)} · compra ≈ {formatoDinero(Number(precioCompra || 0) * cotizacion)}</small>}</label>
                 {margenIgualAPct && <p className="loginError formFull">Un margen de 100% o más no es posible: el precio de venta sería infinito. Usá menos de 100%.</p>}
 
                 {tipo === 'producto' && <label>Stock (cantidad)<input type="number" min="0" step="1" value={stock} onChange={(e) => setStock(e.target.value)} placeholder="0" /></label>}
@@ -750,7 +931,7 @@ function ProductosServicios() {
                   )}
                 </div>
 
-                <label className="formFull">Descripción<textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder="Descripción detallada..." /></label>
+                <label className="formFull">Detalle interno (no sale en el presupuesto)<textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder="Modelo, especificaciones, notas de instalación, compatibilidades…" /></label>
 
                 <div className="simulacionBox formFull">
                   <span className="simulacionTitulo">Resumen del producto</span>
@@ -778,3 +959,84 @@ function ProductosServicios() {
 }
 
 export default ProductosServicios
+
+// ───────────────────────── Stock y rotación ─────────────────────────
+type Venta = { unidades: number; veces: number; ultima: string | null; fechas: { f: string; c: number }[] }
+
+function StockRotacion({ elementos, ventas, diasVendidos, diasParado, onDiasVendidos, onDiasParado, vendidasEn, estaParado, diasDesde, mostrar, onEditar, onMinimo }: {
+  elementos: ProductoServicio[]
+  ventas: Record<number, Venta>
+  diasVendidos: number
+  diasParado: number
+  onDiasVendidos: (n: number) => void
+  onDiasParado: (n: number) => void
+  vendidasEn: (id: number, dias: number) => number
+  estaParado: (el: ProductoServicio) => boolean
+  diasDesde: (f: string | null) => number | null
+  mostrar: (n: number) => string
+  onEditar: (el: ProductoServicio) => void
+  onMinimo: (el: ProductoServicio, v: number) => void
+}) {
+  const productos = elementos.filter((e) => e.tipo === 'producto' && e.activo)
+  const inversion = productos.reduce((s, e) => s + e.costo_unitario * e.stock, 0)
+  const valorVenta = productos.reduce((s, e) => s + e.precio_venta * e.stock, 0)
+  const reponer = productos.filter((e) => e.stock <= (e.stock_minimo ?? 0)).sort((a, b) => a.stock - b.stock)
+  const masVendidos = productos.map((e) => ({ e, u: vendidasEn(e.id, diasVendidos) })).filter((x) => x.u > 0).sort((a, b) => b.u - a.u).slice(0, 10)
+  const parados = productos.filter(estaParado).sort((a, b) => b.costo_unitario * b.stock - a.costo_unitario * a.stock)
+  const inmovilizado = parados.reduce((s, e) => s + e.costo_unitario * e.stock, 0)
+  const maxVend = masVendidos[0]?.u ?? 1
+  const foto = (e: ProductoServicio) => <span className="srFoto">{e.fotoView ? <img src={e.fotoView} alt="" /> : '📦'}</span>
+
+  return <div className="srWrap">
+    <div className="cpKpis">
+      <div className="srKpi"><span>Inversión en stock</span><strong>{mostrar(inversion)}</strong><small>Costo × stock de {productos.length} productos</small></div>
+      <div className="srKpi"><span>Valor de venta del stock</span><strong>{mostrar(valorVenta)}</strong><small>Ganancia potencial {mostrar(valorVenta - inversion)}</small></div>
+      <div className="srKpi"><span>Para reponer</span><strong style={{ color: reponer.length ? '#b23b32' : undefined }}>{reponer.length}</strong><small>En o bajo el stock mínimo</small></div>
+      <div className="srKpi"><span>Parados</span><strong style={{ color: parados.length ? '#b86608' : undefined }}>{parados.length}</strong><small>{mostrar(inmovilizado)} inmovilizados</small></div>
+    </div>
+
+    <section className="srSeccion">
+      <div className="srHead"><h4>⚠ Para reponer</h4><small>El stock baja solo cuando un presupuesto pasa a Aceptado. Cambiá el mínimo acá mismo.</small></div>
+      {reponer.length === 0 ? <p className="agVacio">Todo con stock por encima del mínimo.</p> : reponer.map((e) => (
+        <div key={e.id} className="srFila">
+          {foto(e)}
+          <button type="button" className="srNombre" onClick={() => onEditar(e)}><strong>{e.nombre}</strong><small>{e.proveedor || 'Sin proveedor'}{e.codigo ? ` · ${e.codigo}` : ''}</small></button>
+          <span className={`srStock ${e.stock <= 0 ? 'sin' : 'bajo'}`}>{e.stock <= 0 ? 'Sin stock' : `Quedan ${e.stock}`}</span>
+          <label className="srMin">Mínimo<input type="number" min="0" step="1" defaultValue={e.stock_minimo} onBlur={(ev) => { const v = Math.max(0, Number(ev.target.value || 0)); if (v !== e.stock_minimo) onMinimo(e, v) }} /></label>
+          {e.link_compra && <a className="editButton" href={e.link_compra} target="_blank" rel="noreferrer">Comprar</a>}
+        </div>
+      ))}
+    </section>
+
+    <section className="srSeccion">
+      <div className="srHead"><h4>🔥 Lo que más sale</h4>
+        <select value={diasVendidos} onChange={(e) => onDiasVendidos(Number(e.target.value))}><option value={30}>Últimos 30 días</option><option value={90}>Últimos 90 días</option><option value={180}>Últimos 6 meses</option><option value={365}>Último año</option></select>
+      </div>
+      {masVendidos.length === 0 ? <p className="agVacio">Todavía no hay productos del catálogo en presupuestos aceptados en ese período.</p> : masVendidos.map(({ e, u }) => (
+        <div key={e.id} className="srFila">
+          {foto(e)}
+          <button type="button" className="srNombre" onClick={() => onEditar(e)}><strong>{e.nombre}</strong><small>{ventas[e.id]?.veces ?? 0} presupuesto{(ventas[e.id]?.veces ?? 0) === 1 ? '' : 's'} en total · stock {e.stock}</small></button>
+          <div className="srBarra"><div className="tabBar"><span style={{ width: `${(u / maxVend) * 100}%`, background: '#e47b00' }} /></div><b>{u.toLocaleString('es-AR')} {e.unidad === 'unidad' ? 'u.' : e.unidad}</b></div>
+        </div>
+      ))}
+    </section>
+
+    <section className="srSeccion">
+      <div className="srHead"><h4>💤 Parados (necesitan rotación)</h4>
+        <select value={diasParado} onChange={(e) => onDiasParado(Number(e.target.value))}><option value={60}>Sin salir hace +60 días</option><option value={90}>Sin salir hace +90 días</option><option value={180}>Sin salir hace +6 meses</option><option value={365}>Sin salir hace +1 año</option></select>
+      </div>
+      {parados.length === 0 ? <p className="agVacio">No hay productos con stock parado en ese plazo.</p> : parados.map((e) => {
+        const d = diasDesde(ventas[e.id]?.ultima ?? null)
+        return (
+          <div key={e.id} className="srFila">
+            {foto(e)}
+            <button type="button" className="srNombre" onClick={() => onEditar(e)}><strong>{e.nombre}</strong><small>{d == null ? 'Nunca salió en un presupuesto aceptado' : `Última salida hace ${d} días`}</small></button>
+            <span className="srStock parado">Stock {e.stock}</span>
+            <b className="srMonto">{mostrar(e.costo_unitario * e.stock)}</b>
+          </div>
+        )
+      })}
+      {parados.length > 0 && <p className="gestionAyuda">Ideas: ofrecerlos en los próximos presupuestos, armar un combo o aplicarles un descuento desde la ficha del producto.</p>}
+    </section>
+  </div>
+}

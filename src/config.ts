@@ -23,6 +23,8 @@ export type ConfigApp = {
   empresa: Empresa
   presupuestos: { validezDias: number; condiciones: Condicion[] }
   accesos: { aviso: string[] }
+  // Pesos por dólar, compartida por todos los usuarios (la usa el catálogo).
+  cotizacion: { usd: number; fecha: string | null; fuente: string | null }
 }
 
 export const DEFAULTS: ConfigApp = {
@@ -36,6 +38,7 @@ export const DEFAULTS: ConfigApp = {
     web: 'www.movaelectronica.com.ar',
     instagram: '@mova.smart',
   },
+  cotizacion: { usd: 0, fecha: null, fuente: null },
   presupuestos: { validezDias: 15, condiciones: CONDICIONES_GENERALES.map((c) => ({ ...c })) },
   accesos: {
     aviso: [
@@ -61,6 +64,7 @@ export async function cargarConfig(): Promise<ConfigApp> {
     empresa: { ...DEFAULTS.empresa, ...(filas.empresa ?? {}) },
     presupuestos: { ...DEFAULTS.presupuestos, ...(filas.presupuestos ?? {}) },
     accesos: { ...DEFAULTS.accesos, ...(filas.accesos ?? {}) },
+    cotizacion: { ...DEFAULTS.cotizacion, ...(filas.cotizacion ?? {}) },
   }
   return actual
 }

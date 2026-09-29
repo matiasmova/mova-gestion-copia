@@ -1,9 +1,13 @@
 import { useMemo, useState } from 'react'
 import type { ProductoServicio } from './ProductosServicios'
 import type { ModoGanancia } from './catalogoCalculos'
+import { guardarCotizacion, leerCotizacion as leerCotizacionGuardada } from './catalogoMoneda'
 import {
+  descargarPlantillaXlsx,
   ejecutarImportacion,
+  filasDesdeTextoPegado,
   leerFilasDesdeArchivo,
+  leerFilasDesdePdf,
   planificarDesdeFilas,
   plantillaCsv,
   type FilaCruda,
@@ -17,20 +21,19 @@ import {
 type Props = {
   existentes: ProductoServicio[]
   modoInicial: ModoGanancia
+  // false si todavía no se corrió el SQL de moneda por producto.
+  conMoneda?: boolean
   onCerrar: () => void
   // Se llama al terminar, para que el catálogo se vuelva a cargar.
   onTerminado: () => void
 }
 
-const CLAVE_COTIZACION = 'mova_cotizacion_usd'
 const MAX_FILAS_VISIBLES = 300
 
+// Cotización compartida (Configuración); si no hay, la de este navegador.
 function leerCotizacion(): string {
-  try {
-    return localStorage.getItem(CLAVE_COTIZACION) ?? ''
-  } catch {
-    return ''
-  }
+  const v = leerCotizacionGuardada()
+  return v > 0 ? String(v) : ''
 }
 
 const etiquetaAccion: Record<FilaPlan['accion'], string> = {
@@ -57,7 +60,10 @@ function descargar(nombre: string, contenido: string) {
   URL.revokeObjectURL(url)
 }
 
-export default function ImportarCatalogo({ existentes, modoInicial, onCerrar, onTerminado }: Props) {
+export default function ImportarCatalogo({ existentes, modoInicial, conMoneda = true, onCerrar, onTerminado }: Props) {
+  const [pegando, setPegando] = useState(false)
+  const [textoPegado, setTextoPegado] = useState('')
+  const [leyendo, setLeyendo] = useState(false)
   const [filas, setFilas] = useState<FilaCruda[] | null>(null)
   const [nombreArchivo, setNombreArchivo] = useState('')
   const [errorLectura, setErrorLectura] = useState('')
@@ -77,6 +83,7 @@ export default function ImportarCatalogo({ existentes, modoInicial, onCerrar, on
       cotizacion: Number(cotizacion.replace(',', '.')) || 0,
       gananciaNuevos: gananciaNuevos.trim() === '' ? null : Number(gananciaNuevos.replace(',', '.')),
       recalcularPrecio: recalcular,
+      conMoneda,
     })
   }, [filas, existentes, modo, cotizacion, gananciaNuevos, recalcular])
 
@@ -88,23 +95,34 @@ export default function ImportarCatalogo({ existentes, modoInicial, onCerrar, on
     const archivo = evento.target.files?.[0]
     if (!archivo) return
     setErrorLectura('')
+    setLeyendo(true)
     try {
-      setFilas(await leerFilasDesdeArchivo(archivo))
+      const esPdf = archivo.name.toLowerCase().endsWith('.pdf')
+      setFilas(esPdf ? await leerFilasDesdePdf(archivo) : await leerFilasDesdeArchivo(archivo))
       setNombreArchivo(archivo.name)
       setFiltro('todas')
       setFase('revisar')
     } catch (fallo) {
       console.error(fallo)
-      setErrorLectura('No se pudo leer el archivo. Probá guardarlo de nuevo como CSV o Excel (.xlsx).')
-    }
+      setErrorLectura('No se pudo leer el archivo. Probá guardarlo de nuevo como Excel (.xlsx) o CSV, o copiá la tabla y usá "Pegar tabla".')
+    } finally { setLeyendo(false) }
+  }
+
+  function usarTextoPegado() {
+    const f = filasDesdeTextoPegado(textoPegado)
+    if (f.length < 2) { setErrorLectura('Pegá la tabla con la fila de títulos arriba (Código, Nombre, Precio…).'); return }
+    setErrorLectura('')
+    setFilas(f)
+    setNombreArchivo('Tabla pegada')
+    setFiltro('todas')
+    setFase('revisar')
   }
 
   async function confirmar() {
     if (!plan || aGuardar === 0) return
-    try {
-      localStorage.setItem(CLAVE_COTIZACION, cotizacion)
-    } catch {
-      /* sin almacenamiento: no pasa nada */
+    const cot = Number(cotizacion.replace(',', '.')) || 0
+    if (cot > 0 && Math.abs(cot - leerCotizacionGuardada()) >= 0.005) {
+      try { await guardarCotizacion(cot, 'Importación') } catch { /* queda solo en este navegador */ }
     }
     setFase('importando')
     const r = await ejecutarImportacion(plan, (hechas, total) => setProgreso({ hechas, total }))
@@ -127,18 +145,31 @@ export default function ImportarCatalogo({ existentes, modoInicial, onCerrar, on
         {fase === 'elegir' && (
           <div className="catalogoForm">
             <p className="gestionAyuda">
-              Subí un archivo <strong>.xlsx</strong> (Excel) o <strong>.csv</strong>, tal cual lo tengas guardado: no hace falta convertirlo.
+              Subí un archivo <strong>Excel (.xlsx)</strong>, <strong>.csv</strong> o una <strong>lista de precios en PDF</strong>, o pegá una tabla copiada. Lo más seguro es usar la plantilla.
               Cada fila es un producto. Si ya existe (mismo <strong>código</strong>) se actualiza solo lo que completes en la hoja; si no existe se crea.
               Antes de guardar vas a ver un resumen para revisar.
             </p>
             <div className="formActions" style={{ justifyContent: 'flex-start', gap: '10px', flexWrap: 'wrap' }}>
-              <button type="button" className="editButton" onClick={() => descargar('plantilla-catalogo.csv', plantillaCsv())}>⬇ Descargar plantilla</button>
+              <button type="button" className="newButton" onClick={descargarPlantillaXlsx}>⬇ Descargar plantilla Excel</button>
+              <button type="button" className="editButton" onClick={() => descargar('plantilla-catalogo.csv', plantillaCsv())}>Plantilla CSV</button>
+              <button type="button" className="editButton" onClick={() => setPegando((v) => !v)}>📋 Pegar tabla</button>
             </div>
             <p className="gestionAyuda">
-              Columnas que reconozco: <em>código, nombre, tipo, categoría, proveedor, unidad, precio de compra, precio de compra USD, % de ganancia, precio de lista, precio de venta USD, stock, stock mínimo, IVA, link de compra, foto (link), descripción</em>.
+              Columnas que reconozco: <em>código, nombre, nombre en presupuesto, tipo, categoría, proveedor, unidad, moneda (ARS/USD), precio de compra, % de ganancia, precio de lista, stock, stock mínimo, IVA, link de compra, foto (link), descripción</em>.
+              Con <strong>Moneda = USD</strong> los precios de esa fila van en dólares y el producto sigue al dólar.
               Solo <strong>código o nombre</strong> son obligatorias; el resto es opcional. Si el Excel tiene varias hojas, uso la que tenga los productos.
             </p>
-            <label>Archivo (.xlsx o .csv)<input type="file" accept=".csv,.txt,.xlsx,.xls,.xlsm,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={elegirArchivo} /></label>
+            {pegando && (
+              <div className="imPegar">
+                <label>Pegá acá la tabla (copiada de Excel, de una web o de un PDF), con los títulos en la primera línea
+                  <textarea rows={7} value={textoPegado} onChange={(e) => setTextoPegado(e.target.value)} placeholder={'Código\tNombre\tMoneda\tPrecio de compra\nSON-4CH\tSonoff 4CH R3\tUSD\t18,5'} />
+                </label>
+                <button type="button" className="newButton" disabled={!textoPegado.trim()} onClick={usarTextoPegado}>Revisar tabla pegada</button>
+              </div>
+            )}
+            <label>Archivo (.xlsx, .csv o .pdf)<input type="file" accept=".csv,.txt,.xlsx,.xls,.xlsm,.pdf,application/pdf,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={elegirArchivo} disabled={leyendo} /></label>
+            {leyendo && <p role="status">Leyendo el archivo…</p>}
+            <p className="gestionAyuda">📄 PDF: se lee la tabla por posición del texto. Funciona bien con listas de precios simples; siempre revisá el resultado antes de importar. Si el PDF es una foto escaneada, no se puede leer.</p>
             {errorLectura && <p className="loginError">{errorLectura}</p>}
           </div>
         )}
