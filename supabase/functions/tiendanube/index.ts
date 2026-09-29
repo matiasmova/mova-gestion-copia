@@ -181,6 +181,18 @@ Deno.serve(async (req) => {
   }
   if (req.method !== 'POST') return responder({ error: 'Método no permitido' }, 405)
 
+  // ---- Webhooks de privacidad que exige Tiendanube (?webhook=...) ----
+  // La app no guarda datos de compradores de la tienda; solo hay que responder
+  // bien. Si se desinstala la app de la tienda (store_redact), se borra la conexión.
+  const webhook = url.searchParams.get('webhook')
+  if (webhook) {
+    if (webhook === 'store_redact') {
+      await db.from('integraciones').delete().eq('proveedor', 'tiendanube')
+      await registrar(db, 'conectar', 'Tiendanube avisó que se desinstaló la app: conexión borrada')
+    }
+    return responder({ ok: true })
+  }
+
   const cuerpo = await req.json().catch(() => ({})) as { accion?: string; volver?: string; ids?: number[]; productos?: number[]; visible?: boolean; id?: number }
 
   // ---- Cron: sincronización automática ----
