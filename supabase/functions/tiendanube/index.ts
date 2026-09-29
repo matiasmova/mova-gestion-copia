@@ -186,6 +186,13 @@ Deno.serve(async (req) => {
   // bien. Si se desinstala la app de la tienda (store_redact), se borra la conexión.
   const webhook = url.searchParams.get('webhook')
   if (webhook) {
+    // Tiendanube firma sus avisos con el client secret (HMAC-SHA256): se verifica
+    // para que nadie de afuera pueda borrar la conexión.
+    const crudo = await req.text()
+    const clave = await crypto.subtle.importKey('raw', new TextEncoder().encode(Deno.env.get('TIENDANUBE_CLIENT_SECRET') ?? ''), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+    const firma = Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', clave, new TextEncoder().encode(crudo)))).map((x) => x.toString(16).padStart(2, '0')).join('')
+    const recibida = (req.headers.get('x-linkedstore-hmac-sha256') ?? '').toLowerCase()
+    if (!recibida || recibida !== firma) return responder({ error: 'Firma inválida' }, 401)
     if (webhook === 'store_redact') {
       await db.from('integraciones').delete().eq('proveedor', 'tiendanube')
       await registrar(db, 'conectar', 'Tiendanube avisó que se desinstaló la app: conexión borrada')
