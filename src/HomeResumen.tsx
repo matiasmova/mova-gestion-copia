@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { supabase } from './supabase'
-import Calendario from './Calendario'
+import { TIPOS_EVENTO } from './Agenda'
 import Tablero, { type Pestana } from './Tablero'
 import { moneda } from './gestionFormat'
 import { calcularPersona } from './personalCalculos'
@@ -14,8 +14,8 @@ import { calcularPersona } from './personalCalculos'
 //  · Obras: todos.
 
 type Rol = 'admin' | 'encargado' | 'auxiliar' | 'contable'
-type Destino = 'obras' | 'presupuestos' | 'clientes'
-type TabInicio = 'resumen' | Pestana | 'calendario'
+type Destino = 'obras' | 'presupuestos' | 'clientes' | 'agenda'
+type TabInicio = 'resumen' | Pestana
 
 type Obra = { id: number; cliente_id: number; nombre_obra: string; localidad: string | null; estado: string | null; porcentaje_avance: number | null; activo: boolean }
 type Cliente = { id: number; nombre: string; apellido: string | null }
@@ -64,6 +64,14 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
   const [abiertas, setAbiertas] = useState<Record<string, boolean>>({})
   const [verTodas, setVerTodas] = useState<Record<string, boolean>>({})
   const [detalleNeto, setDetalleNeto] = useState(false)
+  // Lo que hay hoy en la Agenda (pendiente), para mostrarlo arriba en "Para mirar".
+  const [agendaHoy, setAgendaHoy] = useState<{ id: number; titulo: string; hora: string | null; tipo: string | null }[]>([])
+  useEffect(() => {
+    const d = new Date()
+    const hoyLocal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    void supabase.from('recordatorios').select('id,titulo,hora,tipo').eq('fecha', hoyLocal).eq('completado', false).order('hora', { ascending: true, nullsFirst: true })
+      .then(({ data }) => setAgendaHoy((data ?? []) as typeof agendaHoy))
+  }, [])
   const [mesSel, setMesSel] = useState(mesActual())
   const [cargando, setCargando] = useState(true)
   const [obras, setObras] = useState<Obra[]>([])
@@ -279,6 +287,12 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
   }
 
   const alertas: ReactNode[] = [
+    ...agendaHoy.map((e) => (
+      <div className="fase2Cuenta" key={`ag-${e.id}`} role="button" tabIndex={0} onClick={() => onNavegar('agenda')}>
+        <div><strong>{(TIPOS_EVENTO[e.tipo ?? ''] ?? TIPOS_EVENTO.recordatorio).icono} {e.titulo}</strong><span>Hoy en la agenda{e.hora ? ` · ${e.hora.slice(0, 5)}` : ''}</span></div>
+        <b>Ver →</b>
+      </div>
+    )),
     ...(verFinanzas && mes.recurrentesPendientes.length > 0 ? [(
       <div className="fase2Cuenta" key="gastos-pend" role="button" tabIndex={0} onClick={() => setTab('gastos')}>
         <div><strong>⏰ Gastos fijos sin cargar</strong><span>{mes.recurrentesPendientes.length} recurrente{mes.recurrentesPendientes.length === 1 ? '' : 's'} del mes pasado todavía no se cargaron este mes</span></div>
@@ -312,7 +326,6 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
   const pestanas: [TabInicio, string][] = [
     ['resumen', 'Resumen'],
     ...(verFinanzas ? [['pyl', 'Balance'], ['caja', 'Cobranzas'], ['personal', 'Personal'], ['gastos', 'Gastos fijos'], ['inventario', 'Inventario']] as [TabInicio, string][] : []),
-    ['calendario', '📅 Calendario'],
   ]
 
   return <div className="fase2Dashboard homeCompacto">
@@ -327,11 +340,10 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
       ))}
     </div>
 
-    {tab !== 'resumen' && tab !== 'calendario' && verFinanzas && (
+    {tab !== 'resumen' && verFinanzas && (
       <Tablero embebido pestana={tab} onAbrirObra={onAbrirObra} />
     )}
 
-    {tab === 'calendario' && <Calendario obras={obras.map((o) => ({ id: o.id, nombre_obra: o.nombre_obra }))} />}
 
     {tab === 'resumen' && (cargando ? <p>Cargando resumen...</p> : <>
       {/* ---- Neto del mes: número grande, mes y detalle desplegable ---- */}

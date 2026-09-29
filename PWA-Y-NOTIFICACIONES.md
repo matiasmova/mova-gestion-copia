@@ -48,7 +48,7 @@ Abrir el presupuesto → botón **📲 Compartir** → elegir **WhatsApp** (o lo
 > está desplegada, con sus 3 secrets cargados, Verify JWT desactivado, y el cron
 > `enviar-recordatorios` corriendo cada 15 minutos (`*/15 * * * *`, activo).
 > Prueba real: se enviaron 2 notificaciones (status 200, `{"enviados":2}`).
-> `CRON_SECRET` usado: `mova-cron-a7F3kQ9pL2xN8vR4t`.
+> `CRON_SECRET`: está cargado en los secrets de Supabase (no se escribe en el repositorio).
 > Esta sección queda solo como referencia por si hay que rehacerlo.
 
 Las notificaciones necesitan un “enviador” que corre en Supabase. Pasos:

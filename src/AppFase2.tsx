@@ -9,7 +9,7 @@ import ProductosServicios from './ProductosServicios'
 import Finanzas from './Finanzas'
 import Compras from './Compras'
 import Personal from './Personal.tsx'
-import Notificaciones from './Notificaciones'
+import Agenda from './Agenda'
 import Configuracion from './Configuracion'
 import Usuarios from './Usuarios'
 import HomeResumen from './HomeResumen'
@@ -28,6 +28,7 @@ const ROLES_VALIDOS: Rol[] = ['admin', 'encargado', 'auxiliar', 'contable']
 // personal, gastos fijos e inventario), cada cosa en su pestaña.
 const NAVEGACION = [
   ['dashboard', 'principal', 'Inicio'],
+  ['agenda', 'principal', 'Agenda'],
   ['clientes', 'comercial', 'Clientes'],
   ['presupuestos', 'comercial', 'Presupuestos'],
   ['obras', 'comercial', 'Obras'],
@@ -36,7 +37,6 @@ const NAVEGACION = [
   ['compras', 'operacion', 'Compras'],
   ['personal', 'operacion', 'Personal'],
   ['finanzas', 'operacion', 'Movimientos'],
-  ['notificaciones', 'sistema', 'Notificaciones'],
   ['usuarios', 'sistema', 'Usuarios'],
   ['configuracion', 'sistema', 'Configuración'],
 ] as const
@@ -186,7 +186,7 @@ export default function AppFase2() {
     soluciones: <Soluciones />,
     finanzas: <Finanzas onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} />,
     compras: <Compras />,
-    personal: <Personal />, notificaciones: <Notificaciones />, usuarios: <Usuarios />, configuracion: <Configuracion />,
+    personal: <Personal />, agenda: <Agenda />, usuarios: <Usuarios />, configuracion: <Configuracion />,
   }
 
   return <div className="fase2App">
