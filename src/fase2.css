@@ -657,3 +657,54 @@
 .npAyuda{display:block;margin-top:5px;color:var(--mova-muted);font-size:11.5px;font-weight:400;line-height:1.4}
 .modalOverlay+.modalOverlay,body>.modalOverlay:last-child{z-index:1400}
 .pagoResumen{grid-column:1/-1;margin:0;padding:10px 12px;border-radius:10px;background:#fff7ed;border:1px solid #fde3c3;font-size:13px;color:#374151;line-height:1.45}
+
+/* ---- Agenda ---- */
+.agHead{margin-bottom:14px}
+.agPush{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-bottom:14px;padding:12px 16px;border:1px solid var(--mova-border);border-radius:12px;background:#fff}
+.agPush.on{border-color:#cdebd9;background:#effaf3}
+.agPush>span{font-size:13.5px;font-weight:700;color:#1f2937;flex:1;min-width:200px}
+.agPush small{font-size:12px;color:var(--mova-muted)}
+.agPush .configSwitch{position:static;flex-shrink:0}
+.agPushMsg{flex-basis:100%}
+.agGrupo{margin-bottom:18px}
+.agGrupo h3{margin:0 0 8px;font-size:15px;color:#111827}
+.agGrupo h3 span{font-weight:500;color:var(--mova-muted);font-size:13px}
+.agGrupo.atrasados h3{color:#b23b32}
+.agDia{margin-bottom:8px}
+.agDiaTit{margin:10px 0 6px;font-size:12px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#8a929e}
+.agEvento{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;margin-bottom:8px;border:1px solid var(--mova-border);border-left:4px solid #2f6fb3;border-radius:12px;background:#fff}
+.agEvento.tipo-reunion{border-left-color:#e47b00}
+.agEvento.tipo-visita{border-left-color:#23935b}
+.agEvento.tipo-llamada{border-left-color:#7c5cc4}
+.agEvento.hecho{opacity:.55}
+.agEvento.hecho strong{text-decoration:line-through}
+.agHora{min-width:62px;font-weight:800;font-size:14px;color:#111827;padding-top:1px}
+.agCuerpo{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.agCuerpo strong{font-size:14.5px;overflow-wrap:anywhere}
+.agCuerpo small{font-size:12.5px;color:var(--mova-muted);overflow-wrap:anywhere}
+.agDetalle{white-space:pre-wrap}
+.agAviso{font-size:11.5px!important}
+.agAcciones{display:flex;gap:4px;flex-shrink:0}
+.agBtn{width:34px;height:34px;border:1px solid var(--mova-border);border-radius:9px;background:#fff;cursor:pointer;font-size:14px;color:#6b7280}
+.agBtn:hover{border-color:var(--mova-orange)}
+.agBtn.ok{background:#23935b;border-color:#23935b;color:#fff}
+.agBtn.peligro:hover{border-color:#b23b32}
+.agVacio{margin:0 0 8px;padding:12px 14px;border:1px dashed var(--mova-border);border-radius:12px;color:var(--mova-muted);font-size:13.5px;background:#fff}
+.agVerHechos{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#4b5563;cursor:pointer}
+.agVerHechos input{width:auto}
+.agTipos{margin-bottom:14px}
+.agAgregarDia{width:100%;margin-top:8px}
+.calLateral .agEvento{flex-wrap:wrap}
+.calCell.sel{border-color:#111827;box-shadow:inset 0 0 0 1px #111827}
+.calChip.tipo-reunion{background:#fff0de;color:#b86608}
+.calChip.tipo-visita{background:#e4f5eb;color:#23764e}
+.calChip.tipo-llamada{background:#efe9fb;color:#6546a8}
+.calPuntos{display:none;gap:3px;flex-wrap:wrap}
+.calPuntos i{width:6px;height:6px;border-radius:50%;background:#2f6fb3}
+.calPuntos i.tipo-reunion{background:#e47b00}.calPuntos i.tipo-visita{background:#23935b}.calPuntos i.tipo-llamada{background:#7c5cc4}
+@media(max-width:520px){
+  .calPuntos{display:flex}
+  .agEvento{flex-wrap:wrap;gap:8px 10px;padding:11px 12px}
+  .agHora{min-width:0;width:100%;font-size:13px;color:#6b7280}
+  .agAcciones{width:100%;justify-content:flex-end}
+}
