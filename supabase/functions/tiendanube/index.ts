@@ -181,7 +181,7 @@ Deno.serve(async (req) => {
   }
   if (req.method !== 'POST') return responder({ error: 'Método no permitido' }, 405)
 
-  const cuerpo = await req.json().catch(() => ({})) as { accion?: string; volver?: string; ids?: number[]; productos?: number[] }
+  const cuerpo = await req.json().catch(() => ({})) as { accion?: string; volver?: string; ids?: number[]; productos?: number[]; visible?: boolean; id?: number }
 
   // ---- Cron: sincronización automática ----
   const secretoCron = Deno.env.get('CRON_SECRET')
@@ -250,7 +250,7 @@ Deno.serve(async (req) => {
           if (p.foto_url) foto = /^https?:\/\//.test(p.foto_url) ? p.foto_url : (await db.storage.from('productos').createSignedUrl(p.foto_url, 3600)).data?.signedUrl ?? null
           const precio = precioWeb(p, o)
           const r = await tn(con, '/products', { method: 'POST', body: JSON.stringify({
-            name: { es: p.nombre }, published: false,
+            name: { es: p.nombre }, published: cuerpo.visible === true,
             variants: [{ price: precio, sku: p.codigo || undefined, stock: p.tipo === 'producto' ? Math.max(0, Math.floor(num(p.stock))) : null }],
             ...(foto ? { images: [{ src: foto }] } : {}),
           }) })
@@ -261,8 +261,18 @@ Deno.serve(async (req) => {
           creados.push(p.nombre)
           await esperar(500)
         }
-        await registrar(db, 'crear', `${creados.length} producto(s) creados en la web (sin publicar, revisalos en Tiendanube)${errores.length ? ` · errores: ${errores.join(', ')}` : ''}`, errores.length === 0)
+        await registrar(db, 'crear', `${creados.length} producto(s) creados en la web (${cuerpo.visible === true ? 'visibles' : 'ocultos, revisalos en Tiendanube'})${errores.length ? ` · errores: ${errores.join(', ')}` : ''}`, errores.length === 0)
         return responder({ creados, errores })
+      }
+      case 'visibilidad': {
+        // Mostrar u ocultar en la tienda un producto ya vinculado (no lo borra).
+        if (!con) return responder({ error: 'Tiendanube no está conectado.' }, 400)
+        const { data: p } = await db.from('productos_servicios').select('nombre, tn_product_id').eq('id', Number(cuerpo.id)).maybeSingle()
+        if (!p?.tn_product_id) return responder({ error: 'Ese producto no está en la web.' }, 400)
+        const r = await tn(con, `/products/${p.tn_product_id}`, { method: 'PUT', body: JSON.stringify({ published: cuerpo.visible === true }) })
+        if (!r.ok) return responder({ error: `La web respondió ${r.status}.` }, 502)
+        await registrar(db, 'visibilidad', `${p.nombre}: ${cuerpo.visible ? 'visible' : 'oculto'} en la web`)
+        return responder({ ok: true })
       }
       case 'sincronizar': {
         if (!con) return responder({ error: 'Tiendanube no está conectado.' }, 400)

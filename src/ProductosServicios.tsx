@@ -959,7 +959,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                   )}
                 </div>
 
-                {editando?.tn_variant_id && <label className="caCheck formFull"><input type="checkbox" checked={tnSincronizar} onChange={(e) => setTnSincronizar(e.target.checked)} /> 🛒 Sincronizar con la web (precio y stock se actualizan solos en Tiendanube)</label>}
+                {editando && <TiendaWebProducto producto={editando} sincronizar={tnSincronizar} onSincronizar={setTnSincronizar} onCambio={() => void cargarCatalogo()} />}
                 <label className="formFull">Detalle interno (no sale en el presupuesto)<textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder="Modelo, especificaciones, notas de instalación, compatibilidades…" /></label>
 
                 <div className="simulacionBox formFull">
@@ -985,6 +985,43 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
       )}
     </div>
   )
+}
+
+// Ficha del producto → Tienda web: publicarlo (solo si vos querés), mostrarlo u
+// ocultarlo en la tienda y elegir si se sincroniza. Nada se publica solo.
+function TiendaWebProducto({ producto, sincronizar, onSincronizar, onCambio }: { producto: ProductoServicio; sincronizar: boolean; onSincronizar: (v: boolean) => void; onCambio: () => void }) {
+  const [trabajando, setTrabajando] = useState(false)
+  const [mensaje, setMensaje] = useState('')
+  async function llamar(cuerpo: Record<string, unknown>, ok: string) {
+    setTrabajando(true); setMensaje('')
+    const { data, error } = await supabase.functions.invoke('tiendanube', { body: cuerpo })
+    setTrabajando(false)
+    if (error || data?.error) {
+      let msg = data?.error ?? 'No se pudo conectar con la tienda web. Revisá que esté conectada en Configuración → Tienda web.'
+      try { const ctx = (error as { context?: Response } | null)?.context; if (ctx) msg = (await ctx.json()).error ?? msg } catch { /* sin detalle */ }
+      setMensaje(`⚠ ${msg}`); return
+    }
+    if (data?.errores?.length) { setMensaje(`⚠ ${data.errores.join(', ')}`); return }
+    setMensaje(ok); onCambio()
+  }
+  return <div className="formFull tnProd">
+    <span className="tnProdTit">🛒 Tienda web (movaelectronica.com.ar)</span>
+    {producto.tn_variant_id ? <>
+      <label className="caCheck"><input type="checkbox" checked={sincronizar} onChange={(e) => onSincronizar(e.target.checked)} /> Sincronizar precio y stock con la web</label>
+      <div className="tnProdBtns">
+        <button type="button" className="editButton" disabled={trabajando} onClick={() => void llamar({ accion: 'visibilidad', id: producto.id, visible: true }, '✓ Ahora se ve en la tienda.')}>👁 Mostrar en la tienda</button>
+        <button type="button" className="editButton" disabled={trabajando} onClick={() => void llamar({ accion: 'visibilidad', id: producto.id, visible: false }, '✓ Oculto en la tienda (sigue vinculado).')}>🙈 Ocultar en la tienda</button>
+      </div>
+    </> : <>
+      <small>No está en la web. Solo se publica si vos lo pedís.</small>
+      <div className="tnProdBtns">
+        <button type="button" className="newButton" disabled={trabajando} onClick={() => { if (window.confirm(`¿Publicar "${producto.nombre}" en la tienda web, visible para los clientes?`)) void llamar({ accion: 'crear', productos: [producto.id], visible: true }, '✓ Publicado en la tienda web.') }}>🛒 Publicar en la web</button>
+        <button type="button" className="editButton" disabled={trabajando} onClick={() => void llamar({ accion: 'crear', productos: [producto.id], visible: false }, '✓ Creado en la tienda, oculto: revisalo en Tiendanube y publicalo cuando quieras.')}>Subirlo oculto para revisar</button>
+      </div>
+    </>}
+    {trabajando && <small>Conectando con la tienda…</small>}
+    {mensaje && <small className={mensaje.startsWith('⚠') ? 'tnProdError' : 'tnProdOk'}>{mensaje}</small>}
+  </div>
 }
 
 export default ProductosServicios

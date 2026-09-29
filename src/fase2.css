@@ -1226,3 +1226,14 @@ button.fichaRow:not(:disabled):hover .fichaIr{color:var(--mova-orange)}
 .tnOpciones label.caCheck input,.clienteForm .tnOpciones label.caCheck input{width:auto;margin:0 8px 0 0;vertical-align:-2px}
 .clienteForm label.caCheck.formFull{display:block;font-weight:600}
 .clienteForm label.caCheck.formFull input{width:auto;margin-right:8px;vertical-align:-2px}
+.tnProd{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border:1px solid #e3d6f2;border-radius:12px;background:#faf7fd}
+.tnProdTit{font-weight:700;font-size:13.5px;color:#4b2a78}
+.tnProd small{color:var(--mova-muted);font-size:12.5px}
+.tnProdBtns{display:flex;flex-wrap:wrap;gap:8px}
+.tnProd .tnProdOk{color:#1d6a45}
+.tnProd .tnProdError{color:#b23b32}
+.clienteForm .tnProd label.caCheck,.catalogoForm .tnProd label.caCheck{display:block;font-weight:600}
+.tnProd label.caCheck input{width:auto;margin-right:8px;vertical-align:-2px}
+.tnProd label.caCheck{display:flex!important;flex-direction:row!important;align-items:center;gap:8px;margin:0}
+.tnProd label.caCheck input{margin:0}
+.tnProdBtns button{padding:8px 14px!important;font-size:13.5px!important;min-height:0!important}

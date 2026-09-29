@@ -118,7 +118,7 @@ export default function Tiendanube() {
             <b>{trabajando === 'sincronizar' ? 'Sincronizando…' : '🔄 Sincronizar ahora'}</b><small>Publica en la web los precios y el stock de la app, y descuenta lo que se vendió por la web.{opciones.auto ? ' Igual se hace sola cada 15 minutos.' : ''}</small>
           </button>
           <button type="button" className="tnAccion" disabled={!!trabajando} onClick={() => setPublicando(true)}>
-            <b>⬆ Subir productos nuevos a la web</b><small>Crea en Tiendanube los productos de la app que todavía no están (quedan sin publicar para que los revises).</small>
+            <b>⬆ Subir productos a la web</b><small>Elegís cuáles de la app querés en la web. Nada se publica solo: los servicios y los productos que no subas quedan solo en la app.</small>
           </button>
         </div>
       </section>
@@ -132,7 +132,7 @@ export default function Tiendanube() {
           <label className="caCheck"><input type="checkbox" checked={opciones.redondear} onChange={(e) => void guardarOpciones({ ...opciones, redondear: e.target.checked })} /> Redondear los precios de la web (sin centavos)</label>
           <label className="caCheck"><input type="checkbox" checked={opciones.auto} onChange={(e) => void guardarOpciones({ ...opciones, auto: e.target.checked })} /> Sincronizar <strong>automáticamente</strong> cada 15 minutos</label>
         </div>
-        <p className="gestionAyuda">La app manda: cambiás el precio, el stock o la cotización del dólar acá y la web se actualiza. Si un producto en la web no controla stock (stock ilimitado), no se toca. Para que un producto no se actualice, destildá "Sincronizar con la web" en su ficha.</p>
+        <p className="gestionAyuda">La app manda: cambiás el precio, el stock o la cotización del dólar acá y la web se actualiza. Si un producto en la web no controla stock (stock ilimitado), no se toca. Nada se publica solo: un producto llega a la web solo si lo subís (acá o con "Publicar en la web" en su ficha). Para que uno ya publicado no se actualice, destildá "Sincronizar" en su ficha.</p>
       </section>
 
       <section className="tnCard">
