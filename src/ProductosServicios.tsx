@@ -50,10 +50,6 @@ type EstadoGuardadoFila = 'guardando' | 'ok' | 'error'
 
 const BUCKET = 'productos'
 const CLAVE_MODO = 'mova_modo_ganancia'
-const TIPOS_KANBAN = [
-  { v: 'producto', t: 'Productos' },
-  { v: 'servicio', t: 'Servicios' },
-]
 const UNIDADES = ['unidad', 'metro', 'hora', 'servicio', 'kit', 'boca', 'circuito']
 const esHttp = (u: string | null | undefined) => !!u && /^https?:\/\//.test(u)
 
@@ -115,6 +111,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
   const [fMoneda, setFMoneda] = useState<'todas' | 'ARS' | 'USD'>('todas')
   const [fStock, setFStock] = useState<'todos' | 'sin' | 'bajo' | 'ok'>('todos')
   const [fFoto, setFFoto] = useState<'todas' | 'con' | 'sin'>('todas')
+  const [fDatos, setFDatos] = useState<'todos' | 'sinPrecio' | 'sinCosto'>('todos')
   const [fRotacion, setFRotacion] = useState<'todos' | 'parados' | 'vendidos'>('todos')
   const [orden, setOrden] = useState<'nombre' | 'precioAsc' | 'precioDesc' | 'stock' | 'vendidos' | 'inversion'>('nombre')
   // Ventas (presupuestos aceptados) por producto, para rotación.
@@ -253,8 +250,8 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
   }
   const categorias = useMemo(() => Array.from(new Set(elementos.map((e) => e.categoria?.trim()).filter((x): x is string => !!x))).sort(), [elementos])
   const proveedoresLista = useMemo(() => Array.from(new Set(elementos.map((e) => e.proveedor?.trim()).filter((x): x is string => !!x))).sort(), [elementos])
-  const filtrosAvanzadosActivos = [fCategoria !== 'todas', fProveedor !== 'todos', fMoneda !== 'todas', fStock !== 'todos', fFoto !== 'todas', fRotacion !== 'todos'].filter(Boolean).length
-  function limpiarFiltrosAvanzados() { setFCategoria('todas'); setFProveedor('todos'); setFMoneda('todas'); setFStock('todos'); setFFoto('todas'); setFRotacion('todos'); setOrden('nombre') }
+  const filtrosAvanzadosActivos = [fCategoria !== 'todas', fProveedor !== 'todos', fMoneda !== 'todas', fStock !== 'todos', fFoto !== 'todas', fRotacion !== 'todos', fDatos !== 'todos'].filter(Boolean).length
+  function limpiarFiltrosAvanzados() { setFCategoria('todas'); setFProveedor('todos'); setFMoneda('todas'); setFStock('todos'); setFFoto('todas'); setFRotacion('todos'); setFDatos('todos'); setOrden('nombre') }
 
   const elementosFiltrados = useMemo(() => {
     const texto = busqueda.trim().toLowerCase()
@@ -264,13 +261,15 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
       const coincideEstado = estadoFiltro === 'todos' || (estadoFiltro === 'activos' && el.activo) || (estadoFiltro === 'inactivos' && !el.activo)
       const coincideStock = !soloStockBajo || nivelStock(el) === 'bajo' || nivelStock(el) === 'sin'
       if (!(coincideBusqueda && coincideTipo && coincideEstado && coincideStock)) return false
-      if (fCategoria !== 'todas' && (el.categoria?.trim() ?? '') !== fCategoria) return false
+      if (fCategoria !== 'todas' && (el.categoria?.trim() || 'Sin categoría') !== fCategoria && (el.categoria?.trim() ?? '') !== fCategoria) return false
       if (fProveedor !== 'todos' && (el.proveedor?.trim() ?? '') !== fProveedor) return false
       if (fMoneda !== 'todas' && el.moneda !== fMoneda) return false
       if (fStock !== 'todos' && nivelStock(el) !== fStock) return false
       if (fFoto === 'con' && !el.foto_url) return false
       if (fFoto === 'sin' && el.foto_url) return false
       if (fRotacion === 'parados' && !estaParado(el)) return false
+      if (fDatos === 'sinPrecio' && el.precio_venta > 0) return false
+      if (fDatos === 'sinCosto' && (el.costo_unitario > 0 || el.tipo !== 'producto')) return false
       if (fRotacion === 'vendidos' && !(vendidasEn(el.id, diasVendidos) > 0)) return false
       return true
     })
@@ -284,10 +283,18 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
     }
     return lista.sort(cmp[orden])
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [elementos, busqueda, tipoFiltro, estadoFiltro, soloStockBajo, fCategoria, fProveedor, fMoneda, fStock, fFoto, fRotacion, orden, ventas, diasVendidos, diasParado])
+  }, [elementos, busqueda, tipoFiltro, estadoFiltro, soloStockBajo, fCategoria, fProveedor, fMoneda, fStock, fFoto, fRotacion, fDatos, orden, ventas, diasVendidos, diasParado])
 
   const inversionStock = elementos.filter((el) => el.tipo === 'producto' && el.activo).reduce((s, el) => s + el.costo_unitario * el.stock, 0)
   const bajos = elementos.filter((el) => el.activo && (nivelStock(el) === 'bajo' || nivelStock(el) === 'sin'))
+  const sinPrecio = elementos.filter((el) => el.activo && !(el.precio_venta > 0)).length
+  const sinCosto = elementos.filter((el) => el.activo && el.tipo === 'producto' && !(el.costo_unitario > 0)).length
+  // Categorías con cantidad, para los botones rápidos de la vista de tarjetas.
+  const chipsCategoria = useMemo(() => {
+    const m = new Map<string, number>()
+    elementos.filter((el) => estadoFiltro === 'todos' || (estadoFiltro === 'activos') === el.activo).forEach((el) => { const c = el.categoria?.trim() || 'Sin categoría'; m.set(c, (m.get(c) ?? 0) + 1) })
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1])
+  }, [elementos, estadoFiltro])
 
   // Muestra un valor guardado en pesos según la moneda elegida (solo visual).
   const mostrar = (valorArs: number) => (moneda === 'USD' && cotizacion > 0 ? formatoDolar(valorArs / cotizacion) : formatoDinero(valorArs))
@@ -589,12 +596,12 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
           {tieneDesc ? (<>
             <strong>{mostrar(final)}</strong><s>{mostrar(el.precio_venta)}</s>
             <span className="prodBadgeDesc">{el.descuento_pct > 0 ? `-${el.descuento_pct}%` : `-${mostrar(el.descuento_monto)}`}</span>
-          </>) : <strong>{mostrar(el.precio_venta)}</strong>}
+          </>) : el.precio_venta > 0 ? <strong>{mostrar(el.precio_venta)}</strong> : <button type="button" className="prodSinPrecio" onClick={() => abrirEdicion(el)}>Sin precio · cargar</button>}
         </div>
         {el.moneda === 'USD' && <small className="prodUsd">US$ {formatoDolar(el.precio_usd ?? 0).replace('$', '').trim()} · compra US$ {formatoDolar(el.costo_usd ?? 0).replace('$', '').trim()} · sigue al dólar</small>}
         {el.iva_pct > 0 && <small className="prodCat">Sin IVA · con IVA {String(el.iva_pct).replace('.', ',')}%: {mostrar(final * (1 + el.iva_pct / 100))}</small>}
         <div className="prodDatos">
-          <span>Compra <b>{mostrar(el.costo_unitario)}</b></span>
+          <span>Compra <b className={el.tipo === 'producto' && !(el.costo_unitario > 0) ? 'prodFalta' : ''}>{el.tipo === 'producto' && !(el.costo_unitario > 0) ? 'falta' : mostrar(el.costo_unitario)}</b></span>
           <span>Ganancia <b>{mostrar(ganancia)}</b></span>
           <span>Margen <b>{margen.toFixed(1)}%</b></span>
           {el.tipo === 'producto' && <span>Invertido <b>{mostrar(el.costo_unitario * el.stock)}</b></span>}
@@ -656,12 +663,19 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
           <button type="button" className={`prodKpiBtn ${bajos.length ? 'alertaStock' : ''} ${soloStockBajo ? 'activo' : ''}`} onClick={() => setSoloStockBajo((v) => !v)}>
             <span>STOCK BAJO</span><strong>{bajos.length}</strong><small>{soloStockBajo ? 'Mostrando solo estos ✓' : 'Tocá para filtrar'}</small>
           </button>
+          <button type="button" className={`prodKpiBtn ${sinPrecio + sinCosto ? 'alertaStock' : ''} ${fDatos !== 'todos' ? 'activo' : ''}`} onClick={() => setFDatos((v) => (v === 'todos' ? (sinPrecio ? 'sinPrecio' : sinCosto ? 'sinCosto' : 'todos') : v === 'sinPrecio' && sinCosto ? 'sinCosto' : 'todos'))}>
+            <span>PARA COMPLETAR</span><strong>{sinPrecio + sinCosto}</strong><small>{fDatos === 'sinPrecio' ? `Mostrando ${sinPrecio} sin precio ✓` : fDatos === 'sinCosto' ? `Mostrando ${sinCosto} sin costo ✓` : `${sinPrecio} sin precio · ${sinCosto} sin costo`}</small>
+          </button>
         </div>
       )}
 
       {!cargando && !error && bajos.length > 0 && (
-        <div className="stockAviso">
-          <strong>⚠ Reponer stock:</strong> {bajos.map((el) => `${el.nombre} (${el.stock})`).join(' · ')}
+        <div className="stockAviso stockAvisoCorto">
+          <span><strong>⚠ {bajos.length} producto{bajos.length === 1 ? '' : 's'} para reponer:</strong> {bajos.slice(0, 3).map((el) => `${el.nombre} (${el.stock})`).join(' · ')}{bajos.length > 3 ? ` y ${bajos.length - 3} más` : ''}</span>
+          <span className="stockAvisoAcc">
+            <button type="button" className="caLink" onClick={() => setSoloStockBajo(true)}>Ver cuáles</button>
+            <button type="button" className="caLink" onClick={() => setPestana('stock')}>Stock y rotación →</button>
+          </span>
         </div>
       )}
 
@@ -720,6 +734,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
           <label>Moneda<select value={fMoneda} onChange={(e) => setFMoneda(e.target.value as typeof fMoneda)}><option value="todas">Pesos y dólares</option><option value="ARS">Solo en pesos</option><option value="USD">Solo en dólares</option></select></label>
           <label>Stock<select value={fStock} onChange={(e) => setFStock(e.target.value as typeof fStock)}><option value="todos">Todos</option><option value="sin">Sin stock</option><option value="bajo">Stock bajo</option><option value="ok">Stock OK</option></select></label>
           <label>Foto<select value={fFoto} onChange={(e) => setFFoto(e.target.value as typeof fFoto)}><option value="todas">Con y sin foto</option><option value="con">Con foto</option><option value="sin">Sin foto</option></select></label>
+          <label>Datos<select value={fDatos} onChange={(e) => setFDatos(e.target.value as typeof fDatos)}><option value="todos">Todos</option><option value="sinPrecio">Sin precio de venta</option><option value="sinCosto">Sin precio de compra</option></select></label>
           <label>Rotación<select value={fRotacion} onChange={(e) => setFRotacion(e.target.value as typeof fRotacion)}><option value="todos">Todos</option><option value="vendidos">Se vendieron en {diasVendidos} días</option><option value="parados">Parados (+{diasParado} días sin salir)</option></select></label>
         </div>
       )}
@@ -734,19 +749,15 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
         <div className="empty"><span>📦</span><h3>Sin resultados</h3><p>Probá con otra búsqueda o filtro.</p></div>
       )}
 
+      {!cargando && !error && !modoEdicion && vista === 'kanban' && chipsCategoria.length > 1 && (
+        <div className="prodChips" role="tablist" aria-label="Categorías">
+          <button type="button" className={fCategoria === 'todas' ? 'active' : ''} onClick={() => setFCategoria('todas')}>Todas <b>{chipsCategoria.reduce((x, [, n]) => x + n, 0)}</b></button>
+          {chipsCategoria.map(([c, n]) => <button type="button" key={c} className={fCategoria === c ? 'active' : ''} onClick={() => setFCategoria(fCategoria === c ? 'todas' : c)}>{c} <b>{n}</b></button>)}
+        </div>
+      )}
       {!cargando && !error && elementosFiltrados.length > 0 && !modoEdicion && vista === 'kanban' && (
-        <div className="crmKanban">
-          {TIPOS_KANBAN.map((t) => {
-            const cols = elementosFiltrados.filter((el) => el.tipo === t.v)
-            return (
-              <div className={`crmKanbanCol tope ${t.v === 'producto' ? 'col-proceso' : 'col-aceptado'}`} key={t.v}>
-                <div className="crmKanbanHead"><h3>{t.t}</h3><span className="cuenta">{cols.length}</span></div>
-                <div className="crmKanbanBody">
-                  {cols.length === 0 ? <div className="crmKanbanVacio">—</div> : cols.map((el) => tarjeta(el))}
-                </div>
-              </div>
-            )
-          })}
+        <div className="prodGrid">
+          {elementosFiltrados.map((el) => tarjeta(el))}
         </div>
       )}
 

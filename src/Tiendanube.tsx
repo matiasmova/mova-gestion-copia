@@ -199,7 +199,7 @@ function ImportarDeWeb({ opciones, onCerrar }: { opciones: Opciones; onCerrar: (
       const nuevos = visibles.filter((f) => f.como === 'nuevo').map((f) => ({
         tipo: 'producto', nombre: f.web.nombre.slice(0, 200), codigo: f.web.sku, descripcion: f.web.descripcion || null,
         categoria: f.web.categoria, unidad: 'unidad', precio_venta: sinIva(f.web.precio), costo_unitario: 0,
-        stock: f.web.stock ?? 0, stock_minimo: 1, iva_pct: Number(iva) || 21, foto_url: f.web.foto, link_compra: null, proveedor: null,
+        stock: f.web.stock ?? 0, stock_minimo: f.web.stock == null ? 0 : 1, iva_pct: Number(iva) || 21, foto_url: f.web.foto, link_compra: null, proveedor: null,
         aplica_descuento: false, descuento_pct: 0, descuento_monto: 0, activo: true, ...vinculo(f.web),
       }))
       for (let i = 0; i < nuevos.length; i += 100) {
