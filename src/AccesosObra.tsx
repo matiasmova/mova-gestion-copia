@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { supabase } from './supabase'
-import { AVISO_ACCESOS, generarPdfAccesos, nombreArchivoAccesos } from './pdfAccesos'
+import { avisoAccesos, generarPdfAccesos, nombreArchivoAccesos } from './pdfAccesos'
 import VistaPreviaPdf from './VistaPreviaPdf'
 import { confirmarEliminacion } from './confirmar'
 
@@ -136,7 +136,7 @@ export default function AccesosObra({ obraId, cliente, obra, ubicacion }: Props)
           </tr>)}</tbody>
         </table></div>
       </>}
-      <p className="gestionAyuda" style={{ marginTop: 12 }}><strong>Aviso que se imprime al pie del PDF:</strong> {AVISO_ACCESOS.join(' ')}</p>
+      <p className="gestionAyuda" style={{ marginTop: 12 }}><strong>Aviso que se imprime al pie del PDF:</strong> {avisoAccesos().join(' ')}</p>
     </>}
     {verPdf && <VistaPreviaPdf titulo={`Resumen de accesos · ${obra}`} generar={armarPdf} onCerrar={() => setVerPdf(false)} />}
   </section>

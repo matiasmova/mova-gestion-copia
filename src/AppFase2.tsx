@@ -10,6 +10,7 @@ import Finanzas from './Finanzas'
 import Compras from './Compras'
 import Personal from './Personal.tsx'
 import Agenda from './Agenda'
+import { cargarConfig } from './config'
 import Configuracion from './Configuracion'
 import Usuarios from './Usuarios'
 import HomeResumen from './HomeResumen'
@@ -99,6 +100,8 @@ export default function AppFase2() {
   // falla la lectura, se mantiene el mínimo privilegio ('auxiliar'), nunca admin.
   // El rol admin SOLO se otorga si el perfil en la BD lo dice explícitamente.
   async function cargarPerfil(sesion: Session) {
+    // Configuración de la empresa (datos de contacto, condiciones…) para los documentos.
+    void cargarConfig()
     setNombreUsuario(sesion.user.email?.split('@')[0] ?? 'Usuario')
     try {
       const { data, error } = await supabase

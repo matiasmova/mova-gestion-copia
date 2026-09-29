@@ -1,5 +1,6 @@
 import logo from './assets/mova-logo.jpg'
 import { fechaCorta } from './gestionFormat'
+import { configActual } from './config'
 import type { ItemPresupuesto } from './NuevoPresupuesto'
 
 type PresupuestoParaRemito = {
@@ -109,11 +110,11 @@ export default function RemitoPDF({ presupuesto, cliente, obra, onCerrar }: Prop
         <footer className="pdfFooter">
           <img src={logo} alt="MOVA" className="pdfFooterLogo" />
           <div className="pdfContacto">
-            <span>🌐 www.movaelectronica.com.ar</span>
-            <span>📷 Instagram: @mova.smart</span>
-            <span>📱 +54 9 261 555 7970</span>
+            {configActual().empresa.web && <span>🌐 {configActual().empresa.web}</span>}
+            {configActual().empresa.instagram && <span>📷 Instagram: {configActual().empresa.instagram}</span>}
+            {configActual().empresa.telefono && <span>📱 {configActual().empresa.telefono}</span>}
           </div>
-          <span className="pdfFooterTag">MOVA Tecnología Smart · Espacios inteligentes</span>
+          <span className="pdfFooterTag">{[configActual().empresa.nombre, configActual().empresa.lema].filter(Boolean).join(' · ')}</span>
         </footer>
       </div>
     </div>
