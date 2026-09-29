@@ -1176,3 +1176,53 @@ button.fichaRow:not(:disabled):hover .fichaIr{color:var(--mova-orange)}
   .peHeaderAcc>button{flex:1 1 auto}
   .liEstaSemana{display:none}
 }
+
+/* ===== Tienda web (Tiendanube) ===== */
+.prodWeb{display:block;margin-top:2px;color:#6b3fa0;font-size:12px;font-weight:600}
+.prodWeb.pausa{color:#8a93a0}
+.tnWrap{display:flex;flex-direction:column;gap:14px}
+.tnCard{padding:16px 18px;border:1px solid var(--mova-border);border-radius:14px;background:#fff}
+.tnCard h3{margin:0 0 10px;font-size:15px}
+.tnAviso{margin:0;padding:10px 14px;border-radius:10px;background:#eef8f2;border:1px solid #bfe3cd;color:#1d6a45}
+.tnEstado{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.tnEstado>div{flex:1;min-width:200px;display:flex;flex-direction:column}
+.tnEstado small{color:var(--mova-muted);font-size:12.5px}
+.tnPunto{width:12px;height:12px;border-radius:50%;background:#c3c9d2;flex:0 0 12px}
+.tnPunto.ok{background:#23935b;box-shadow:0 0 0 4px #dff3e8}
+.tnAcciones{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.tnAccion{display:flex;flex-direction:column;gap:4px;padding:14px;border:1px solid var(--mova-border);border-radius:12px;background:#fafbfc;font:inherit;text-align:left;cursor:pointer;color:inherit}
+.tnAccion:hover:not(:disabled){border-color:var(--mova-orange);background:#fff}
+.tnAccion b{font-size:14px}
+.tnAccion small{color:var(--mova-muted);font-size:12.5px;line-height:1.4}
+.tnOpciones{display:flex;flex-direction:column;gap:8px;margin:6px 0 10px}
+.tnOpciones .caCheck{font-weight:400;font-size:13.5px}
+.tnIva{display:flex!important;flex-direction:row!important;align-items:center;gap:6px;font-size:13.5px;font-weight:400}
+.clienteForm .tnIva input{width:70px}
+.tnLog{display:flex;gap:12px;padding:8px 0;border-top:1px solid #f0f2f5;font-size:13px}
+.tnLog span{flex:0 0 110px;color:#8a93a0}
+.tnLog p{margin:0}
+.tnLog.error p{color:#b23b32}
+.tnModal{max-width:760px}
+.tnResumen{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px}
+.tnResumen>div{padding:10px 12px;border:1px solid var(--mova-border);border-radius:12px;display:flex;flex-direction:column}
+.tnResumen strong{font-size:20px}
+.tnResumen span{font-size:12px;color:var(--mova-muted)}
+.tnLista{max-height:46vh;overflow:auto;border:1px solid var(--mova-border);border-radius:12px;padding:0 10px;margin-bottom:12px}
+.tnFila{display:flex!important;flex-direction:row!important;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #f0f2f5;font-weight:400!important}
+.tnFila:first-child{border-top:0}
+.tnFila img,.tnSinFoto{width:40px;height:40px;border-radius:8px;object-fit:cover;background:#f3f5f8;display:flex;align-items:center;justify-content:center;flex:0 0 40px}
+.tnFila>div{flex:1;min-width:0;display:flex;flex-direction:column}
+.tnFila strong{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tnFila small{color:var(--mova-muted);font-size:11.5px}
+.tnPrecio{display:flex;flex-direction:column;align-items:flex-end;font-size:13px;font-weight:700;white-space:nowrap}
+.tnComo{font-style:normal;font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:#eef1f4;color:#4a5361;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tnComo.nuevo{background:#e4f5eb;color:#23764e}
+.tnComo.sku,.tnComo.nombre{background:#fff4e0;color:#a35a00}
+.clienteForm .tnElegir input{width:18px;height:18px;flex:0 0 18px}
+.tnGuia ol{margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:8px;font-size:13.5px;line-height:1.5}
+.tnGuia code{background:#f3f5f8;padding:1px 5px;border-radius:5px;font-size:12px;word-break:break-all}
+@media(max-width:760px){.tnAcciones,.tnResumen{grid-template-columns:1fr}}
+.tnOpciones label.caCheck,.clienteForm .tnOpciones label.caCheck{display:block;text-align:left;font-weight:400;cursor:pointer}
+.tnOpciones label.caCheck input,.clienteForm .tnOpciones label.caCheck input{width:auto;margin:0 8px 0 0;vertical-align:-2px}
+.clienteForm label.caCheck.formFull{display:block;font-weight:600}
+.clienteForm label.caCheck.formFull input{width:auto;margin-right:8px;vertical-align:-2px}

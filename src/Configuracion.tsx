@@ -3,14 +3,16 @@ import * as XLSX from 'xlsx'
 import { supabase } from './supabase'
 import { cargarConfig, configActual, configTablaDisponible, guardarConfig, lineaContacto, DEFAULTS, type Condicion, type Empresa } from './config'
 import { confirmarEliminacion } from './confirmar'
+import Tiendanube from './Tiendanube'
 
 // Configuración (solo admin): datos de la empresa, textos de presupuestos y
 // documentos, copia de seguridad en Excel y auditoría legible.
 
-type Pestana = 'empresa' | 'presupuestos' | 'backup' | 'auditoria'
+type Pestana = 'empresa' | 'presupuestos' | 'tiendanube' | 'backup' | 'auditoria'
 
 export default function Configuracion() {
-  const [pestana, setPestana] = useState<Pestana>('empresa')
+  // Al volver de autorizar en Tiendanube se abre directo esa pestaña.
+  const [pestana, setPestana] = useState<Pestana>(() => (window.location.search.includes('tiendanube=') ? 'tiendanube' : 'empresa'))
   const [listo, setListo] = useState(false)
   const [tablaOk, setTablaOk] = useState<boolean | null>(null)
 
@@ -24,6 +26,7 @@ export default function Configuracion() {
     <div className="gestionTabs homeTabs">
       <button className={pestana === 'empresa' ? 'active' : ''} onClick={() => setPestana('empresa')}>🏢 Empresa</button>
       <button className={pestana === 'presupuestos' ? 'active' : ''} onClick={() => setPestana('presupuestos')}>📄 Presupuestos y documentos</button>
+      <button className={pestana === 'tiendanube' ? 'active' : ''} onClick={() => setPestana('tiendanube')}>🛒 Tienda web</button>
       <button className={pestana === 'backup' ? 'active' : ''} onClick={() => setPestana('backup')}>💾 Copia de seguridad</button>
       <button className={pestana === 'auditoria' ? 'active' : ''} onClick={() => setPestana('auditoria')}>🕵 Auditoría</button>
     </div>
@@ -32,9 +35,10 @@ export default function Configuracion() {
       <p className="loginError">Falta correr el SQL de Configuración en Supabase (tabla <code>configuracion</code>). Mientras tanto se usan los valores de siempre y no se pueden guardar cambios.</p>
     )}
 
-    {!listo && pestana !== 'backup' && pestana !== 'auditoria' && <p>Cargando configuración...</p>}
+    {!listo && (pestana === 'empresa' || pestana === 'presupuestos') && <p>Cargando configuración...</p>}
     {listo && pestana === 'empresa' && <EmpresaForm habilitado={tablaOk !== false} />}
     {listo && pestana === 'presupuestos' && <PresupuestosForm habilitado={tablaOk !== false} />}
+    {pestana === 'tiendanube' && <Tiendanube />}
     {pestana === 'backup' && <CopiaSeguridad />}
     {pestana === 'auditoria' && <Auditoria />}
   </div>

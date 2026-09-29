@@ -33,7 +33,8 @@ export default function AppFase2() {
   const [avisoReset, setAvisoReset] = useState('')
   // Entró con un link de invitación o de recuperar contraseña: primero crea su contraseña.
   const [crearClave, setCrearClave] = useState<'invite' | 'recovery' | null>(TIPO_LINK_AUTH)
-  const [vista, setVista] = useState<Vista>('dashboard')
+  // Al volver de conectar la tienda web (Tiendanube) se abre Configuración.
+  const [vista, setVista] = useState<Vista>(() => (window.location.search.includes('tiendanube=') ? 'configuracion' : 'dashboard'))
   const [obraAbrirId, setObraAbrirId] = useState<number | null>(null)
   const [presupuestoAbrirId, setPresupuestoAbrirId] = useState<number | null>(null)
   const [menuAbierto, setMenuAbierto] = useState(false)
