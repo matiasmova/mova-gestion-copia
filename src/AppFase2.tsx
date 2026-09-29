@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { supabase } from './supabase'
+import { supabase, TIPO_LINK_AUTH } from './supabase'
 import Clientes from './Clientes'
 import Obras from './Obras'
 import Presupuestos from './Presupuestos'
@@ -19,52 +19,7 @@ import './fase2.css'
 import './menu.css'
 import IconoMenu from './iconosMenu'
 
-type Rol = 'admin' | 'encargado' | 'auxiliar' | 'contable'
-const ROLES: Record<Rol, string> = {
-  admin: 'Administrador', encargado: 'Encargado', auxiliar: 'Auxiliar', contable: 'Contable',
-}
-const ROLES_VALIDOS: Rol[] = ['admin', 'encargado', 'auxiliar', 'contable']
-
-// Inicio reúne el resumen y lo que antes era el Tablero (balance, cobranzas,
-// personal, gastos fijos e inventario), cada cosa en su pestaña.
-const NAVEGACION = [
-  ['dashboard', 'principal', 'Inicio'],
-  ['agenda', 'principal', 'Agenda'],
-  ['clientes', 'comercial', 'Clientes'],
-  ['presupuestos', 'comercial', 'Presupuestos'],
-  ['obras', 'comercial', 'Obras'],
-  ['soluciones', 'comercial', 'Soluciones'],
-  ['catalogo', 'operacion', 'Productos y servicios'],
-  ['compras', 'operacion', 'Compras'],
-  ['personal', 'operacion', 'Personal'],
-  ['finanzas', 'operacion', 'Movimientos'],
-  ['usuarios', 'sistema', 'Usuarios'],
-  ['configuracion', 'sistema', 'Configuración'],
-] as const
-
-// Secciones del menú, en orden.
-const GRUPOS_MENU: [string, string][] = [
-  ['principal', 'Principal'],
-  ['comercial', 'Comercial'],
-  ['operacion', 'Operación'],
-  ['sistema', 'Sistema'],
-]
-
-type Vista = (typeof NAVEGACION)[number][0]
-
-// Qué roles ven cada módulo. Si un módulo no figura acá, lo ven todos.
-const PERMISOS: Partial<Record<Vista, Rol[]>> = {
-  clientes: ['admin', 'encargado', 'contable'],
-  presupuestos: ['admin', 'contable'],
-  soluciones: ['admin', 'contable'],
-  finanzas: ['admin', 'contable'],
-  compras: ['admin', 'encargado', 'auxiliar'],
-  personal: ['admin', 'encargado', 'contable'],
-  usuarios: ['admin'],
-  configuracion: ['admin'],
-}
-const puedeVer = (rol: Rol, vista: Vista) =>
-  (PERMISOS[vista] ?? ROLES_VALIDOS).includes(rol)
+import { ROLES, ROLES_VALIDOS, NAVEGACION, GRUPOS_MENU, puedeVer, type Rol, type Vista } from './permisos'
 
 export default function AppFase2() {
   const [session, setSession] = useState<Session | null>(null)
@@ -75,6 +30,8 @@ export default function AppFase2() {
   const [ingresando, setIngresando] = useState(false)
   const [modoAuth, setModoAuth] = useState<'login' | 'reset'>('login')
   const [avisoReset, setAvisoReset] = useState('')
+  // Entró con un link de invitación o de recuperar contraseña: primero crea su contraseña.
+  const [crearClave, setCrearClave] = useState<'invite' | 'recovery' | null>(TIPO_LINK_AUTH)
   const [vista, setVista] = useState<Vista>('dashboard')
   const [obraAbrirId, setObraAbrirId] = useState<number | null>(null)
   const [presupuestoAbrirId, setPresupuestoAbrirId] = useState<number | null>(null)
@@ -88,7 +45,8 @@ export default function AppFase2() {
       if (data.session) await cargarPerfil(data.session)
       setVerificando(false)
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_evento, nueva) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (evento, nueva) => {
+      if (evento === 'PASSWORD_RECOVERY') setCrearClave('recovery')
       setSession(nueva)
       if (nueva) await cargarPerfil(nueva)
       setVerificando(false)
@@ -106,10 +64,16 @@ export default function AppFase2() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('nombre,rol')
+        .select('nombre,rol,activo')
         .eq('id', sesion.user.id)
         .maybeSingle()
       if (!error && data) {
+        // Usuario desactivado: no puede usar la app.
+        if (data.activo === false) {
+          await supabase.auth.signOut()
+          setMensajeError('Tu usuario está desactivado. Consultá con el administrador.')
+          return
+        }
         if (data.nombre) setNombreUsuario(data.nombre)
         if (data.rol && ROLES_VALIDOS.includes(data.rol as Rol)) setRol(data.rol as Rol)
         else setRol('auxiliar')
@@ -178,6 +142,8 @@ export default function AppFase2() {
     </div>
   )
 
+  if (crearClave) return <CrearClave tipo={crearClave} onListo={() => { setCrearClave(null); try { window.history.replaceState(null, '', window.location.pathname) } catch { /* sin acción */ } }} />
+
   const vistaSegura: Vista = puedeVer(rol, vista) ? vista : 'dashboard'
   const modulos = NAVEGACION.filter(([clave]) => puedeVer(rol, clave))
 
@@ -221,4 +187,35 @@ export default function AppFase2() {
         : contenido[vistaSegura]}
     </main>
   </div>
+}
+
+// Crear contraseña (al aceptar una invitación) o cambiarla (link de "olvidé mi contraseña").
+function CrearClave({ tipo, onListo }: { tipo: 'invite' | 'recovery'; onListo: () => void }) {
+  const [clave, setClave] = useState('')
+  const [repetir, setRepetir] = useState('')
+  const [error, setError] = useState('')
+  const [guardando, setGuardando] = useState(false)
+  async function guardar(e: FormEvent) {
+    e.preventDefault(); setError('')
+    if (clave.length < 8) { setError('Usá al menos 8 caracteres.'); return }
+    if (clave !== repetir) { setError('Las dos contraseñas no coinciden.'); return }
+    setGuardando(true)
+    const { error: fallo } = await supabase.auth.updateUser({ password: clave })
+    setGuardando(false)
+    if (fallo) { setError('No se pudo guardar la contraseña. Pedí un link nuevo e intentá otra vez.'); return }
+    onListo()
+  }
+  return (
+    <div className="fase2Login">
+      <form className="fase2LoginCard" onSubmit={guardar}>
+        <img className="fase2LoginLogo" src={logo} alt="MOVA" />
+        <h2>{tipo === 'invite' ? 'Bienvenido a MOVA Gestión' : 'Nueva contraseña'}</h2>
+        <p className="fase2LoginSub">{tipo === 'invite' ? 'Creá tu contraseña para empezar a usar la app' : 'Elegí tu nueva contraseña'}</p>
+        <label>Contraseña<input type="password" value={clave} onChange={(e) => setClave(e.target.value)} placeholder="Mínimo 8 caracteres" required autoComplete="new-password" /></label>
+        <label>Repetir contraseña<input type="password" value={repetir} onChange={(e) => setRepetir(e.target.value)} required autoComplete="new-password" /></label>
+        {error && <p className="loginError">{error}</p>}
+        <button className="fase2LoginBtn" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar y entrar'}</button>
+      </form>
+    </div>
+  )
 }

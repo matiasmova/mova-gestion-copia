@@ -15,4 +15,14 @@ if (!supabaseUrl || !supabaseKey) {
   throw new Error('Faltan las credenciales de Supabase')
 }
 
+// Si se entró desde el link de una invitación o de "olvidé mi contraseña", se
+// anota ANTES de crear el cliente (que después limpia la dirección), para
+// mostrar la pantalla de crear contraseña.
+export const TIPO_LINK_AUTH: 'invite' | 'recovery' | null = (() => {
+  try {
+    const m = /type=(invite|recovery)/.exec(`${window.location.hash}${window.location.search}`)
+    return m ? (m[1] as 'invite' | 'recovery') : null
+  } catch { return null }
+})()
+
 export const supabase = createClient(supabaseUrl, supabaseKey)
