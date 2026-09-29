@@ -37,6 +37,9 @@ export type ProductoServicio = {
   precio_usd: number | null
   // Cómo aparece en el presupuesto (genérico, sin marca ni detalle interno).
   nombre_presupuesto: string | null
+  // Vínculo con la tienda web (Tiendanube); si falta el SQL quedan vacíos.
+  tn_variant_id?: number | null
+  tn_sincronizar?: boolean
   fotoView?: string | null
 }
 
@@ -130,6 +133,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
   const [tipo, setTipo] = useState<'producto' | 'servicio'>('producto')
   const [monedaProd, setMonedaProd] = useState<'ARS' | 'USD'>('ARS')
   const [nombrePresupuesto, setNombrePresupuesto] = useState('')
+  const [tnSincronizar, setTnSincronizar] = useState(true)
   const [faltaSqlMoneda, setFaltaSqlMoneda] = useState(false)
   const [codigo, setCodigo] = useState('')
   const [nombre, setNombre] = useState('')
@@ -205,6 +209,13 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
     setElementos(conFoto)
     setCargando(false)
     void cargarVentas()
+    // Vínculo con la tienda web (si ya se corrió el SQL de Tiendanube).
+    void supabase.from('productos_servicios').select('id, tn_variant_id, tn_sincronizar').not('tn_variant_id', 'is', null)
+      .then(({ data: tn, error: e }) => {
+        if (e || !tn?.length) return
+        const mapa = new Map((tn as { id: number; tn_variant_id: number; tn_sincronizar: boolean }[]).map((x) => [x.id, x]))
+        setElementos((arr) => arr.map((x) => (mapa.has(x.id) ? { ...x, tn_variant_id: mapa.get(x.id)!.tn_variant_id, tn_sincronizar: mapa.get(x.id)!.tn_sincronizar } : x)))
+      })
   }
 
   // Cuánto salió cada producto en presupuestos aceptados (y cuándo fue la última vez).
@@ -316,7 +327,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
     setEditando(el)
     setTipo(el.tipo); setCodigo(el.codigo ?? ''); setNombre(el.nombre); setDescripcion(el.descripcion ?? ''); setCategoria(el.categoria ?? '')
     setProveedor(el.proveedor ?? ''); setLinkCompra(el.link_compra ?? ''); setUnidad(el.unidad)
-    setMonedaProd(el.moneda); setNombrePresupuesto(el.nombre_presupuesto ?? '')
+    setMonedaProd(el.moneda); setNombrePresupuesto(el.nombre_presupuesto ?? ''); setTnSincronizar(el.tn_sincronizar !== false)
     // En un producto en dólares, los precios del formulario son en dólares.
     const compra = el.moneda === 'USD' ? el.costo_usd ?? 0 : el.costo_unitario
     const lista = el.moneda === 'USD' ? el.precio_usd ?? 0 : el.precio_venta
@@ -397,6 +408,9 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
     const resultado = editando
       ? await supabase.from('productos_servicios').update(datos).eq('id', editando.id)
       : await supabase.from('productos_servicios').insert({ ...datos, activo: true })
+    if (!resultado.error && editando?.tn_variant_id && (editando.tn_sincronizar !== false) !== tnSincronizar) {
+      await supabase.from('productos_servicios').update({ tn_sincronizar: tnSincronizar }).eq('id', editando.id)
+    }
     if (resultado.error) {
       console.error(resultado.error)
       setErrorFormulario(resultado.error.code === '23505' ? 'Ya existe un producto con ese código.' : 'No se pudo guardar el producto o servicio.')
@@ -568,6 +582,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
         </div>
         <h3>{el.nombre}</h3>
         {el.nombre_presupuesto && <small className="prodPres" title="Así aparece en el presupuesto">📄 {el.nombre_presupuesto}</small>}
+        {el.tn_variant_id && <small className={`prodWeb ${el.tn_sincronizar === false ? 'pausa' : ''}`} title="Vinculado con la tienda web (Tiendanube)">🛒 {el.tn_sincronizar === false ? 'En la web · sin sincronizar' : 'En la web · se actualiza solo'}</small>}
         {el.codigo && <small className="prodCat">Cód. {el.codigo}</small>}
         <small className="prodCat">{el.categoria || el.descripcion || 'Sin categoría'}{el.proveedor ? ` · ${el.proveedor}` : ''}</small>
         <div className="prodPrecio">
@@ -944,6 +959,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                   )}
                 </div>
 
+                {editando && <TiendaWebProducto producto={editando} sincronizar={tnSincronizar} onSincronizar={setTnSincronizar} onCambio={() => void cargarCatalogo()} />}
                 <label className="formFull">Detalle interno (no sale en el presupuesto)<textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder="Modelo, especificaciones, notas de instalación, compatibilidades…" /></label>
 
                 <div className="simulacionBox formFull">
@@ -969,6 +985,43 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
       )}
     </div>
   )
+}
+
+// Ficha del producto → Tienda web: publicarlo (solo si vos querés), mostrarlo u
+// ocultarlo en la tienda y elegir si se sincroniza. Nada se publica solo.
+function TiendaWebProducto({ producto, sincronizar, onSincronizar, onCambio }: { producto: ProductoServicio; sincronizar: boolean; onSincronizar: (v: boolean) => void; onCambio: () => void }) {
+  const [trabajando, setTrabajando] = useState(false)
+  const [mensaje, setMensaje] = useState('')
+  async function llamar(cuerpo: Record<string, unknown>, ok: string) {
+    setTrabajando(true); setMensaje('')
+    const { data, error } = await supabase.functions.invoke('tiendanube', { body: cuerpo })
+    setTrabajando(false)
+    if (error || data?.error) {
+      let msg = data?.error ?? 'No se pudo conectar con la tienda web. Revisá que esté conectada en Configuración → Tienda web.'
+      try { const ctx = (error as { context?: Response } | null)?.context; if (ctx) msg = (await ctx.json()).error ?? msg } catch { /* sin detalle */ }
+      setMensaje(`⚠ ${msg}`); return
+    }
+    if (data?.errores?.length) { setMensaje(`⚠ ${data.errores.join(', ')}`); return }
+    setMensaje(ok); onCambio()
+  }
+  return <div className="formFull tnProd">
+    <span className="tnProdTit">🛒 Tienda web (movaelectronica.com.ar)</span>
+    {producto.tn_variant_id ? <>
+      <label className="caCheck"><input type="checkbox" checked={sincronizar} onChange={(e) => onSincronizar(e.target.checked)} /> Sincronizar precio y stock con la web</label>
+      <div className="tnProdBtns">
+        <button type="button" className="editButton" disabled={trabajando} onClick={() => void llamar({ accion: 'visibilidad', id: producto.id, visible: true }, '✓ Ahora se ve en la tienda.')}>👁 Mostrar en la tienda</button>
+        <button type="button" className="editButton" disabled={trabajando} onClick={() => void llamar({ accion: 'visibilidad', id: producto.id, visible: false }, '✓ Oculto en la tienda (sigue vinculado).')}>🙈 Ocultar en la tienda</button>
+      </div>
+    </> : <>
+      <small>No está en la web. Solo se publica si vos lo pedís.</small>
+      <div className="tnProdBtns">
+        <button type="button" className="newButton" disabled={trabajando} onClick={() => { if (window.confirm(`¿Publicar "${producto.nombre}" en la tienda web, visible para los clientes?`)) void llamar({ accion: 'crear', productos: [producto.id], visible: true }, '✓ Publicado en la tienda web.') }}>🛒 Publicar en la web</button>
+        <button type="button" className="editButton" disabled={trabajando} onClick={() => void llamar({ accion: 'crear', productos: [producto.id], visible: false }, '✓ Creado en la tienda, oculto: revisalo en Tiendanube y publicalo cuando quieras.')}>Subirlo oculto para revisar</button>
+      </div>
+    </>}
+    {trabajando && <small>Conectando con la tienda…</small>}
+    {mensaje && <small className={mensaje.startsWith('⚠') ? 'tnProdError' : 'tnProdOk'}>{mensaje}</small>}
+  </div>
 }
 
 export default ProductosServicios
