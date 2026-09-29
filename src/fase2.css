@@ -656,3 +656,4 @@
 .npNuevo:disabled{color:#b4bac2;cursor:not-allowed}
 .npAyuda{display:block;margin-top:5px;color:var(--mova-muted);font-size:11.5px;font-weight:400;line-height:1.4}
 .modalOverlay+.modalOverlay,body>.modalOverlay:last-child{z-index:1400}
+.pagoResumen{grid-column:1/-1;margin:0;padding:10px 12px;border-radius:10px;background:#fff7ed;border:1px solid #fde3c3;font-size:13px;color:#374151;line-height:1.45}

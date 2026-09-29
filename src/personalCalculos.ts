@@ -108,3 +108,15 @@ export function calcularPersona(
     faltaValor,
   }
 }
+
+// Las dos formas de contratar: por acuerdo (monto por obra, se paga según el
+// avance) o por día (se paga por los jornales cargados). Las demás modalidades
+// (por hora, por etapa, porcentaje) se siguen calculando si ya estaban cargadas.
+export const MODALIDADES_PRINCIPALES: [string, string][] = [
+  ['por_obra', 'Por acuerdo (monto por obra)'],
+  ['por_dia', 'Por día (jornal)'],
+]
+
+// Modalidad con la que se asigna a una persona según su ficha.
+export const modalidadDePersona = (modalidadPago: string | null | undefined) =>
+  modalidadPago === 'por_dia' || modalidadPago === 'por_hora' ? modalidadPago : 'por_obra'
