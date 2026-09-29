@@ -708,3 +708,100 @@
   .agHora{min-width:0;width:100%;font-size:13px;color:#6b7280}
   .agAcciones{width:100%;justify-content:flex-end}
 }
+
+/* ---- Compras (versión nueva) ---- */
+.cpHead{margin-bottom:12px}
+.cpPeriodo{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:12px}
+.cpPeriodo label{display:flex;align-items:center;gap:6px}
+.cpPeriodo select,.cpPeriodo input{padding:8px 10px;border:1px solid var(--mova-border);border-radius:10px;background:#fff;font:inherit;font-size:13.5px}
+.cpPeriodo small{color:var(--mova-muted);font-size:12.5px}
+.cpKpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.cpKpis button{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:3px;padding:14px 16px;border:1px solid var(--mova-border);border-radius:14px;background:#fff;min-width:0;transition:border-color .12s,box-shadow .12s}
+.cpKpis button:hover{border-color:var(--mova-orange)}
+.cpKpis button.activo{border-color:var(--mova-orange);box-shadow:0 0 0 2px #f6d9ae}
+.cpKpis span{color:#9099a6;font-size:10.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase}
+.cpKpis strong{font-size:21px;overflow-wrap:anywhere}
+.cpKpis small{color:#697382;font-size:12px}
+.cpFiltros{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:8px}
+.cpFiltros input,.cpFiltros select{padding:10px 12px;border:1px solid var(--mova-border);border-radius:10px;background:#fff;font:inherit;font-size:14px;min-width:0}
+.cpEstados{margin-bottom:10px}
+.cpLimpiar{border:0!important;background:none!important;color:var(--mova-orange)!important;font-weight:700}
+.cpTotalFiltro{margin:0 0 10px;font-size:13px;color:var(--mova-muted)}
+.cpDia{margin-bottom:14px}
+.cpDiaHead{display:flex;justify-content:space-between;align-items:baseline;margin:0 2px 6px;font-size:12px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;color:#8a929e}
+.cpDiaHead b{color:#374151;letter-spacing:0}
+.cpCompra{display:flex;justify-content:space-between;gap:12px;padding:12px 14px;margin-bottom:8px;border:1px solid var(--mova-border);border-left:4px solid #23935b;border-radius:12px;background:#fff}
+.cpCompra.impaga{border-left-color:#e47b00}
+.cpCompra.vencida{border-left-color:#b23b32;background:#fffafa}
+.cpCompraInfo{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.cpCompraInfo strong{font-size:14.5px;overflow-wrap:anywhere}
+.cpCompraInfo small{font-size:12.5px;color:var(--mova-muted)}
+.cpChips{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
+.cpChip{font-size:11.5px;padding:3px 8px;border-radius:999px;background:#f1f3f5;color:#374151;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cpChip.obra{background:#e7f0fb;color:#2866a7}
+.cpCompraLado{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+.cpMonto{font-size:16px;white-space:nowrap;color:#111827}
+.cpEstado{border:0;border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap}
+.cpEstado.ok{background:#e4f5eb;color:#23764e}
+.cpEstado.pend{background:#fff0de;color:#b86608}
+.cpEstado.venc{background:#fdeceb;color:#b23b32}
+.cpEstado:disabled{opacity:.6;cursor:wait}
+.cpAcciones{display:flex;gap:4px}
+.cpAdjuntar{display:inline-grid;place-items:center;box-sizing:border-box}
+.cpAdjuntar input{display:none}
+.cpVacio{padding:18px}
+.cpDeudas{display:flex;flex-direction:column;gap:10px}
+.cpProv{border:1px solid var(--mova-border);border-left:4px solid #e47b00;border-radius:12px;background:#fff;overflow:hidden}
+.cpProv.vencida{border-left-color:#b23b32}
+.cpProvHead{all:unset;box-sizing:border-box;width:100%;cursor:pointer;display:flex;align-items:center;gap:12px;padding:14px 16px}
+.cpProvHead>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.cpProvHead strong{font-size:15px}
+.cpProvHead small{font-size:12.5px;color:var(--mova-muted)}
+.cpProvCuerpo{padding:0 12px 4px}
+.cpProvPie{display:flex;justify-content:flex-end;padding:0 16px 14px}
+.cpAnalisis{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.cpAnalisis section{border:1px solid var(--mova-border);border-radius:14px;background:#fff;padding:14px 16px}
+.cpAnalisis h4{margin:0 0 10px;font-size:14.5px}
+.cpAnalisis h4 small{font-weight:500;color:var(--mova-muted)}
+.cpBarra{display:grid;grid-template-columns:minmax(80px,140px) 1fr auto;gap:10px;align-items:center;padding:5px 0;font-size:13px}
+.cpBarra>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.cpBarra b{white-space:nowrap}
+.cpBarra b small{color:var(--mova-muted);font-weight:500}
+.cpMeses{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;align-items:end;height:170px}
+.cpMes{display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;min-width:0}
+.cpMes small{font-size:10px;color:var(--mova-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.cpMes>div{flex:1;width:100%;display:flex;align-items:flex-end;background:#f4f6f8;border-radius:6px;overflow:hidden}
+.cpMes>div span{display:block;width:100%;background:#e47b00;border-radius:6px 6px 0 0;min-height:2px}
+.cpMes:last-child>div span{background:#b86608}
+.cpMes b{font-size:11.5px;text-transform:capitalize;color:#4b5563}
+button.comprobanteCard{padding:0;text-align:left;font:inherit;cursor:pointer;width:100%}
+.cpModal{max-width:760px}
+.cpItems{margin:14px 0 4px;padding:12px;border:1px solid var(--mova-border);border-radius:12px;background:#fafbfc}
+.cpItemsHead{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;margin-bottom:8px}
+.cpItemsHead small{color:var(--mova-muted);font-size:12px}
+.cpItem{display:grid;grid-template-columns:minmax(0,2.2fr) 70px 80px minmax(0,1fr) auto auto;gap:6px;align-items:center;margin-bottom:6px}
+.cpItem input{padding:9px 10px!important;font-size:13.5px!important;min-width:0}
+.cpItemTotal{font-size:13px;white-space:nowrap;text-align:right;min-width:90px}
+.cpPagoFila{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:12px 0}
+.cpPagoFila>span{font-size:13.5px;font-weight:700;color:#374151}
+.cpVence{display:flex!important;flex-direction:row!important;align-items:center;gap:6px;font-size:13px}
+.cpVence input{width:auto!important;padding:7px 9px!important}
+.cpArchivo{display:block;cursor:pointer;padding:14px;border:1.5px dashed #d6dbe1;border-radius:12px;text-align:center;color:#4b5563;font-weight:600;font-size:13.5px;background:#fff}
+.cpArchivo:hover{border-color:var(--mova-orange);color:var(--mova-orange)}
+.cpArchivo input{display:none}
+@media(max-width:900px){.cpKpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){
+  .cpKpis{gap:8px}
+  .cpKpis button{padding:12px}
+  .cpKpis strong{font-size:17px}
+  .cpFiltros{grid-template-columns:1fr 1fr}
+  .cpFiltros input{grid-column:1/-1}
+  .cpCompra{flex-direction:column;gap:8px}
+  .cpCompraLado{flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap}
+  .cpItem{grid-template-columns:1fr 1fr 1fr;padding:8px;border:1px solid var(--mova-border);border-radius:10px;background:#fff}
+  .cpItemNombre{grid-column:1/-1}
+  .cpItemTotal{grid-column:1/3;text-align:left}
+  .cpMeses{height:140px}
+}
+.cpFila{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+@media(max-width:640px){.cpFila{flex:1;justify-content:flex-end}}
