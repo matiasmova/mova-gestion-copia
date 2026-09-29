@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { supabase } from './supabase'
 import type { ProductoServicio } from './ProductosServicios'
 import { dos } from './catalogoCalculos'
-import { CLAVE_COTIZACION, formatoDinero, leerCotizacion } from './catalogoMoneda'
+import { formatoDinero, formatoDolar, guardarCotizacion, leerCotizacion, traerCotizacionOnline } from './catalogoMoneda'
+import { configActual } from './config'
 
-// Ventana para cargar la cotización del dólar del día. Si ya había una
-// cotización guardada y cambió, se ofrece recalcular y guardar el costo y el
-// precio de lista de TODO el catálogo (en pesos), multiplicando por la
-// variación entre la cotización vieja y la nueva.
+// Cotización del dólar (compartida por todos los usuarios).
+//  · Los productos cargados EN DÓLARES se recalculan solos en pesos con la
+//    cotización nueva (precio USD × cotización).
+//  · Los productos cargados EN PESOS no cambian, salvo que se tilde "ajustar
+//    también los productos en pesos", que los multiplica por la variación.
 
 type Props = {
   elementos: ProductoServicio[]
@@ -15,85 +17,81 @@ type Props = {
   onActualizado: () => void
 }
 
-type Fase = 'ingresar' | 'confirmar' | 'aplicando' | 'listo'
-
-function formatoNumero(n: number) {
-  return new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n)
-}
+type Fase = 'ingresar' | 'aplicando' | 'listo'
+const numero = (n: number) => new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n)
 
 export default function ActualizarCotizacion({ elementos, onCerrar, onActualizado }: Props) {
-  const cotizacionActual = leerCotizacion()
-  const [nueva, setNueva] = useState(cotizacionActual > 0 ? String(cotizacionActual).replace('.', ',') : '')
+  const actual = leerCotizacion()
+  const info = configActual().cotizacion
+  const [nueva, setNueva] = useState(actual > 0 ? String(actual).replace('.', ',') : '')
+  const [fuente, setFuente] = useState<string | null>(null)
+  const [trayendo, setTrayendo] = useState<string | null>(null)
+  const [ajustarPesos, setAjustarPesos] = useState(false)
   const [fase, setFase] = useState<Fase>('ingresar')
   const [error, setError] = useState('')
-  const [progreso, setProgreso] = useState({ hechos: 0, total: 0 })
-  const [resumen, setResumen] = useState('')
-  const [fallidos, setFallidos] = useState(0)
+  const [resumen, setResumen] = useState<string[]>([])
 
-  const nuevaNum = Number(nueva.replace(',', '.'))
-  const afectados = elementos.filter((el) => el.costo_unitario > 0 || el.precio_venta > 0)
-  const ratio = cotizacionActual > 0 ? nuevaNum / cotizacionActual : 1
-  const variacionPct = (ratio - 1) * 100
-  const ejemplo = afectados[0]
+  const nuevaNum = Number(nueva.replace(/\./g, '').replace(',', '.'))
+  const valida = Number.isFinite(nuevaNum) && nuevaNum > 0
+  const ratio = actual > 0 && valida ? nuevaNum / actual : 1
+  const variacion = (ratio - 1) * 100
+  const enUsd = elementos.filter((el) => el.moneda === 'USD')
+  const enPesos = elementos.filter((el) => el.moneda !== 'USD' && (el.costo_unitario > 0 || el.precio_venta > 0))
+  const ejemploUsd = enUsd.find((el) => (el.precio_usd ?? 0) > 0)
 
-  function guardarCotizacionLocal(valor: number) {
+  async function traer(casa: 'oficial' | 'blue' | 'bolsa', etiqueta: string) {
+    setTrayendo(casa); setError('')
     try {
-      localStorage.setItem(CLAVE_COTIZACION, String(valor))
+      const r = await traerCotizacionOnline(casa)
+      setNueva(String(r.venta).replace('.', ','))
+      setFuente(`Dólar ${etiqueta}`)
     } catch {
-      /* sin almacenamiento: no pasa nada */
-    }
+      setError('No se pudo traer la cotización de internet. Cargala a mano.')
+    } finally { setTrayendo(null) }
   }
 
-  function continuar() {
+  async function aplicar() {
     setError('')
-    if (!Number.isFinite(nuevaNum) || nuevaNum <= 0) {
-      setError('Ingresá un valor de cotización válido.')
-      return
-    }
-    if (cotizacionActual <= 0) {
-      // Primera vez: se guarda como base. Recién la próxima actualización recalcula precios.
-      guardarCotizacionLocal(nuevaNum)
-      setResumen(`Se guardó la cotización (USD 1 = $ ${formatoNumero(nuevaNum)}). La próxima vez que la actualices, el costo y el precio de lista del catálogo se van a recalcular según cuánto haya variado.`)
-      setFase('listo')
-      onActualizado()
-      return
-    }
-    if (Math.abs(ratio - 1) < 0.0005) {
-      setResumen('La cotización no cambió respecto de la guardada: no hay nada para recalcular.')
-      setFase('listo')
-      return
-    }
-    setFase('confirmar')
-  }
-
-  async function confirmar() {
+    if (!valida) { setError('Ingresá una cotización válida.'); return }
     setFase('aplicando')
-    const total = afectados.length
-    setProgreso({ hechos: 0, total })
-    let hechos = 0
-    let fallos = 0
-    let cursor = 0
-    const trabajador = async () => {
-      while (cursor < afectados.length) {
-        const el = afectados[cursor++]
-        const nuevoCosto = el.costo_unitario > 0 ? dos(el.costo_unitario * ratio) : el.costo_unitario
-        const nuevoPrecio = el.precio_venta > 0 ? dos(el.precio_venta * ratio) : el.precio_venta
-        const { error: err } = await supabase.from('productos_servicios').update({ costo_unitario: nuevoCosto, precio_venta: nuevoPrecio }).eq('id', el.id)
-        if (err) { console.error(err); fallos++ } else hechos++
-        setProgreso({ hechos: hechos + fallos, total })
-      }
+    const lineas: string[] = []
+    try {
+      await guardarCotizacion(nuevaNum, fuente ?? 'Manual')
+      lineas.push(`Cotización guardada: USD 1 = $ ${numero(nuevaNum)}. La ven todos los usuarios.`)
+    } catch (e) {
+      console.error(e)
+      lineas.push('⚠ La cotización quedó solo en este dispositivo: falta correr el SQL de Productos (o el de Configuración) en Supabase.')
     }
-    await Promise.all([trabajador(), trabajador(), trabajador(), trabajador()])
-    guardarCotizacionLocal(nuevaNum)
-    setFallidos(fallos)
-    setResumen(`Se actualizaron ${hechos} de ${total} producto(s) con la nueva cotización (USD 1 = $ ${formatoNumero(nuevaNum)}).`)
+    // Productos en dólares: se recalculan en pesos en la base, de una sola vez.
+    if (enUsd.length > 0) {
+      const { data, error: e } = await supabase.rpc('actualizar_precios_usd', { p_cotizacion: nuevaNum })
+      lineas.push(e ? '⚠ No se pudieron recalcular los productos en dólares (falta correr el SQL de Productos).' : `${data ?? enUsd.length} producto(s) en dólares actualizados en pesos.`)
+    }
+    // Productos en pesos: solo si se pidió, por la variación.
+    if (ajustarPesos && actual > 0 && Math.abs(ratio - 1) >= 0.0005) {
+      let ok = 0
+      let cursor = 0
+      const trabajador = async () => {
+        while (cursor < enPesos.length) {
+          const el = enPesos[cursor++]
+          const { error: e } = await supabase.from('productos_servicios').update({
+            costo_unitario: el.costo_unitario > 0 ? dos(el.costo_unitario * ratio) : el.costo_unitario,
+            precio_venta: el.precio_venta > 0 ? dos(el.precio_venta * ratio) : el.precio_venta,
+          }).eq('id', el.id)
+          if (!e) ok++
+        }
+      }
+      await Promise.all([trabajador(), trabajador(), trabajador(), trabajador()])
+      lineas.push(`${ok} producto(s) en pesos ajustados un ${variacion > 0 ? '+' : ''}${variacion.toFixed(1)}%.`)
+    }
+    setResumen(lineas)
     setFase('listo')
     onActualizado()
   }
 
   return (
     <div className="modalOverlay">
-      <div className="modalCard catalogoModal" style={{ maxWidth: '560px' }}>
+      <div className="modalCard catalogoModal" style={{ maxWidth: '600px' }}>
         <div className="modalHeader">
           <div><p className="subtitle">CATÁLOGO MOVA</p><h2>Cotización del dólar</h2></div>
           <button type="button" className="modalClose closeButton" onClick={onCerrar} disabled={fase === 'aplicando'}>×</button>
@@ -102,59 +100,47 @@ export default function ActualizarCotizacion({ elementos, onCerrar, onActualizad
         {fase === 'ingresar' && (
           <div className="catalogoForm">
             <p className="gestionAyuda" style={{ marginTop: 0 }}>
-              {cotizacionActual > 0
-                ? `Cotización guardada: USD 1 = $ ${formatoNumero(cotizacionActual)}. Si cargás una nueva, el costo y el precio de lista de todo el catálogo se multiplican por la variación entre las dos.`
-                : 'Todavía no cargaste una cotización. La primera vez solo se guarda como base, sin tocar ningún precio.'}
+              {actual > 0
+                ? <>Cotización actual: <strong>USD 1 = $ {numero(actual)}</strong>{info.fecha ? ` · ${new Date(info.fecha).toLocaleDateString('es-AR')}` : ''}{info.fuente ? ` · ${info.fuente}` : ''}</>
+                : 'Todavía no hay una cotización cargada.'}
             </p>
-            <label>Cotización de hoy (pesos por dólar)
-              <input type="text" inputMode="decimal" value={nueva} onChange={(e) => setNueva(e.target.value)} placeholder="Ej.: 1.450" autoFocus />
+            <div className="ctTraer">
+              <span>Traer la de hoy:</span>
+              <button type="button" className="editButton" disabled={!!trayendo} onClick={() => void traer('oficial', 'oficial')}>{trayendo === 'oficial' ? '…' : 'Oficial'}</button>
+              <button type="button" className="editButton" disabled={!!trayendo} onClick={() => void traer('blue', 'blue')}>{trayendo === 'blue' ? '…' : 'Blue'}</button>
+              <button type="button" className="editButton" disabled={!!trayendo} onClick={() => void traer('bolsa', 'MEP')}>{trayendo === 'bolsa' ? '…' : 'MEP'}</button>
+            </div>
+            <label>Cotización (pesos por dólar)
+              <input type="text" inputMode="decimal" value={nueva} onChange={(e) => { setNueva(e.target.value); setFuente(null) }} placeholder="Ej.: 1450" autoFocus />
             </label>
+            {fuente && <small className="gestionAyuda">Valor de venta del {fuente.toLowerCase()} (dolarapi.com). Podés corregirlo.</small>}
+
+            {valida && actual > 0 && Math.abs(ratio - 1) >= 0.0005 && (
+              <p className="gestionAyuda">Variación: <strong>{variacion > 0 ? '+' : ''}{variacion.toFixed(1)}%</strong> respecto de la actual.</p>
+            )}
+
+            <div className="simulacionBox">
+              <span className="simulacionTitulo">Qué va a pasar</span>
+              <p className="ctLinea">💵 <strong>{enUsd.length}</strong> producto(s) cargados en dólares se recalculan en pesos{ejemploUsd && valida ? ` (ej.: ${ejemploUsd.nombre}: US$ ${formatoDolar(ejemploUsd.precio_usd ?? 0).replace("$", "").trim()} → ${formatoDinero(dos((ejemploUsd.precio_usd ?? 0) * nuevaNum))})` : ''}.</p>
+              <p className="ctLinea">$ <strong>{enPesos.length}</strong> producto(s) en pesos {ajustarPesos ? `se ajustan un ${variacion > 0 ? '+' : ''}${variacion.toFixed(1)}%` : 'quedan igual'}.</p>
+              {actual > 0 && enPesos.length > 0 && (
+                <label className="caCheck"><input type="checkbox" checked={ajustarPesos} onChange={(e) => setAjustarPesos(e.target.checked)} /> Ajustar también los productos en pesos según la variación del dólar</label>
+              )}
+            </div>
             {error && <p className="loginError">{error}</p>}
             <div className="modalActions formActions">
               <button type="button" className="cancelButton" onClick={onCerrar}>Cancelar</button>
-              <button type="button" className="newButton" onClick={continuar}>Continuar</button>
+              <button type="button" className="newButton" disabled={!valida} onClick={() => void aplicar()}>Guardar cotización</button>
             </div>
           </div>
         )}
 
-        {fase === 'confirmar' && (
-          <div className="catalogoForm">
-            <p className="gestionAyuda" style={{ marginTop: 0 }}>
-              La cotización pasa de <strong>USD 1 = $ {formatoNumero(cotizacionActual)}</strong> a <strong>USD 1 = $ {formatoNumero(nuevaNum)}</strong>
-              {' '}({variacionPct > 0 ? '+' : ''}{variacionPct.toFixed(1)}%).
-            </p>
-            <p className="gestionAyuda">
-              Se van a actualizar <strong>{afectados.length}</strong> producto(s) con costo o precio de lista cargado, multiplicando cada valor por {ratio.toFixed(4)}.
-              Esta acción no se puede deshacer.
-            </p>
-            {ejemplo && (
-              <div className="simulacionBox">
-                <span className="simulacionTitulo">Ejemplo: {ejemplo.nombre}</span>
-                <div className="simulacionGrid">
-                  <div><small>Compra antes → después</small><strong>{formatoDinero(ejemplo.costo_unitario)} → {formatoDinero(dos(ejemplo.costo_unitario * ratio))}</strong></div>
-                  <div><small>Lista antes → después</small><strong>{formatoDinero(ejemplo.precio_venta)} → {formatoDinero(dos(ejemplo.precio_venta * ratio))}</strong></div>
-                </div>
-              </div>
-            )}
-            <div className="modalActions formActions">
-              <button type="button" className="cancelButton" onClick={() => setFase('ingresar')}>Volver</button>
-              <button type="button" className="newButton" onClick={() => void confirmar()}>Actualizar {afectados.length} producto(s)</button>
-            </div>
-          </div>
-        )}
-
-        {fase === 'aplicando' && (
-          <div className="catalogoForm">
-            <p role="status">Actualizando precios... {progreso.hechos} de {progreso.total}</p>
-            <div className="crmBarra"><span style={{ width: `${progreso.total ? (progreso.hechos / progreso.total) * 100 : 0}%` }} /></div>
-            <p className="gestionAyuda">No cierres esta ventana hasta que termine.</p>
-          </div>
-        )}
+        {fase === 'aplicando' && <div className="catalogoForm"><p role="status">Actualizando precios…</p><p className="gestionAyuda">No cierres esta ventana.</p></div>}
 
         {fase === 'listo' && (
           <div className="catalogoForm">
-            <p><strong>Listo.</strong> {resumen}</p>
-            {fallidos > 0 && <p className="loginError">{fallidos} producto(s) no se pudieron actualizar.</p>}
+            <p><strong>Listo.</strong></p>
+            <ul className="ctResumen">{resumen.map((l) => <li key={l}>{l}</li>)}</ul>
             <div className="modalActions formActions"><button type="button" className="newButton" onClick={onCerrar}>Cerrar</button></div>
           </div>
         )}

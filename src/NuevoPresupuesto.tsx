@@ -49,6 +49,7 @@ type ProductoServicio = {
   unidad: string
   precio_venta: number
   costo_unitario: number
+  nombre_presupuesto?: string | null
 }
 
 export type PresupuestoEditable = {
@@ -153,14 +154,11 @@ function NuevoPresupuesto({
 
   useEffect(() => {
     async function cargarCatalogo() {
-      const { data, error: errorCatalogo } = await supabase
-        .from('productos_servicios')
-        .select(
-          'id, tipo, nombre, descripcion, unidad, precio_venta, costo_unitario',
-        )
-        .eq('activo', true)
-        .order('tipo')
-        .order('nombre')
+      const columnas = 'id, tipo, nombre, descripcion, unidad, precio_venta, costo_unitario'
+      let consulta = await supabase.from('productos_servicios').select(`${columnas}, nombre_presupuesto`).eq('activo', true).order('tipo').order('nombre')
+      // Sin el SQL de Productos todavía no existe nombre_presupuesto: se lee como antes.
+      if (consulta.error) consulta = await supabase.from('productos_servicios').select(columnas).eq('activo', true).order('tipo').order('nombre') as typeof consulta
+      const { data, error: errorCatalogo } = consulta
 
       if (errorCatalogo) {
         console.error(errorCatalogo)
@@ -289,9 +287,9 @@ function NuevoPresupuesto({
 
     if (!seleccionado) return
 
-    const descripcionCompleta = seleccionado.descripcion?.trim()
-      ? `${seleccionado.nombre} — ${seleccionado.descripcion.trim()}`
-      : seleccionado.nombre
+    // En el presupuesto va solo el nombre para el cliente: sin marca, modelo ni
+    // detalle interno. Si no se cargó, el nombre del producto.
+    const descripcionCompleta = seleccionado.nombre_presupuesto?.trim() || seleccionado.nombre
 
     setItems((actuales) =>
       actuales.map((item, posicion) =>
@@ -696,7 +694,7 @@ function NuevoPresupuesto({
 
                     {catalogo.map((producto) => (
                       <option key={producto.id} value={producto.id}>
-                        {producto.nombre} ({producto.unidad})
+                        {producto.nombre}{producto.nombre_presupuesto ? ` → "${producto.nombre_presupuesto}"` : ''} ({producto.unidad})
                       </option>
                     ))}
                   </select>
