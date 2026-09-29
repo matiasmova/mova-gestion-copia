@@ -843,3 +843,44 @@ button.comprobanteCard{padding:0;text-align:left;font:inherit;cursor:pointer;wid
   .cfgFiltros{grid-template-columns:1fr}
   .cfgResultado ul{columns:1}
 }
+
+/* ---- Usuarios ---- */
+.usAviso{margin:0 0 12px!important}
+.usFalta{padding:10px 14px;border-radius:10px;background:#fff7ed;border:1px solid #fde3c3;color:#935508!important}
+.usLista{display:flex;flex-direction:column;gap:10px;max-width:980px}
+.usCard{display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid var(--mova-border);border-radius:14px;background:#fff}
+.usCard.inactivo{opacity:.62;background:#fafbfc}
+.usAvatar{flex-shrink:0;display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:#11151a;color:#fff;font-weight:800;font-size:17px}
+.usCard.inactivo .usAvatar{background:#9aa1ab}
+.usInfo{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.usInfo strong{display:flex;align-items:center;gap:8px;font-size:15px;overflow-wrap:anywhere}
+.usInfo small{color:var(--mova-muted);font-size:12.5px;overflow-wrap:anywhere}
+.usMeta{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.usYo{font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:999px;background:#e7f0fb;color:#2866a7}
+.usPendiente{font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:999px;background:#fff0de;color:#b86608}
+.usLapiz{border:0;background:none;cursor:pointer;font-size:12px;opacity:.55;padding:0}
+.usLapiz:hover{opacity:1}
+.usNombreEdit{display:flex;flex-wrap:wrap;gap:6px}
+.usNombreEdit input{flex:1;min-width:150px;padding:8px 10px;border:1px solid #d9dce0;border-radius:9px;font:inherit}
+.usControles{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.usRol{display:flex;flex-direction:column;gap:2px;font-size:10.5px;font-weight:800;color:#9099a6;text-transform:uppercase;letter-spacing:.4px}
+.usRol select{padding:8px 10px;border:1px solid #d9dce0;border-radius:9px;background:#fff;font:inherit;font-size:13.5px;text-transform:none;letter-spacing:0;color:#111827;font-weight:600}
+.usEstado{border:0;border-radius:999px;padding:7px 12px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap}
+.usEstado.ok{background:#e4f5eb;color:#23764e}
+.usEstado.off{background:#f1f3f5;color:#6b7280}
+.usEstado:disabled,.usRol select:disabled{cursor:not-allowed;opacity:.7}
+.usPermisos{margin-top:18px;max-width:980px;border:1px solid var(--mova-border);border-radius:14px;background:#fff;overflow:hidden}
+.usPermisosHead{all:unset;box-sizing:border-box;width:100%;cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:14px 16px}
+.usRoles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:0 16px 12px}
+.usRoles>div{display:flex;flex-direction:column;gap:3px;padding:10px;border-radius:10px;background:#f6f7f9}
+.usRoles small{color:var(--mova-muted);font-size:12px}
+.usMatriz{margin:0 16px 12px;border-radius:10px}
+.usMatriz td.si{color:#23764e;font-weight:800}
+.usMatriz td.no{color:#c3c8cf}
+.usPermisos>.gestionAyuda{padding:0 16px 14px;margin:0}
+@media(max-width:760px){
+  .usCard{flex-wrap:wrap}
+  .usInfo{flex-basis:calc(100% - 60px)}
+  .usControles{width:100%;justify-content:flex-end;flex-wrap:wrap}
+  .usRoles{grid-template-columns:1fr 1fr}
+}
