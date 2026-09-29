@@ -12,6 +12,7 @@ import {
 import { cargarSoluciones, type Solucion } from './Soluciones'
 import { cargarSolucionesPresupuesto, type SolucionPresupuesto } from './presupuestoSoluciones'
 import NuevoCliente from './NuevoCliente'
+import { configActual } from './config'
 import NuevaObra from './NuevaObra'
 
 export type ClienteOpcion = {
@@ -115,7 +116,7 @@ function NuevoPresupuesto({
     presupuesto?.fecha ?? new Date().toISOString().slice(0, 10),
   )
   const [validezDias, setValidezDias] = useState(
-    presupuesto?.validez_dias ?? 15,
+    presupuesto?.validez_dias ?? configActual().presupuestos.validezDias,
   )
   const [estado, setEstado] = useState<string>(
     presupuesto?.estado ?? 'borrador',

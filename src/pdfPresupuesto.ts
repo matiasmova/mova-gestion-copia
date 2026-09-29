@@ -5,7 +5,7 @@ import type { ItemPresupuesto } from './NuevoPresupuesto'
 import { importeNeto, partirDescripcion, pctItem, formatoPct } from './presupuestoCalculos'
 import { antesYAhora, etiquetaModificacion } from './presupuestoModificaciones'
 import { cargarSolucionesPresupuesto, type SolucionPresupuesto } from './presupuestoSoluciones'
-import { CONDICIONES_GENERALES } from './condicionesGenerales'
+import { configActual, lineaContacto, textoCondicion } from './config'
 import { cargarEstadoPresupuesto, mensajeEstado, PCT_ANTICIPO, type EstadoPresupuesto } from './estadoObra'
 import { cargarDatosContacto, type DatosContacto } from './presupuestoContacto'
 import { codigoPresupuesto, nombreArchivo } from './codigoPresupuesto'
@@ -200,7 +200,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf): Promise<Blob> {
   const lineasObra = [
     hayObra && (contacto?.direccionObra || contacto?.direccionCliente) ? `Ubicación: ${contacto?.direccionObra || contacto?.direccionCliente}` : null,
     etapa ? `Estado: ${etapa}` : null,
-    estado ? null : `Presupuesto válido hasta el ${fechaCorta(new Date(new Date(`${d.fecha.slice(0, 10)}T12:00:00`).getTime() + (d.validez_dias ?? 10) * 86400000).toISOString().slice(0, 10))}`,
+    estado ? null : `Presupuesto válido hasta el ${fechaCorta(new Date(new Date(`${d.fecha.slice(0, 10)}T12:00:00`).getTime() + (d.validez_dias ?? configActual().presupuestos.validezDias) * 86400000).toISOString().slice(0, 10))}`,
   ].filter((l): l is string => !!l).flatMap((l) => partir(l, F_CHICO + 0.5, cajaW - 24))
   const altoCaja = 34 + Math.max(lineasCliente.length, lineasObra.length) * 10.5
   rect(M, y - altoCaja + 12, cajaW, altoCaja, GRIS_CLARO)
@@ -495,7 +495,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf): Promise<Blob> {
 
   // ---------- Notas y vigencia ----------
   const notas = d.notas?.trim() ?? ''
-  const vigencia = `Este presupuesto tiene una validez de ${d.validez_dias ?? 10} días corridos desde su emisión.`
+  const vigencia = `Este presupuesto tiene una validez de ${d.validez_dias ?? configActual().presupuestos.validezDias} días corridos desde su emisión.`
   const cajas = [...(notas ? [{ t: 'NOTAS', texto: notas }] : []), ...(estado ? [] : [{ t: 'VIGENCIA', texto: vigencia }])]
   if (cajas.length) {
     const colW = cajas.length === 2 ? (CW - 12) / 2 : CW
@@ -513,13 +513,12 @@ export async function generarPdfPresupuesto(entrada: DatosPdf): Promise<Blob> {
   }
 
   // ---------- Condiciones generales ----------
-  if (CONDICIONES_GENERALES.length) {
+  const condiciones = configActual().presupuestos.condiciones.filter((c) => c.titulo.trim() || c.texto.trim())
+  if (condiciones.length) {
     lugar(60)
     titulo('Condiciones generales')
-    for (const cond of CONDICIONES_GENERALES) {
-      const textoCond = cond.titulo === 'Variaciones de precios'
-        ? `El presupuesto tendrá una vigencia de ${d.validez_dias ?? 10} días corridos desde su emisión. Transcurrido dicho plazo, Mova podrá actualizar los valores antes de la aceptación.`
-        : cond.texto
+    for (const cond of condiciones) {
+      const textoCond = textoCondicion(cond, d.validez_dias)
       const renglones = partir(textoCond, F_CHICO + 0.5, CW)
       lugar(14 + renglones.length * 10.5)
       texto(cond.titulo, M, y, F_NORMAL, bold, OSCURO); y -= 12
@@ -536,8 +535,8 @@ export async function generarPdfPresupuesto(entrada: DatosPdf): Promise<Blob> {
   paginas.forEach((p, i) => {
     p.drawLine({ start: { x: M, y: M + 22 }, end: { x: W - M, y: M + 22 }, thickness: 0.6, color: LINEA })
     p.drawRectangle({ x: M, y: M + 21.4, width: 40, height: 1.4, color: NARANJA })
-    p.drawText(win('MOVA Tecnología Smart'), { x: M, y: M + 9, size: F_CHICO, font: bold, color: OSCURO })
-    p.drawText(win('www.movaelectronica.com.ar · IG @mova.smart · +54 9 261 555 7970'), { x: M, y: M - 1, size: F_CHICO, font, color: GRIS })
+    p.drawText(win(configActual().empresa.nombre), { x: M, y: M + 9, size: F_CHICO, font: bold, color: OSCURO })
+    p.drawText(win(lineaContacto()), { x: M, y: M - 1, size: F_CHICO, font, color: GRIS })
     const pag = win(`Página ${i + 1} de ${paginas.length}`)
     p.drawText(pag, { x: W - M - font.widthOfTextAtSize(pag, F_CHICO), y: M + 9, size: F_CHICO, font, color: GRIS })
   })

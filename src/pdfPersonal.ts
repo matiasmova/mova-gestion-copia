@@ -2,6 +2,7 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type RGB, type PDFPage }
 import logoUrl from './assets/mova-logo.png'
 import { supabase } from './supabase'
 import { moneda, fechaCorta, hoy } from './gestionFormat'
+import { configActual, lineaContacto } from './config'
 import { calcularPersona, type CalculoPersona } from './personalCalculos'
 
 // Estado de cuenta de una persona del personal: por cada obra, lo pactado, lo
@@ -155,7 +156,7 @@ export const nombreArchivoCuenta = (c: CuentaPersona) => `Cuenta_${limpiar(c.nom
 export async function generarPdfCuentaPersona(c: CuentaPersona): Promise<Blob> {
   const pdf = await PDFDocument.create()
   pdf.setTitle(win(`Estado de cuenta · ${c.nombre}`))
-  pdf.setAuthor('MOVA Tecnología Smart')
+  pdf.setAuthor(configActual().empresa.nombre)
   const font = await pdf.embedFont(StandardFonts.Helvetica)
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
   let logo: Awaited<ReturnType<typeof pdf.embedPng>> | null = null
@@ -342,8 +343,8 @@ export async function generarPdfCuentaPersona(c: CuentaPersona): Promise<Blob> {
   paginas.forEach((p, i) => {
     p.drawLine({ start: { x: M, y: M + 22 }, end: { x: W - M, y: M + 22 }, thickness: 0.6, color: LINEA })
     p.drawRectangle({ x: M, y: M + 21.4, width: 40, height: 1.4, color: NARANJA })
-    p.drawText(win('MOVA Tecnología Smart'), { x: M, y: M + 9, size: F_CHICO, font: bold, color: OSCURO })
-    p.drawText(win('www.movaelectronica.com.ar · IG @mova.smart · +54 9 261 555 7970'), { x: M, y: M - 1, size: F_CHICO, font, color: GRIS })
+    p.drawText(win(configActual().empresa.nombre), { x: M, y: M + 9, size: F_CHICO, font: bold, color: OSCURO })
+    p.drawText(win(lineaContacto()), { x: M, y: M - 1, size: F_CHICO, font, color: GRIS })
     const pag = win(`Página ${i + 1} de ${paginas.length}`)
     p.drawText(pag, { x: W - M - font.widthOfTextAtSize(pag, F_CHICO), y: M + 9, size: F_CHICO, font, color: GRIS })
   })

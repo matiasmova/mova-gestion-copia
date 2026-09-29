@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type RGB, type PDFPage } from 'pdf-lib'
 import logoUrl from './assets/mova-logo.png'
 import { fechaCorta, hoy } from './gestionFormat'
+import { configActual, lineaContacto } from './config'
 
 // PDF "Resumen de accesos": apps, usuarios y contraseñas que dejó el instalador.
 // Mismo estilo que el presupuesto (pdfPresupuesto.ts): logo, barra naranja,
@@ -21,11 +22,8 @@ export type DatosAccesosPdf = {
   accesos: AccesoPdf[]
 }
 
-export const AVISO_ACCESOS = [
-  'Las contraseñas de este documento fueron creadas por el instalador durante la puesta en marcha de los equipos. Por seguridad, recomendamos modificarlas desde cada aplicación para proteger sus datos y su privacidad.',
-  'Si lo prefiere, puede conservarlas tal como están. MOVA es una empresa confiable que resguarda la integridad de sus clientes y no utiliza estos datos con otro fin que la instalación y el soporte técnico solicitado.',
-  'Una vez entregado este documento, el cliente es el único responsable de su custodia y del uso de las cuentas. MOVA no se responsabiliza por accesos no autorizados, pérdidas, daños o inconvenientes derivados del uso, divulgación o falta de modificación de estas credenciales.',
-]
+// El aviso se edita en Configuración → Presupuestos y documentos.
+export const avisoAccesos = () => configActual().accesos.aviso.filter((p) => p.trim())
 
 const NARANJA = rgb(0.894, 0.482, 0)
 const NARANJA_SUAVE = rgb(1, 0.965, 0.925)
@@ -61,7 +59,7 @@ export function nombreArchivoAccesos(cliente: string, obra: string): string {
 export async function generarPdfAccesos(d: DatosAccesosPdf): Promise<Blob> {
   const pdf = await PDFDocument.create()
   pdf.setTitle(win(`Resumen de accesos · ${d.obra}`))
-  pdf.setAuthor('MOVA Tecnología Smart')
+  pdf.setAuthor(configActual().empresa.nombre)
   const font = await pdf.embedFont(StandardFonts.Helvetica)
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
   // Monoespaciada para usuario y contraseña: no se confunden l/1 u O/0.
@@ -223,7 +221,7 @@ export async function generarPdfAccesos(d: DatosAccesosPdf): Promise<Blob> {
   y -= 12
 
   // ---------- Aviso importante ----------
-  const avisos = AVISO_ACCESOS.map((p) => partir(p, F_CHICO + 1, CW - 28))
+  const avisos = avisoAccesos().map((p) => partir(p, F_CHICO + 1, CW - 28))
   const altoAviso = 30 + avisos.reduce((s, r) => s + r.length * 11 + 5, 0)
   lugar(altoAviso + 10)
   rect(M, y - altoAviso + 12, CW, altoAviso, NARANJA_SUAVE)
@@ -254,8 +252,8 @@ export async function generarPdfAccesos(d: DatosAccesosPdf): Promise<Blob> {
   paginas.forEach((p, i) => {
     p.drawLine({ start: { x: M, y: M + 22 }, end: { x: W - M, y: M + 22 }, thickness: 0.6, color: LINEA })
     p.drawRectangle({ x: M, y: M + 21.4, width: 40, height: 1.4, color: NARANJA })
-    p.drawText(win('MOVA Tecnología Smart'), { x: M, y: M + 9, size: F_CHICO, font: bold, color: OSCURO })
-    p.drawText(win('www.movaelectronica.com.ar · IG @mova.smart · +54 9 261 555 7970'), { x: M, y: M - 1, size: F_CHICO, font, color: GRIS })
+    p.drawText(win(configActual().empresa.nombre), { x: M, y: M + 9, size: F_CHICO, font: bold, color: OSCURO })
+    p.drawText(win(lineaContacto()), { x: M, y: M - 1, size: F_CHICO, font, color: GRIS })
     const pag = win(`Confidencial · Página ${i + 1} de ${paginas.length}`)
     p.drawText(pag, { x: W - M - font.widthOfTextAtSize(pag, F_CHICO), y: M + 9, size: F_CHICO, font, color: GRIS })
   })

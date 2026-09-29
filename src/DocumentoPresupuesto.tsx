@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import logo from './assets/mova-logo.jpg'
 import { moneda, fechaCorta } from './gestionFormat'
-import { CONDICIONES_GENERALES } from './condicionesGenerales'
+import { configActual, lineaContacto, textoCondicion } from './config'
 import { COLOR_MARCA_HEX, agruparPorTipo, completarDatosDocumento, type DatosPdf } from './pdfPresupuesto'
 import { formatoPct, importeNeto, partirDescripcion, pctItem } from './presupuestoCalculos'
 import { antesYAhora, etiquetaModificacion } from './presupuestoModificaciones'
@@ -378,18 +378,18 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
       {(notas || !e) && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '30px' }}>
           {notas && <div style={s.caja}><div style={{ ...s.etiqueta, color: NARANJA, marginBottom: '4px' }}>Notas</div><div style={{ whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>{notas}</div></div>}
-          {!e && <div style={s.caja}><div style={{ ...s.etiqueta, color: NARANJA, marginBottom: '4px' }}>Vigencia</div><div>Este presupuesto tiene una validez de {d.validez_dias ?? 10} días corridos desde su emisión.</div></div>}
+          {!e && <div style={s.caja}><div style={{ ...s.etiqueta, color: NARANJA, marginBottom: '4px' }}>Vigencia</div><div>Este presupuesto tiene una validez de {d.validez_dias ?? configActual().presupuestos.validezDias} días corridos desde su emisión.</div></div>}
         </div>
       )}
 
-      {CONDICIONES_GENERALES.length > 0 && (
+      {configActual().presupuestos.condiciones.length > 0 && (
         <section style={{ marginTop: '28px' }}>
           <TituloSeccion texto="Condiciones generales" />
-          {CONDICIONES_GENERALES.map((c) => (
-            <div key={c.titulo} style={{ marginBottom: '10px' }}>
+          {configActual().presupuestos.condiciones.filter((c) => c.titulo.trim() || c.texto.trim()).map((c, i) => (
+            <div key={`${i}-${c.titulo}`} style={{ marginBottom: '10px' }}>
               <strong style={{ color: OSCURO }}>{c.titulo}</strong>
               <p style={{ margin: '2px 0 0', color: GRIS, fontSize: T_CHICO, lineHeight: 1.55 }}>
-                {c.titulo === 'Variaciones de precios' ? `El presupuesto tendrá una vigencia de ${d.validez_dias ?? 10} días corridos desde su emisión. Transcurrido dicho plazo, Mova podrá actualizar los valores antes de la aceptación.` : c.texto}
+                {textoCondicion(c, d.validez_dias)}
               </p>
             </div>
           ))}
@@ -398,8 +398,8 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
 
       <footer style={{ marginTop: '28px', paddingTop: '10px', borderTop: `1px solid ${LINEA}`, position: 'relative', fontSize: T_CHICO }}>
         <span style={{ position: 'absolute', top: '-2px', left: 0, width: '46px', height: '2px', background: NARANJA }} />
-        <strong style={{ color: OSCURO }}>MOVA Tecnología Smart</strong>
-        <div style={{ color: GRIS }}>www.movaelectronica.com.ar · IG @mova.smart · +54 9 261 555 7970</div>
+        <strong style={{ color: OSCURO }}>{configActual().empresa.nombre}</strong>
+        <div style={{ color: GRIS }}>{lineaContacto()}</div>
       </footer>
     </div>
   )
