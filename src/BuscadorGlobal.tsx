@@ -8,7 +8,7 @@ import IconoMenu from './iconosMenu'
 // acciones rápidas. Los dos le piden a la app que vaya a una sección y abra
 // algo con un "pedido" que el módulo atiende al montarse.
 
-export type Pedido = { accion: 'nuevo' | 'abrir' | 'cobro' | 'gasto'; id?: number; n: number }
+export type Pedido = { accion: 'nuevo' | 'abrir' | 'cobro' | 'gasto' | 'parte' | 'pagoPersonal'; id?: number; n: number }
 export type Ir = (vista: Vista, pedido?: Omit<Pedido, 'n'>) => void
 
 type Accion = { clave: string; vista: Vista; accion: Pedido['accion']; texto: string; icono: string; buscar: string }
@@ -19,6 +19,8 @@ export const ACCIONES: Accion[] = [
   { clave: 'gasto', vista: 'finanzas', accion: 'gasto', texto: 'Gasto', icono: 'gasto', buscar: 'nuevo gasto costo egreso' },
   { clave: 'compra', vista: 'compras', accion: 'nuevo', texto: 'Compra', icono: 'compras', buscar: 'nueva compra material proveedor' },
   { clave: 'cliente', vista: 'clientes', accion: 'nuevo', texto: 'Cliente', icono: 'clientes', buscar: 'nuevo cliente' },
+  { clave: 'parte', vista: 'personal', accion: 'parte', texto: 'Parte del día', icono: 'agenda', buscar: 'parte del dia jornal jornales asistencia personal' },
+  { clave: 'pagoPersonal', vista: 'personal', accion: 'pagoPersonal', texto: 'Pago al personal', icono: 'personal', buscar: 'pago al personal sueldo jornal liquidacion obrero' },
   { clave: 'recordatorio', vista: 'agenda', accion: 'nuevo', texto: 'Recordatorio', icono: 'agenda', buscar: 'nuevo recordatorio agenda evento visita tarea' },
 ]
 
