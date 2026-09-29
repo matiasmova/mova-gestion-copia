@@ -27,6 +27,8 @@ type NuevaObraProps = {
   obra?: ObraEditable | null
   clienteInicial?: ClienteOpcion | null
   onGuardada: () => void
+  /** Si se pasa, al crear una obra nueva se devuelve la obra creada (lo usa Nuevo presupuesto). */
+  onCreada?: (obra: { id: number; cliente_id: number; nombre_obra: string }) => void
   onCancelar: () => void
 }
 
@@ -42,6 +44,7 @@ function NuevaObra({
   obra,
   clienteInicial,
   onGuardada,
+  onCreada,
   onCancelar,
 }: NuevaObraProps) {
   const [formulario, setFormulario] = useState({
@@ -101,11 +104,13 @@ function NuevaObra({
       descripcion: formulario.descripcion.trim() || null,
     }
 
-    const { error } = obra
+    const { data: creada, error } = obra
       ? await supabase
           .from('obras')
           .update(datosObra)
           .eq('id', obra.id)
+          .select('id, cliente_id, nombre_obra')
+          .maybeSingle()
       : await supabase
           .from('obras')
           .insert({
@@ -113,6 +118,8 @@ function NuevaObra({
             estado: ESTADO_INICIAL_OBRA,
             activo: true,
           })
+          .select('id, cliente_id, nombre_obra')
+          .single()
 
     if (error) {
       console.error(error)
@@ -122,6 +129,11 @@ function NuevaObra({
           : 'No se pudo guardar la obra.',
       )
       setGuardando(false)
+      return
+    }
+
+    if (!obra && onCreada && creada) {
+      onCreada(creada as { id: number; cliente_id: number; nombre_obra: string })
       return
     }
 
