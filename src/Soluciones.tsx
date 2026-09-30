@@ -108,14 +108,7 @@ function FormularioSolucion({ solucion, existentes, onCancelar, onGuardado }: { 
   const [f, setF] = useState({ titulo: solucion.titulo, descripcion: solucion.descripcion, orden: String(solucion.orden), activo: solucion.activo })
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
-  const [opcionesIA, setOpcionesIA] = useState<OpcionIA[] | null>(null)
-  const [pensando, setPensando] = useState(false)
-
-  async function mejorarConIA() {
-    setError(''); setPensando(true); setOpcionesIA(null)
-    try { setOpcionesIA(await pedirIA({ accion: 'mejorar', titulo: f.titulo, descripcion: f.descripcion, existentes })) } catch (e) { setError((e as Error).message) }
-    setPensando(false)
-  }
+  const [conIA, setConIA] = useState(false)
 
   async function guardar(e: FormEvent) {
     e.preventDefault(); setError('')
@@ -139,10 +132,10 @@ function FormularioSolucion({ solucion, existentes, onCancelar, onGuardado }: { 
           <textarea rows={5} value={f.descripcion} onChange={(e) => setF({ ...f, descripcion: e.target.value })} placeholder="Contá los beneficios en 2 o 3 oraciones, pensando en el cliente." />
         </label>
         <div className="formFull iaFila">
-          <button type="button" className="editButton iaBoton" disabled={pensando || (!f.titulo.trim() && !f.descripcion.trim())} onClick={() => void mejorarConIA()}>{pensando ? '✨ Pensando…' : '✨ Mejorar con IA'}</button>
-          <small>Te propone 3 versiones del texto. Elegís una y la podés retocar antes de guardar.</small>
+          <button type="button" className="editButton iaBoton" disabled={!f.titulo.trim() && !f.descripcion.trim()} onClick={() => setConIA((v) => !v)}>{conIA ? '✕ Cerrar ayuda de IA' : '✨ Mejorar con IA'}</button>
+          {!conIA && <small>Claude te propone 3 versiones del texto (gratis, con tu cuenta de claude.ai).</small>}
         </div>
-        {opcionesIA && <div className="formFull"><OpcionesIA opciones={opcionesIA} onElegir={(o) => { setF({ ...f, titulo: o.titulo, descripcion: o.descripcion }); setOpcionesIA(null) }} /></div>}
+        {conIA && <div className="formFull"><PuenteClaude pedido={pedidoMejorar(f.titulo, f.descripcion, existentes)} onElegir={(o) => { setF({ ...f, titulo: o.titulo, descripcion: o.descripcion }); setConIA(false) }} /></div>}
         <label>Orden<input type="number" value={f.orden} onChange={(e) => setF({ ...f, orden: e.target.value })} /></label>
         <label>Estado<select value={f.activo ? 'si' : 'no'} onChange={(e) => setF({ ...f, activo: e.target.value === 'si' })}><option value="si">Activa (se puede elegir)</option><option value="no">Oculta</option></select></label>
       </div>
@@ -152,25 +145,58 @@ function FormularioSolucion({ solucion, existentes, onCancelar, onGuardado }: { 
   </div></div>
 }
 
-// ---------- Asistente con IA ----------
+// ---------- Asistente con IA (gratis, a través de claude.ai) ----------
+// La app arma el pedido con el estilo de MOVA, lo copia y abre claude.ai.
+// Se pega la respuesta de vuelta y la app la separa en opciones para elegir.
 type OpcionIA = { titulo: string; descripcion: string }
 
-async function pedirIA(cuerpo: Record<string, unknown>): Promise<OpcionIA[]> {
-  const { data, error } = await supabase.functions.invoke('asistente-ia', { body: cuerpo })
-  if (error) {
-    let msg = 'No se pudo conectar con el asistente. Revisá que la función "asistente-ia" esté instalada en Supabase.'
-    try { const ctx = (error as { context?: Response }).context; if (ctx) msg = (await ctx.json()).error ?? msg } catch { /* sin detalle */ }
-    throw new Error(msg)
-  }
-  if (data?.error) throw new Error(data.error)
-  return (data?.opciones ?? []) as OpcionIA[]
+const ESTILO = `Sos redactor comercial de MOVA Tecnología Smart, una empresa de Mendoza (Argentina) que instala domótica, redes WiFi, cámaras, riego automático, electricidad y tecnología para hogares y empresas.
+
+Escribís "soluciones": bloques cortos que aparecen en los presupuestos, en la sección "Qué vas a disfrutar con este proyecto". Cada una tiene:
+- Título: nombre breve y claro (2 a 5 palabras, sin marcas ni modelos).
+- Descripción: 2 a 4 oraciones (entre 250 y 420 caracteres) con los beneficios para el cliente en su vida diaria: comodidad, seguridad, ahorro, control desde el celular, tranquilidad.
+
+Estilo: español rioplatense con voseo ("controlá", "tenés"), cálido, concreto, sin exageraciones ni promesas imposibles. Sin emojis, sin precios, sin marcas ni modelos de equipos, sin tecnicismos: que lo entienda un cliente sin conocimientos técnicos.`
+
+const FORMATO = `Dame exactamente 3 opciones distintas entre sí (por ejemplo: una enfocada en comodidad, otra en seguridad o ahorro, otra más breve). Respondé SOLO con este formato, sin nada antes ni después:
+
+TÍTULO: ...
+DESCRIPCIÓN: ...
+---
+TÍTULO: ...
+DESCRIPCIÓN: ...
+---
+TÍTULO: ...
+DESCRIPCIÓN: ...`
+
+const yaExisten = (existentes: string[]) => (existentes.length ? `\n\nSoluciones que ya tengo (no las repitas ni uses el mismo título): ${existentes.slice(0, 40).join(' · ')}` : '')
+
+function pedidoCrear(idea: string, existentes: string[]) {
+  return `${ESTILO}\n\nCreá una solución nueva a partir de esta idea: "${idea.trim()}"${yaExisten(existentes)}\n\n${FORMATO}`
+}
+function pedidoMejorar(titulo: string, descripcion: string, existentes: string[]) {
+  return `${ESTILO}\n\nMejorá esta solución manteniendo la idea (podés ajustar el título si queda mejor):\nTítulo: "${titulo.trim()}"\nDescripción: "${descripcion.trim()}"${yaExisten(existentes)}\n\n${FORMATO}`
+}
+
+// Separa la respuesta pegada en opciones. Si no viene con el formato, la toma entera como descripción.
+function leerRespuesta(texto: string): OpcionIA[] {
+  const limpio = texto.replace(/\*\*/g, '').replace(/\r/g, '')
+  const bloques = limpio.split(/\n\s*-{3,}\s*\n|\n(?=\s*(?:\d+[.)]\s*)?T[IÍ]TULO\s*:)/i).map((b) => b.trim()).filter(Boolean)
+  const opciones = bloques.map((b) => {
+    const t = /T[IÍ]TULO\s*:\s*(.+)/i.exec(b)?.[1]?.trim() ?? ''
+    const d = /DESCRIPCI[OÓ]N\s*:\s*([\s\S]+)/i.exec(b)?.[1]?.trim().replace(/\s*\n\s*/g, ' ') ?? ''
+    return { titulo: t.replace(/^["“]|["”]$/g, ''), descripcion: d.replace(/^["“]|["”]$/g, '') }
+  }).filter((o) => o.titulo && o.descripcion)
+  if (opciones.length) return opciones.slice(0, 5)
+  const solo = limpio.trim()
+  return solo ? [{ titulo: '', descripcion: solo }] : []
 }
 
 function OpcionesIA({ opciones, onElegir }: { opciones: OpcionIA[]; onElegir: (o: OpcionIA) => void }) {
   return <div className="iaOpciones">
     {opciones.map((o, i) => (
       <div key={i} className="iaOpcion">
-        <strong>{o.titulo}</strong>
+        <strong>{o.titulo || 'Sin título'}</strong>
         <p>{o.descripcion}</p>
         <button type="button" className="newButton" onClick={() => onElegir(o)}>Usar esta</button>
       </div>
@@ -178,38 +204,65 @@ function OpcionesIA({ opciones, onElegir }: { opciones: OpcionIA[]; onElegir: (o
   </div>
 }
 
+function PuenteClaude({ pedido, deshabilitado, onElegir }: { pedido: string; deshabilitado?: boolean; onElegir: (o: OpcionIA) => void }) {
+  const [copiado, setCopiado] = useState(false)
+  const [respuesta, setRespuesta] = useState('')
+  const [opciones, setOpciones] = useState<OpcionIA[] | null>(null)
+  const [aviso, setAviso] = useState('')
+
+  async function copiarYAbrir() {
+    setAviso('')
+    try { await navigator.clipboard.writeText(pedido); setCopiado(true) } catch { setAviso('No se pudo copiar solo: seleccioná el texto de abajo y copialo a mano.') ; setCopiado(true) }
+    window.open('https://claude.ai/new', '_blank', 'noopener')
+  }
+  function verOpciones() {
+    const o = leerRespuesta(respuesta)
+    if (!o.length) { setAviso('Pegá primero la respuesta de Claude.'); return }
+    setAviso(''); setOpciones(o)
+  }
+
+  return <div className="iaPuente">
+    <div className="iaPaso">
+      <span className="iaNum">1</span>
+      <div>
+        <button type="button" className="newButton" disabled={deshabilitado} onClick={() => void copiarYAbrir()}>📋 Copiar pedido y abrir Claude</button>
+        <small>{copiado ? '✓ Copiado. En Claude, pegá con Ctrl + V (o mantené apretado → Pegar en el celular) y enviá.' : 'Se abre claude.ai en otra pestaña (gratis con tu cuenta).'}</small>
+        {copiado && <details className="iaVer"><summary>Ver el pedido</summary><textarea readOnly rows={5} value={pedido} onFocus={(e) => e.currentTarget.select()} /></details>}
+      </div>
+    </div>
+    <div className="iaPaso">
+      <span className="iaNum">2</span>
+      <div>
+        <label>Pegá acá la respuesta de Claude
+          <textarea rows={5} value={respuesta} onChange={(e) => { setRespuesta(e.target.value); setOpciones(null) }} placeholder={'TÍTULO: …\nDESCRIPCIÓN: …\n---\nTÍTULO: …'} />
+        </label>
+        <button type="button" className="editButton iaBoton" disabled={!respuesta.trim()} onClick={verOpciones}>Ver opciones</button>
+      </div>
+    </div>
+    {aviso && <p className="loginError">{aviso}</p>}
+    {opciones && <>
+      <p className="pgTitulo">Elegí la que más te guste (después la podés retocar):</p>
+      <OpcionesIA opciones={opciones} onElegir={onElegir} />
+    </>}
+  </div>
+}
+
 function AsistenteIA({ existentes, onCerrar, onElegir }: { existentes: string[]; onCerrar: () => void; onElegir: (o: OpcionIA) => void }) {
   const [idea, setIdea] = useState('')
-  const [opciones, setOpciones] = useState<OpcionIA[] | null>(null)
-  const [pensando, setPensando] = useState(false)
-  const [error, setError] = useState('')
-  async function generar(e?: FormEvent) {
-    e?.preventDefault(); setError(''); setPensando(true)
-    try { setOpciones(await pedirIA({ accion: 'crear', idea, existentes })) } catch (err) { setError((err as Error).message) }
-    setPensando(false)
-  }
   return <div className="modalOverlay"><div className="modalCard" style={{ maxWidth: 760 }}>
-    <div className="modalHeader"><div><p className="subtitle">ASISTENTE</p><h2>✨ Crear solución con IA</h2></div><button type="button" className="closeButton" onClick={onCerrar} disabled={pensando}>×</button></div>
-    <form className="clienteForm" onSubmit={(e) => void generar(e)}>
+    <div className="modalHeader"><div><p className="subtitle">ASISTENTE</p><h2>✨ Crear solución con IA</h2></div><button type="button" className="closeButton" onClick={onCerrar}>×</button></div>
+    <div className="clienteForm">
       <label>¿Qué solución querés ofrecer?
         <textarea rows={3} value={idea} onChange={(e) => setIdea(e.target.value)} autoFocus
-          placeholder="Ej.: portón automático que se abre desde el celular y avisa si quedó abierto · alarma para comercio con cámaras · riego por goteo para huerta" />
+          placeholder="Ej.: instalación eléctrica nueva con tablero, disyuntor y cañerías embutidas · portón automático que se abre desde el celular" />
       </label>
       <div className="iaEjemplos">
-        {['Portón automático con app', 'Cortinas motorizadas', 'Control de acceso con huella', 'Paneles solares con monitoreo', 'Sonido multiroom'].map((x) => (
+        {['Portón automático con app', 'Cortinas motorizadas', 'Control de acceso con huella', 'Paneles solares con monitoreo', 'Sonido multiroom', 'Instalación eléctrica completa'].map((x) => (
           <button type="button" key={x} onClick={() => setIdea(x)}>{x}</button>
         ))}
       </div>
-      {error && <p className="loginError">{error}</p>}
-      <div className="formActions">
-        <button type="button" className="cancelButton" onClick={onCerrar} disabled={pensando}>Cancelar</button>
-        <button className="newButton" disabled={pensando || !idea.trim()}>{pensando ? '✨ Escribiendo…' : opciones ? '✨ Generar otras' : '✨ Generar'}</button>
-      </div>
-      {pensando && <p className="gestionAyuda">Esto tarda unos segundos…</p>}
-      {opciones && <>
-        <p className="pgTitulo">Elegí la que más te guste (después la podés retocar):</p>
-        <OpcionesIA opciones={opciones} onElegir={onElegir} />
-      </>}
-    </form>
+      <PuenteClaude pedido={pedidoCrear(idea, existentes)} deshabilitado={!idea.trim()} onElegir={onElegir} />
+      <div className="formActions"><button type="button" className="cancelButton" onClick={onCerrar}>Cerrar</button></div>
+    </div>
   </div></div>
 }
