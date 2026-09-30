@@ -1261,3 +1261,18 @@ button.fichaRow:not(:disabled):hover .fichaIr{color:var(--mova-orange)}
 .prodSinPrecio{border:1px dashed #e0a458;background:#fff8ee;color:#a35a00;border-radius:8px;padding:4px 10px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
 .prodFalta{color:#b86608}
 @media(max-width:560px){.prodGrid{grid-template-columns:1fr 1fr;gap:10px}.prodGrid .prodCardFoto{height:110px}.prodGrid .prodDatos{display:none}}
+
+/* ===== Asistente con IA (Soluciones) ===== */
+.iaBoton{border-color:#d9c8f2!important;background:#faf6ff!important;color:#5b2e9a!important;font-weight:700}
+.iaBoton:hover:not(:disabled){border-color:#8b5cd6!important}
+.iaFila{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.iaFila small{color:var(--mova-muted);font-size:12.5px}
+.iaOpciones{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:8px}
+.iaOpcion{display:flex;flex-direction:column;gap:6px;padding:12px;border:1px solid #e3d6f2;border-radius:12px;background:#fdfbff}
+.iaOpcion strong{font-size:14px}
+.iaOpcion p{margin:0;font-size:13px;line-height:1.5;color:#3a404a;flex:1}
+.iaOpcion button{align-self:flex-start;padding:6px 12px;font-size:13px}
+.iaEjemplos{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.iaEjemplos button{border:1px solid var(--mova-border);background:#fff;border-radius:999px;padding:5px 10px;font:inherit;font-size:12.5px;cursor:pointer;color:#4a5361}
+.iaEjemplos button:hover{border-color:#8b5cd6;color:#5b2e9a}
+.clienteForm .formGrid>.formFull{grid-column:1/-1}
