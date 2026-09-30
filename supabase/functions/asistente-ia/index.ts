@@ -28,8 +28,9 @@ Siempre das 3 opciones distintas entre sí.`
 const recorte = (s: unknown, n: number) => String(s ?? '').trim().slice(0, n)
 
 async function gemini(clave: string, pedido: string, esquema: unknown): Promise<unknown> {
-  const modelos = [Deno.env.get('GEMINI_MODEL'), 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'].filter(Boolean) as string[]
-  let ultimo = ''
+  // Google retira modelos seguido: se prueba el del secret GEMINI_MODEL y después estos.
+  const modelos = Array.from(new Set([Deno.env.get('GEMINI_MODEL'), 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3-flash-preview', 'gemini-2.5-flash'].filter(Boolean) as string[]))
+  const errores: string[] = []
   for (const modelo of modelos) {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
       method: 'POST',
@@ -42,15 +43,15 @@ async function gemini(clave: string, pedido: string, esquema: unknown): Promise<
     })
     const cuerpo = await r.json().catch(() => ({}))
     const mensaje = String((cuerpo as { error?: { message?: string } }).error?.message ?? '').slice(0, 300)
-    if (r.status === 404) { ultimo = `${modelo}: ${mensaje || 'no disponible'}`; continue }
+    if (r.status === 404) { errores.push(`${modelo}: ${mensaje || 'no disponible'}`); continue }
     if ((r.status === 400 || r.status === 403) && /API key|API_KEY|permission|PERMISSION/i.test(JSON.stringify(cuerpo))) throw new Error(`clave|${mensaje}`)
-    if (r.status === 429) { ultimo = `${modelo}: límite (${mensaje})`; continue }
-    if (!r.ok) { ultimo = `${modelo}: ${r.status} ${mensaje}`; continue }
+    if (r.status === 429) throw new Error(`límite: ${mensaje}`)
+    if (!r.ok) { errores.push(`${modelo}: ${r.status} ${mensaje}`); continue }
     let texto = (cuerpo as { candidates?: { content?: { parts?: { text?: string }[] } }[] }).candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? ''
     texto = texto.replace(/^```(?:json)?\s*|\s*```$/g, '').trim()
-    try { return JSON.parse(texto) } catch { ultimo = `${modelo}: respuesta sin formato`; continue }
+    try { return JSON.parse(texto) } catch { errores.push(`${modelo}: respuesta sin formato`); continue }
   }
-  throw new Error(ultimo || 'sin respuesta')
+  throw new Error(errores.join(' | ') || 'sin respuesta')
 }
 
 // Esquema en el formato de Gemini (los tipos van en mayúsculas).
