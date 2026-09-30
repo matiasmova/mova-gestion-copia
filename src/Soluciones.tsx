@@ -24,6 +24,7 @@ export default function Soluciones() {
   const [error, setError] = useState('')
   const [editando, setEditando] = useState<Solucion | null>(null)
   const [revision, setRevision] = useState(0)
+  const [conIA, setConIA] = useState(false)
 
   useEffect(() => {
     let vigente = true
@@ -60,7 +61,10 @@ export default function Soluciones() {
           <h2>Soluciones</h2>
           <p className="welcome">Textos de beneficios que se eligen al armar un presupuesto y aparecen en "Qué vas a disfrutar con este proyecto"</p>
         </div>
-        <button className="newButton" onClick={() => setEditando({ ...vacia, orden: (lista[lista.length - 1]?.orden ?? 0) + 10 })}>+ Nueva solución</button>
+        <div className="headerActions">
+          <button className="editButton iaBoton" onClick={() => setConIA(true)}>✨ Crear con IA</button>
+          <button className="newButton" onClick={() => setEditando({ ...vacia, orden: (lista[lista.length - 1]?.orden ?? 0) + 10 })}>+ Nueva solución</button>
+        </div>
       </div>
 
       {cargando && <p>Cargando soluciones...</p>}
@@ -92,16 +96,26 @@ export default function Soluciones() {
         si después la editás, los presupuestos ya enviados no cambian.
       </p>
 
-      {editando && <FormularioSolucion solucion={editando} onCancelar={() => setEditando(null)} onGuardado={() => { setEditando(null); setRevision((v) => v + 1) }} />}
+      {conIA && <AsistenteIA existentes={lista.map((x) => x.titulo)} onCerrar={() => setConIA(false)}
+        onElegir={(o) => { setConIA(false); setEditando({ ...vacia, titulo: o.titulo, descripcion: o.descripcion, orden: (lista[lista.length - 1]?.orden ?? 0) + 10 }) }} />}
+      {editando && <FormularioSolucion existentes={lista.filter((x) => x.id !== editando.id).map((x) => x.titulo)} solucion={editando} onCancelar={() => setEditando(null)} onGuardado={() => { setEditando(null); setRevision((v) => v + 1) }} />}
     </div>
   )
 }
 
-function FormularioSolucion({ solucion, onCancelar, onGuardado }: { solucion: Solucion; onCancelar: () => void; onGuardado: () => void }) {
+function FormularioSolucion({ solucion, existentes, onCancelar, onGuardado }: { solucion: Solucion; existentes: string[]; onCancelar: () => void; onGuardado: () => void }) {
   const editando = solucion.id > 0
   const [f, setF] = useState({ titulo: solucion.titulo, descripcion: solucion.descripcion, orden: String(solucion.orden), activo: solucion.activo })
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
+  const [opcionesIA, setOpcionesIA] = useState<OpcionIA[] | null>(null)
+  const [pensando, setPensando] = useState(false)
+
+  async function mejorarConIA() {
+    setError(''); setPensando(true); setOpcionesIA(null)
+    try { setOpcionesIA(await pedirIA({ accion: 'mejorar', titulo: f.titulo, descripcion: f.descripcion, existentes })) } catch (e) { setError((e as Error).message) }
+    setPensando(false)
+  }
 
   async function guardar(e: FormEvent) {
     e.preventDefault(); setError('')
@@ -124,11 +138,78 @@ function FormularioSolucion({ solucion, onCancelar, onGuardado }: { solucion: So
         <label className="formFull">Qué va a disfrutar el cliente *
           <textarea rows={5} value={f.descripcion} onChange={(e) => setF({ ...f, descripcion: e.target.value })} placeholder="Contá los beneficios en 2 o 3 oraciones, pensando en el cliente." />
         </label>
+        <div className="formFull iaFila">
+          <button type="button" className="editButton iaBoton" disabled={pensando || (!f.titulo.trim() && !f.descripcion.trim())} onClick={() => void mejorarConIA()}>{pensando ? '✨ Pensando…' : '✨ Mejorar con IA'}</button>
+          <small>Te propone 3 versiones del texto. Elegís una y la podés retocar antes de guardar.</small>
+        </div>
+        {opcionesIA && <div className="formFull"><OpcionesIA opciones={opcionesIA} onElegir={(o) => { setF({ ...f, titulo: o.titulo, descripcion: o.descripcion }); setOpcionesIA(null) }} /></div>}
         <label>Orden<input type="number" value={f.orden} onChange={(e) => setF({ ...f, orden: e.target.value })} /></label>
         <label>Estado<select value={f.activo ? 'si' : 'no'} onChange={(e) => setF({ ...f, activo: e.target.value === 'si' })}><option value="si">Activa (se puede elegir)</option><option value="no">Oculta</option></select></label>
       </div>
       {error && <p className="loginError">{error}</p>}
       <div className="formActions"><button type="button" className="cancelButton" onClick={onCancelar}>Cancelar</button><button className="newButton" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar'}</button></div>
+    </form>
+  </div></div>
+}
+
+// ---------- Asistente con IA ----------
+type OpcionIA = { titulo: string; descripcion: string }
+
+async function pedirIA(cuerpo: Record<string, unknown>): Promise<OpcionIA[]> {
+  const { data, error } = await supabase.functions.invoke('asistente-ia', { body: cuerpo })
+  if (error) {
+    let msg = 'No se pudo conectar con el asistente. Revisá que la función "asistente-ia" esté instalada en Supabase.'
+    try { const ctx = (error as { context?: Response }).context; if (ctx) msg = (await ctx.json()).error ?? msg } catch { /* sin detalle */ }
+    throw new Error(msg)
+  }
+  if (data?.error) throw new Error(data.error)
+  return (data?.opciones ?? []) as OpcionIA[]
+}
+
+function OpcionesIA({ opciones, onElegir }: { opciones: OpcionIA[]; onElegir: (o: OpcionIA) => void }) {
+  return <div className="iaOpciones">
+    {opciones.map((o, i) => (
+      <div key={i} className="iaOpcion">
+        <strong>{o.titulo}</strong>
+        <p>{o.descripcion}</p>
+        <button type="button" className="newButton" onClick={() => onElegir(o)}>Usar esta</button>
+      </div>
+    ))}
+  </div>
+}
+
+function AsistenteIA({ existentes, onCerrar, onElegir }: { existentes: string[]; onCerrar: () => void; onElegir: (o: OpcionIA) => void }) {
+  const [idea, setIdea] = useState('')
+  const [opciones, setOpciones] = useState<OpcionIA[] | null>(null)
+  const [pensando, setPensando] = useState(false)
+  const [error, setError] = useState('')
+  async function generar(e?: FormEvent) {
+    e?.preventDefault(); setError(''); setPensando(true)
+    try { setOpciones(await pedirIA({ accion: 'crear', idea, existentes })) } catch (err) { setError((err as Error).message) }
+    setPensando(false)
+  }
+  return <div className="modalOverlay"><div className="modalCard" style={{ maxWidth: 760 }}>
+    <div className="modalHeader"><div><p className="subtitle">ASISTENTE</p><h2>✨ Crear solución con IA</h2></div><button type="button" className="closeButton" onClick={onCerrar} disabled={pensando}>×</button></div>
+    <form className="clienteForm" onSubmit={(e) => void generar(e)}>
+      <label>¿Qué solución querés ofrecer?
+        <textarea rows={3} value={idea} onChange={(e) => setIdea(e.target.value)} autoFocus
+          placeholder="Ej.: portón automático que se abre desde el celular y avisa si quedó abierto · alarma para comercio con cámaras · riego por goteo para huerta" />
+      </label>
+      <div className="iaEjemplos">
+        {['Portón automático con app', 'Cortinas motorizadas', 'Control de acceso con huella', 'Paneles solares con monitoreo', 'Sonido multiroom'].map((x) => (
+          <button type="button" key={x} onClick={() => setIdea(x)}>{x}</button>
+        ))}
+      </div>
+      {error && <p className="loginError">{error}</p>}
+      <div className="formActions">
+        <button type="button" className="cancelButton" onClick={onCerrar} disabled={pensando}>Cancelar</button>
+        <button className="newButton" disabled={pensando || !idea.trim()}>{pensando ? '✨ Escribiendo…' : opciones ? '✨ Generar otras' : '✨ Generar'}</button>
+      </div>
+      {pensando && <p className="gestionAyuda">Esto tarda unos segundos…</p>}
+      {opciones && <>
+        <p className="pgTitulo">Elegí la que más te guste (después la podés retocar):</p>
+        <OpcionesIA opciones={opciones} onElegir={onElegir} />
+      </>}
     </form>
   </div></div>
 }
