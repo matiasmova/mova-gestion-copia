@@ -28,7 +28,7 @@ Siempre das 3 opciones distintas entre sí.`
 const recorte = (s: unknown, n: number) => String(s ?? '').trim().slice(0, n)
 
 async function gemini(clave: string, pedido: string, esquema: unknown): Promise<unknown> {
-  const modelos = [Deno.env.get('GEMINI_MODEL'), 'gemini-flash-latest', 'gemini-2.5-flash'].filter(Boolean) as string[]
+  const modelos = [Deno.env.get('GEMINI_MODEL'), 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'].filter(Boolean) as string[]
   let ultimo = ''
   for (const modelo of modelos) {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
@@ -41,19 +41,21 @@ async function gemini(clave: string, pedido: string, esquema: unknown): Promise<
       }),
     })
     const cuerpo = await r.json().catch(() => ({}))
-    if (r.status === 404) { ultimo = `modelo ${modelo} no disponible`; continue }
-    if (r.status === 400 && /API key/i.test(JSON.stringify(cuerpo))) throw new Error('clave')
-    if (r.status === 403) throw new Error('clave')
-    if (r.status === 429) throw new Error('limite')
-    if (!r.ok) { ultimo = `${r.status}`; continue }
-    const texto = (cuerpo as { candidates?: { content?: { parts?: { text?: string }[] } }[] }).candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? ''
-    return JSON.parse(texto)
+    const mensaje = String((cuerpo as { error?: { message?: string } }).error?.message ?? '').slice(0, 300)
+    if (r.status === 404) { ultimo = `${modelo}: ${mensaje || 'no disponible'}`; continue }
+    if ((r.status === 400 || r.status === 403) && /API key|API_KEY|permission|PERMISSION/i.test(JSON.stringify(cuerpo))) throw new Error(`clave|${mensaje}`)
+    if (r.status === 429) { ultimo = `${modelo}: límite (${mensaje})`; continue }
+    if (!r.ok) { ultimo = `${modelo}: ${r.status} ${mensaje}`; continue }
+    let texto = (cuerpo as { candidates?: { content?: { parts?: { text?: string }[] } }[] }).candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? ''
+    texto = texto.replace(/^```(?:json)?\s*|\s*```$/g, '').trim()
+    try { return JSON.parse(texto) } catch { ultimo = `${modelo}: respuesta sin formato`; continue }
   }
   throw new Error(ultimo || 'sin respuesta')
 }
 
+// Esquema en el formato de Gemini (los tipos van en mayúsculas).
 const lista = (props: Record<string, unknown>) => ({
-  type: 'object', properties: { opciones: { type: 'array', items: { type: 'object', properties: props, required: Object.keys(props) } } }, required: ['opciones'],
+  type: 'OBJECT', properties: { opciones: { type: 'ARRAY', items: { type: 'OBJECT', properties: props, required: Object.keys(props) } } }, required: ['opciones'],
 })
 
 Deno.serve(async (req) => {
@@ -78,26 +80,26 @@ Deno.serve(async (req) => {
   try {
     if (accion === 'completar') {
       if (!i && !t && !d) return responder({ error: 'Escribí una idea.' }, 400)
-      const r = await gemini(clave, `Creá una solución a partir de esta idea: "${i || t || d}".${evitar}`, lista({ titulo: { type: 'string' }, descripcion: { type: 'string' } })) as { opciones?: { titulo: string; descripcion: string }[] }
+      const r = await gemini(clave, `Creá una solución a partir de esta idea: "${i || t || d}".${evitar}`, lista({ titulo: { type: 'STRING' }, descripcion: { type: 'STRING' } })) as { opciones?: { titulo: string; descripcion: string }[] }
       return responder({ opciones: (r.opciones ?? []).filter((o) => o.titulo && o.descripcion).slice(0, 3) })
     }
     if (accion === 'titulos') {
       if (!t && !d && !i) return responder({ error: 'Escribí algo en la descripción o una idea.' }, 400)
-      const r = await gemini(clave, `Proponé 3 títulos para esta solución.\nTítulo actual: "${t}"\nDescripción: "${d || i}"${evitar}`, lista({ titulo: { type: 'string' } })) as { opciones?: { titulo: string }[] }
+      const r = await gemini(clave, `Proponé 3 títulos para esta solución.\nTítulo actual: "${t}"\nDescripción: "${d || i}"${evitar}`, lista({ titulo: { type: 'STRING' } })) as { opciones?: { titulo: string }[] }
       return responder({ opciones: (r.opciones ?? []).map((o) => o.titulo).filter(Boolean).slice(0, 3) })
     }
     if (accion === 'descripciones') {
       if (!t && !d && !i) return responder({ error: 'Escribí el título o una idea.' }, 400)
       const r = await gemini(clave, d
         ? `Mejorá esta descripción manteniendo la idea, en 3 versiones.\nTítulo: "${t}"\nDescripción actual: "${d}"`
-        : `Escribí 3 descripciones para la solución "${t || i}".`, lista({ descripcion: { type: 'string' } })) as { opciones?: { descripcion: string }[] }
+        : `Escribí 3 descripciones para la solución "${t || i}".`, lista({ descripcion: { type: 'STRING' } })) as { opciones?: { descripcion: string }[] }
       return responder({ opciones: (r.opciones ?? []).map((o) => o.descripcion).filter(Boolean).slice(0, 3) })
     }
     return responder({ error: 'Acción desconocida' }, 400)
   } catch (e) {
     const m = (e as Error).message
-    if (m === 'clave') return responder({ error: 'La clave de Gemini (GEMINI_API_KEY) no es válida.' }, 400)
-    if (m === 'limite') return responder({ error: 'Se alcanzó el límite gratuito por un rato. Probá en un minuto.' }, 429)
-    return responder({ error: 'No se pudo generar el texto. Probá de nuevo.' }, 502)
+    if (m.startsWith('clave|')) return responder({ error: `Google rechazó la clave de Gemini (GEMINI_API_KEY): ${m.slice(6)}` }, 400)
+    if (/límite/.test(m)) return responder({ error: 'Se alcanzó el límite gratuito de Gemini por un rato. Probá en un minuto.' }, 429)
+    return responder({ error: `No se pudo generar el texto. Detalle de Google: ${m}` }, 502)
   }
 })
