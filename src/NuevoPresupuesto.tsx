@@ -11,6 +11,7 @@ import {
 } from './presupuestoCalculos'
 import { cargarSoluciones, type Solucion } from './Soluciones'
 import { pedirAsistente } from './asistenteIA'
+import CompararMercado, { type ProductoAComparar } from './CompararMercado'
 import { cargarSolucionesPresupuesto, type SolucionPresupuesto } from './presupuestoSoluciones'
 import NuevoCliente from './NuevoCliente'
 import { configActual } from './config'
@@ -315,6 +316,20 @@ function NuevoPresupuesto({
   const [iaError, setIaError] = useState('')
   const [iaNotas, setIaNotas] = useState('')
 
+  const [mercado, setMercado] = useState<ProductoAComparar[] | null>(null)
+  // Productos del presupuesto con el precio por unidad que paga el cliente
+  // (con el descuento del ítem y la bonificación general).
+  function compararMercado() {
+    const base = subtotal - descuentoPorItems
+    const factorGeneral = base > 0 ? 1 - descuentoGeneral / base : 1
+    const lista = items.filter((it) => it.tipo === 'producto' && it.descripcion.trim() && it.cantidad > 0).slice(0, 24).map((it) => {
+      const p = it.catalogo_id ? catalogo.find((x) => Number(x.id) === Number(it.catalogo_id)) : undefined
+      return { id: p?.id ?? null, nombre: p?.nombre ?? it.descripcion, cantidad: it.cantidad, costo: it.costo_unitario, precio: Math.round((importeNeto(it) / it.cantidad) * factorGeneral * 100) / 100 }
+    })
+    setMercado(lista)
+  }
+  const hayProductos = items.some((it) => it.tipo === 'producto' && it.descripcion.trim())
+
   async function armarConIA() {
     setIaError(''); setIaNotas(''); setIaPensando(true)
     try {
@@ -563,6 +578,8 @@ function NuevoPresupuesto({
           />,
           document.body,
         )}
+
+        {mercado && <CompararMercado titulo={titulo.trim() || 'Este presupuesto'} productos={mercado} onCerrar={() => setMercado(null)} />}
 
         <form className="presupuestoForm" onSubmit={guardar}>
           <div className={`iaArmar ${iaAbierta ? 'abierto' : ''}`}>
@@ -941,6 +958,7 @@ function NuevoPresupuesto({
               <strong>Total: {formatoDinero(total)}</strong>
               <span>Cobrado: {formatoDinero(totalPagado)}</span>
               <span>Saldo: {formatoDinero(saldo)}</span>
+              {hayProductos && <button type="button" className="editButton mercadoBtnPresu" onClick={compararMercado}>💲 ¿Cómo estoy de precio?</button>}
             </div>
           </div>
 
