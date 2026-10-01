@@ -20,7 +20,7 @@ type Modificacion = Parameters<typeof antesYAhora>[0]
 
 export type PagoEstado = { id: number; fecha: string; monto: number; medio: string | null; referencia: string | null }
 export type AvanceEstado = { id: number; fecha: string; titulo: string; descripcion: string | null; porcentaje: number }
-export type GastoExtraEstado = { id: number; fecha: string; descripcion: string; importe: number; devuelto: boolean }
+export type GastoExtraEstado = { id: number; fecha: string; descripcion: string; importe: number; devuelto: boolean; comprobante: string | null }
 
 export type PasoLinea = {
   tipo: 'anticipo' | 'avance' | 'final'
@@ -103,7 +103,7 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
     }) as Modificacion)
   const gastosExtra: GastoExtraEstado[] = adicionales
     .filter((a) => a.tipo === 'gasto_extra' && (a.estado === 'aprobado' || a.estado === 'pagado'))
-    .map((a) => ({ id: Number(a.id), fecha: dia(a.fecha), descripcion: String(a.descripcion ?? ''), importe: Math.abs(Number(a.importe) || 0), devuelto: a.estado === 'pagado' }))
+    .map((a) => ({ id: Number(a.id), fecha: dia(a.fecha), descripcion: String(a.descripcion ?? ''), importe: Math.abs(Number(a.importe) || 0), devuelto: a.estado === 'pagado', comprobante: (a.comprobante_path as string) || null }))
   const pagos: PagoEstado[] = ((rPagos.data ?? []) as Record<string, unknown>[]).filter(propio).map((p) => ({
     id: Number(p.id), fecha: dia(p.fecha), monto: Number(p.monto) || 0,
     medio: (p.medio_pago as string) ?? null, referencia: ((p.referencia as string) || (p.notas as string)) || null,

@@ -1570,3 +1570,5 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
   .trabajosTabs button{font-size:12.5px;padding:9px 2px}
   .trabajosTabLargo{display:none}.trabajosTabCorto{display:inline}
 }
+.presuComprobantes{font-size:13px;color:#4b5563;align-items:flex-start}
+.pdfCheck{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#374151;white-space:nowrap}

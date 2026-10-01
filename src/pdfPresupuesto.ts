@@ -9,6 +9,7 @@ import { configActual, lineaContacto, textoCondicion } from './config'
 import { cargarEstadoPresupuesto, mensajeEstado, PCT_ANTICIPO, totalAPagarHoy, type EstadoPresupuesto } from './estadoObra'
 import { cargarDatosContacto, type DatosContacto } from './presupuestoContacto'
 import { codigoPresupuesto, nombreArchivo } from './codigoPresupuesto'
+import { supabase } from './supabase'
 
 export const GRUPOS_DOCUMENTO: Record<string, string> = {
   producto: 'Productos y equipos', servicio: 'Servicios', material: 'Materiales',
@@ -90,7 +91,30 @@ function win(s: string): string {
 
 const conSigno = (n: number) => (n < 0 ? `- ${moneda(Math.abs(n))}` : `+ ${moneda(n)}`)
 
-export async function generarPdfPresupuesto(entrada: DatosPdf): Promise<Blob> {
+// Foto de un comprobante → JPEG liviano y derecho (el navegador aplica la
+// rotación de la cámara al dibujarla). Sirve también para HEIC en el iPhone.
+async function imagenAJpeg(blob: Blob): Promise<{ bytes: ArrayBuffer; w: number; h: number }> {
+  const url = URL.createObjectURL(blob)
+  try {
+    const img = document.createElement('img')
+    await new Promise<void>((ok, mal) => { img.onload = () => ok(); img.onerror = () => mal(new Error('imagen')); img.src = url })
+    const max = 1600
+    let w = img.naturalWidth, h = img.naturalHeight
+    if (w > max || h > max) { const r = Math.min(max / w, max / h); w = Math.round(w * r); h = Math.round(h * r) }
+    const canvas = document.createElement('canvas')
+    canvas.width = w; canvas.height = h
+    const ctx = canvas.getContext('2d')!
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h)
+    ctx.drawImage(img, 0, 0, w, h)
+    const jpg = await new Promise<Blob | null>((ok) => canvas.toBlob(ok, 'image/jpeg', 0.82))
+    if (!jpg) throw new Error('jpeg')
+    return { bytes: await jpg.arrayBuffer(), w, h }
+  } finally { URL.revokeObjectURL(url) }
+}
+
+// opciones.comprobantes: agrega al final las fotos/PDF de los comprobantes de
+// los gastos a reintegrar (por defecto sí).
+export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { comprobantes?: boolean } = {}): Promise<Blob> {
   const d = await completarDatosDocumento(entrada)
   const estado = d.estado ?? null
   const soluciones = d.soluciones ?? []
@@ -106,6 +130,8 @@ export async function generarPdfPresupuesto(entrada: DatosPdf): Promise<Blob> {
   const CW = W - 2 * M
   const PIE = M + 34
   const codigo = codigoPresupuesto(d.id)
+  // Gastos con comprobante que van como anexo (numerados en el orden de la lista).
+  const conComprobante = opciones.comprobantes === false || !estado ? [] : estado.gastosExtra.filter((g) => g.comprobante)
   let page: PDFPage = pdf.addPage([W, H])
   let y = H - M
 
@@ -471,11 +497,13 @@ export async function generarPdfPresupuesto(entrada: DatosPdf): Promise<Blob> {
       y -= 6
       for (const g of estado.gastosExtra) {
         const rr = partir(`${fechaCorta(g.fecha)} · ${g.descripcion}`, F_NORMAL, CW - 200)
-        const alto = Math.max(rr.length * 12, 20) + 8
+        const alto = Math.max(rr.length * 12 + (conComprobante.includes(g) ? 10 : 0), 20) + 8
         lugar(alto)
         tilde(M + 16, y + 3, g.devuelto)
         let yy = y
         for (const r of rr) { texto(r, M + 30, yy, F_NORMAL, font, TEXTO); yy -= 12 }
+        const nComp = conComprobante.indexOf(g)
+        if (nComp >= 0) texto(`Comprobante N.º ${nComp + 1}: adjunto al final del documento`, M + 30, yy + 1, F_CHICO, font, NARANJA)
         derecha(moneda(g.importe), M + CW - 90, y, F_NORMAL, bold, OSCURO)
         derecha(g.devuelto ? 'Reintegrado' : 'Pendiente', M + CW, y, F_CHICO + 0.5, bold, g.devuelto ? VERDE : NARANJA)
         derecha(g.devuelto ? 'no suma' : 'suma al total', M + CW, y - 10, F_CHICO, font, GRIS)
@@ -543,6 +571,63 @@ export async function generarPdfPresupuesto(entrada: DatosPdf): Promise<Blob> {
 
   lugar(24)
   texto(`Documento emitido: ${new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}`, M, y, F_CHICO, font, GRIS)
+
+  // ---------- Anexo: comprobantes de los gastos a reintegrar ----------
+  // Cada comprobante en su página, con encabezado (número, fecha, detalle y
+  // monto) y la imagen o el PDF original ajustado al espacio.
+  for (let k = 0; k < conComprobante.length; k++) {
+    const g = conComprobante[k]
+    page = pdf.addPage([W, H]); y = H - M
+    if (logo) { const esc = 26 / logo.height; page.drawImage(logo, { x: M, y: y - 22, width: logo.width * esc, height: 26 }) }
+    derecha('ANEXO · COMPROBANTES DE GASTOS', M + CW, y - 6, F_CHICO, bold, NARANJA)
+    derecha(`Presupuesto ${codigo} · ${d.cliente}`, M + CW, y - 18, F_CHICO, font, GRIS)
+    y -= 36; linea(M, y, M + CW); y -= 22
+    texto(`COMPROBANTE ${k + 1} DE ${conComprobante.length}`, M, y, F_CHICO, bold, NARANJA)
+    derecha(moneda(g.importe), M + CW, y - 6, F_GRANDE, bold, OSCURO)
+    y -= 15
+    for (const r of partir(g.descripcion || 'Gasto', F_NORMAL + 1, CW - 170, bold).slice(0, 2)) { texto(r, M, y, F_NORMAL + 1, bold, OSCURO); y -= 14 }
+    texto(`${fechaCorta(g.fecha)} · ${g.devuelto ? 'Reintegrado' : 'Pendiente de reintegro'}`, M, y, F_CHICO + 0.5, bold, g.devuelto ? VERDE : NARANJA)
+    y -= 16
+    // Espacio para el comprobante
+    const cajaX = M, cajaW = CW, cajaArriba = y, cajaAbajo = PIE + 6
+    const cajaH = cajaArriba - cajaAbajo
+    const encajar = (w: number, h: number) => {
+      const esc = Math.min(cajaW / w, cajaH / h, 1.6)
+      return { w: w * esc, h: h * esc, x: cajaX + (cajaW - w * esc) / 2, y: cajaArriba - h * esc }
+    }
+    try {
+      const { data: archivo, error } = await supabase.storage.from('comprobantes').download(g.comprobante!)
+      if (error || !archivo) throw error ?? new Error('sin archivo')
+      const esPdf = archivo.type === 'application/pdf' || /\.pdf$/i.test(g.comprobante!)
+      if (esPdf) {
+        const bytes = await archivo.arrayBuffer()
+        const origen = await PDFDocument.load(bytes, { ignoreEncryption: true })
+        const paginasOrigen = origen.getPageCount()
+        const embebidas = await pdf.embedPdf(bytes, Array.from({ length: Math.min(paginasOrigen, 6) }, (_, i) => i))
+        embebidas.forEach((emb, i) => {
+          if (i > 0) {
+            page = pdf.addPage([W, H])
+            texto(`Comprobante ${k + 1} · página ${i + 1} de ${Math.min(paginasOrigen, 6)}`, M, H - M, F_CHICO, bold, NARANJA)
+          }
+          const top = i > 0 ? H - M - 16 : cajaArriba
+          const alto = top - cajaAbajo
+          const esc = Math.min(cajaW / emb.width, alto / emb.height)
+          page.drawPage(emb, { x: cajaX + (cajaW - emb.width * esc) / 2, y: top - emb.height * esc, width: emb.width * esc, height: emb.height * esc })
+          page.drawRectangle({ x: cajaX + (cajaW - emb.width * esc) / 2, y: top - emb.height * esc, width: emb.width * esc, height: emb.height * esc, borderColor: LINEA, borderWidth: 0.8 })
+        })
+      } else {
+        const jpg = await imagenAJpeg(archivo)
+        const imagen = await pdf.embedJpg(jpg.bytes)
+        const r = encajar(jpg.w, jpg.h)
+        page.drawImage(imagen, { x: r.x, y: r.y, width: r.w, height: r.h })
+        page.drawRectangle({ x: r.x, y: r.y, width: r.w, height: r.h, borderColor: LINEA, borderWidth: 0.8 })
+      }
+    } catch (e) {
+      console.error(e)
+      rect(cajaX, cajaArriba - 60, cajaW, 50, GRIS_CLARO)
+      texto('No se pudo adjuntar este comprobante. Si lo necesitás, te lo enviamos por separado.', cajaX + 14, cajaArriba - 38, F_NORMAL, font, GRIS)
+    }
+  }
 
   // ---------- Pie en todas las páginas ----------
   const paginas = pdf.getPages()
