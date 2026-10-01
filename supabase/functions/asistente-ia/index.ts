@@ -35,7 +35,8 @@ type Parte = { text: string } | { inlineData: { mimeType: string; data: string }
 async function gemini(clave: string, pedido: string | Parte[], esquema: unknown, sistema = ESTILO, temperatura = 0.9): Promise<unknown> {
   // Google retira modelos seguido: se prueba el del secret GEMINI_MODEL y después estos.
   const modelos = Array.from(new Set([Deno.env.get('GEMINI_MODEL'), 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3-flash-preview', 'gemini-2.5-flash'].filter(Boolean) as string[]))
-  const errores: string[] = []
+  const errores: string[] = [], limites: string[] = []
+  // Cada modelo tiene su propio cupo gratis: si uno se agotó, se prueba el siguiente.
   for (const modelo of modelos) {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
       method: 'POST',
@@ -50,12 +51,13 @@ async function gemini(clave: string, pedido: string | Parte[], esquema: unknown,
     const mensaje = String((cuerpo as { error?: { message?: string } }).error?.message ?? '').slice(0, 300)
     if (r.status === 404) { errores.push(`${modelo}: ${mensaje || 'no disponible'}`); continue }
     if ((r.status === 400 || r.status === 403) && /API key|API_KEY|permission|PERMISSION/i.test(JSON.stringify(cuerpo))) throw new Error(`clave|${mensaje}`)
-    if (r.status === 429) throw new Error(`límite: ${mensaje}`)
+    if (r.status === 429) { limites.push(`${modelo}: ${mensaje}`); continue }
     if (!r.ok) { errores.push(`${modelo}: ${r.status} ${mensaje}`); continue }
     let texto = (cuerpo as { candidates?: { content?: { parts?: { text?: string }[] } }[] }).candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? ''
     texto = texto.replace(/^```(?:json)?\s*|\s*```$/g, '').trim()
     try { return JSON.parse(texto) } catch { errores.push(`${modelo}: respuesta sin formato`); continue }
   }
+  if (limites.length) throw new Error(`límite|${limites.join(' | ')}`)
   throw new Error(errores.join(' | ') || 'sin respuesta')
 }
 
@@ -66,7 +68,8 @@ type Fuente = { titulo: string; url: string }
 // texto y se extrae. Devuelve también las páginas y búsquedas que usó.
 async function geminiBuscar(clave: string, pedido: string, sistema: string): Promise<{ datos: unknown; fuentes: Fuente[]; busquedas: string[] }> {
   const modelos = Array.from(new Set([Deno.env.get('GEMINI_MODEL'), 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3-flash-preview', 'gemini-2.5-flash'].filter(Boolean) as string[]))
-  const errores: string[] = []
+  const errores: string[] = [], limites: string[] = []
+  // Cada modelo tiene su propio cupo gratis: si uno se agotó, se prueba el siguiente.
   for (const modelo of modelos) {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
       method: 'POST',
@@ -85,7 +88,7 @@ async function geminiBuscar(clave: string, pedido: string, sistema: string): Pro
     const mensaje = String(cuerpo.error?.message ?? '').slice(0, 300)
     if (r.status === 404) { errores.push(`${modelo}: ${mensaje || 'no disponible'}`); continue }
     if ((r.status === 400 || r.status === 403) && /API key|API_KEY|permission|PERMISSION/i.test(JSON.stringify(cuerpo))) throw new Error(`clave|${mensaje}`)
-    if (r.status === 429) throw new Error(`límite: ${mensaje}`)
+    if (r.status === 429) { limites.push(`${modelo}: ${mensaje}`); continue }
     if (!r.ok) { errores.push(`${modelo}: ${r.status} ${mensaje}`); continue }
     const c = cuerpo.candidates?.[0]
     const texto = c?.content?.parts?.map((p) => p.text ?? '').join('') ?? ''
@@ -96,6 +99,7 @@ async function geminiBuscar(clave: string, pedido: string, sistema: string): Pro
       .filter((x) => /^https:\/\//.test(x.url))
     return { datos, fuentes, busquedas: (c?.groundingMetadata?.webSearchQueries ?? []).map((q) => recorte(q, 120)).filter(Boolean).slice(0, 8) }
   }
+  if (limites.length) throw new Error(`límite|${limites.join(' | ')}`)
   throw new Error(errores.join(' | ') || 'sin respuesta')
 }
 
@@ -325,7 +329,10 @@ Deno.serve(async (req) => {
   } catch (e) {
     const m = (e as Error).message
     if (m.startsWith('clave|')) return responder({ error: `Google rechazó la clave de Gemini (GEMINI_API_KEY): ${m.slice(6)}` }, 400)
-    if (/límite/.test(m)) return responder({ error: 'Se alcanzó el límite gratuito de Gemini por un rato. Probá en un minuto.' }, 429)
+    if (m.startsWith('límite|')) {
+      const diario = /per ?day|PerDay|daily/i.test(m)
+      return responder({ error: `${diario ? 'Se agotó el cupo gratuito de Gemini de hoy' : 'Se alcanzó el límite gratuito de Gemini por un rato: probá en un minuto'}. Detalle de Google: ${m.slice(7, 600)}` }, 429)
+    }
     return responder({ error: `No se pudo generar el texto. Detalle de Google: ${m}` }, 502)
   }
 })
