@@ -16,6 +16,7 @@ import { cargarSolucionesPresupuesto, type SolucionPresupuesto } from './presupu
 import NuevoCliente from './NuevoCliente'
 import { configActual } from './config'
 import NuevaObra from './NuevaObra'
+import CampoNumero from './CampoNumero'
 
 export type ClienteOpcion = {
   id: number
@@ -745,8 +746,7 @@ function NuevoPresupuesto({
 
             <label>
               Validez en días
-              <input
-                type="number"
+              <CampoNumero
                 min="1"
                 value={validezDias}
                 onChange={(evento) =>
@@ -853,10 +853,8 @@ function NuevoPresupuesto({
 
                 <label className="itemCampo itemCantidad">
                   <span>Cantidad</span>
-                  <input
-                    type="number"
+                  <CampoNumero
                     min="0.01"
-                    step="0.01"
                     value={item.cantidad}
                     onChange={(evento) =>
                       actualizarItem(
@@ -870,10 +868,8 @@ function NuevoPresupuesto({
 
                 <label className="itemCampo itemPrecio">
                   <span>Precio unitario</span>
-                  <input
-                    type="number"
+                  <CampoNumero
                     min="0"
-                    step="0.01"
                     value={item.precio_unitario}
                     onChange={(evento) =>
                       actualizarItem(
@@ -887,10 +883,8 @@ function NuevoPresupuesto({
 
                 <label className="itemCampo itemCosto">
                   <span>Costo unitario</span>
-                  <input
-                    type="number"
+                  <CampoNumero
                     min="0"
-                    step="0.01"
                     value={item.costo_unitario}
                     onChange={(evento) =>
                       actualizarItem(
@@ -923,12 +917,9 @@ function NuevoPresupuesto({
                 <div className="itemDescuentoFila">
                   <label>
                     <span>Descuento del ítem</span>
-                    <input
-                      type="number"
+                    <CampoNumero
                       min="0"
                       max="100"
-                      step="0.01"
-                      inputMode="decimal"
                       value={item.descuento_pct ?? 0}
                       onChange={(evento) =>
                         actualizarItem(
@@ -961,10 +952,8 @@ function NuevoPresupuesto({
                   <button type="button" className={descuentoTipo === 'monto' ? 'active' : ''} onClick={() => setDescuentoTipo('monto')}>$</button>
                   <button type="button" className={descuentoTipo === 'porcentaje' ? 'active' : ''} onClick={() => setDescuentoTipo('porcentaje')}>%</button>
                 </div>
-                <input
-                  type="number"
+                <CampoNumero
                   min="0"
-                  step="0.01"
                   value={descuento}
                   onChange={(evento) => setDescuento(Number(evento.target.value))}
                   placeholder={descuentoTipo === 'porcentaje' ? '% de descuento' : 'Monto en $'}

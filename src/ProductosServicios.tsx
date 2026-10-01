@@ -10,6 +10,7 @@ import { confirmarEliminacion } from './confirmar'
 import { cargarConfig } from './config'
 import CompararMercado, { type ProductoAComparar } from './CompararMercado'
 import OrdenarCatalogoIA from './OrdenarCatalogoIA'
+import CampoNumero from './CampoNumero'
 
 export type ProductoServicio = {
   id: number
@@ -812,7 +813,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                   <option value="restar">Restar stock</option>
                   <option value="fijar">Fijar stock en</option>
                 </select>
-                <input type="number" min="0" step="1" value={valorStockMasivo} onChange={(e) => setValorStockMasivo(e.target.value)} placeholder="cantidad" style={{ width: '90px' }} />
+                <CampoNumero min="0" value={valorStockMasivo} onChange={(e) => setValorStockMasivo(e.target.value)} placeholder="cantidad" style={{ width: '90px' }} />
                 <button type="button" className="editButton" disabled={aplicandoMasivo} onClick={() => void aplicarStockMasivo()}>Aplicar</button>
               </span>
               <button type="button" className="activateButton" disabled={aplicandoMasivo} onClick={() => void aplicarEstadoMasivoIds([...seleccion], true)}>Activar</button>
@@ -852,19 +853,19 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                     </select>
                   </td>
                   {el.moneda === 'USD' ? <>
-                    <td><small className="prodUsdMini">US$</small><input type="number" min="0" step="0.01" value={el.costo_usd ?? 0} onChange={(e) => actualizarCampoLocal(el.id, 'costo_usd', Number(e.target.value))} onBlur={(e) => { const v = Number(e.target.value || 0); actualizarCampoLocal(el.id, 'costo_unitario', dos(v * cotizacion)); void persistirCampos(el.id, { costo_usd: v, costo_unitario: dos(v * cotizacion) }) }} style={{ width: '85px' }} /></td>
-                    <td><small className="prodUsdMini">US$</small><input type="number" min="0" step="0.01" value={el.precio_usd ?? 0} onChange={(e) => actualizarCampoLocal(el.id, 'precio_usd', Number(e.target.value))} onBlur={(e) => { const v = Number(e.target.value || 0); actualizarCampoLocal(el.id, 'precio_venta', dos(v * cotizacion)); void persistirCampos(el.id, { precio_usd: v, precio_venta: dos(v * cotizacion) }) }} style={{ width: '85px' }} /></td>
+                    <td><small className="prodUsdMini">US$</small><CampoNumero min="0" value={el.costo_usd ?? 0} onChange={(e) => actualizarCampoLocal(el.id, 'costo_usd', Number(e.target.value))} onBlur={(e) => { const v = Number(e.target.value || 0); actualizarCampoLocal(el.id, 'costo_unitario', dos(v * cotizacion)); void persistirCampos(el.id, { costo_usd: v, costo_unitario: dos(v * cotizacion) }) }} style={{ width: '85px' }} /></td>
+                    <td><small className="prodUsdMini">US$</small><CampoNumero min="0" value={el.precio_usd ?? 0} onChange={(e) => actualizarCampoLocal(el.id, 'precio_usd', Number(e.target.value))} onBlur={(e) => { const v = Number(e.target.value || 0); actualizarCampoLocal(el.id, 'precio_venta', dos(v * cotizacion)); void persistirCampos(el.id, { precio_usd: v, precio_venta: dos(v * cotizacion) }) }} style={{ width: '85px' }} /></td>
                   </> : <>
-                    <td><input type="number" min="0" step="0.01" value={el.costo_unitario} onChange={(e) => actualizarCampoLocal(el.id, 'costo_unitario', Number(e.target.value))} onBlur={(e) => persistirCampo(el.id, 'costo_unitario', Number(e.target.value || 0))} style={{ width: '95px' }} /></td>
-                    <td><input type="number" min="0" step="0.01" value={el.precio_venta} onChange={(e) => actualizarCampoLocal(el.id, 'precio_venta', Number(e.target.value))} onBlur={(e) => persistirCampo(el.id, 'precio_venta', Number(e.target.value || 0))} style={{ width: '95px' }} /></td>
+                    <td><CampoNumero min="0" value={el.costo_unitario} onChange={(e) => actualizarCampoLocal(el.id, 'costo_unitario', Number(e.target.value))} onBlur={(e) => persistirCampo(el.id, 'costo_unitario', Number(e.target.value || 0))} style={{ width: '95px' }} /></td>
+                    <td><CampoNumero min="0" value={el.precio_venta} onChange={(e) => actualizarCampoLocal(el.id, 'precio_venta', Number(e.target.value))} onBlur={(e) => persistirCampo(el.id, 'precio_venta', Number(e.target.value || 0))} style={{ width: '95px' }} /></td>
                   </>}
                   <td>
                     <select value={el.iva_pct} onChange={(e) => { const v = Number(e.target.value); actualizarCampoLocal(el.id, 'iva_pct', v); void persistirCampo(el.id, 'iva_pct', v) }}>
                       <option value={21}>21%</option><option value={10.5}>10,5%</option><option value={27}>27%</option><option value={0}>0%</option>
                     </select>
                   </td>
-                  <td><input type="number" min="0" step="1" value={el.stock} onChange={(e) => actualizarCampoLocal(el.id, 'stock', Number(e.target.value))} onBlur={(e) => persistirCampo(el.id, 'stock', Number(e.target.value || 0))} style={{ width: '70px' }} /></td>
-                  <td><input type="number" min="0" step="1" value={el.stock_minimo} onChange={(e) => actualizarCampoLocal(el.id, 'stock_minimo', Number(e.target.value))} onBlur={(e) => persistirCampo(el.id, 'stock_minimo', Number(e.target.value || 0))} style={{ width: '70px' }} /></td>
+                  <td><CampoNumero min="0" value={el.stock} onChange={(e) => actualizarCampoLocal(el.id, 'stock', Number(e.target.value))} onBlur={(e) => persistirCampo(el.id, 'stock', Number(e.target.value || 0))} style={{ width: '70px' }} /></td>
+                  <td><CampoNumero min="0" value={el.stock_minimo} onChange={(e) => actualizarCampoLocal(el.id, 'stock_minimo', Number(e.target.value))} onBlur={(e) => persistirCampo(el.id, 'stock_minimo', Number(e.target.value || 0))} style={{ width: '70px' }} /></td>
                   <td><input type="checkbox" checked={el.activo} onChange={(e) => { const v = e.target.checked; actualizarCampoLocal(el.id, 'activo', v); void persistirCampo(el.id, 'activo', v) }} /></td>
                 </tr>
               ))}
@@ -951,13 +952,13 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                     ? cotizacion > 0 ? `Se guarda en dólares y se pasa a pesos con la cotización (USD 1 = $ ${String(cotizacion).replace('.', ',')}). Si la cotización cambia, este precio se actualiza solo.` : 'Primero cargá la cotización con el botón 💲.'
                     : 'Precio fijo en pesos: no cambia con la cotización.'}</small>
                 </div>
-                <label>Precio de compra{monedaProd === 'USD' ? ' (US$)' : ' ($)'}<input type="number" min="0" step="0.01" value={precioCompra} onChange={(e) => cambiarCompra(e.target.value)} placeholder="0,00" /></label>
-                <label>{modoGanancia === 'margen' ? '% de margen (sobre la venta)' : '% de recargo (sobre el costo)'}<input type="number" step="0.1" max={modoGanancia === 'margen' ? 99.9 : undefined} value={gananciaPct} onChange={(e) => cambiarGanancia(e.target.value)} placeholder="Ej.: 50" /></label>
-                <label>Precio de lista sin IVA{monedaProd === 'USD' ? ' (US$)' : ' ($)'}<input type="number" min="0" step="0.01" value={precioLista} onChange={(e) => cambiarLista(e.target.value)} placeholder="0,00" />{monedaProd === 'USD' && cotizacion > 0 && Number(precioLista) > 0 && <small className="npAyuda">≈ {formatoDinero(Number(precioLista) * cotizacion)} · compra ≈ {formatoDinero(Number(precioCompra || 0) * cotizacion)}</small>}</label>
+                <label>Precio de compra{monedaProd === 'USD' ? ' (US$)' : ' ($)'}<CampoNumero min="0" value={precioCompra} onChange={(e) => cambiarCompra(e.target.value)} placeholder="0,00" /></label>
+                <label>{modoGanancia === 'margen' ? '% de margen (sobre la venta)' : '% de recargo (sobre el costo)'}<CampoNumero max={modoGanancia === 'margen' ? 99.9 : undefined} value={gananciaPct} onChange={(e) => cambiarGanancia(e.target.value)} placeholder="Ej.: 50" /></label>
+                <label>Precio de lista sin IVA{monedaProd === 'USD' ? ' (US$)' : ' ($)'}<CampoNumero min="0" value={precioLista} onChange={(e) => cambiarLista(e.target.value)} placeholder="0,00" />{monedaProd === 'USD' && cotizacion > 0 && Number(precioLista) > 0 && <small className="npAyuda">≈ {formatoDinero(Number(precioLista) * cotizacion)} · compra ≈ {formatoDinero(Number(precioCompra || 0) * cotizacion)}</small>}</label>
                 {margenIgualAPct && <p className="loginError formFull">Un margen de 100% o más no es posible: el precio de venta sería infinito. Usá menos de 100%.</p>}
 
-                {tipo === 'producto' && <label>Stock (cantidad)<input type="number" min="0" step="1" value={stock} onChange={(e) => setStock(e.target.value)} placeholder="0" /></label>}
-                {tipo === 'producto' && <label>Stock mínimo (alerta)<input type="number" min="0" step="1" value={stockMinimo} onChange={(e) => setStockMinimo(e.target.value)} placeholder="5" /></label>}
+                {tipo === 'producto' && <label>Stock (cantidad)<CampoNumero min="0" value={stock} onChange={(e) => setStock(e.target.value)} placeholder="0" /></label>}
+                {tipo === 'producto' && <label>Stock mínimo (alerta)<CampoNumero min="0" value={stockMinimo} onChange={(e) => setStockMinimo(e.target.value)} placeholder="5" /></label>}
                 <label>Unidad
                   <select value={unidad} onChange={(e) => setUnidad(e.target.value)}>
                     <option value="unidad">Unidad</option><option value="metro">Metro</option><option value="hora">Hora</option>
@@ -990,7 +991,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                         <button type="button" className={descuentoTipo === 'porcentaje' ? 'active' : ''} onClick={() => setDescuentoTipo('porcentaje')}>%</button>
                         <button type="button" className={descuentoTipo === 'monto' ? 'active' : ''} onClick={() => setDescuentoTipo('monto')}>$</button>
                       </div>
-                      <input type="number" min="0" step="0.01" value={descuentoValor} onChange={(e) => setDescuentoValor(e.target.value)} placeholder={descuentoTipo === 'porcentaje' ? '% de descuento' : 'Monto en $'} />
+                      <CampoNumero min="0" value={descuentoValor} onChange={(e) => setDescuentoValor(e.target.value)} placeholder={descuentoTipo === 'porcentaje' ? '% de descuento' : 'Monto en $'} />
                     </div>
                   )}
                 </div>
@@ -1104,7 +1105,7 @@ function StockRotacion({ elementos, ventas, diasVendidos, diasParado, onDiasVend
           {foto(e)}
           <button type="button" className="srNombre" onClick={() => onEditar(e)}><strong>{e.nombre}</strong><small>{e.proveedor || 'Sin proveedor'}{e.codigo ? ` · ${e.codigo}` : ''}</small></button>
           <span className={`srStock ${e.stock <= 0 ? 'sin' : 'bajo'}`}>{e.stock <= 0 ? 'Sin stock' : `Quedan ${e.stock}`}</span>
-          <label className="srMin">Mínimo<input type="number" min="0" step="1" defaultValue={e.stock_minimo} onBlur={(ev) => { const v = Math.max(0, Number(ev.target.value || 0)); if (v !== e.stock_minimo) onMinimo(e, v) }} /></label>
+          <label className="srMin">Mínimo<CampoNumero min="0" defaultValue={e.stock_minimo} onBlur={(ev) => { const v = Math.max(0, Number(ev.target.value || 0)); if (v !== e.stock_minimo) onMinimo(e, v) }} /></label>
           {e.link_compra && <a className="editButton" href={e.link_compra} target="_blank" rel="noreferrer">Comprar</a>}
         </div>
       ))}

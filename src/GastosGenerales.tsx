@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from './supabase'
 import { moneda, fechaCorta, hoy } from './gestionFormat'
 import { confirmarEliminacion } from './confirmar'
+import CampoNumero from './CampoNumero'
 
 type Gasto = {
   id: number
@@ -127,7 +128,7 @@ function FormularioGasto({ gasto, onCancelar, onGuardado }: { gasto: Gasto; onCa
     <form className="clienteForm" onSubmit={guardar}><div className="formGrid">
       <label>Fecha *<input type="date" required value={f.fecha} onChange={(e) => set('fecha', e.target.value)} /></label>
       <label>Categoría<select value={f.categoria} onChange={(e) => set('categoria', e.target.value)}>{CATEGORIAS.map((c) => <option key={c} value={c}>{c}</option>)}</select></label>
-      <label>Monto *<input type="number" min="0.01" step="0.01" required value={f.monto} onChange={(e) => set('monto', e.target.value)} /></label>
+      <label>Monto *<CampoNumero min="0.01" required value={f.monto} onChange={(e) => set('monto', e.target.value)} /></label>
       <label>Recurrente (mensual)<select value={f.recurrente ? 'si' : 'no'} onChange={(e) => set('recurrente', e.target.value === 'si')}><option value="si">Sí, gasto fijo mensual</option><option value="no">No, puntual</option></select></label>
       <label className="formFull">Descripción<input value={f.descripcion} onChange={(e) => set('descripcion', e.target.value)} placeholder="Ej.: Alquiler local septiembre" /></label>
     </div>{error && <p className="loginError">{error}</p>}<div className="formActions"><button type="button" className="cancelButton" onClick={onCancelar}>Cancelar</button><button className="newButton" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar'}</button></div></form>

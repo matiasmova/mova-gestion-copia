@@ -4,6 +4,7 @@ import { supabase } from './supabase'
 import { archivoParaIA, pedirAsistente } from './asistenteIA'
 import { fechaCorta, moneda, hoy } from './gestionFormat'
 import { confirmarEliminacion } from './confirmar'
+import CampoNumero from './CampoNumero'
 
 // Compras de materiales por obra.
 // Arriba cuatro números que filtran; abajo pestañas: la lista en tarjetas
@@ -601,9 +602,9 @@ function FormularioCompra({ obras, proveedores, compra, onCancelar, onGuardado }
         {items.map((it, i) => (
           <div key={i} className="cpItem">
             <input className="cpItemNombre" value={it.nombre} onChange={(e) => setItem(i, 'nombre', e.target.value)} placeholder="Material (ej.: Cable UTP Cat 6)" aria-label="Material" />
-            <input type="number" min="0.01" step="0.01" value={it.cantidad} onChange={(e) => setItem(i, 'cantidad', e.target.value)} aria-label="Cantidad" placeholder="Cant." />
+            <CampoNumero min="0.01" value={it.cantidad} onChange={(e) => setItem(i, 'cantidad', e.target.value)} aria-label="Cantidad" placeholder="Cant." />
             <input value={it.unidad} onChange={(e) => setItem(i, 'unidad', e.target.value)} aria-label="Unidad" placeholder="unidad" />
-            <input type="number" min="0" step="0.01" value={it.precio_unitario} onChange={(e) => setItem(i, 'precio_unitario', e.target.value)} aria-label="Precio unitario" placeholder="$ unitario" />
+            <CampoNumero min="0" value={it.precio_unitario} onChange={(e) => setItem(i, 'precio_unitario', e.target.value)} aria-label="Precio unitario" placeholder="$ unitario" />
             <b className="cpItemTotal">{moneda((Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0))}</b>
             {!editando && items.length > 1 && <button type="button" className="agBtn peligro" aria-label="Quitar material" onClick={() => setItems((arr) => arr.filter((_, k) => k !== i))}>✕</button>}
           </div>

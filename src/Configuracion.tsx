@@ -4,6 +4,7 @@ import { supabase } from './supabase'
 import { cargarConfig, configActual, configTablaDisponible, guardarConfig, lineaContacto, DEFAULTS, type Condicion, type Empresa } from './config'
 import { confirmarEliminacion } from './confirmar'
 import Tiendanube from './Tiendanube'
+import CampoNumero from './CampoNumero'
 
 // Configuración (solo admin): datos de la empresa, textos de presupuestos y
 // documentos, copia de seguridad en Excel y auditoría legible.
@@ -105,7 +106,7 @@ function PresupuestosForm({ habilitado }: { habilitado: boolean }) {
 
   return <section className="cfgSeccion">
     <div className="clienteForm"><div className="formGrid">
-      <label>Validez de los presupuestos nuevos (días)<input type="number" min="1" value={validez} onChange={(e) => setValidez(e.target.value)} disabled={!habilitado} /></label>
+      <label>Validez de los presupuestos nuevos (días)<CampoNumero min="1" value={validez} onChange={(e) => setValidez(e.target.value)} disabled={!habilitado} /></label>
     </div></div>
     <p className="gestionAyuda">La forma de cobro de las obras (70% al confirmar y 30% al terminar) está en el cálculo de cuentas de todas las obras y no se cambia desde acá. Si cambiás el texto de "Forma de pago", mantené ese acuerdo.</p>
 

@@ -7,6 +7,7 @@ import { armarPdfCuenta } from './pdfPersonal'
 import VistaPreviaPdf from './VistaPreviaPdf'
 import { linkWhatsApp } from './whatsapp'
 import { confirmarEliminacion } from './confirmar'
+import CampoNumero from './CampoNumero'
 
 // Personal: equipo con lo que se le debe a cada uno, parte diario (jornales de
 // varios a la vez), liquidación semanal y movimientos. Los pagos se guardan en
@@ -512,13 +513,13 @@ function FormularioPago({ datos, situaciones, persona: personaInicial, soloJorna
                 ? `${l.calc.jornadas.toLocaleString('es-AR')} día(s) cargados · ${l.calc.diferencia > 0 ? `le corresponden ${moneda(l.calc.diferencia)}` : l.calc.diferencia < 0 ? `adelantado ${moneda(-l.calc.diferencia)}` : 'al día'}`
                 : `Acordado ${moneda(l.calc.totalContrato ?? 0)} · avance ${l.obra?.porcentaje_avance ?? 0}% · ${l.calc.diferencia > 0 ? `corresponde ${moneda(l.calc.diferencia)}` : l.calc.diferencia < 0 ? `adelantado ${moneda(-l.calc.diferencia)}` : 'al día'}`}</small>
             </div>
-            <input type="number" min="0" step="0.01" value={montos[l.asig.obra_id] ?? ''} onChange={(e) => setMontos((m) => ({ ...m, [l.asig.obra_id]: e.target.value }))} placeholder="0" aria-label={`Monto en ${l.obra?.nombre_obra}`} />
+            <CampoNumero min="0" value={montos[l.asig.obra_id] ?? ''} onChange={(e) => setMontos((m) => ({ ...m, [l.asig.obra_id]: e.target.value }))} placeholder="0" aria-label={`Monto en ${l.obra?.nombre_obra}`} />
           </div>
         ))}
       </div>}
       {s && lineas.length === 0 && <div className="formGrid">
         <label>Obra *<select value={obraSuelta} onChange={(e) => setObraSuelta(e.target.value)}><option value="">Elegí la obra</option>{datos.obras.filter((o) => o.activo).map((o) => <option key={o.id} value={o.id}>{o.nombre_obra}</option>)}</select></label>
-        <label>Monto *<input type="number" min="0" step="0.01" value={montoSuelto} onChange={(e) => setMontoSuelto(e.target.value)} /></label>
+        <label>Monto *<CampoNumero min="0" value={montoSuelto} onChange={(e) => setMontoSuelto(e.target.value)} /></label>
         <p className="gestionAyuda formFull">{nombrePersona(s.persona)} no está asignado a ninguna obra: el pago queda cargado en la obra que elijas. Para que la app calcule lo que le corresponde, asignalo con "Asignar a obra".</p>
       </div>}
       <label>Detalle<input value={detalle} onChange={(e) => setDetalle(e.target.value)} placeholder="Ej.: adelanto, liquidación semana, fin de etapa" /></label>
@@ -586,7 +587,7 @@ function ParteDiario({ datos, personaId, onCancelar, onGuardado }: { datos: Dato
               <select value={m.jornada} onChange={(e) => setMarcas((x) => ({ ...x, [p.id]: { ...m, jornada: e.target.value } }))} aria-label="Jornada">
                 <option value="1">Día completo</option><option value="0.5">Medio día</option><option value="0.75">3/4 de día</option><option value="0.25">1/4 de día</option><option value="1.5">Día y medio</option>
               </select>
-              {a.modalidad === 'por_hora' && <input type="number" min="0" step="0.5" value={m.horas} placeholder="Horas" onChange={(e) => setMarcas((x) => ({ ...x, [p.id]: { ...m, horas: e.target.value } }))} aria-label="Horas" />}
+              {a.modalidad === 'por_hora' && <CampoNumero min="0" value={m.horas} placeholder="Horas" onChange={(e) => setMarcas((x) => ({ ...x, [p.id]: { ...m, horas: e.target.value } }))} aria-label="Horas" />}
             </div>}
           </div>
         })}
@@ -709,7 +710,7 @@ function FormularioPersona({ persona, conDatosPersonales, onCancelar, onGuardado
         <label>Especialidad<input value={f.especialidad} onChange={(e) => set('especialidad', e.target.value)} placeholder="Ej.: Electricista, Redes, Domótica" /></label>
         <label>Cómo se le paga<select value={f.modalidad_pago} onChange={(e) => set('modalidad_pago', e.target.value)}>{MODALIDADES_PRINCIPALES.map(([v, t]) => <option key={v} value={v}>{t}</option>)}{!MODALIDADES_PRINCIPALES.some(([v]) => v === f.modalidad_pago) && <option value={f.modalidad_pago}>{MODALIDADES[f.modalidad_pago] ?? f.modalidad_pago}</option>}</select></label>
         <label>Teléfono (WhatsApp)<input value={f.telefono} onChange={(e) => set('telefono', e.target.value)} placeholder="Ej.: 261 555 7970" /></label>
-        {porDia && <label>{f.modalidad_pago === 'por_hora' ? 'Valor por hora *' : 'Valor por día (jornal) *'}<input type="number" min="0" step="0.01" value={f.costo_dia} onChange={(e) => set('costo_dia', e.target.value)} /></label>}
+        {porDia && <label>{f.modalidad_pago === 'por_hora' ? 'Valor por hora *' : 'Valor por día (jornal) *'}<CampoNumero min="0" value={f.costo_dia} onChange={(e) => set('costo_dia', e.target.value)} /></label>}
       </div>
       <p className="gestionAyuda">{porDia ? 'Se le paga por los días que cargues en el Parte del día: días × valor del día. Se liquida al cierre de la semana.' : 'El monto se acuerda en cada obra al asignarlo, y le corresponde según el avance de la obra. Le pagás cuando quieras.'}</p>
       <details className="peDetalles" open={!!(persona?.documento || persona?.seguro_vencimiento)}>
@@ -746,7 +747,7 @@ function FormularioAsignacion({ persona, obras, asignadas, onCancelar, onGuardad
     <form className="clienteForm" onSubmit={guardar}><div className="formGrid">
       <label>Obra *<select required value={obraId} onChange={(e) => setObraId(e.target.value)}><option value="">{libres.length ? 'Seleccionar obra' : 'Ya está en todas las obras activas'}</option>{libres.map((o) => <option key={o.id} value={o.id}>{o.nombre_obra}</option>)}</select></label>
       <label>Cómo se le paga<select value={modalidad} onChange={(e) => { setModalidad(e.target.value); setValor(e.target.value !== 'por_obra' && persona.costo_dia ? String(persona.costo_dia) : '') }}>{MODALIDADES_PRINCIPALES.map(([v, t]) => <option key={v} value={v}>{t}</option>)}{!MODALIDADES_PRINCIPALES.some(([v]) => v === modalidad) && <option value={modalidad}>{MODALIDADES[modalidad] ?? modalidad}</option>}</select></label>
-      <label>{modalidad === 'por_obra' ? 'Monto acordado por esta obra *' : modalidad === 'por_hora' ? 'Valor por hora *' : 'Valor por día (jornal) *'}<input type="number" min="0" step="0.01" required value={valor} onChange={(e) => setValor(e.target.value)} /></label>
+      <label>{modalidad === 'por_obra' ? 'Monto acordado por esta obra *' : modalidad === 'por_hora' ? 'Valor por hora *' : 'Valor por día (jornal) *'}<CampoNumero min="0" required value={valor} onChange={(e) => setValor(e.target.value)} /></label>
       <label>Función en la obra<input value={rol} onChange={(e) => setRol(e.target.value)} placeholder="Ej.: Instalador" /></label>
     </div>
       <p className="gestionAyuda">{modalidad === 'por_obra' ? 'Le corresponde el monto acordado × el % de avance de la obra.' : 'Le corresponde lo que cargues en el Parte del día × el valor del día.'}{asignadas.length > 0 ? ` Ya está en ${asignadas.length} obra(s); para cambiar un valor, hacelo desde la ficha de la obra.` : ''}</p>
