@@ -58,7 +58,7 @@ function textoCondicion(modalidad: string, valor: number, total: number | null, 
   return `${moneda(total ?? valor)} total`
 }
 
-function PersonalObra({ obraId, avance = 0, puedeEditar = true, onCambio }: { obraId: number; avance?: number; puedeEditar?: boolean; onCambio?: () => void }) {
+function PersonalObra({ obraId, avance = 0, puedeEditar = true, onCambio, abrir }: { obraId: number; avance?: number; puedeEditar?: boolean; onCambio?: () => void; abrir?: { form: 'pago' | 'jornal'; n: number } | null }) {
   const [personas, setPersonas] = useState<Persona[]>([])
   const [asignaciones, setAsignaciones] = useState<Asignacion[]>([])
   const [pagos, setPagos] = useState<CostoPersonal[]>([])
@@ -159,6 +159,14 @@ function PersonalObra({ obraId, avance = 0, puedeEditar = true, onCambio }: { ob
 
   function recargar() { setFormAbierto(null); setRevision((v) => v + 1); onCambio?.() }
 
+  // Abierto desde "Registrar" en la ficha: va directo al formulario (si no hay
+  // nadie asignado, primero hay que asignar a la persona).
+  useEffect(() => {
+    if (!abrir || cargando || Date.now() - abrir.n > 15000) return
+    setFormAbierto(asignados.length ? abrir.form : 'asignar')
+    setTimeout(() => document.querySelector('[data-registrar]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120)
+  }, [abrir?.n, cargando]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const asignados = filas.map((f) => f.persona).filter(Boolean) as Persona[]
 
   // Qué trabajó, qué le corresponde y qué falta pagarle a cada uno (para el formulario de pago).
@@ -212,22 +220,23 @@ function PersonalObra({ obraId, avance = 0, puedeEditar = true, onCambio }: { ob
         </div>
       )}
 
-      {formAbierto === 'asignar' && puedeEditar && !asigEditar && (
+      {formAbierto === 'asignar' && puedeEditar && !asigEditar && (<div data-registrar>
+        {abrir && !asignados.length && <p className="gestionAyuda">Primero asigná a la persona a esta obra; después vas a poder cargarle pagos y jornales.</p>}
         <FormAsignar obraId={obraId} personas={sinAsignar} onCancelar={() => setFormAbierto(null)} onGuardado={recargar} />
-      )}
+      </div>)}
       {asigEditar && puedeEditar && (
         <FormAsignar obraId={obraId} personas={personas} asignacion={asigEditar} nombrePersona={nombreDe(personaPorId(asigEditar.personal_id))} onCancelar={() => setAsigEditar(null)} onGuardado={() => { setAsigEditar(null); setRevision((v) => v + 1); onCambio?.() }} />
       )}
-      {formAbierto === 'pago' && puedeEditar && (
+      {formAbierto === 'pago' && puedeEditar && (<div data-registrar>
         <FormPago obraId={obraId} personas={asignados} resumen={resumenPago} onCancelar={() => setFormAbierto(null)} onGuardado={recargar} />
-      )}
+      </div>)}
       {pagoEditar && puedeEditar && (
         <FormPago obraId={obraId} personas={asignados} pago={pagoEditar} personaFija={personaPorId(pagoEditar.personal_id)}
           onCancelar={() => setPagoEditar(null)} onGuardado={() => { setPagoEditar(null); recargar() }} />
       )}
-      {formAbierto === 'jornal' && puedeEditar && (
+      {formAbierto === 'jornal' && puedeEditar && (<div data-registrar>
         <FormJornal obraId={obraId} personas={asignados} porDia={new Set(filas.filter((f) => f.calculo.totalContrato == null).map((f) => f.asig.personal_id as number))} onCancelar={() => setFormAbierto(null)} onGuardado={recargar} />
-      )}
+      </div>)}
 
       {cargando && <p role="status">Cargando personal...</p>}
       {error && <p className="loginError" role="alert">{error}</p>}
@@ -436,7 +445,8 @@ function FormPago({ obraId, personas, resumen = {}, pago, personaFija, onCancela
 }) {
   const editando = !!pago
   const [f, setF] = useState({
-    personal_id: editando ? String(pago!.personal_id ?? '') : '',
+    // Con una sola persona en la obra, ya queda elegida.
+    personal_id: editando ? String(pago!.personal_id ?? '') : personas.length === 1 ? String(personas[0].id) : '',
     monto: editando ? String(pago!.monto) : '',
     fecha: editando ? pago!.fecha.slice(0, 10) : hoy(),
     detalle: editando ? detalleDesdePago(pago!.descripcion, nombreDe(personaFija)) : '',
@@ -489,7 +499,7 @@ function FormPago({ obraId, personas, resumen = {}, pago, personaFija, onCancela
 }
 
 function FormJornal({ obraId, personas, porDia = new Set<number>(), onCancelar, onGuardado }: { obraId: number; personas: Persona[]; porDia?: Set<number>; onCancelar: () => void; onGuardado: () => void }) {
-  const [f, setF] = useState({ personal_id: '', fecha: hoy(), jornada: '1', horas: '', observaciones: '' })
+  const [f, setF] = useState({ personal_id: personas.length === 1 ? String(personas[0].id) : '', fecha: hoy(), jornada: '1', horas: '', observaciones: '' })
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const set = (k: string, v: string) => setF((a) => ({ ...a, [k]: v }))

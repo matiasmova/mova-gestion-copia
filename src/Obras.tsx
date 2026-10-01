@@ -7,6 +7,7 @@ import { supabase } from './supabase'
 import NuevaObra from './NuevaObra'
 import EstadoObraPDF from './EstadoObraPDF'
 import InformeObraIA from './InformeObraIA'
+import { CompraRapida, MenuRegistrar, type OpcionRegistrar } from './RegistrarObra'
 import AdicionalesObra from './AdicionalesObra'
 import PersonalObra from './PersonalObra'
 import RentabilidadObra from './RentabilidadObra'
@@ -94,6 +95,13 @@ function Obras({ obraAbrirId, onObraAbierta, conIA = false }: { obraAbrirId?: nu
   const [informeObra, setInformeObra] = useState<Obra | null>(null)
   const [informeIA, setInformeIA] = useState<Obra | null>(null)
   const [seguTab, setSeguTab] = useState<TabSeguimiento>('resumen')
+  // "➕ Registrar": menú único para cargar cosas en la obra.
+  const [menuRegistrar, setMenuRegistrar] = useState(false)
+  const [compraRapida, setCompraRapida] = useState(false)
+  const [abrirCobro, setAbrirCobro] = useState(0)
+  const [abrirPersonal, setAbrirPersonal] = useState<{ form: 'pago' | 'jornal'; n: number } | null>(null)
+  const [abrirAdic, setAbrirAdic] = useState<{ tipo: string; n: number } | null>(null)
+  const [refrescoResumen, setRefrescoResumen] = useState(0)
   const [menuFicha, setMenuFicha] = useState(false)
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [cargando, setCargando] = useState(true)
@@ -325,6 +333,37 @@ function Obras({ obraAbrirId, onObraAbierta, conIA = false }: { obraAbrirId?: nu
       }),
     )
     setImagenes(conUrls)
+  }
+
+  function abrirNuevoAvance() {
+    setFotoAvance(null)
+    setEditandoAvanceId(null)
+    setFormularioAvance({
+      ...avanceInicial,
+      fecha: new Date().toISOString().slice(0, 10),
+      estado: (obraSeguimiento?.estado as EstadoObra) ?? 'en_proceso',
+      porcentaje: Number(obraSeguimiento?.porcentaje_avance || 0),
+    })
+    setMostrarNuevoAvance(true)
+  }
+
+  function elegirRegistro(o: OpcionRegistrar) {
+    setMenuRegistrar(false)
+    const n = Date.now()
+    const irA = (tab: TabSeguimiento) => setSeguTab(tab)
+    switch (o) {
+      case 'cobro': irA('finanzas'); setAbrirCobro(n); break
+      case 'pago_empleado': irA('personal'); setAbrirPersonal({ form: 'pago', n }); break
+      case 'jornal': irA('personal'); setAbrirPersonal({ form: 'jornal', n }); break
+      case 'compra': setCompraRapida(true); break
+      case 'gasto_reintegro': irA('adicionales'); setAbrirAdic({ tipo: 'gasto_extra', n }); break
+      case 'extra': irA('adicionales'); setAbrirAdic({ tipo: 'producto', n }); break
+      case 'descuento': irA('adicionales'); setAbrirAdic({ tipo: 'bonificacion', n }); break
+      case 'avance':
+        irA('timeline'); abrirNuevoAvance()
+        setTimeout(() => document.querySelector('[data-registrar]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
+        break
+    }
   }
 
   function abrirSeguimiento(obra: Obra) {
@@ -713,6 +752,10 @@ function Obras({ obraAbrirId, onObraAbierta, conIA = false }: { obraAbrirId?: nu
               </div>
             </div>
 
+            <button type="button" className="obraRegistrarBtn" onClick={() => setMenuRegistrar(true)}>
+              <span>➕ Registrar</span><small>Cobro, pago a empleado, jornal, compra, gasto, extra, avance…</small>
+            </button>
+
             {seguTab !== 'resumen' && (
               <div className="fichaVolver">
                 <button type="button" onClick={() => setSeguTab('resumen')}>← Volver al resumen</button>
@@ -720,16 +763,19 @@ function Obras({ obraAbrirId, onObraAbierta, conIA = false }: { obraAbrirId?: nu
               </div>
             )}
 
-            {seguTab === 'finanzas' && <EconomiaObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} onGenerarPdf={() => setInformeObra(obraSeguimiento)} onCambio={() => setActualizacion(v => v + 1)} />}
+            {seguTab === 'finanzas' && <EconomiaObra key={obraSeguimiento.id} abrirCobro={abrirCobro} obraId={obraSeguimiento.id} onGenerarPdf={() => setInformeObra(obraSeguimiento)} onCambio={() => setActualizacion(v => v + 1)} />}
 
-            {seguTab === 'adicionales' && <AdicionalesObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} onCambio={() => setActualizacion(v => v + 1)} />}
+            {seguTab === 'adicionales' && <AdicionalesObra key={obraSeguimiento.id} abrir={abrirAdic} obraId={obraSeguimiento.id} onCambio={() => setActualizacion(v => v + 1)} />}
 
-            {seguTab === 'personal' && <PersonalObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} avance={Number(obraSeguimiento.porcentaje_avance || 0)} />}
+            {seguTab === 'personal' && <PersonalObra key={obraSeguimiento.id} abrir={abrirPersonal} onCambio={() => setRefrescoResumen((v) => v + 1)} obraId={obraSeguimiento.id} avance={Number(obraSeguimiento.porcentaje_avance || 0)} />}
 
             {seguTab === 'rentabilidad' && <RentabilidadObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} avance={Number(obraSeguimiento.porcentaje_avance || 0)} estado={obraSeguimiento.estado ?? undefined} />}
 
+            {menuRegistrar && <MenuRegistrar onElegir={elegirRegistro} onCerrar={() => setMenuRegistrar(false)} />}
+            {compraRapida && <CompraRapida obraId={obraSeguimiento.id} onCerrar={() => setCompraRapida(false)} onGuardado={() => { setCompraRapida(false); setRefrescoResumen((v) => v + 1); window.alert('✓ Gasto guardado. Lo ves en Rentabilidad y en Compras.') }} />}
+
             {seguTab === 'resumen' && <ResumenObra
-              key={obraSeguimiento.id}
+              key={`${obraSeguimiento.id}-${refrescoResumen}`}
               obraId={obraSeguimiento.id}
               estado={obraSeguimiento.estado}
               avance={Number(obraSeguimiento.porcentaje_avance || 0)}
@@ -780,6 +826,7 @@ function Obras({ obraAbrirId, onObraAbierta, conIA = false }: { obraAbrirId?: nu
             {mostrarNuevoAvance && (
               <form
                 className="avanceForm"
+                data-registrar
                 onSubmit={guardarAvance}
               >
                 <div className="formGrid">
@@ -1115,7 +1162,7 @@ const ESTADO_ADIC_LABEL: Record<string, string> = {
 // Pestaña Finanzas, simplificada: solo registrar los cobros del cliente y ver
 // los movimientos de Adicionales (se editan en esa pestaña). El documento con
 // todo (presupuesto, pagos y estado de la obra) se abre con el botón de arriba.
-function EconomiaObra({ obraId, onGenerarPdf, onCambio }: { obraId: number; onGenerarPdf: () => void; onCambio: () => void }) {
+function EconomiaObra({ obraId, onGenerarPdf, onCambio, abrirCobro = 0 }: { obraId: number; onGenerarPdf: () => void; onCambio: () => void; abrirCobro?: number }) {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
@@ -1124,6 +1171,12 @@ function EconomiaObra({ obraId, onGenerarPdf, onCambio }: { obraId: number; onGe
   const [mostrarCobro, setMostrarCobro] = useState(false)
   const [cobroForm, setCobroForm] = useState({ monto: '', fecha: new Date().toISOString().slice(0, 10), medio_pago: 'transferencia', referencia: '' })
   const [guardandoCobro, setGuardandoCobro] = useState(false)
+  // Abierto desde "Registrar": muestra el formulario de cobro.
+  useEffect(() => {
+    if (!abrirCobro || Date.now() - abrirCobro > 15000) return
+    setMostrarCobro(true)
+    setTimeout(() => document.querySelector('[data-registrar]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
+  }, [abrirCobro])
 
   async function guardarCobro(e: FormEvent) {
     e.preventDefault()
@@ -1184,7 +1237,7 @@ function EconomiaObra({ obraId, onGenerarPdf, onCambio }: { obraId: number; onGe
     </div>
 
     {mostrarCobro && (
-      <form className="clienteForm adicForm" onSubmit={guardarCobro}>
+      <form className="clienteForm adicForm" data-registrar onSubmit={guardarCobro}>
         <div className="formGrid">
           <label>Monto *<CampoNumero min="0.01" required value={cobroForm.monto} onChange={(e) => setCobroForm((f) => ({ ...f, monto: e.target.value }))} /></label>
           <label>Fecha *<input type="date" required value={cobroForm.fecha} onChange={(e) => setCobroForm((f) => ({ ...f, fecha: e.target.value }))} /></label>

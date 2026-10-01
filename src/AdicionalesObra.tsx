@@ -51,6 +51,8 @@ type Props = {
   puedeEditar?: boolean
   /** Avisa al padre que la economía cambió (para refrescar valor actualizado). */
   onCambio?: () => void
+  /** Abierto desde "Registrar": elige el tipo y lleva al formulario. */
+  abrir?: { tipo: string; n: number } | null
 }
 
 // Tipos del adicional rápido (los cambios de ítems se hacen desde el presupuesto).
@@ -106,7 +108,7 @@ const precioNeto = (it: ItemPresupuesto) => it.precio_unitario * (1 - (Number(it
 const conSigno = (n: number) => `${n > 0 ? '+ ' : n < 0 ? '− ' : ''}${moneda(Math.abs(n))}`
 const ESTADO_TEXTO: Record<Adicional['estado'], string> = { pendiente: 'Pendiente', aprobado: 'Aprobado', rechazado: 'Rechazado', pagado: 'Pagado' }
 
-function AdicionalesObra({ obraId, puedeEditar = true, onCambio }: Props) {
+function AdicionalesObra({ obraId, puedeEditar = true, onCambio, abrir }: Props) {
   const [adicionales, setAdicionales] = useState<Adicional[]>([])
   const [valorOriginal, setValorOriginal] = useState(0)
   const [presupuestos, setPresupuestos] = useState<PresupuestoAceptado[]>([])
@@ -193,6 +195,16 @@ function AdicionalesObra({ obraId, puedeEditar = true, onCambio }: Props) {
       vigente = false
     }
   }, [obraId, revision])
+
+  useEffect(() => {
+    if (!abrir || cargando || Date.now() - abrir.n > 15000) return
+    setForm((f) => ({ ...f, tipo: abrir.tipo }))
+    setTimeout(() => {
+      const el = document.querySelector<HTMLElement>('[data-registrar]')
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      el?.querySelector<HTMLInputElement>('.caDescInput')?.focus({ preventScroll: true })
+    }, 150)
+  }, [abrir?.n, cargando]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const aprobados = adicionales
     .filter((a) => a.estado === 'aprobado')
@@ -649,7 +661,7 @@ function AdicionalesObra({ obraId, puedeEditar = true, onCambio }: Props) {
 
         {/* ---------- Adicional rápido ---------- */}
         {puedeEditar && (
-          <form className="caBloque caRapido" onSubmit={guardarAdicional}>
+          <form className="caBloque caRapido" data-registrar onSubmit={guardarAdicional}>
             <div className="caBloqueHead"><h4>Adicional rápido</h4><p>Algo que no estaba en el presupuesto: un extra, un gasto o un descuento.</p></div>
             <div className="caChips" role="radiogroup" aria-label="Tipo">
               {TIPOS_RAPIDOS.map(([valor, texto]) => (
