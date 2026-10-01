@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import type { Pedido } from './BuscadorGlobal'
 import { supabase } from './supabase'
+import { archivoParaIA, pedirAsistente } from './asistenteIA'
 import { fechaCorta, moneda, hoy } from './gestionFormat'
 import { confirmarEliminacion } from './confirmar'
 
@@ -516,6 +517,24 @@ function FormularioCompra({ obras, proveedores, compra, onCancelar, onGuardado }
   const set = (campo: string, valor: string | boolean) => setDatos((a) => ({ ...a, [campo]: valor }))
   const setItem = (i: number, campo: keyof ItemCompra, valor: string) => setItems((arr) => arr.map((it, k) => (k === i ? { ...it, [campo]: valor } : it)))
   const total = items.reduce((s, it) => s + (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0), 0)
+  // Leer la factura con IA: completa proveedor, fecha, número y los ítems.
+  const [leyendo, setLeyendo] = useState(false)
+  const [lectura, setLectura] = useState('')
+  async function leerFactura(f: File | undefined) {
+    if (!f) return
+    setError(''); setLectura(''); setLeyendo(true)
+    try {
+      const { data, mime } = await archivoParaIA(f)
+      const r = await pedirAsistente<{ proveedor: string; fecha: string; numero: string; total: number; items: { descripcion: string; cantidad: number; unidad: string; precio_unitario: number }[] }>({ accion: 'factura', imagen: data, mime })
+      if (!r.items.length) { setError('No pude leer los productos de la factura. Probá con una foto más nítida y derecha.'); return }
+      setDatos((a) => ({ ...a, proveedor: r.proveedor || a.proveedor, fecha: r.fecha || a.fecha, numero_comprobante: r.numero || a.numero_comprobante }))
+      setItems(r.items.map((it) => ({ nombre: it.descripcion, cantidad: String(it.cantidad), unidad: it.unidad || 'unidad', precio_unitario: String(Math.round(it.precio_unitario * 100) / 100) })))
+      setArchivo(f)
+      const suma = r.items.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0)
+      const dif = r.total > 0 && Math.abs(suma - r.total) > Math.max(1, r.total * 0.01)
+      setLectura(`✓ Leí ${r.items.length} ítem(s)${r.proveedor ? ` de ${r.proveedor}` : ''}.${dif ? ` ⚠ La suma (${moneda(suma)}) no coincide con el total de la factura (${moneda(r.total)}): revisá precios y cantidades.` : ' Revisá que esté todo bien antes de guardar.'}`)
+    } catch (e) { setError((e as Error).message) } finally { setLeyendo(false) }
+  }
 
   async function guardar(evento: FormEvent) {
     evento.preventDefault(); setError('')
@@ -562,6 +581,14 @@ function FormularioCompra({ obras, proveedores, compra, onCancelar, onGuardado }
 
   return <div className="modalOverlay"><div className="modalCard cpModal"><div className="modalHeader"><div><p className="subtitle">{editando ? 'EDITAR COMPRA' : 'NUEVA COMPRA'}</p><h2>{editando ? 'Editar compra' : 'Registrar compra'}</h2></div><button type="button" className="closeButton" onClick={onCancelar}>×</button></div>
     <form className="clienteForm" onSubmit={guardar}>
+      {!editando && <div className="iaFactura">
+        <label className={`iaFacturaBtn ${leyendo ? 'leyendo' : ''}`}>
+          <span>{leyendo ? '✨ Leyendo la factura…' : '📷 Leer factura con IA'}</span>
+          <small>Sacá una foto (o elegí un PDF) y se completan proveedor, fecha, número y materiales</small>
+          <input type="file" accept="image/*,application/pdf" disabled={leyendo} onChange={(e) => { void leerFactura(e.target.files?.[0]); e.target.value = '' }} />
+        </label>
+        {lectura && <p className="iaNotas">{lectura}</p>}
+      </div>}
       <div className="formGrid">
         <label>Obra *<select required value={datos.obra_id} onChange={(e) => set('obra_id', e.target.value)}><option value="">Seleccionar obra</option>{obras.map((obra) => <option key={obra.id} value={obra.id}>{obra.nombre_obra}</option>)}</select></label>
         <label>Proveedor<input list="proveedores-cargados" value={datos.proveedor} onChange={(e) => set('proveedor', e.target.value)} placeholder="Escribí o elegí uno ya cargado" /><datalist id="proveedores-cargados">{proveedores.map((p) => <option key={p} value={p} />)}</datalist></label>
