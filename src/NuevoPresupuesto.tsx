@@ -318,7 +318,7 @@ function NuevoPresupuesto({
   async function armarConIA() {
     setIaError(''); setIaNotas(''); setIaPensando(true)
     try {
-      const r = await pedirAsistente<{ titulo: string; descripcion: string; notas: string; descuento_general_pct?: number; soluciones: number[]; items: { catalogo_id: number | null; descripcion: string; cantidad: number; tipo: 'producto' | 'servicio'; precio_pedido?: number; precio_catalogo?: number; descuento_pct?: number }[] }>({ accion: 'presupuesto', pedido: iaPedido })
+      const r = await pedirAsistente<{ titulo: string; descripcion: string; notas: string; descuento_general_pct?: number; cliente_id?: number | null; obra_id?: number | null; cliente_texto?: string; obra_texto?: string; soluciones: number[]; items: { catalogo_id: number | null; descripcion: string; cantidad: number; tipo: 'producto' | 'servicio'; precio_pedido?: number; precio_catalogo?: number; descuento_pct?: number }[] }>({ accion: 'presupuesto', pedido: iaPedido })
       const nuevos: ItemPresupuesto[] = r.items.map((it) => {
         const p = it.catalogo_id ? catalogo.find((x) => Number(x.id) === Number(it.catalogo_id)) : undefined
         // Precio: el que dijo el pedido; si no, el de tu lista de productos.
@@ -339,10 +339,20 @@ function NuevoPresupuesto({
       if (r.titulo && (!titulo.trim() || !tituloManual)) { setTitulo(r.titulo); setTituloManual(true) }
       if (r.descripcion && !descripcion.trim()) setDescripcion(r.descripcion)
       if (Number(r.descuento_general_pct) > 0) { setDescuentoTipo('porcentaje'); setDescuento(Number(r.descuento_general_pct)) }
+      // Cliente y obra nombrados en el pedido.
+      const cli = r.cliente_id ? clientesLista.find((c) => Number(c.id) === Number(r.cliente_id)) : undefined
+      const obr = r.obra_id ? obrasLista.find((o) => Number(o.id) === Number(r.obra_id)) : undefined
+      if (cli) {
+        cambiarCliente(String(cli.id))
+        if (obr && Number(obr.cliente_id) === Number(cli.id)) setObraId(String(obr.id))
+      }
       const enCero = nuevos.filter((it) => !(it.precio_unitario > 0))
       setIaNotas([
         r.notas,
         Number(r.descuento_general_pct) > 0 ? `Apliqué ${r.descuento_general_pct}% de bonificación general.` : '',
+        cli ? `Cliente: ${cli.nombre} ${cli.apellido ?? ''}${obr ? ` · obra ${obr.nombre_obra}` : ''}.` : '',
+        !cli && r.cliente_texto ? `⚠ No encontré a "${r.cliente_texto}" entre tus clientes: crealo con "+ Nuevo cliente".` : '',
+        cli && !obr && r.obra_texto ? `⚠ No encontré la obra "${r.obra_texto}" de ese cliente: creala con "+ Nueva obra".` : '',
         enCero.length ? `⚠ Quedaron sin precio (en tu lista están en $0 o no están): ${enCero.map((it) => it.descripcion).join(', ')}. Cargales el precio acá o en Productos y servicios.` : '',
       ].filter(Boolean).join(' '))
       setIaAbierta(false)

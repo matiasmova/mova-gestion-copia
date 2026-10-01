@@ -66,6 +66,7 @@ Te pasan lo que pide un cliente y el CATÁLOGO de la empresa (id | nombre | cate
 - soluciones: ids de las SOLUCIONES de la lista que correspondan a lo pedido (pueden ser ninguna).
 - notas: supuestos importantes para que el instalador revise (por ejemplo "calculé 3 nodos por 200 m²"). Corto.
 - Precios: NO hace falta que pongas precios, la app usa los del catálogo. Solo si el pedido dice un precio para algo (por ejemplo "las cámaras a 90000"), ponelo en precio_unitario de ese ítem; si no, precio_unitario = 0.
+- Cliente y obra: si el pedido nombra al cliente (por ejemplo "para Sergio Baigoria") o la obra (por ejemplo "en la finca de Junín"), buscalos en la lista de CLIENTES y OBRAS y devolvé cliente_id y obra_id (la obra tiene que ser de ese cliente). Si nombra un cliente u obra que no está en la lista, dejá el id en 0 y escribí el nombre en cliente_texto u obra_texto. Si no nombra ninguno, todo en 0 y vacío.
 - Descuentos: si el pedido pide un descuento para un ítem o tipo de ítem (por ejemplo "20% en la mano de obra"), ponelo en descuento_pct de esos ítems. Si pide un descuento general sobre todo el presupuesto (por ejemplo "aplicá un 15% de descuento"), ponelo en descuento_general_pct y dejá descuento_pct en 0. Si no se pide descuento, todo en 0.`
 
 const SISTEMA_FACTURA = `Leés fotos de facturas, tickets y remitos de proveedores argentinos (materiales eléctricos, redes, domótica, ferretería).
@@ -124,23 +125,28 @@ Deno.serve(async (req) => {
     if (accion === 'presupuesto') {
       const pedido = recorte(cuerpo.pedido, 2000)
       if (!pedido) return responder({ error: 'Contá qué necesita el cliente.' }, 400)
-      const [rCat, rSol] = await Promise.all([
+      const [rCat, rSol, rCli, rObr] = await Promise.all([
         db.from('productos_servicios').select('id, nombre, categoria, tipo, unidad, precio_venta').eq('activo', true).order('nombre').limit(600),
         db.from('soluciones').select('id, titulo').eq('activo', true).limit(60),
+        db.from('Clientes').select('id, nombre, apellido, localidad').limit(1500),
+        db.from('obras').select('id, nombre_obra, cliente_id, localidad').limit(2000),
       ])
+      const clientes = (rCli.data ?? []) as { id: number; nombre: string; apellido: string | null; localidad: string | null }[]
+      const obras = (rObr.data ?? []) as { id: number; nombre_obra: string; cliente_id: number; localidad: string | null }[]
       const catalogo = (rCat.data ?? []) as { id: number; nombre: string; categoria: string | null; tipo: string; unidad: string; precio_venta: number }[]
       const soluciones = (rSol.data ?? []) as { id: number; titulo: string }[]
-      const texto = `PEDIDO DEL CLIENTE:\n${pedido}\n\nCATÁLOGO:\n${catalogo.map((p) => `${p.id} | ${p.nombre} | ${p.categoria ?? ''} | ${p.tipo} | ${p.unidad} | ${Number(p.precio_venta) || 0}`).join('\n') || '(vacío)'}\n\nSOLUCIONES:\n${soluciones.map((x) => `${x.id} | ${x.titulo}`).join('\n') || '(ninguna)'}`
+      const texto = `PEDIDO DEL CLIENTE:\n${pedido}\n\nCATÁLOGO:\n${catalogo.map((p) => `${p.id} | ${p.nombre} | ${p.categoria ?? ''} | ${p.tipo} | ${p.unidad} | ${Number(p.precio_venta) || 0}`).join('\n') || '(vacío)'}\n\nSOLUCIONES:\n${soluciones.map((x) => `${x.id} | ${x.titulo}`).join('\n') || '(ninguna)'}\n\nCLIENTES (id | nombre | localidad):\n${clientes.map((c) => `${c.id} | ${c.nombre} ${c.apellido ?? ''} | ${c.localidad ?? ''}`).join('\n') || '(ninguno)'}\n\nOBRAS (id | nombre | id del cliente | localidad):\n${obras.map((o) => `${o.id} | ${o.nombre_obra} | ${o.cliente_id} | ${o.localidad ?? ''}`).join('\n') || '(ninguna)'}`
       const esquema = {
         type: 'OBJECT',
         properties: {
           titulo: { type: 'STRING' }, descripcion: { type: 'STRING' }, notas: { type: 'STRING' }, descuento_general_pct: { type: 'NUMBER' },
+          cliente_id: { type: 'INTEGER' }, obra_id: { type: 'INTEGER' }, cliente_texto: { type: 'STRING' }, obra_texto: { type: 'STRING' },
           soluciones: { type: 'ARRAY', items: { type: 'INTEGER' } },
           items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { catalogo_id: { type: 'INTEGER' }, descripcion: { type: 'STRING' }, cantidad: { type: 'NUMBER' }, tipo: { type: 'STRING', enum: ['producto', 'servicio'] }, precio_unitario: { type: 'NUMBER' }, descuento_pct: { type: 'NUMBER' } }, required: ['catalogo_id', 'descripcion', 'cantidad', 'tipo', 'precio_unitario', 'descuento_pct'] } },
         },
-        required: ['titulo', 'descripcion', 'items', 'soluciones', 'notas'],
+        required: ['titulo', 'descripcion', 'items', 'soluciones', 'notas', 'cliente_id', 'obra_id'],
       }
-      const r = await gemini(clave, texto, esquema, SISTEMA_PRESUPUESTO, 0.4) as { titulo?: string; descripcion?: string; notas?: string; descuento_general_pct?: number; soluciones?: number[]; items?: { catalogo_id: number; descripcion: string; cantidad: number; tipo: string; precio_unitario?: number; descuento_pct?: number }[] }
+      const r = await gemini(clave, texto, esquema, SISTEMA_PRESUPUESTO, 0.4) as { titulo?: string; descripcion?: string; notas?: string; descuento_general_pct?: number; cliente_id?: number; obra_id?: number; cliente_texto?: string; obra_texto?: string; soluciones?: number[]; items?: { catalogo_id: number; descripcion: string; cantidad: number; tipo: string; precio_unitario?: number; descuento_pct?: number }[] }
       const ids = new Set(catalogo.map((p) => p.id))
       const precioDe = new Map(catalogo.map((p) => [p.id, Number(p.precio_venta) || 0]))
       const pct = (x: unknown) => Math.min(100, Math.max(0, Number(x) || 0))
@@ -148,6 +154,17 @@ Deno.serve(async (req) => {
       return responder({
         titulo: recorte(r.titulo, 120), descripcion: recorte(r.descripcion, 800), notas: recorte(r.notas, 600),
         descuento_general_pct: pct(r.descuento_general_pct),
+        ...(() => {
+          // Solo ids que existen; la obra tiene que ser del cliente elegido.
+          const cli = clientes.find((c) => c.id === Number(r.cliente_id))
+          let obra = obras.find((o) => o.id === Number(r.obra_id))
+          if (obra && cli && obra.cliente_id !== cli.id) obra = undefined
+          const clienteFinal = cli ?? (obra ? clientes.find((c) => c.id === obra!.cliente_id) : undefined)
+          return {
+            cliente_id: clienteFinal?.id ?? null, obra_id: obra?.id ?? null,
+            cliente_texto: clienteFinal ? '' : recorte(r.cliente_texto, 80), obra_texto: obra ? '' : recorte(r.obra_texto, 80),
+          }
+        })(),
         soluciones: (r.soluciones ?? []).filter((id) => idsSol.has(id)),
         items: (r.items ?? []).slice(0, 40).map((it) => ({
           catalogo_id: ids.has(Number(it.catalogo_id)) ? Number(it.catalogo_id) : null,
