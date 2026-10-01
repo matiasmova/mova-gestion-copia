@@ -69,7 +69,7 @@ function CajaTotales({ filas, total, etiquetaTotal }: { filas: { t: string; v: s
       ))}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', background: NARANJA_SUAVE, borderLeft: `3px solid ${NARANJA}`, borderRadius: '0 6px 6px 0', padding: '10px 14px', marginTop: '8px' }}>
         <span style={{ fontSize: T_CHICO, fontWeight: 700, letterSpacing: '0.8px', color: NARANJA }}>{etiquetaTotal}</span>
-        <strong style={{ fontSize: T_GRANDE, color: OSCURO, whiteSpace: 'nowrap' }}>{moneda(total)}</strong>
+        <strong style={{ fontSize: 'clamp(17px, 5.2vw, 22px)', color: OSCURO, whiteSpace: 'nowrap' }}>{moneda(total)}</strong>
       </div>
     </div>
   )
@@ -169,7 +169,25 @@ function EstadoObra({ e }: { e: EstadoPresupuesto }) {
   )
 }
 
+// En pantallas angostas (celular) las tablas se muestran como lista, para que
+// no se corten los montos a la derecha.
+function useAngosto() {
+  const consulta = '(max-width: 640px)'
+  const [angosto, setAngosto] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.(consulta).matches)
+  useEffect(() => {
+    const mq = window.matchMedia?.(consulta)
+    if (!mq) return
+    const cambio = () => setAngosto(mq.matches)
+    mq.addEventListener?.('change', cambio)
+    return () => mq.removeEventListener?.('change', cambio)
+  }, [])
+  return angosto
+}
+
+const fila: CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', padding: '10px 0', borderBottom: `1px solid ${LINEA}` }
+
 export default function DocumentoPresupuesto({ datos, embebido = false }: Props) {
+  const angosto = useAngosto()
   const [completos, setCompletos] = useState<DatosPdf | null>(null)
   const [error, setError] = useState('')
 
@@ -257,7 +275,31 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
 
       {/* Ítems */}
       <TituloSeccion texto={e ? 'Presupuesto aceptado' : 'Detalle del presupuesto'} />
-      {grupos.length === 0 ? <p style={{ color: GRIS }}>Sin ítems.</p> : (
+      {grupos.length === 0 ? <p style={{ color: GRIS }}>Sin ítems.</p> : angosto ? (
+        <div>
+          {grupos.map((g) => (
+            <div key={`g-${g.clave}`}>
+              <div style={{ color: NARANJA, fontWeight: 700, fontSize: T_CHICO, letterSpacing: '0.6px', textTransform: 'uppercase', padding: '10px 0 2px' }}>{g.titulo}</div>
+              {g.items.map((it) => {
+                numero++
+                const { titulo, detalle } = partirDescripcion(it.descripcion)
+                return (
+                  <div key={`${g.clave}-${it.id ?? numero}`} style={fila}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <strong style={{ color: OSCURO, overflowWrap: 'anywhere' }}><span style={{ color: GRIS, fontWeight: 400 }}>{String(numero).padStart(2, '0')} · </span>{titulo}</strong>
+                      {detalle && <div style={{ color: GRIS, fontSize: T_CHICO, whiteSpace: 'pre-line' }}>{detalle}</div>}
+                      <div style={{ color: GRIS, fontSize: T_CHICO, marginTop: '2px' }}>
+                        {Number(it.cantidad)} × {moneda(it.precio_unitario)}{pctItem(it) > 0 && <span style={{ color: NARANJA }}> · −{formatoPct(pctItem(it))}%</span>}
+                      </div>
+                    </div>
+                    <strong style={{ color: OSCURO, whiteSpace: 'nowrap' }}>{moneda(importeNeto(it))}</strong>
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      ) : (
         <div style={s.tablaWrap}>
           <table style={s.tabla}>
             <thead>
@@ -303,6 +345,25 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
         <section style={{ marginTop: '32px' }}>
           <TituloSeccion texto="Modificaciones durante la obra" />
           <p style={{ color: GRIS, fontSize: T_CHICO, margin: '0 0 10px' }}>El presupuesto de arriba se mantiene tal como fue aceptado. Estos son los cambios registrados después:</p>
+          {angosto ? (
+            <div>
+              {e.modificaciones.map((m) => {
+                const { antes, ahora } = antesYAhora(m, moneda)
+                return (
+                  <div key={m.id} style={fila}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={s.etiqueta}>{fechaCorta(m.fecha)} · {etiquetaModificacion(m)}</div>
+                      <strong style={{ color: OSCURO, overflowWrap: 'anywhere' }}>{m.descripcion}</strong>
+                      {antes && <div style={{ color: GRIS, fontSize: T_CHICO, overflowWrap: 'anywhere' }}>Antes: {antes}</div>}
+                      {ahora && <div style={{ fontSize: T_CHICO, overflowWrap: 'anywhere' }}>Ahora: {ahora}</div>}
+                      {m.motivo && <div style={{ color: GRIS, fontSize: T_CHICO }}>Motivo: {m.motivo}</div>}
+                    </div>
+                    <strong style={{ color: m.importe < 0 ? VERDE : OSCURO, whiteSpace: 'nowrap' }}>{m.importe === 0 ? moneda(0) : conSigno(m.importe)}</strong>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
           <div style={s.tablaWrap}>
             <table style={s.tabla}>
               <thead><tr><th style={{ ...s.th, width: '90px' }}>Fecha</th><th style={s.th}>Concepto</th><th style={{ ...s.th, ...s.num }}>Importe</th></tr></thead>
@@ -326,6 +387,7 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
               </tbody>
             </table>
           </div>
+          )}
           <CajaTotales
             filas={[{ t: 'Total original aceptado', v: moneda(e.totalOriginal) }, { t: 'Modificaciones', v: conSigno(e.totalCambios), color: e.totalCambios < 0 ? VERDE : OSCURO }]}
             etiquetaTotal="TOTAL ACTUALIZADO"
@@ -339,6 +401,15 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
         <section style={{ marginTop: '32px' }}>
           <TituloSeccion texto="Pagos recibidos" />
           {e.pagos.length === 0 ? <p style={{ color: GRIS }}>Todavía no registramos pagos.</p> : <>
+            {angosto ? e.pagos.map((p) => (
+              <div key={p.id} style={fila}>
+                <div style={{ minWidth: 0 }}>
+                  <strong style={{ color: OSCURO }}>{fechaCorta(p.fecha)}</strong>
+                  <div style={{ color: GRIS, fontSize: T_CHICO, textTransform: 'capitalize' }}>{(p.medio ?? '—').replace('_', ' ')}{p.referencia ? ` · ${p.referencia}` : ''}</div>
+                </div>
+                <strong style={{ color: OSCURO, whiteSpace: 'nowrap' }}>{moneda(p.monto)}</strong>
+              </div>
+            )) : (
             <div style={s.tablaWrap}>
               <table style={s.tabla}>
                 <thead><tr><th style={s.th}>Fecha</th><th style={s.th}>Medio</th><th style={s.th}>Referencia</th><th style={{ ...s.th, ...s.num }}>Monto</th></tr></thead>
@@ -354,6 +425,7 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
                 </tbody>
               </table>
             </div>
+            )}
             <div style={{ ...s.filaTotal, marginLeft: 'auto', width: 'min(330px, 100%)', fontWeight: 700 }}><span style={{ color: OSCURO }}>Total pagado</span><span style={{ color: VERDE }}>{moneda(e.cobrado)}</span></div>
           </>}
         </section>

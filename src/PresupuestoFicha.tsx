@@ -11,6 +11,8 @@ import {
   type DatosPdf,
 } from './pdfPresupuesto'
 import { codigoPresupuesto } from './codigoPresupuesto'
+import AdicionalesObra from './AdicionalesObra'
+import FacturasObra from './FacturasObra'
 
 export type PresupuestoFichaData = {
   id: number
@@ -93,6 +95,18 @@ export default function PresupuestoFicha({
   const [error, setError] = useState('')
   const [reintento, setReintento] = useState(0)
   const [compartiendo, setCompartiendo] = useState(false)
+  // Con obra vinculada, la ficha se divide en Documento / Cambios y gastos / Facturas.
+  const [seccion, setSeccion] = useState<'documento' | 'cambios' | 'facturas'>('documento')
+  const conObra = presupuesto.obra_id != null && presupuesto.estado === 'aceptado'
+  useEffect(() => { setSeccion('documento') }, [presupuesto.id])
+
+  // El presupuesto aceptado queda como fue aceptado: los cambios van en "Cambios y gastos".
+  function editar() {
+    if (conObra && !window.confirm('Este presupuesto ya está aceptado y tiene obra.\n\nPara agregar, cambiar o quitar ítems usá la pestaña "Cambios y gastos": así queda el historial y el cliente ve qué cambió.\n\n¿Querés editar igual el presupuesto original?')) {
+      setSeccion('cambios'); return
+    }
+    onEditar()
+  }
 
   const codigo = codigoPresupuesto(presupuesto.id)
 
@@ -217,31 +231,32 @@ export default function PresupuestoFicha({
         </div>
 
         <div className="fichaBody">
-          <div className="fichaAcciones">
-            <label className="fichaEstadoSelect">
-              Estado
-              <select value={estadoLocal} onChange={(e) => setEstadoLocal(e.target.value)}>
-                {ESTADOS.map((estado) => <option key={estado.v} value={estado.v}>{estado.t}</option>)}
-              </select>
-            </label>
-
-            {cambioEstado && <button type="button" className="newButton" onClick={() => onCambiarEstado(estadoLocal)}>Guardar estado</button>}
-
-            {presupuesto.obra_id != null && <span className="obraVinculadaTag">✓ Obra vinculada</span>}
+          <div className="fichaAcciones presuAcciones">
+            <div className="presuAccEstado">
+              <label className="fichaEstadoSelect">
+                Estado
+                <select value={estadoLocal} onChange={(e) => setEstadoLocal(e.target.value)}>
+                  {ESTADOS.map((estado) => <option key={estado.v} value={estado.v}>{estado.t}</option>)}
+                </select>
+              </label>
+              {cambioEstado && <button type="button" className="newButton" onClick={() => onCambiarEstado(estadoLocal)}>Guardar estado</button>}
+              {presupuesto.obra_id != null && <span className="obraVinculadaTag">✓ Obra vinculada</span>}
+            </div>
 
             {presupuesto.obra_id != null && presupuesto.estado === 'rechazado' && onEliminarObra && (
               <button type="button" className="deactivateButton" onClick={onEliminarObra}>🗑 Eliminar obra vinculada</button>
             )}
 
-            <button type="button" className="editButton" onClick={onEditar}>Editar</button>
-            <button type="button" className="editButton" onClick={descargarPdf} disabled={!listo}>
-              {estadoObra?.enObra ? '📄 Descargar estado de obra' : '📄 Descargar PDF'}
-            </button>
-            <button type="button" className="editButton" onClick={compartir} disabled={!listo || compartiendo}>
-              {compartiendo ? 'Compartiendo...' : '📲 Compartir PDF'}
-            </button>
-            <button type="button" className="editButton waButton" onClick={enviarWhatsApp} title={telefono ? `Escribirle al ${telefono}` : 'El cliente no tiene teléfono: elegís el contacto en WhatsApp'}>💬 WhatsApp</button>
-            <button type="button" className="deactivateButton" onClick={onEliminar}>Eliminar</button>
+            <div className="presuAccBotones">
+              <button type="button" className="editButton" onClick={editar}>✏️ Editar</button>
+              <button type="button" className="editButton" onClick={descargarPdf} disabled={!listo}>
+                {estadoObra?.enObra ? '📄 Estado de obra' : '📄 Descargar PDF'}
+              </button>
+              <button type="button" className="editButton" onClick={compartir} disabled={!listo || compartiendo}>
+                {compartiendo ? 'Compartiendo...' : '📲 Compartir PDF'}
+              </button>
+              <button type="button" className="editButton waButton" onClick={enviarWhatsApp} title={telefono ? `Escribirle al ${telefono}` : 'El cliente no tiene teléfono: elegís el contacto en WhatsApp'}>💬 WhatsApp</button>
+            </div>
           </div>
 
           {error && (
@@ -284,7 +299,28 @@ export default function PresupuestoFicha({
             </div>
           </div>
 
-          {listo ? <DocumentoPresupuesto datos={listo.datos} /> : !error && <p role="status" style={{ color: '#64748b', fontSize: '13px' }}>Cargando documento…</p>}
+          {conObra && (
+            <div className="presuTabs">
+              <button type="button" className={seccion === 'documento' ? 'active' : ''} onClick={() => setSeccion('documento')}><span className="presuTabIcono">📄 </span>Documento</button>
+              <button type="button" className={seccion === 'cambios' ? 'active' : ''} onClick={() => setSeccion('cambios')}><span className="presuTabIcono">✏️ </span>Cambios<span className="presuTabLargo"> y gastos</span></button>
+              <button type="button" className={seccion === 'facturas' ? 'active' : ''} onClick={() => setSeccion('facturas')}><span className="presuTabIcono">🧾 </span>Facturas</button>
+            </div>
+          )}
+
+          {(!conObra || seccion === 'documento') && (listo ? <DocumentoPresupuesto datos={listo.datos} /> : !error && <p role="status" style={{ color: '#64748b', fontSize: '13px' }}>Cargando documento…</p>)}
+
+          {conObra && seccion === 'cambios' && (
+            <div className="presuSeccion">
+              <p className="gestionAyuda" style={{ marginTop: 0 }}>Acá agregás, cambiás o quitás ítems, cargás productos y servicios extra, gastos extra con su factura, descuentos y ajustes. Lo aprobado se suma al documento del cliente.</p>
+              <AdicionalesObra obraId={presupuesto.obra_id!} onCambio={() => setReintento((v) => v + 1)} />
+            </div>
+          )}
+
+          {conObra && seccion === 'facturas' && <div className="presuSeccion"><FacturasObra obraId={presupuesto.obra_id!} /></div>}
+
+          <div className="presuPeligro">
+            <button type="button" className="deactivateButton" onClick={onEliminar}>🗑 Eliminar presupuesto</button>
+          </div>
 
         </div>
       </div>
