@@ -1304,3 +1304,52 @@ button.fichaRow:not(:disabled):hover .fichaIr{color:var(--mova-orange)}
 .iaSugerencias>button span{flex:1}
 .iaSugerencias>button b{color:#5b2e9a;font-size:12px}
 .iaCerrar{border:0!important;background:transparent!important;color:#8a93a0!important;font:inherit;font-size:12px;cursor:pointer;padding:2px 4px!important;align-self:flex-start}
+
+/* ===== Presupuesto (nuevo / editar): ítems y pie más claros ===== */
+.itemCabecera{display:none}
+.itemDescuentoFila{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding-top:4px;font-size:13px}
+.itemDescuentoFila label{display:flex!important;flex-direction:row!important;align-items:center;gap:8px;font-size:13px}
+.itemDescuentoFila input{width:90px;min-height:38px}
+.itemDescuentoNeto{color:#c62828;font-weight:600}
+.presuPieTotal{margin-right:auto;align-self:center;color:#4b5059;font-size:14px}
+.presuPieTotal strong{color:#14181e;font-size:17px;margin-left:4px}
+body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
+@media (max-width:720px){
+  /* El formulario ocupa toda la pantalla del celular */
+  .modalOverlay:has(.presupuestoModal){padding:0;align-items:stretch}
+  .presupuestoModal{width:100%!important;max-width:none!important;height:100dvh;max-height:100dvh!important;border-radius:0!important;padding:16px 14px 0!important}
+  .presupuestoForm{gap:18px}
+  .presupuestoForm input[type=date]{width:100%;min-width:0;max-width:100%;-webkit-appearance:none;appearance:none;text-align:left}
+  /* Tarjeta de ítem compacta */
+  .presupuestoItem{grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:8px 10px!important;padding:12px!important}
+  .itemCabecera{display:flex;grid-column:1/-1;align-items:center;gap:10px;padding-bottom:6px;border-bottom:1px solid #e6e9ee}
+  .itemCabecera span{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#697386}
+  .itemCabecera strong{margin-left:auto;font-size:15px;color:#14181e}
+  .itemCabecera button{border:0;background:#fdeaea;color:#b42318;border-radius:8px;padding:6px 10px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
+  .presupuestoItem .itemCatalogo,.presupuestoItem .itemDescripcionCampo{grid-column:1/-1}
+  .presupuestoItem .itemCantidad{grid-column:span 2}
+  .presupuestoItem .itemPrecio{grid-column:span 4}
+  .presupuestoItem .itemTipo{grid-column:span 3}
+  .presupuestoItem .itemCosto{grid-column:span 3}
+  .presupuestoItem .itemSubtotal,.presupuestoItem .removeItemButton{display:none!important}
+  .itemCampo{gap:5px!important;font-size:10.5px!important}
+  .itemCampo input,.itemCampo select{height:40px!important}
+  .itemDescuentoFila{padding-top:2px}
+  .itemDescuentoFila label span:first-child{font-size:12px;color:#697386;font-weight:700}
+  .itemDescuentoFila input{width:76px;height:38px}
+  /* Pie fijo: total + Guardar, compacto */
+  .presupuestoForm .modalActions{flex-direction:row!important;align-items:center;flex-wrap:wrap;gap:8px 10px!important;margin:0 -14px;padding:10px 14px calc(10px + env(safe-area-inset-bottom))!important;border-top:1px solid #e6e9ee;box-shadow:0 -8px 18px -14px rgba(0,0,0,.35);z-index:5}
+  .presupuestoForm .modalActions button{width:auto!important;padding:11px 16px!important}
+  .presupuestoForm .modalActions .newButton{flex:1}
+  .presuPieTotal{flex-basis:100%;display:flex;justify-content:space-between}
+}
+@media (max-width:720px){
+  .itemCabecera{order:0}
+  .presupuestoItem .itemCatalogo{order:1}
+  .presupuestoItem .itemDescripcionCampo{order:2}
+  .presupuestoItem .itemCantidad{order:3}
+  .presupuestoItem .itemPrecio{order:4}
+  .presupuestoItem .itemTipo{order:5}
+  .presupuestoItem .itemCosto{order:6}
+  .itemDescuentoFila{order:7}
+}
