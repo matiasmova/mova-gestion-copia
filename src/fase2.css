@@ -1572,3 +1572,7 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 }
 .presuComprobantes{font-size:13px;color:#4b5563;align-items:flex-start}
 .pdfCheck{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#374151;white-space:nowrap}
+.caArchivoBtn{position:relative;cursor:pointer;display:inline-flex;align-items:center}
+.caArchivoBtn input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.caArchivoBtn.deshabilitado{opacity:.6;pointer-events:none}
+@media (max-width:480px){.caEditorCampos{grid-template-columns:1fr}.caEditorCampos select{width:100%}}
