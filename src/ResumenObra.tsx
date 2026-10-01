@@ -2,6 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { supabase } from './supabase'
 import type { EstadoPresupuesto } from './estadoObra'
 import { calcularPersona, type AsignacionCalc, type JornalCalc } from './personalCalculos'
+import VidaEtapas, { pasosObra } from './VidaEtapas'
+import { codigoPresupuesto } from './codigoPresupuesto'
 
 // Resumen de la obra: la ficha abre acá. Arriba "Qué falta" y abajo seis
 // tarjetas con mini gráficos; cada una abre el detalle completo de su sección.
@@ -30,6 +32,10 @@ type Props = {
   cargandoCuenta: boolean
   dinero: (n: number) => string
   onIr: (tab: TabSeguimiento) => void
+  // Presupuesto aceptado de la obra (tarjeta con totales y accesos al documento).
+  presupuesto?: { id: number; titulo: string } | null
+  onVerDocumento?: () => void
+  onVerPresupuesto?: () => void
 }
 
 // Una persona del equipo, con los mismos números que la sección Personal.
@@ -143,7 +149,7 @@ function Tarjeta({ icono, titulo, onClick, children }: { icono: string; titulo: 
   </button>
 }
 
-export default function ResumenObra({ obraId, estado, avance, avances, cargandoAvances, tienePresupuesto, cuenta, cargandoCuenta, dinero, onIr }: Props) {
+export default function ResumenObra({ obraId, estado, avance, avances, cargandoAvances, tienePresupuesto, cuenta, cargandoCuenta, dinero, onIr, presupuesto, onVerDocumento, onVerPresupuesto }: Props) {
   const [datos, setDatos] = useState<Datos | null>(null)
 
   useEffect(() => {
@@ -174,6 +180,21 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
   const serie = [...avances].reverse().slice(-8)
 
   return <section className="orResumen" aria-label="Resumen de la obra">
+    <div className="orVida"><VidaEtapas pasos={pasosObra({ estado, porcentaje_avance: avance }, cuenta ? cuenta.saldoTotal : undefined)} /></div>
+
+    {presupuesto && <div className="orPresu">
+      <div className="orPresuTit"><span>📄 PRESUPUESTO {codigoPresupuesto(presupuesto.id)}</span><span className="presuEtapa et-aceptado">Aceptado</span></div>
+      <strong>{presupuesto.titulo}</strong>
+      {cuenta ? <>
+        <div className="orPresuFila"><span>Original</span><b>{dinero(cuenta.totalOriginal)}</b></div>
+        <div className="orPresuFila"><span>Cambios y extras</span><b>{cuenta.totalCambios === 0 ? dinero(0) : `${cuenta.totalCambios > 0 ? '+' : '−'} ${dinero(Math.abs(cuenta.totalCambios))}`}</b></div>
+        <div className="orPresuTotal"><span>TOTAL ACTUALIZADO</span><span>{dinero(cuenta.totalActualizado)}</span></div>
+      </> : <small>Cargando…</small>}
+      <div className="orPresuBtns">
+        {onVerDocumento && <button type="button" className="editButton" onClick={onVerDocumento}>👁️ Ver documento</button>}
+        {onVerPresupuesto && <button type="button" className="editButton" onClick={onVerPresupuesto}>📄 Abrir presupuesto</button>}
+      </div>
+    </div>}
     <div className={`orPend ${listo && alertas === 0 ? 'ok' : ''}`}>
       <h4>{!listo ? 'Revisando la obra…' : alertas === 0 ? '✓ Todo al día' : `Qué falta (${alertas})`}</h4>
       {listo && pendientes.length > 0 && <ul>

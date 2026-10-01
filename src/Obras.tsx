@@ -88,7 +88,7 @@ const avanceInicial = {
 
 // onVerPresupuesto se sigue aceptando por compatibilidad, pero la ficha de la obra
 // ya no lo usa: todo se ve en un único documento (presupuesto y estado de obra).
-function Obras({ obraAbrirId, onObraAbierta, conIA = false }: { obraAbrirId?: number | null; onObraAbierta?: () => void; onVerPresupuesto?: (presupuestoId: number) => void; conIA?: boolean } = {}) {
+function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false }: { obraAbrirId?: number | null; onObraAbierta?: () => void; onVerPresupuesto?: (presupuestoId: number) => void; conIA?: boolean } = {}) {
   const puedeInformeIA = conIA
   const [obras, setObras] = useState<Obra[]>([])
   const [presupuestosObra, setPresupuestosObra] = useState<{ id: number; obra_id: number | null; total: number | string; estado: string; activo: boolean; titulo: string }[]>([])
@@ -786,6 +786,9 @@ function Obras({ obraAbrirId, onObraAbierta, conIA = false }: { obraAbrirId?: nu
               cargandoCuenta={cargandoCuenta}
               dinero={dineroFicha}
               onIr={setSeguTab}
+              presupuesto={presupuestoAceptado ? { id: presupuestoAceptado.id, titulo: presupuestoAceptado.titulo } : null}
+              onVerDocumento={() => setInformeObra(obraSeguimiento)}
+              onVerPresupuesto={onVerPresupuesto && presupuestoAceptado ? () => onVerPresupuesto(presupuestoAceptado.id) : undefined}
             />}
 
             {seguTab === 'accesos' && <AccesosObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} cliente={obtenerCliente(obraSeguimiento.cliente_id)} obra={obraSeguimiento.nombre_obra} ubicacion={[obraSeguimiento.direccion, obraSeguimiento.localidad].filter(Boolean).join(', ') || null} />}

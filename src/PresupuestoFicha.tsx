@@ -1,4 +1,4 @@
-import { linkWhatsApp, mensajeEnvioPresupuesto } from './whatsapp'
+import { linkWhatsApp, mensajeEnvioPresupuesto, mensajeSeguimientoPresupuesto } from './whatsapp'
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from './supabase'
 import { moneda } from './gestionFormat'
@@ -11,8 +11,9 @@ import {
   type DatosPdf,
 } from './pdfPresupuesto'
 import { codigoPresupuesto } from './codigoPresupuesto'
-import AdicionalesObra from './AdicionalesObra'
-import FacturasObra from './FacturasObra'
+import VidaEtapas, { pasosPresupuesto, type ObraEtapa } from './VidaEtapas'
+import { createPortal } from 'react-dom'
+import { fechaCorta } from './gestionFormat'
 
 export type PresupuestoFichaData = {
   id: number
@@ -30,6 +31,7 @@ export type PresupuestoFichaData = {
   saldo: number
   notas?: string | null
   items: ItemPresupuesto[]
+  enviado_at?: string | null
 }
 
 type Pago = {
@@ -40,6 +42,7 @@ type Pago = {
 }
 
 export type DatosObra = {
+  nombre?: string
   direccion: string
   localidad: string
   fecha_inicio: string
@@ -55,11 +58,21 @@ type Props = {
   onCerrar: () => void
   onEditar: () => void
   onPDF: () => void
-  onCrearObra: (datos: DatosObra) => void
   onCambiarEstado: (nuevo: string) => void
   onEliminar: () => void
   onEliminarObra?: () => void
+  // Etapas: obra vinculada (estado y avance), motivo de rechazo y acciones del flujo.
+  obraEtapa?: ObraEtapa | null
+  motivoRechazo?: string | null
+  onAceptar: (datos: DatosObra | null) => void
+  onRechazar: (motivo: string) => void
+  onNuevaVersion: () => void
+  onDuplicar: () => void
+  onIrObra?: () => void
 }
+
+const MOTIVOS = ['💲 Precio', '⏱️ Tiempos', '🏃 Eligió a otro', '⏸️ Lo postergó', 'Otro']
+const hoyISO = () => new Date().toISOString().slice(0, 10)
 
 type Preparado = {
   base: DatosPdf
@@ -83,39 +96,66 @@ export default function PresupuestoFicha({
   convirtiendo,
   onCerrar,
   onEditar,
-  onCrearObra,
   onCambiarEstado,
   onEliminar,
   onEliminarObra,
+  obraEtapa,
+  motivoRechazo,
+  onAceptar,
+  onRechazar,
+  onNuevaVersion,
+  onDuplicar,
+  onIrObra,
 }: Props) {
   const [pagosSueltos, setPagosSueltos] = useState<Pago[]>([])
   const [estadoLocal, setEstadoLocal] = useState(presupuesto.estado)
-  const [obraForm, setObraForm] = useState<DatosObra>({ direccion: '', localidad: '', fecha_inicio: '', fecha_fin_estimada: '' })
+  const [obraForm, setObraForm] = useState<DatosObra>({ nombre: '', direccion: '', localidad: '', fecha_inicio: '', fecha_fin_estimada: '' })
+  const [modal, setModal] = useState<'aceptar' | 'rechazar' | null>(null)
+  const [motivo, setMotivo] = useState('')
+  const [notaRechazo, setNotaRechazo] = useState('')
   const [preparado, setPreparado] = useState<Preparado | null>(null)
   const [error, setError] = useState('')
   const [reintento, setReintento] = useState(0)
   const [compartiendo, setCompartiendo] = useState(false)
-  // Con obra vinculada, la ficha se divide en Documento / Cambios y gastos / Facturas.
-  const [seccion, setSeccion] = useState<'documento' | 'cambios' | 'facturas'>('documento')
   const conObra = presupuesto.obra_id != null && presupuesto.estado === 'aceptado'
-  useEffect(() => { setSeccion('documento') }, [presupuesto.id])
 
-  // El presupuesto aceptado queda como fue aceptado: los cambios van en "Cambios y gastos".
+  // El presupuesto aceptado queda fijo: los cambios se cargan en la obra.
   function editar() {
-    if (conObra && !window.confirm('Este presupuesto ya está aceptado y tiene obra.\n\nPara agregar, cambiar o quitar ítems usá la pestaña "Cambios y gastos": así queda el historial y el cliente ve qué cambió.\n\n¿Querés editar igual el presupuesto original?')) {
-      setSeccion('cambios'); return
-    }
+    if (conObra && !window.confirm('Este presupuesto ya está aceptado y tiene obra.\n\nLos cambios, extras y descuentos se cargan en la obra (➕ Registrar): así queda el historial y el cliente ve qué cambió.\n\n¿Querés editar igual el presupuesto original?')) return
+    if (presupuesto.estado === 'enviado' && !window.confirm('El cliente ya tiene este presupuesto.\n\nSi pidió cambios conviene "Nueva versión" (la anterior queda guardada).\n\n¿Editar igual este?')) return
     onEditar()
+  }
+
+  function abrirAceptar() {
+    if (presupuesto.obra_id != null) { onAceptar(null); return }
+    setObraForm({ nombre: presupuesto.titulo, direccion: '', localidad: '', fecha_inicio: hoyISO(), fecha_fin_estimada: '' })
+    setModal('aceptar')
+  }
+  function confirmarRechazo() {
+    // Se guarda sin el emoji: "Precio", "Tiempos"…
+    const m = (motivo || 'Otro').replace(/^[^A-Za-zÁ-úñÑ]+/, '')
+    onRechazar(notaRechazo.trim() ? `${m}: ${notaRechazo.trim()}` : m)
+    setModal(null)
   }
 
   const codigo = codigoPresupuesto(presupuesto.id)
 
-  // Abre WhatsApp con el mensaje listo. El PDF se adjunta con "Compartir PDF".
+  // Abre WhatsApp con el mensaje listo y, si era borrador, pasa solo a Enviado.
+  // El PDF se adjunta con "Compartir PDF".
   function enviarWhatsApp() {
     const url = linkWhatsApp(telefono, mensajeEnvioPresupuesto({ cliente, titulo: presupuesto.titulo, codigo, validezDias: presupuesto.validez_dias ?? null }))
     if (url) window.open(url, '_blank', 'noopener')
-    if (presupuesto.estado === 'borrador' && window.confirm('¿Lo marco como Enviado?')) onCambiarEstado('enviado')
+    if (presupuesto.estado === 'borrador') onCambiarEstado('enviado')
   }
+  function seguimientoWhatsApp() {
+    const vencido = !!presupuesto.validez_dias && diasEnviado != null && diasEnviado > presupuesto.validez_dias
+    const url = linkWhatsApp(telefono, mensajeSeguimientoPresupuesto({ cliente, titulo: presupuesto.titulo, codigo, fecha: fechaCorta(presupuesto.enviado_at || presupuesto.fecha), vencido }))
+    if (url) window.open(url, '_blank', 'noopener')
+  }
+  const diasEnviado = presupuesto.estado === 'enviado'
+    ? Math.max(0, Math.floor((Date.now() - new Date((presupuesto.enviado_at || presupuesto.fecha).slice(0, 10) + 'T12:00:00').getTime()) / 86400000))
+    : null
+  const venceEn = diasEnviado != null && presupuesto.validez_dias ? presupuesto.validez_dias - diasEnviado : null
   const cambioEstado = estadoLocal !== presupuesto.estado
 
   const base = useMemo<DatosPdf>(() => ({
@@ -231,33 +271,62 @@ export default function PresupuestoFicha({
         </div>
 
         <div className="fichaBody">
-          <div className="fichaAcciones presuAcciones">
-            <div className="presuAccEstado">
-              <label className="fichaEstadoSelect">
-                Estado
-                <select value={estadoLocal} onChange={(e) => setEstadoLocal(e.target.value)}>
-                  {ESTADOS.map((estado) => <option key={estado.v} value={estado.v}>{estado.t}</option>)}
-                </select>
-              </label>
-              {cambioEstado && <button type="button" className="newButton" onClick={() => onCambiarEstado(estadoLocal)}>Guardar estado</button>}
-              {presupuesto.obra_id != null && <span className="obraVinculadaTag">✓ Obra vinculada</span>}
-            </div>
+          <p className="presuCli">{cliente}{presupuesto.obra_id != null ? ` · ${obra}` : ''}</p>
+          <VidaEtapas pasos={pasosPresupuesto(presupuesto.estado, presupuesto.obra_id != null ? obraEtapa ?? { estado: 'en_proceso', porcentaje_avance: 0 } : null, estadoObra ? estadoObra.saldoTotal : undefined)} />
 
-            {presupuesto.obra_id != null && presupuesto.estado === 'rechazado' && onEliminarObra && (
-              <button type="button" className="deactivateButton" onClick={onEliminarObra}>🗑 Eliminar obra vinculada</button>
-            )}
-
+          {/* ---------- Siguiente paso, según la etapa ---------- */}
+          {presupuesto.estado === 'borrador' && <>
+            <button type="button" className="presuPaso wa" onClick={enviarWhatsApp}>
+              <small>Siguiente paso</small><b>📤 Enviar por WhatsApp</b><span>Se abre WhatsApp con el mensaje listo y pasa solo a "Enviado". El PDF lo mandás con Compartir PDF.</span>
+            </button>
             <div className="presuAccBotones">
               <button type="button" className="editButton" onClick={editar}>✏️ Editar</button>
-              <button type="button" className="editButton" onClick={descargarPdf} disabled={!listo}>
-                {estadoObra?.enObra ? '📄 Estado de obra' : '📄 Descargar PDF'}
-              </button>
-              <button type="button" className="editButton" onClick={compartir} disabled={!listo || compartiendo}>
-                {compartiendo ? 'Compartiendo...' : '📲 Compartir PDF'}
-              </button>
-              <button type="button" className="editButton waButton" onClick={enviarWhatsApp} title={telefono ? `Escribirle al ${telefono}` : 'El cliente no tiene teléfono: elegís el contacto en WhatsApp'}>💬 WhatsApp</button>
+              <button type="button" className="editButton" onClick={compartir} disabled={!listo || compartiendo}>{compartiendo ? 'Compartiendo...' : '📲 Compartir PDF'}</button>
             </div>
-          </div>
+            <p className="presuNota">📝 <b>Borrador:</b> lo estás armando. Podés cambiar todo; el cliente todavía no lo vio.</p>
+          </>}
+
+          {presupuesto.estado === 'enviado' && <>
+            <h3 className="presuPregunta">¿Qué respondió el cliente?</h3>
+            <div className="presuAccBotones">
+              <button type="button" className="presuBtnOk" disabled={convirtiendo} onClick={abrirAceptar}>✅ Aceptó</button>
+              <button type="button" className="presuBtnNo" onClick={() => { setMotivo(''); setNotaRechazo(''); setModal('rechazar') }}>❌ Rechazó</button>
+            </div>
+            <button type="button" className="editButton presuAncho" onClick={() => { if (window.confirm('Se crea la versión nueva para que la edites, y esta queda guardada como historial (rechazada por "nueva versión").\n\n¿Seguimos?')) onNuevaVersion() }}>✏️ Pidió cambios → hacer nueva versión</button>
+            <div className="presuAviso">
+              <span>⏰ Enviado {diasEnviado === 0 ? 'hoy' : `hace ${diasEnviado} día${diasEnviado === 1 ? '' : 's'}`}{venceEn != null ? (venceEn < 0 ? ` · venció hace ${-venceEn} día${venceEn === -1 ? '' : 's'}` : venceEn === 0 ? ' · vence hoy' : ` · vence en ${venceEn} día${venceEn === 1 ? '' : 's'}`) : ''}</span>
+              <button type="button" className="caLink" onClick={seguimientoWhatsApp}>💬 Escribirle por WhatsApp</button>
+            </div>
+            <div className="presuAccBotones">
+              <button type="button" className="editButton" onClick={compartir} disabled={!listo || compartiendo}>{compartiendo ? 'Compartiendo...' : '📲 Compartir PDF'}</button>
+              <button type="button" className="editButton" onClick={descargarPdf} disabled={!listo}>📄 Descargar PDF</button>
+            </div>
+          </>}
+
+          {presupuesto.estado === 'aceptado' && presupuesto.obra_id == null && <>
+            <button type="button" className="presuPaso" disabled={convirtiendo} onClick={abrirAceptar}>
+              <small>Siguiente paso</small><b>{convirtiendo ? 'Creando obra…' : '🏗️ Crear la obra'}</b><span>Dirección y fecha de inicio, y queda vinculada a este presupuesto</span>
+            </button>
+          </>}
+
+          {conObra && <>
+            <button type="button" className="presuPaso" onClick={onIrObra} disabled={!onIrObra}>
+              <small>Se trabaja en la obra</small><b>🏗️ Ir a la obra {obra} →</b><span>Cobros, pagos, gastos, extras y avances se cargan ahí, con ➕ Registrar</span>
+            </button>
+            <p className="presuNota">🔒 <b>Aceptado:</b> el presupuesto queda fijo como lo aceptó el cliente. Los cambios se cargan en la obra y aparecen solos en el documento.</p>
+            <div className="presuAccBotones">
+              <button type="button" className="editButton" onClick={compartir} disabled={!listo || compartiendo}>{compartiendo ? 'Compartiendo...' : '📲 Compartir PDF'}</button>
+              <button type="button" className="editButton waButton" onClick={enviarWhatsApp}>💬 WhatsApp</button>
+            </div>
+          </>}
+
+          {presupuesto.estado === 'rechazado' && <>
+            <div className="presuAviso rechazo"><span>❌ <b>Rechazado</b>{motivoRechazo ? ` · ${motivoRechazo}` : ''}</span></div>
+            <div className="presuAccBotones">
+              <button type="button" className="editButton" onClick={onDuplicar}>📑 Duplicar</button>
+              <button type="button" className="editButton" onClick={() => onCambiarEstado('borrador')}>↩️ Volver a borrador</button>
+            </div>
+          </>}
 
           {error && (
             <div role="alert" style={{ margin: '12px 0' }}>
@@ -266,63 +335,88 @@ export default function PresupuestoFicha({
             </div>
           )}
 
-          {presupuesto.estado === 'aceptado' && !presupuesto.obra_id && (
-            <div className="fichaObraNueva">
-              <h3>✅ Presupuesto aceptado — creá la obra</h3>
-              <p>Completá los datos y la obra queda vinculada a este presupuesto (hereda cliente, título y monto).</p>
-              <div className="formGrid">
-                <label>Dirección<input value={obraForm.direccion} onChange={(e) => setObraForm((f) => ({ ...f, direccion: e.target.value }))} placeholder="Dirección de la obra" /></label>
-                <label>Localidad<input value={obraForm.localidad} onChange={(e) => setObraForm((f) => ({ ...f, localidad: e.target.value }))} /></label>
-                <label>Fecha de inicio<input type="date" value={obraForm.fecha_inicio} onChange={(e) => setObraForm((f) => ({ ...f, fecha_inicio: e.target.value }))} /></label>
-                <label>Fecha fin estimada<input type="date" value={obraForm.fecha_fin_estimada} onChange={(e) => setObraForm((f) => ({ ...f, fecha_fin_estimada: e.target.value }))} /></label>
+          {estadoObra && conObra ? (
+            <div className="fichaKpis">
+              <div><span>TOTAL DE LA OBRA</span><strong>{moneda(estadoObra.totalActualizado)}</strong></div>
+              <div><span>COBRADO</span><strong>{moneda(estadoObra.cobrado)}</strong></div>
+              <div className="alerta"><span>FALTA COBRAR HOY</span><strong>{moneda(estadoObra.pendienteHoy)}</strong></div>
+              <div><span>SALDO PARA TERMINAR</span><strong>{moneda(Math.max(0, estadoObra.saldoTotal))}</strong></div>
+            </div>
+          ) : (
+            <div className="fichaKpis">
+              <div><span>TOTAL</span><strong>{moneda(presupuesto.total)}</strong></div>
+              <div><span>{pagos.length ? 'COBRADO' : 'ÍTEMS'}</span><strong>{pagos.length ? moneda(pagos.reduce((s, p) => s + p.monto, 0)) : presupuesto.items.length}</strong></div>
+            </div>
+          )}
+
+          {listo ? <DocumentoPresupuesto datos={listo.datos} /> : !error && <p role="status" style={{ color: '#64748b', fontSize: '13px' }}>Cargando documento…</p>}
+
+          {/* ---------- Más opciones (lo que se usa poco) ---------- */}
+          <details className="presuMas">
+            <summary>⋯ Más opciones</summary>
+            <div className="presuMasCuerpo">
+              {presupuesto.estado !== 'borrador' && <button type="button" className="editButton" onClick={editar}>✏️ {conObra ? 'Editar el presupuesto original' : 'Editar'}</button>}
+              <button type="button" className="editButton" onClick={descargarPdf} disabled={!listo}>{estadoObra?.enObra ? '📄 Descargar estado de obra' : '📄 Descargar PDF'}</button>
+              {presupuesto.estado !== 'rechazado' && <button type="button" className="editButton" onClick={onDuplicar}>📑 Duplicar</button>}
+              <div className="presuEstadoManual">
+                <label className="fichaEstadoSelect">Cambiar el estado a mano
+                  <select value={estadoLocal} onChange={(e) => setEstadoLocal(e.target.value)}>
+                    {ESTADOS.map((estado) => <option key={estado.v} value={estado.v}>{estado.t}</option>)}
+                  </select>
+                </label>
+                {cambioEstado && <button type="button" className="newButton" onClick={() => onCambiarEstado(estadoLocal)}>Guardar</button>}
               </div>
-              <button type="button" className="newButton" disabled={convirtiendo} onClick={() => onCrearObra(obraForm)}>{convirtiendo ? 'Creando obra...' : '🏗️ Crear obra'}</button>
+              {presupuesto.obra_id != null && presupuesto.estado === 'rechazado' && onEliminarObra && (
+                <button type="button" className="deactivateButton" onClick={onEliminarObra}>🗑 Eliminar obra vinculada</button>
+              )}
+              <button type="button" className="deactivateButton" onClick={onEliminar}>🗑 Eliminar presupuesto</button>
             </div>
-          )}
-
-          <div className="fichaKpis">
-            <div>
-              <span>{estadoObra ? 'TOTAL DE LA OBRA' : 'TOTAL'}</span>
-              <strong>{moneda(estadoObra?.totalActualizado ?? presupuesto.total)}</strong>
-            </div>
-            <div>
-              <span>PAGADO</span>
-              <strong>{moneda(estadoObra ? estadoObra.cobrado : pagos.reduce((s, p) => s + p.monto, 0))}</strong>
-            </div>
-            <div className="alerta">
-              <span>{estadoObra ? 'PENDIENTE A HOY' : 'SALDO'}</span>
-              <strong>{estadoObra ? moneda(estadoObra.pendienteHoy) : moneda(presupuesto.saldo)}</strong>
-            </div>
-            <div>
-              <span>{estadoObra ? 'SALDO PARA TERMINAR' : 'ÍTEMS'}</span>
-              <strong>{estadoObra ? moneda(Math.max(0, estadoObra.saldoTotal)) : presupuesto.items.length}</strong>
-            </div>
-          </div>
-
-          {conObra && (
-            <div className="presuTabs">
-              <button type="button" className={seccion === 'documento' ? 'active' : ''} onClick={() => setSeccion('documento')}><span className="presuTabIcono">📄 </span>Documento</button>
-              <button type="button" className={seccion === 'cambios' ? 'active' : ''} onClick={() => setSeccion('cambios')}><span className="presuTabIcono">✏️ </span>Cambios<span className="presuTabLargo"> y gastos</span></button>
-              <button type="button" className={seccion === 'facturas' ? 'active' : ''} onClick={() => setSeccion('facturas')}><span className="presuTabIcono">🧾 </span>Facturas</button>
-            </div>
-          )}
-
-          {(!conObra || seccion === 'documento') && (listo ? <DocumentoPresupuesto datos={listo.datos} /> : !error && <p role="status" style={{ color: '#64748b', fontSize: '13px' }}>Cargando documento…</p>)}
-
-          {conObra && seccion === 'cambios' && (
-            <div className="presuSeccion">
-              <p className="gestionAyuda" style={{ marginTop: 0 }}>Acá agregás, cambiás o quitás ítems, cargás productos y servicios extra, gastos extra con su factura, descuentos y ajustes. Lo aprobado se suma al documento del cliente.</p>
-              <AdicionalesObra obraId={presupuesto.obra_id!} onCambio={() => setReintento((v) => v + 1)} />
-            </div>
-          )}
-
-          {conObra && seccion === 'facturas' && <div className="presuSeccion"><FacturasObra obraId={presupuesto.obra_id!} /></div>}
-
-          <div className="presuPeligro">
-            <button type="button" className="deactivateButton" onClick={onEliminar}>🗑 Eliminar presupuesto</button>
-          </div>
-
+          </details>
         </div>
+
+        {modal === 'aceptar' && createPortal(
+          <div className="modalOverlay">
+            <div className="modalCard registrarModal">
+              <div className="modalHeader">
+                <div><p className="subtitle">✅ EL CLIENTE ACEPTÓ</p><h2>Creamos la obra</h2></div>
+                <button type="button" className="modalClose closeButton" onClick={() => setModal(null)}>×</button>
+              </div>
+              <div className="catalogoForm">
+                <p className="gestionAyuda" style={{ marginTop: 0 }}>Completá estos datos y la obra queda creada y vinculada a este presupuesto.</p>
+                <div className="formGrid">
+                  <label className="formFull">Nombre de la obra<input value={obraForm.nombre ?? ''} onChange={(e) => setObraForm((f) => ({ ...f, nombre: e.target.value }))} /></label>
+                  <label className="formFull">Dirección<input value={obraForm.direccion} onChange={(e) => setObraForm((f) => ({ ...f, direccion: e.target.value }))} placeholder="Calle y número" /></label>
+                  <label>Localidad<input value={obraForm.localidad} onChange={(e) => setObraForm((f) => ({ ...f, localidad: e.target.value }))} /></label>
+                  <label>Fecha de inicio<input type="date" value={obraForm.fecha_inicio} onChange={(e) => setObraForm((f) => ({ ...f, fecha_inicio: e.target.value }))} /></label>
+                </div>
+                <div className="modalActions formActions">
+                  <button type="button" className="cancelButton" onClick={() => setModal(null)}>Cancelar</button>
+                  <button type="button" className="newButton" disabled={convirtiendo} onClick={() => { onAceptar(obraForm); setModal(null) }}>🏗️ Crear obra y empezar</button>
+                </div>
+              </div>
+            </div>
+          </div>, document.body)}
+
+        {modal === 'rechazar' && createPortal(
+          <div className="modalOverlay">
+            <div className="modalCard registrarModal">
+              <div className="modalHeader">
+                <div><p className="subtitle">❌ EL CLIENTE RECHAZÓ</p><h2>¿Por qué no avanzó?</h2></div>
+                <button type="button" className="modalClose closeButton" onClick={() => setModal(null)}>×</button>
+              </div>
+              <div className="catalogoForm">
+                <p className="gestionAyuda" style={{ marginTop: 0 }}>Te sirve para ver después por qué se pierden presupuestos.</p>
+                <div className="caChips presuMotivos">
+                  {MOTIVOS.map((m) => <button type="button" key={m} className={motivo === m ? 'activo' : ''} onClick={() => setMotivo(m)}>{m}</button>)}
+                </div>
+                <label>Nota (opcional)<input value={notaRechazo} onChange={(e) => setNotaRechazo(e.target.value)} placeholder="Ej.: le pareció caro el tablero" /></label>
+                <div className="modalActions formActions">
+                  <button type="button" className="cancelButton" onClick={() => setModal(null)}>Cancelar</button>
+                  <button type="button" className="newButton" onClick={confirmarRechazo}>Guardar como rechazado</button>
+                </div>
+              </div>
+            </div>
+          </div>, document.body)}
       </div>
     </div>
   )
