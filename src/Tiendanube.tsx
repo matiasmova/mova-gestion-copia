@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from './supabase'
 import { moneda, fechaCorta } from './gestionFormat'
+import CampoNumero from './CampoNumero'
 
 // Configuración → Tiendanube: conectar la tienda, traer los productos de la
 // web, publicar los que faltan y sincronizar precio y stock (la app manda).
@@ -247,7 +248,7 @@ function ImportarDeWeb({ opciones, onCerrar }: { opciones: Opciones; onCerrar: (
           <label className="caCheck"><input type="checkbox" checked={soloPublicados} onChange={(e) => setSoloPublicados(e.target.checked)} /> Traer solo los productos <strong>publicados</strong> en la web</label>
           <label className="caCheck"><input type="checkbox" checked={traerPrecioStock} onChange={(e) => setTraerPrecioStock(e.target.checked)} /> A los que ya están en la app, <strong>traerles el precio y el stock de la web</strong> (si lo destildás, se publican los de la app)</label>
           <label className="caCheck"><input type="checkbox" checked={completar} onChange={(e) => setCompletar(e.target.checked)} /> Completar foto y descripción si en la app están vacías</label>
-          {opciones.preciosConIva && <label className="tnIva">Los precios de la web incluyen IVA del <input type="number" min="0" max="50" value={iva} onChange={(e) => setIva(e.target.value)} />% → en la app se guardan sin IVA</label>}
+          {opciones.preciosConIva && <label className="tnIva">Los precios de la web incluyen IVA del <CampoNumero min="0" max="50" value={iva} onChange={(e) => setIva(e.target.value)} />% → en la app se guardan sin IVA</label>}
         </div>
         <div className="tnLista">
           {visibles.slice(0, 300).map((f) => (

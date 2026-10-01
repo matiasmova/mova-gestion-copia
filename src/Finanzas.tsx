@@ -3,6 +3,7 @@ import type { Pedido } from './BuscadorGlobal'
 import { supabase } from './supabase'
 import { fechaCorta, moneda, hoy } from './gestionFormat'
 import { confirmarEliminacion } from './confirmar'
+import CampoNumero from './CampoNumero'
 
 // Movimientos: toda la plata que entra y sale, en una sola lista ordenada por fecha.
 //  · Entra: cobros a clientes (tabla pagos).
@@ -380,7 +381,7 @@ function FormularioPago({ presupuestos, obras, pago, onCancelar, onGuardado }: {
       <div className="formGrid">
         <label>Obra{seleccionado ? '' : ' *'}<select value={formulario.obra_id} onChange={(e) => { actualizar('obra_id', e.target.value); actualizar('presupuesto_id', '') }}><option value="">Seleccionar obra</option>{obras.map((o) => <option key={o.id} value={o.id}>{o.nombre_obra}</option>)}</select></label>
         <label>Presupuesto (opcional)<select value={formulario.presupuesto_id} onChange={(e) => actualizar('presupuesto_id', e.target.value)}><option value="">Cobro a la obra (sin presupuesto)</option>{disponibles.map((p) => <option key={p.id} value={p.id}>{p.titulo} · saldo {moneda(p.saldo)}</option>)}</select></label>
-        <label>Monto *<input type="number" min="0.01" step="0.01" required value={formulario.monto} onChange={(e) => actualizar('monto', e.target.value)} /></label>
+        <label>Monto *<CampoNumero min="0.01" required value={formulario.monto} onChange={(e) => actualizar('monto', e.target.value)} /></label>
         <label>Fecha *<input type="date" required value={formulario.fecha} onChange={(e) => actualizar('fecha', e.target.value)} /></label>
         <label>Medio de pago<select value={formulario.medio_pago} onChange={(e) => actualizar('medio_pago', e.target.value)}><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option><option value="tarjeta">Tarjeta</option><option value="cheque">Cheque</option><option value="otro">Otro</option></select></label>
         <label>Referencia<input value={formulario.referencia} onChange={(e) => actualizar('referencia', e.target.value)} placeholder="Ej.: transferencia 09/05" /></label>
@@ -410,7 +411,7 @@ function FormularioCosto({ obras, categorias, onCancelar, onGuardado }: { obras:
       <label>Obra *<select required value={formulario.obra_id} onChange={(e) => actualizar('obra_id', e.target.value)}><option value="">Seleccionar obra</option>{obras.map((o) => <option key={o.id} value={o.id}>{o.nombre_obra}</option>)}</select></label>
       <label>Tipo<select value={formulario.tipo} onChange={(e) => actualizar('tipo', e.target.value)}><option value="material">Material</option><option value="mano_obra">Mano de obra</option><option value="terciarizado">Terciarizado</option><option value="otro">Otro</option></select></label>
       <label>Categoría<select value={formulario.categoria_id} onChange={(e) => actualizar('categoria_id', e.target.value)}><option value="">Sin categoría</option>{categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select></label>
-      <label>Monto *<input type="number" min="0.01" step="0.01" required value={formulario.monto} onChange={(e) => actualizar('monto', e.target.value)} /></label>
+      <label>Monto *<CampoNumero min="0.01" required value={formulario.monto} onChange={(e) => actualizar('monto', e.target.value)} /></label>
       <label>Fecha<input type="date" value={formulario.fecha} onChange={(e) => actualizar('fecha', e.target.value)} /></label>
       <label>Detalle<input value={formulario.descripcion} onChange={(e) => actualizar('descripcion', e.target.value)} /></label>
     </div>{error && <p className="loginError">{error}</p>}<div className="formActions"><button type="button" className="cancelButton" onClick={onCancelar}>Cancelar</button><button className="newButton" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar costo'}</button></div></form>

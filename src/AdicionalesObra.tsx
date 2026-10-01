@@ -7,6 +7,7 @@ import {
   etiquetaModificacion,
   type CambioTipo,
 } from './presupuestoModificaciones'
+import CampoNumero from './CampoNumero'
 
 // Cambios y adicionales de la obra.
 // · Arriba, el presupuesto aceptado tal como está hoy: cada ítem se modifica o
@@ -526,12 +527,12 @@ function AdicionalesObra({ obraId, puedeEditar = true, onCambio }: Props) {
           <label>Cantidad
             <div className="caStepper">
               <button type="button" aria-label="Restar uno" onClick={() => setEditor({ ...editor, cantidad: String(Math.max(0, redondear((Number(editor.cantidad) || 0) - 1))) })}>−</button>
-              <input type="number" min="0.001" step="0.001" value={editor.cantidad} onChange={(e) => setEditor({ ...editor, cantidad: e.target.value })} />
+              <CampoNumero min="0.001" value={editor.cantidad} onChange={(e) => setEditor({ ...editor, cantidad: e.target.value })} />
               <button type="button" aria-label="Sumar uno" onClick={() => setEditor({ ...editor, cantidad: String(redondear((Number(editor.cantidad) || 0) + 1)) })}>+</button>
             </div>
           </label>
           <label>Precio unitario
-            <input type="number" min="0" step="0.01" value={editor.precio} onChange={(e) => setEditor({ ...editor, precio: e.target.value })} />
+            <CampoNumero min="0" value={editor.precio} onChange={(e) => setEditor({ ...editor, precio: e.target.value })} />
           </label>
         </div>
       )}
@@ -658,7 +659,7 @@ function AdicionalesObra({ obraId, puedeEditar = true, onCambio }: Props) {
             <div className="caLinea">
               <input className="caDescInput" value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
                 placeholder={form.tipo === 'gasto_extra' ? 'Ej.: Caño corrugado comprado en obra' : form.tipo === 'bonificacion' ? 'Ej.: Descuento por pago contado' : 'Ej.: 3 tomas adicionales en cocina'} />
-              <input className="caImporte" type="number" step="0.01" value={form.importe} onChange={(e) => setForm({ ...form, importe: e.target.value })}
+              <CampoNumero className="caImporte" value={form.importe} onChange={(e) => setForm({ ...form, importe: e.target.value })}
                 placeholder={form.tipo === 'bonificacion' ? 'Monto a descontar' : form.tipo === 'ajuste' ? 'Importe (− resta)' : 'Importe'} />
               <button className="newButton" disabled={guardando === 'adicional'}>{guardando === 'adicional' ? 'Guardando...' : 'Agregar'}</button>
             </div>
@@ -724,13 +725,13 @@ function AdicionalesObra({ obraId, puedeEditar = true, onCambio }: Props) {
                             <label className="caDesc">Descripción<input value={edicion.descripcion} onChange={(e) => setEdicion({ ...edicion, descripcion: e.target.value })} /></label>
                           )}
                           {!esCambio && (
-                            <label>{a.tipo === 'bonificacion' ? 'Monto a descontar' : 'Importe'}<input type="number" step="0.01" value={edicion.importe} onChange={(e) => setEdicion({ ...edicion, importe: e.target.value })} /></label>
+                            <label>{a.tipo === 'bonificacion' ? 'Monto a descontar' : 'Importe'}<CampoNumero value={edicion.importe} onChange={(e) => setEdicion({ ...edicion, importe: e.target.value })} /></label>
                           )}
                           {esCambio && a.cambio_tipo !== 'quitado' && (
-                            <label>Cantidad<input type="number" min="0.001" step="0.001" value={edicion.cantidad} onChange={(e) => setEdicion({ ...edicion, cantidad: e.target.value })} /></label>
+                            <label>Cantidad<CampoNumero min="0.001" value={edicion.cantidad} onChange={(e) => setEdicion({ ...edicion, cantidad: e.target.value })} /></label>
                           )}
                           {esCambio && (a.cambio_tipo === 'reemplazo' || a.cambio_tipo === 'agregado') && (
-                            <label>Precio unitario<input type="number" min="0" step="0.01" value={edicion.precio} onChange={(e) => setEdicion({ ...edicion, precio: e.target.value })} /></label>
+                            <label>Precio unitario<CampoNumero min="0" value={edicion.precio} onChange={(e) => setEdicion({ ...edicion, precio: e.target.value })} /></label>
                           )}
                           <label>Fecha<input type="date" value={edicion.fecha} onChange={(e) => setEdicion({ ...edicion, fecha: e.target.value })} /></label>
                           <label className="caDesc">Motivo<input value={edicion.motivo} onChange={(e) => setEdicion({ ...edicion, motivo: e.target.value })} /></label>

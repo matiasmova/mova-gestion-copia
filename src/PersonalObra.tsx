@@ -3,6 +3,7 @@ import { supabase } from './supabase'
 import { moneda, fechaCorta, hoy } from './gestionFormat'
 import { calcularPersona, MODALIDADES_PRINCIPALES, modalidadDePersona } from './personalCalculos'
 import { confirmarEliminacion } from './confirmar'
+import CampoNumero from './CampoNumero'
 
 type Persona = {
   id: number
@@ -401,7 +402,7 @@ function FormAsignar({ obraId, personas, asignacion, nombrePersona, onCancelar, 
           ? <label>Persona<input value={nombrePersona ?? ''} disabled /></label>
           : <label>Persona *<select required value={f.personal_id} onChange={(e) => elegirPersona(e.target.value)}><option value="">Seleccionar</option>{personas.map((p) => <option key={p.id} value={p.id}>{nombreDe(p)}{p.especialidad ? ` · ${p.especialidad}` : ''} · {modalidadDePersona(p.modalidad_pago) === 'por_obra' ? 'por acuerdo' : 'por día'}</option>)}</select></label>}
         <label>Cómo se le paga<select value={f.modalidad} onChange={(e) => cambiarModalidad(e.target.value)}>{MODALIDADES_PRINCIPALES.map(([v, t]) => <option key={v} value={v}>{t}</option>)}{!MODALIDADES_PRINCIPALES.some(([v]) => v === f.modalidad) && <option value={f.modalidad}>{MODALIDADES[f.modalidad] ?? f.modalidad}</option>}</select></label>
-        <label>{f.modalidad === 'por_obra' ? 'Monto acordado por esta obra *' : f.modalidad === 'por_dia' ? 'Valor por día (jornal) *' : `${ETIQUETA_VALOR[f.modalidad] ?? 'Valor acordado'} *`}<input type="number" min="0" max={f.modalidad === 'porcentaje' ? 100 : undefined} step="0.01" value={f.valor_acordado} onChange={(e) => set('valor_acordado', e.target.value)} /></label>
+        <label>{f.modalidad === 'por_obra' ? 'Monto acordado por esta obra *' : f.modalidad === 'por_dia' ? 'Valor por día (jornal) *' : `${ETIQUETA_VALOR[f.modalidad] ?? 'Valor acordado'} *`}<CampoNumero min="0" max={f.modalidad === 'porcentaje' ? 100 : undefined} value={f.valor_acordado} onChange={(e) => set('valor_acordado', e.target.value)} /></label>
         <label>Función en la obra<input value={f.rol_en_obra} onChange={(e) => set('rol_en_obra', e.target.value)} placeholder="Ej.: Instalador" /></label>
         <label className="adicAncho">Notas<input value={f.notas} onChange={(e) => set('notas', e.target.value)} /></label>
       </div>
@@ -476,7 +477,7 @@ function FormPago({ obraId, personas, resumen = {}, pago, personaFija, onCancela
               setF((a) => ({ ...a, personal_id: id, monto: sugerido > 0.5 ? String(Math.round(sugerido * 100) / 100) : a.monto }))
             }}><option value="">Seleccionar</option>{personas.map((p) => <option key={p.id} value={p.id}>{nombreDe(p)}</option>)}</select></label>}
         {!editando && resumen[Number(f.personal_id)] && <p className="pagoResumen adicAncho">{resumen[Number(f.personal_id)].texto}</p>}
-        <label>Monto *<input type="number" min="0.01" step="0.01" required value={f.monto} onChange={(e) => set('monto', e.target.value)} /></label>
+        <label>Monto *<CampoNumero min="0.01" required value={f.monto} onChange={(e) => set('monto', e.target.value)} /></label>
         <label>Fecha *<input type="date" required value={f.fecha} onChange={(e) => set('fecha', e.target.value)} /></label>
         <label className="adicAncho">Detalle<input value={f.detalle} onChange={(e) => set('detalle', e.target.value)} placeholder="Ej.: adelanto, liquidación semana 2" /></label>
       </div>
@@ -513,8 +514,8 @@ function FormJornal({ obraId, personas, porDia = new Set<number>(), onCancelar, 
           {personas.some((p) => !porDia.has(p.id)) && <optgroup label="Por acuerdo (solo asistencia, no suma a cobrar)">{personas.filter((p) => !porDia.has(p.id)).map((p) => <option key={p.id} value={p.id}>{nombreDe(p)}</option>)}</optgroup>}
         </select></label>
         <label>Fecha *<input type="date" required value={f.fecha} onChange={(e) => set('fecha', e.target.value)} /></label>
-        <label>Jornada *<input type="number" min="0.25" step="0.25" required value={f.jornada} onChange={(e) => set('jornada', e.target.value)} placeholder="1 = día, 0.5 = medio" /></label>
-        <label>Horas (opcional)<input type="number" min="0" step="0.5" value={f.horas} onChange={(e) => set('horas', e.target.value)} /></label>
+        <label>Jornada *<CampoNumero min="0.25" required value={f.jornada} onChange={(e) => set('jornada', e.target.value)} placeholder="1 = día, 0,5 = medio" /></label>
+        <label>Horas (opcional)<CampoNumero min="0" value={f.horas} onChange={(e) => set('horas', e.target.value)} /></label>
         <label className="adicAncho">Observaciones<input value={f.observaciones} onChange={(e) => set('observaciones', e.target.value)} /></label>
       </div>
       <p className="gestionAyuda">El jornal registra asistencia y, si la persona cobra por día u hora, suma a lo que le corresponde cobrar. No genera un pago automático: el pago se registra aparte con el botón Pago.</p>

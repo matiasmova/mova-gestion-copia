@@ -14,6 +14,7 @@ import {
   type FilaPlan,
   type ResultadoImportacion,
 } from './importarCatalogo'
+import CampoNumero from './CampoNumero'
 
 // Ventana para cargar o actualizar el catálogo desde una hoja de cálculo
 // (CSV o Excel .xlsx/.xls).
@@ -187,7 +188,7 @@ export default function ImportarCatalogo({ existentes, modoInicial, conMoneda = 
               <>
                 <div className="formGrid">
                   <label>Cotización del dólar (pesos por USD)
-                    <input type="number" min="0" step="0.01" value={cotizacion} onChange={(e) => setCotizacion(e.target.value)} placeholder="Ej.: 1250" />
+                    <CampoNumero min="0" value={cotizacion} onChange={(e) => setCotizacion(e.target.value)} placeholder="Ej.: 1250" />
                   </label>
                   <label>El % de ganancia es un
                     <select value={modo} onChange={(e) => setModo(e.target.value as ModoGanancia)}>
@@ -196,7 +197,7 @@ export default function ImportarCatalogo({ existentes, modoInicial, conMoneda = 
                     </select>
                   </label>
                   <label>Ganancia para productos nuevos sin precio (%)
-                    <input type="number" min="0" step="0.1" value={gananciaNuevos} onChange={(e) => setGananciaNuevos(e.target.value)} placeholder="Vacío = precio 0" />
+                    <CampoNumero min="0" value={gananciaNuevos} onChange={(e) => setGananciaNuevos(e.target.value)} placeholder="Vacío = precio 0" />
                   </label>
                   <label style={{ flexDirection: 'row', alignItems: 'center', gap: '8px' }}>
                     <input type="checkbox" checked={recalcular} onChange={(e) => setRecalcular(e.target.checked)} style={{ width: 'auto' }} />

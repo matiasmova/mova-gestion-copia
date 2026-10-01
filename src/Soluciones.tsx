@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { supabase } from './supabase'
 import { confirmarEliminacion } from './confirmar'
+import CampoNumero from './CampoNumero'
 
 // Catálogo de soluciones: textos de beneficios que se eligen al armar un
 // presupuesto (domótica, WiFi mesh, riego, etc.) y aparecen en el documento
@@ -177,7 +178,7 @@ function FormularioSolucion({ solucion, existentes, conIdea, onCancelar, onGuard
           </div>}
         </label>
         {errorIA && <p className="loginError formFull">{errorIA}</p>}
-        <label>Orden<input type="number" value={f.orden} onChange={(e) => setF({ ...f, orden: e.target.value })} /></label>
+        <label>Orden<CampoNumero value={f.orden} onChange={(e) => setF({ ...f, orden: e.target.value })} /></label>
         <label>Estado<select value={f.activo ? 'si' : 'no'} onChange={(e) => setF({ ...f, activo: e.target.value === 'si' })}><option value="si">Activa (se puede elegir)</option><option value="no">Oculta</option></select></label>
       </div>
       {error && <p className="loginError">{error}</p>}

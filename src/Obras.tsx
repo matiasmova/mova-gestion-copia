@@ -23,6 +23,7 @@ import {
   resumenEliminacionObra,
 } from './eliminarObra'
 import { confirmarEliminacion } from './confirmar'
+import CampoNumero from './CampoNumero'
 
 type EstadoObra = 'en_proceso' | 'finalizada' | 'observacion'
 
@@ -830,8 +831,7 @@ function Obras({ obraAbrirId, onObraAbierta, conIA = false }: { obraAbrirId?: nu
 
                   <label>
                     Porcentaje completado
-                    <input
-                      type="number"
+                    <CampoNumero
                       min="0"
                       max="100"
                       value={formularioAvance.porcentaje}
@@ -1186,7 +1186,7 @@ function EconomiaObra({ obraId, onGenerarPdf, onCambio }: { obraId: number; onGe
     {mostrarCobro && (
       <form className="clienteForm adicForm" onSubmit={guardarCobro}>
         <div className="formGrid">
-          <label>Monto *<input type="number" min="0.01" step="0.01" required value={cobroForm.monto} onChange={(e) => setCobroForm((f) => ({ ...f, monto: e.target.value }))} /></label>
+          <label>Monto *<CampoNumero min="0.01" required value={cobroForm.monto} onChange={(e) => setCobroForm((f) => ({ ...f, monto: e.target.value }))} /></label>
           <label>Fecha *<input type="date" required value={cobroForm.fecha} onChange={(e) => setCobroForm((f) => ({ ...f, fecha: e.target.value }))} /></label>
           <label>Medio<select value={cobroForm.medio_pago} onChange={(e) => setCobroForm((f) => ({ ...f, medio_pago: e.target.value }))}><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option><option value="tarjeta">Tarjeta</option><option value="cheque">Cheque</option><option value="otro">Otro</option></select></label>
           <label>Referencia<input value={cobroForm.referencia} onChange={(e) => setCobroForm((f) => ({ ...f, referencia: e.target.value }))} /></label>
