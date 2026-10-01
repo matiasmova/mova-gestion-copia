@@ -6,7 +6,7 @@ import { importeNeto, partirDescripcion, pctItem, formatoPct } from './presupues
 import { antesYAhora, etiquetaModificacion } from './presupuestoModificaciones'
 import { cargarSolucionesPresupuesto, type SolucionPresupuesto } from './presupuestoSoluciones'
 import { configActual, lineaContacto, textoCondicion } from './config'
-import { cargarEstadoPresupuesto, mensajeEstado, PCT_ANTICIPO, type EstadoPresupuesto } from './estadoObra'
+import { cargarEstadoPresupuesto, mensajeEstado, PCT_ANTICIPO, totalAPagarHoy, type EstadoPresupuesto } from './estadoObra'
 import { cargarDatosContacto, type DatosContacto } from './presupuestoContacto'
 import { codigoPresupuesto, nombreArchivo } from './codigoPresupuesto'
 
@@ -371,8 +371,19 @@ export async function generarPdfPresupuesto(entrada: DatosPdf): Promise<Blob> {
       { e: 'YA PAGASTE', v: moneda(estado.cobrado), c: VERDE },
       { e: 'PENDIENTE A HOY', v: moneda(estado.pendienteHoy), c: estado.pendienteHoy > 0.5 ? NARANJA : VERDE },
     ]
+    if (estado.gastoExtraPendiente > 0.5) cifras[2].e = 'PENDIENTE DE LA OBRA'
     cifras.forEach((c, i) => { texto(c.e, M + 14 + i * col, y - 2, F_CHICO, bold, GRIS); texto(c.v, M + 14 + i * col, y - 22, F_GRANDE, bold, c.c) })
     y -= 52
+    // Total a pagar hoy = obra + gastos a reintegrar que todavía no se devolvieron.
+    if (estado.gastoExtraPendiente > 0.5) {
+      lugar(44)
+      rect(M, y - 26, CW, 38, NARANJA_SUAVE)
+      rect(M, y - 26, 2.5, 38, NARANJA)
+      texto('TOTAL A PAGAR HOY', M + 14, y - 2, F_CHICO, bold, NARANJA)
+      texto(`Obra ${moneda(Math.max(0, estado.pendienteHoy))} + gastos a reintegrar ${moneda(estado.gastoExtraPendiente)}`, M + 14, y - 16, F_CHICO, font, GRIS)
+      derecha(moneda(totalAPagarHoy(estado)), M + CW - 14, y - 14, F_GRANDE, bold, OSCURO)
+      y -= 46
+    }
     // ---- Avance de la obra: "Hoy vamos por acá" según el último informe ----
     const bx = M, bw = CW
     const total = Math.max(estado.totalActualizado, 1)
@@ -455,19 +466,22 @@ export async function generarPdfPresupuesto(entrada: DatosPdf): Promise<Blob> {
     // Gastos a reintegrar
     if (estado.gastosExtra.length > 0) {
       lugar(60)
-      titulo('Gastos a reintegrar (aparte del total)')
+      titulo('Gastos a reintegrar')
+      for (const r of partir('Materiales y gastos que compramos para tu obra y nos devolvés aparte del presupuesto. Los pendientes se suman al total a pagar; los ya reintegrados, no.', F_CHICO + 0.5, CW)) { texto(r, M, y, F_CHICO + 0.5, font, GRIS); y -= 10.5 }
+      y -= 6
       for (const g of estado.gastosExtra) {
         const rr = partir(`${fechaCorta(g.fecha)} · ${g.descripcion}`, F_NORMAL, CW - 200)
-        const alto = rr.length * 12 + 8
+        const alto = Math.max(rr.length * 12, 20) + 8
         lugar(alto)
         tilde(M + 16, y + 3, g.devuelto)
         let yy = y
         for (const r of rr) { texto(r, M + 30, yy, F_NORMAL, font, TEXTO); yy -= 12 }
         derecha(moneda(g.importe), M + CW - 90, y, F_NORMAL, bold, OSCURO)
         derecha(g.devuelto ? 'Reintegrado' : 'Pendiente', M + CW, y, F_CHICO + 0.5, bold, g.devuelto ? VERDE : NARANJA)
+        derecha(g.devuelto ? 'no suma' : 'suma al total', M + CW, y - 10, F_CHICO, font, GRIS)
         y -= alto
       }
-      if (estado.gastoExtraPendiente > 0.5) { texto(`Pendiente de reintegro: ${moneda(estado.gastoExtraPendiente)}`, M + 30, y, F_NORMAL, bold, NARANJA); y -= 16 }
+      if (estado.gastoExtraPendiente > 0.5) { texto(`Pendiente de reintegro: ${moneda(estado.gastoExtraPendiente)} (incluido en el total a pagar)`, M + 30, y, F_NORMAL, bold, NARANJA); y -= 16 }
       y -= 10
     }
   }

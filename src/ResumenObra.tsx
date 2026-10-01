@@ -166,7 +166,9 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
   // ---------- Qué falta ----------
   const pendientes: Pendiente[] = []
   if (!tienePresupuesto) pendientes.push({ tono: 'alerta', texto: 'La obra no tiene un presupuesto aceptado vinculado.' })
-  if (cuenta && cuenta.pendienteHoy > 0.5) pendientes.push({ tono: 'alerta', texto: `Falta cobrar ${dinero(cuenta.pendienteHoy)} a hoy.`, tab: 'finanzas' })
+  // A hoy: lo de la obra según el avance + los gastos a reintegrar sin devolver.
+  const aCobrarHoy = cuenta ? Math.max(0, cuenta.pendienteHoy) + Math.max(0, cuenta.gastoExtraPendiente) : 0
+  if (cuenta && aCobrarHoy > 0.5) pendientes.push({ tono: 'alerta', texto: cuenta.gastoExtraPendiente > 0.5 && cuenta.pendienteHoy > 0.5 ? `Falta cobrar ${dinero(aCobrarHoy)} a hoy (obra ${dinero(cuenta.pendienteHoy)} + gastos a reintegrar ${dinero(cuenta.gastoExtraPendiente)}).` : `Falta cobrar ${dinero(aCobrarHoy)} a hoy.`, tab: 'finanzas' })
   if (cuenta && cuenta.gastoExtraPendiente > 0.5) pendientes.push({ tono: 'alerta', texto: `Reintegros de gastos pendientes: ${dinero(cuenta.gastoExtraPendiente)}.`, tab: 'adicionales' })
   if (datos && datos.adic.pendientes > 0) pendientes.push({ tono: 'alerta', texto: datos.adic.pendientes === 1 ? '1 cambio o adicional esperando aprobación.' : `${datos.adic.pendientes} cambios o adicionales esperando aprobación.`, tab: 'adicionales' })
   if (datos && datos.personal === 0 && !terminada) pendientes.push({ tono: 'alerta', texto: 'No hay personal asignado a la obra.', tab: 'personal' })
