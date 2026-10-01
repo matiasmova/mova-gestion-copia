@@ -176,7 +176,7 @@ export default function AppFase2() {
       onAbrirObra={puedeVer(rol, 'obras') ? (id) => { setObraAbrirId(id); navegar('obras') } : undefined}
       onAbrirPresupuesto={puedeVer(rol, 'presupuestos') ? (id) => { setPresupuestoAbrirId(id); navegar('presupuestos') } : undefined} />,
     obras: <Obras conIA={rol === 'admin' || rol === 'contable' || rol === 'encargado'} obraAbrirId={obraAbrirId} onObraAbierta={() => setObraAbrirId(null)} onVerPresupuesto={(id) => { setPresupuestoAbrirId(id); navegar('presupuestos') }} />,
-    presupuestos: <Presupuestos pedido={pedidoPara('presupuestos')} onPedidoAtendido={pedidoAtendido} presupuestoAbrirId={presupuestoAbrirId} onPresupuestoAbierto={() => setPresupuestoAbrirId(null)} />,
+    presupuestos: <Presupuestos onAbrirObra={puedeVer(rol, 'obras') ? (id) => { setObraAbrirId(id); navegar('obras') } : undefined} pedido={pedidoPara('presupuestos')} onPedidoAtendido={pedidoAtendido} presupuestoAbrirId={presupuestoAbrirId} onPresupuestoAbierto={() => setPresupuestoAbrirId(null)} />,
     catalogo: <ProductosServicios pedido={pedidoPara('catalogo')} onPedidoAtendido={pedidoAtendido} />,
     soluciones: <Soluciones />,
     finanzas: <Finanzas pedido={pedidoPara('finanzas')} onPedidoAtendido={pedidoAtendido} onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} />,

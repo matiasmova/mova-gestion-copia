@@ -1477,39 +1477,12 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 .hoyIAOtra{margin-top:8px;font-size:12.5px}
 
 /* ===== Ficha de presupuesto: acciones, pestañas y facturas ===== */
-.presuAcciones{flex-direction:column;align-items:stretch;gap:10px}
-.presuAccEstado{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
-.presuAccEstado .obraVinculadaTag{align-self:center;margin:0}
 .presuAccBotones{display:flex;flex-wrap:wrap;gap:8px}
-.presuTabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px;border-radius:12px;background:#f1f2f4}
-.presuTabs button{border:0;border-radius:9px;padding:9px 6px;background:transparent;font:inherit;font-size:14px;font-weight:600;color:#4b5563;cursor:pointer;white-space:nowrap}
-.presuTabs button.active{background:#fff;color:#14181e;box-shadow:0 1px 4px rgba(0,0,0,.1)}
-.presuSeccion{display:flex;flex-direction:column;gap:10px}
 .presuPeligro{display:flex;justify-content:flex-end;padding-top:10px;border-top:1px dashed var(--mova-border)}
 .presuPeligro .deactivateButton{font-size:13px}
-.facturasObra{display:flex;flex-direction:column;gap:10px}
-.facturasTotales{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.facturasTotales>div{border:1px solid var(--mova-border);border-radius:12px;padding:10px 12px;background:#fff;display:flex;flex-direction:column}
-.facturasTotales span{font-size:10.5px;font-weight:800;letter-spacing:.8px;color:#9099a6;text-transform:uppercase}
-.facturasTotales strong{font-size:16px;margin-top:4px}
-.facturasTotales .alerta{border-color:#f1c38d;background:#fff6e9}
-.facturasTotales .alerta strong{color:var(--mova-orange)}
-.facturaCard{border:1px solid var(--mova-border);border-radius:12px;padding:10px 12px;background:#fff;display:flex;flex-direction:column;gap:6px}
-.facturaCard .editButton{align-self:flex-start}
-.facturaCab{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
-.facturaCab>div{display:flex;flex-direction:column;min-width:0}
-.facturaCab small{color:var(--mova-muted);font-size:12px}
-.facturaCab b{white-space:nowrap}
-.facturaCard ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
-.facturaCard li{display:flex;justify-content:space-between;gap:10px;font-size:13px}
-.facturaCard li small{color:var(--mova-muted);white-space:nowrap}
-.facturaPagada{color:#23764e;font-weight:700}
-.facturaImpaga{color:var(--mova-orange);font-weight:700}
 @media (max-width:640px){
   .presuAccBotones{display:grid;grid-template-columns:1fr 1fr}
   .presuAccBotones .editButton{justify-content:center;text-align:center}
-  .presuTabs button{font-size:13px;padding:9px 2px;overflow:hidden;text-overflow:ellipsis}
-  .presuTabLargo,.presuTabIcono{display:none}
 }
 
 /* ===== Obra: botón Registrar y menú ===== */
@@ -1523,3 +1496,58 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 .registrarIcono{font-size:24px;line-height:1}
 .registrarGrid strong{font-size:14.5px;color:#14181e}
 .registrarGrid small{font-size:12px;color:var(--mova-muted);line-height:1.35}
+
+/* ===== Línea de vida (presupuesto → obra) ===== */
+.vidaEtapas{display:flex;list-style:none;margin:2px 0 4px;padding:0}
+.vidaEtapas li{flex:1;min-width:0;text-align:center;font-size:10.5px;font-weight:600;color:#9aa1ab;position:relative;line-height:1.2}
+.vidaEtapas li i{display:block;width:20px;height:20px;border-radius:50%;margin:0 auto 4px;background:#e3e6ea;border:2px solid #e3e6ea;font-style:normal;color:#fff;font-size:11px;line-height:16px;position:relative;z-index:1}
+.vidaEtapas li:not(:last-child)::after{content:'';position:absolute;top:9px;left:50%;width:100%;height:2px;background:#e3e6ea}
+.vidaEtapas li span{display:block;padding:0 1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:480px){.vidaEtapas li{font-size:9.5px;letter-spacing:-.2px}}
+.vidaEtapas .vida-ok{color:#23764e}.vidaEtapas .vida-ok i{background:#23764e;border-color:#23764e}.vidaEtapas .vida-ok::after{background:#23764e!important}
+.vidaEtapas .vida-hoy{color:#e8812a;font-weight:800}.vidaEtapas .vida-hoy i{background:#fff;border-color:#e8812a;box-shadow:0 0 0 4px #fde6cf}
+.vidaEtapas .vida-no{color:#b23b32;font-weight:800}.vidaEtapas .vida-no i{background:#b23b32;border-color:#b23b32}
+
+/* ===== Ficha de presupuesto por etapas ===== */
+.presuCli{margin:-8px 0 0;color:var(--mova-muted);font-size:14px}
+.presuPaso{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:13px 16px;border:0;border-radius:16px;background:var(--mova-orange,#e8812a);color:#fff;text-align:left;cursor:pointer;font:inherit;box-shadow:0 6px 18px -8px rgba(232,129,42,.8)}
+.presuPaso.wa{background:#25d366;box-shadow:0 6px 18px -8px rgba(37,211,102,.8)}
+.presuPaso:disabled{opacity:.6;cursor:default}
+.presuPaso small{font-size:11px;letter-spacing:1px;font-weight:800;text-transform:uppercase;opacity:.92}
+.presuPaso b{font-size:18px}
+.presuPaso span{font-size:12.5px;opacity:.95;line-height:1.35}
+.presuPregunta{margin:4px 0 0;font-size:17px}
+.presuBtnOk,.presuBtnNo{border-radius:12px;padding:12px;font:inherit;font-size:15px;font-weight:700;cursor:pointer;border:1px solid}
+.presuBtnOk{background:#ecf6f1;border-color:#bfe2cf;color:#1f6a3a}
+.presuBtnNo{background:#fff1f1;border-color:#f2c6c6;color:#9b2222}
+.presuAncho{width:100%;justify-content:center}
+.presuAviso{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 12px;background:#fff6e9;border:1px solid #f1d2a6;color:#7a4a07;border-radius:12px;padding:10px 12px;font-size:13.5px}
+.presuAviso.rechazo{background:#fff1f1;border-color:#f2c6c6;color:#9b2222}
+.presuNota{margin:0;background:#f4eefc;color:#4b2a78;border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.45}
+.presuAccBotones{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.presuAccBotones .editButton{justify-content:center;text-align:center}
+.presuMas{border-top:1px dashed var(--mova-border);padding-top:10px}
+.presuMas summary{cursor:pointer;color:var(--mova-muted);font-weight:600;font-size:14px}
+.presuMasCuerpo{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:10px}
+.presuEstadoManual{display:flex;gap:8px;align-items:flex-end}
+.presuMotivos{flex-wrap:wrap;margin:6px 0 10px}
+.presuMotivos button.activo{background:#fff1f1;border-color:#f2c6c6;color:#9b2222}
+.presuChips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}
+.presuChips button{white-space:nowrap;border:1px solid var(--mova-border,#dfe2e7);border-radius:999px;padding:7px 12px;font:inherit;font-size:13px;font-weight:600;background:#fff;cursor:pointer;color:#374151}
+.presuChips button b{margin-left:4px;color:var(--mova-muted)}
+.presuChips button.activo{background:#1f2328;border-color:#1f2328;color:#fff}
+.presuChips button.activo b{color:#cfd3d9}
+.presuEtapa{display:inline-block;font-size:11.5px;font-weight:700;border-radius:999px;padding:3px 9px;white-space:nowrap}
+.et-borrador{background:#eef0f3;color:#4b5563}.et-enviado{background:#e8f0fb;color:#2f5ea8}.et-aceptado{background:#e7f5ec;color:#1f6a3a}
+.et-obra{background:#fff1e3;color:#b8620b}.et-cobrada{background:#e7f5ec;color:#1f6a3a}.et-rechazado{background:#fdecec;color:#9b2222}
+.presuEtapaBarra{height:5px;border-radius:9px;background:#eef0f3;margin:2px 0 8px;overflow:hidden}
+.presuEtapaBarra i{display:block;height:100%;background:#e8812a}
+.orPresu{border:1px solid var(--mova-border,#e5e7eb);border-radius:14px;padding:12px 14px;background:#fff;display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.orPresuTit{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.orPresuTit span{font-size:11px;font-weight:800;letter-spacing:1px;color:#7b8491}
+.orPresu strong{font-size:14.5px}
+.orPresuFila{display:flex;justify-content:space-between;font-size:13.5px;padding:3px 0;border-bottom:1px solid #eef0f3}
+.orPresuTotal{display:flex;justify-content:space-between;background:#fff6ec;border-left:3px solid #e8812a;padding:7px 10px;font-weight:800;font-size:14px}
+.orPresuBtns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
+.orPresuBtns .editButton{justify-content:center;text-align:center}
+.orVida{margin:0 0 12px}

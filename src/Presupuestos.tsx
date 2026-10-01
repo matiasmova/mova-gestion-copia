@@ -18,6 +18,7 @@ import {
 } from './eliminarObra'
 import { confirmarEliminacion } from './confirmar'
 import SeguimientoPresupuestos from './SeguimientoPresupuestos'
+import { etiquetaEtapa, type ObraEtapa } from './VidaEtapas'
 
 type PresupuestoCompleto = PresupuestoEditable & {
   created_at: string
@@ -31,6 +32,9 @@ type PresupuestoCompleto = PresupuestoEditable & {
   // Seguimiento (columnas nuevas: si falta el SQL quedan vacías).
   enviado_at?: string | null
   seguimiento_at?: string | null
+  // Etapas (SQL fase 20: si falta, quedan vacías).
+  motivo_rechazo?: string | null
+  version?: number | null
 }
 
 const ESTADOS = [
@@ -39,9 +43,8 @@ const ESTADOS = [
   { v: 'aceptado', t: 'Aceptado' },
   { v: 'rechazado', t: 'Rechazado' },
 ]
-const etiquetaEstado = (v: string) => ESTADOS.find((e) => e.v === v)?.t ?? v
 
-function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedidoAtendido }: { presupuestoAbrirId?: number | null; onPresupuestoAbierto?: () => void; pedido?: Pedido | null; onPedidoAtendido?: () => void } = {}) {
+function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedidoAtendido, onAbrirObra }: { presupuestoAbrirId?: number | null; onPresupuestoAbierto?: () => void; pedido?: Pedido | null; onPedidoAtendido?: () => void; onAbrirObra?: (obraId: number) => void } = {}) {
   const [presupuestos, setPresupuestos] = useState<PresupuestoCompleto[]>([])
   const [clientes, setClientes] = useState<ClienteOpcion[]>([])
   const [obras, setObras] = useState<ObraOpcion[]>([])
@@ -57,6 +60,9 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
   const [convirtiendo, setConvirtiendo] = useState<number | null>(null)
   const [telefonos, setTelefonos] = useState<Record<number, string | null>>({})
   const [faltaSqlSeguimiento, setFaltaSqlSeguimiento] = useState(false)
+  const [faltaSqlEtapas, setFaltaSqlEtapas] = useState(false)
+  // Estado y avance de cada obra (para la etapa "En obra · 30%").
+  const [obrasEtapa, setObrasEtapa] = useState<Record<number, ObraEtapa>>({})
 
   useEffect(() => { cargarDatos() }, [])
 
@@ -75,7 +81,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pedido])
 
-  async function cargarDatos() {
+  async function cargarDatos(): Promise<PresupuestoCompleto[]> {
     setCargando(true)
     setError('')
     const [rPres, rItems, rClientes, rObras, rPagos, rAdic] = await Promise.all([
@@ -87,10 +93,15 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
       supabase.from('adicionales').select('*').in('estado', ['aprobado', 'pagado']),
     ])
     // Teléfonos (para WhatsApp) y fechas de envío/seguimiento: si fallan, la pantalla sigue igual.
-    const [rTel, rSeg] = await Promise.all([
+    const [rTel, rSeg, rEtapas, rObrasEt] = await Promise.all([
       supabase.from('Clientes').select('id, telefono'),
       supabase.from('presupuestos').select('id, enviado_at, seguimiento_at').eq('activo', true),
+      supabase.from('presupuestos').select('id, motivo_rechazo, version').eq('activo', true),
+      supabase.from('obras').select('id, estado, porcentaje_avance'),
     ])
+    setFaltaSqlEtapas(!!rEtapas.error)
+    const etapas = new Map(((rEtapas.data ?? []) as { id: number; motivo_rechazo: string | null; version: number | null }[]).map((x) => [x.id, x]))
+    setObrasEtapa(Object.fromEntries(((rObrasEt.data ?? []) as { id: number; estado: string | null; porcentaje_avance: number | null }[]).map((o) => [o.id, { estado: o.estado, porcentaje_avance: Number(o.porcentaje_avance) || 0 }])))
     setTelefonos(Object.fromEntries(((rTel.data ?? []) as { id: number; telefono: string | null }[]).map((c) => [c.id, c.telefono])))
     setFaltaSqlSeguimiento(!!rSeg.error)
     const seg = new Map(((rSeg.data ?? []) as { id: number; enviado_at: string | null; seguimiento_at: string | null }[]).map((x) => [x.id, x]))
@@ -98,7 +109,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
       console.error(rPres.error || rItems.error || rClientes.error || rObras.error)
       setError('No se pudieron cargar los presupuestos.')
       setCargando(false)
-      return
+      return []
     }
     const items = (rItems.data ?? []) as Array<ItemPresupuesto & { presupuesto_id: number; orden: number }>
     const base = (rPres.data ?? []).map((p) => ({
@@ -127,7 +138,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
         ? adicionales.filter(a => a.estado === 'aprobado').filter(corresponde).reduce((s, a) => s + (Number(a.importe) || 0), 0)
         : 0
       const pagado = pagos ? pagos.filter(corresponde).reduce((s, x) => s + (Number(x.monto) || 0), 0) : p.total_pagado
-      return { ...p, ajustes, total_pagado: pagado, saldo: Math.max(0, p.total + ajustes - pagado), enviado_at: seg.get(p.id)?.enviado_at ?? null, seguimiento_at: seg.get(p.id)?.seguimiento_at ?? null }
+      return { ...p, ajustes, total_pagado: pagado, saldo: Math.max(0, p.total + ajustes - pagado), enviado_at: seg.get(p.id)?.enviado_at ?? null, seguimiento_at: seg.get(p.id)?.seguimiento_at ?? null, motivo_rechazo: etapas.get(p.id)?.motivo_rechazo ?? null, version: etapas.get(p.id)?.version ?? 1 }
     })
 
     setClientes((rClientes.data ?? []) as ClienteOpcion[])
@@ -136,6 +147,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
     setCargando(false)
     // Si hay una ficha abierta, refrescarla con los datos nuevos
     setFicha((actual) => (actual ? cargados.find((p) => p.id === actual.id) ?? null : null))
+    return cargados
   }
 
   const filtrados = useMemo(() => {
@@ -176,7 +188,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
     }
   }
 
-  async function cambiarEstado(p: PresupuestoCompleto, nuevo: string) {
+  async function cambiarEstado(p: PresupuestoCompleto, nuevo: string, ofrecerEliminarObraVinculada = true) {
     const { error: err } = await supabase.from('presupuestos').update({ estado: nuevo }).eq('id', p.id)
     if (err) { console.error(err); window.alert('No se pudo modificar el estado.'); return }
     // Stock: al ACEPTAR se descuenta (venta confirmada); si sale de aceptado se repone.
@@ -192,7 +204,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
     setPresupuestos((prev) => prev.map((x) => (x.id === p.id ? { ...x, estado: nuevo, ...enviado } : x)))
     setFicha((f) => (f && f.id === p.id ? { ...f, estado: nuevo, ...enviado } : f))
     // Si se rechaza un presupuesto que ya tenía obra, se ofrece eliminarla.
-    if (nuevo === 'rechazado' && p.obra_id != null) {
+    if (nuevo === 'rechazado' && p.obra_id != null && ofrecerEliminarObraVinculada) {
       const eliminada = await ofrecerEliminarObra(p.obra_id, 'El presupuesto pasó a Rechazado y tiene una obra vinculada.')
       if (eliminada) await cargarDatos()
     }
@@ -207,21 +219,69 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
     if (err) console.error(err)
   }
 
-  async function convertirEnObra(p: PresupuestoCompleto, datos?: DatosObra) {
-    if (convirtiendo) return
+  async function convertirEnObra(p: PresupuestoCompleto, datos?: DatosObra, avisar = true): Promise<number | null> {
+    if (convirtiendo) return null
     setConvirtiendo(p.id)
     const { data: obraNueva, error: errObra } = await supabase.from('obras').insert({
-      cliente_id: p.cliente_id, nombre_obra: p.titulo, descripcion: p.descripcion ?? null,
+      cliente_id: p.cliente_id, nombre_obra: datos?.nombre?.trim() || p.titulo, descripcion: p.descripcion ?? null,
       direccion: datos?.direccion?.trim() || null, localidad: datos?.localidad?.trim() || null,
       fecha_inicio: datos?.fecha_inicio || null, fecha_fin_estimada: datos?.fecha_fin_estimada || null,
       estado: 'en_proceso', porcentaje_avance: 0, activo: true,
     }).select('id').single()
-    if (errObra || !obraNueva) { console.error(errObra); window.alert('No se pudo crear la obra.'); setConvirtiendo(null); return }
+    if (errObra || !obraNueva) { console.error(errObra); window.alert('No se pudo crear la obra.'); setConvirtiendo(null); return null }
     const { error: errVinc } = await supabase.from('presupuestos').update({ obra_id: obraNueva.id }).eq('id', p.id)
     if (errVinc) { console.error(errVinc); window.alert('La obra se creó pero no se pudo vincular el presupuesto.') }
     setConvirtiendo(null)
     await cargarDatos()
-    window.alert('Obra creada y vinculada. Ya podés cargarle avances, cambios y cobros desde Obras.')
+    if (avisar) window.alert('Obra creada y vinculada. Ya podés cargarle avances, cambios y cobros desde Obras.')
+    return Number(obraNueva.id)
+  }
+
+  // ---------- Flujo por etapas ----------
+  // "El cliente aceptó": pasa a Aceptado y, si no tenía obra, la crea en el mismo paso.
+  async function aceptar(p: PresupuestoCompleto, datos: DatosObra | null) {
+    if (p.estado !== 'aceptado') await cambiarEstado(p, 'aceptado')
+    if (p.obra_id == null && datos) {
+      const obraId = await convertirEnObra({ ...p, estado: 'aceptado' }, datos, false)
+      if (obraId && onAbrirObra && window.confirm('✓ Obra creada y vinculada.\n\n¿Querés ir a la obra ahora?')) { setFicha(null); onAbrirObra(obraId) }
+    }
+  }
+
+  async function rechazar(p: PresupuestoCompleto, motivo: string, ofrecerEliminarObraVinculada = true) {
+    await cambiarEstado(p, 'rechazado', ofrecerEliminarObraVinculada)
+    if (faltaSqlEtapas) return
+    const { error: err } = await supabase.from('presupuestos').update({ motivo_rechazo: motivo }).eq('id', p.id)
+    if (err) { console.error(err); return }
+    setPresupuestos((prev) => prev.map((x) => (x.id === p.id ? { ...x, motivo_rechazo: motivo } : x)))
+    setFicha((f) => (f && f.id === p.id ? { ...f, motivo_rechazo: motivo } : f))
+  }
+
+  // Copia un presupuesto como borrador nuevo (con sus ítems). Si es una versión
+  // nueva, la anterior queda rechazada con el motivo "Nueva versión".
+  async function copiar(p: PresupuestoCompleto, comoVersion: boolean) {
+    const version = comoVersion ? (p.version ?? 1) + 1 : 1
+    const fila: Record<string, unknown> = {
+      cliente_id: p.cliente_id, obra_id: comoVersion ? p.obra_id : null,
+      titulo: comoVersion ? p.titulo : `${p.titulo} (copia)`, descripcion: p.descripcion ?? null,
+      fecha: new Date().toISOString().slice(0, 10), validez_dias: p.validez_dias, estado: 'borrador',
+      subtotal: p.subtotal, descuento: p.descuento, total: p.total, total_pagado: 0, saldo: p.total, notas: p.notas ?? null, activo: true,
+    }
+    if (!faltaSqlEtapas && comoVersion) { fila.version = version; fila.version_de = p.id }
+    const { data: nuevo, error: err } = await supabase.from('presupuestos').insert(fila).select('id').single()
+    if (err || !nuevo) { console.error(err); window.alert('No se pudo copiar el presupuesto.'); return }
+    if (p.items.length) {
+      const { error: errItems } = await supabase.from('presupuesto_items').insert(p.items.map((it, i) => ({
+        presupuesto_id: nuevo.id, catalogo_id: it.catalogo_id ?? null, tipo: it.tipo, descripcion: it.descripcion,
+        cantidad: it.cantidad, precio_unitario: it.precio_unitario, costo_unitario: it.costo_unitario, descuento_pct: it.descuento_pct ?? 0, orden: i,
+      })))
+      if (errItems) console.error(errItems)
+    }
+    // La versión anterior queda como historial (y su obra, si tenía, sigue con la nueva).
+    if (comoVersion) await rechazar(p, `Nueva versión: reemplazado por la versión ${version}`, false)
+    // Se abre la copia para editarla.
+    const lista = await cargarDatos()
+    const copia = lista.find((q) => q.id === Number(nuevo.id))
+    if (copia) { setFicha(null); editar(copia) }
   }
 
   async function eliminar(p: PresupuestoCompleto) {
@@ -268,13 +328,17 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
       <div className="crmToolbar">
         <div className="crmFiltros">
           <input type="search" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar por título, cliente u obra..." />
-          <select value={estadoFiltro} onChange={(e) => setEstadoFiltro(e.target.value)}>
-            <option value="todos">Todos los estados</option>
-            {ESTADOS.map((s) => <option key={s.v} value={s.v}>{s.t}</option>)}
-          </select>
         </div>
         <VistaToggle vista={vista} onCambio={setVista} />
       </div>
+      <div className="presuChips" role="tablist" aria-label="Etapas">
+        {[['todos', 'Todos'], ['borrador', '📝 Borradores'], ['enviado', '📤 Enviados'], ['aceptado', '✅ Aceptados'], ['rechazado', '❌ Rechazados']].map(([v, t]) => (
+          <button type="button" key={v} className={estadoFiltro === v ? 'activo' : ''} onClick={() => setEstadoFiltro(v)}>
+            {t} <b>{v === 'todos' ? presupuestos.length : presupuestos.filter((p) => p.estado === v).length}</b>
+          </button>
+        ))}
+      </div>
+      {faltaSqlEtapas && !cargando && <p className="gestionAyuda">Para guardar el motivo de rechazo y las versiones, corré el SQL de Etapas (fase 20) en Supabase.</p>}
 
       {cargando && <div className="presupuestosPanel"><p>Cargando presupuestos...</p></div>}
       {error && <div className="presupuestosPanel"><p className="loginError">{error}</p></div>}
@@ -292,7 +356,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
                 <div className="crmKanbanHead"><h3>{s.t}</h3><span className="cuenta">{cols.length}</span></div>
                 <div className="crmKanbanBody">
                   {cols.length === 0 ? <div className="crmKanbanVacio">—</div> : cols.map((p) => (
-                    <TarjetaPresupuesto key={p.id} p={p} cliente={nombreCliente(p.cliente_id)} onAbrir={() => abrirFicha(p)} onPDF={() => setPdfPresupuesto(p)} />
+                    <TarjetaPresupuesto key={p.id} p={p} cliente={nombreCliente(p.cliente_id)} obra={p.obra_id != null ? obrasEtapa[p.obra_id] : undefined} onAbrir={() => abrirFicha(p)} onPDF={() => setPdfPresupuesto(p)} />
                   ))}
                 </div>
               </div>
@@ -315,7 +379,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
                   <td>{moneda(p.total + p.ajustes)}{p.ajustes !== 0 && <><br /><small style={{ color: 'var(--mova-muted)' }}>original {moneda(p.total)}</small></>}</td>
                   <td>{moneda(p.total_pagado)}</td>
                   <td>{moneda(p.saldo)}</td>
-                  <td><span className={`crmBadge est-${p.estado}`}>{etiquetaEstado(p.estado)}</span></td>
+                  <td>{(() => { const et = etiquetaEtapa(p, p.obra_id != null ? obrasEtapa[p.obra_id] : null, p.saldo); return <span className={`presuEtapa ${et.clase}`}>{et.texto}</span> })()}</td>
                 </tr>
               ))}
             </tbody>
@@ -339,7 +403,13 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
           onCerrar={() => setFicha(null)}
           onEditar={() => editar(ficha)}
           onPDF={() => setPdfPresupuesto(ficha)}
-          onCrearObra={(datos) => convertirEnObra(ficha, datos)}
+          obraEtapa={ficha.obra_id != null ? obrasEtapa[ficha.obra_id] ?? null : null}
+          motivoRechazo={ficha.motivo_rechazo ?? null}
+          onAceptar={(datos) => void aceptar(ficha, datos)}
+          onRechazar={(motivo) => void rechazar(ficha, motivo)}
+          onNuevaVersion={() => void copiar(ficha, true)}
+          onDuplicar={() => void copiar(ficha, false)}
+          onIrObra={ficha.obra_id != null && onAbrirObra ? () => { const id = ficha.obra_id!; setFicha(null); onAbrirObra(id) } : undefined}
           onCambiarEstado={(nuevo) => cambiarEstado(ficha, nuevo)}
           onEliminar={() => eliminar(ficha)}
           onEliminarObra={async () => {
@@ -353,7 +423,8 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
   )
 }
 
-function TarjetaPresupuesto({ p, cliente, onAbrir, onPDF }: { p: PresupuestoCompleto; cliente: string; onAbrir: () => void; onPDF: () => void }) {
+function TarjetaPresupuesto({ p, cliente, obra, onAbrir, onPDF }: { p: PresupuestoCompleto; cliente: string; obra?: ObraEtapa; onAbrir: () => void; onPDF: () => void }) {
+  const et = etiquetaEtapa(p, p.obra_id != null ? obra ?? null : null, p.saldo)
   return (
     <div className="crmCard" onClick={onAbrir}>
       <div className="crmCardTop">
@@ -361,10 +432,11 @@ function TarjetaPresupuesto({ p, cliente, onAbrir, onPDF }: { p: PresupuestoComp
           <h3>{p.titulo}</h3>
           <p className="crmCardCli">{cliente}</p>
         </div>
-        <span className={`crmBadge est-${p.estado}`}>{etiquetaEstado(p.estado)}</span>
+        <span className={`presuEtapa ${et.clase}`}>{et.texto}</span>
       </div>
+      {et.avance != null && <div className="presuEtapaBarra"><i style={{ width: `${et.avance}%` }} /></div>}
       <div className="crmCardMeta">
-        <span>#{p.id.toString().padStart(4, '0')}</span>
+        <span>#{p.id.toString().padStart(4, '0')}{(p.version ?? 1) > 1 ? ` · v${p.version}` : ''}</span>
         <span>{fechaCorta(p.fecha)}</span>
         <span>{p.items.length} ítems</span>
       </div>
