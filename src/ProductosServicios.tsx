@@ -8,6 +8,8 @@ import { dos, gananciaDesdePrecio, precioDesdeGanancia, type ModoGanancia } from
 import { formatoDinero, formatoDolar, guardarMoneda, leerCotizacion, leerMoneda, type Moneda } from './catalogoMoneda'
 import { confirmarEliminacion } from './confirmar'
 import { cargarConfig } from './config'
+import CompararMercado, { type ProductoAComparar } from './CompararMercado'
+import OrdenarCatalogoIA from './OrdenarCatalogoIA'
 
 export type ProductoServicio = {
   id: number
@@ -123,6 +125,8 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
   const [mostrarImportar, setMostrarImportar] = useState(false)
   const [mostrarCotizacion, setMostrarCotizacion] = useState(false)
+  const [mostrarOrdenar, setMostrarOrdenar] = useState(false)
+  const [mercado, setMercado] = useState<{ titulo: string; productos: ProductoAComparar[] } | null>(null)
   const [editando, setEditando] = useState<ProductoServicio | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [errorFormulario, setErrorFormulario] = useState('')
@@ -568,6 +572,10 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
   const simConIva = simPrecioFinal * (1 + simIvaPct / 100)
   const margenIgualAPct = modoGanancia === 'margen' && Number(gananciaPct || 0) >= 100
 
+  // Lo que se compara es el precio que paga el cliente (lista con el descuento del producto).
+  const aComparar = (el: ProductoServicio): ProductoAComparar => ({ id: el.id, nombre: el.nombre, precio: precioFinalUnidad(el), costo: el.costo_unitario })
+  const compararUno = (el: ProductoServicio) => setMercado({ titulo: el.nombre, productos: [aComparar(el)] })
+
   const tarjeta = (el: ProductoServicio) => {
     const final = precioFinalUnidad(el)
     const tieneDesc = el.aplica_descuento && final < el.precio_venta
@@ -608,6 +616,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
         </div>
         <div className="prodAcciones">
           <button className="editButton" onClick={() => abrirEdicion(el)}>Editar</button>
+          {el.tipo === 'producto' && <button type="button" className="editButton" title="Comparar con precios del mercado" onClick={() => compararUno(el)}>💲 Mercado</button>}
           {el.link_compra && <a className="editButton" href={el.link_compra} target="_blank" rel="noreferrer">Ver en web</a>}
           <button className={el.activo ? 'deactivateButton' : 'activateButton'} onClick={() => cambiarEstado(el)}>{el.activo ? 'Desactivar' : 'Activar'}</button>
         </div>
@@ -627,6 +636,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
           <button className={`editButton ${modoEdicion ? 'active' : ''}`} onClick={() => (modoEdicion ? salirEdicion() : entrarEdicion())}>
             {modoEdicion ? '✕ Salir de edición' : '✏️ Edición rápida'}
           </button>
+          {!modoEdicion && <button className="editButton" onClick={() => setMostrarOrdenar(true)}>✨ Ordenar con IA</button>}
           {!modoEdicion && <button className="editButton" onClick={() => setMostrarImportar(true)}>⬆ Importar (Excel, CSV, PDF)</button>}
           {!modoEdicion && <button className="newButton" onClick={abrirNuevo}>+ Nuevo</button>}
         </div>
@@ -764,7 +774,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
       {!cargando && !error && elementosFiltrados.length > 0 && !modoEdicion && vista === 'lista' && (
         <div className="crmListaWrap">
           <table className="crmLista">
-            <thead><tr><th></th><th>Nombre</th><th>Proveedor</th><th>P. compra</th><th>P. lista</th><th>Ganancia</th><th>Stock</th></tr></thead>
+            <thead><tr><th></th><th>Nombre</th><th>Proveedor</th><th>P. compra</th><th>P. lista</th><th>Ganancia</th><th>Stock</th><th></th></tr></thead>
             <tbody>
               {elementosFiltrados.map((el) => {
                 const final = precioFinalUnidad(el)
@@ -778,6 +788,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                     <td>{mostrar(final)}{el.moneda === 'USD' && <><br /><small className="prodUsdMini">US$ {formatoDolar(el.precio_usd ?? 0).replace('$', '').trim()}</small></>}</td>
                     <td>{mostrar(final - el.costo_unitario)}</td>
                     <td>{el.tipo === 'producto' ? <span className={`crmBadge ${nivel === 'sin' ? 'est-rechazado' : nivel === 'bajo' ? 'est-observacion' : 'est-aceptado'}`}>{el.stock}</span> : '—'}</td>
+                    <td>{el.tipo === 'producto' && <button type="button" className="editButton" title="Comparar con precios del mercado" onClick={(e) => { e.stopPropagation(); compararUno(el) }}>💲</button>}</td>
                   </tr>
                 )
               })}
@@ -791,6 +802,10 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
           {seleccion.size > 0 && (
             <div className="stockAviso" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
               <strong>{seleccion.size} seleccionado{seleccion.size === 1 ? '' : 's'}</strong>
+              <button type="button" className="editButton" onClick={() => {
+                const elegidos = elementos.filter((el) => seleccion.has(el.id) && el.tipo === 'producto').slice(0, 24)
+                if (elegidos.length) setMercado({ titulo: `${elegidos.length} producto${elegidos.length === 1 ? '' : 's'}`, productos: elegidos.map(aComparar) })
+              }}>💲 Comparar con el mercado</button>
               <span style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                 <select value={accionStockMasivo} onChange={(e) => setAccionStockMasivo(e.target.value as AccionStockMasivo)}>
                   <option value="sumar">Sumar stock</option>
@@ -871,6 +886,16 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
           conMoneda={!faltaSqlMoneda}
           onCerrar={() => setMostrarImportar(false)}
           onTerminado={() => { void cargarCatalogo() }}
+        />
+      )}
+
+      {mercado && <CompararMercado titulo={mercado.titulo} productos={mercado.productos} onCerrar={() => setMercado(null)} />}
+      {mostrarOrdenar && (
+        <OrdenarCatalogoIA
+          productos={elementos}
+          sinNombrePresupuesto={faltaSqlMoneda}
+          onCerrar={() => setMostrarOrdenar(false)}
+          onGuardado={() => { void cargarCatalogo() }}
         />
       )}
 

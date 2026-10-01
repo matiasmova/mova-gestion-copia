@@ -4,6 +4,8 @@
 //   · presupuesto -> arma un presupuesto (ítems del catálogo, título, soluciones)
 //                    a partir de lo que pide el cliente
 //   · factura     -> lee la foto de una factura o ticket y devuelve la compra
+//   · mercado     -> busca en Google precios actuales de productos en Argentina
+//   · ordenar_catalogo -> propone categoría, nombre en presupuesto y descripción
 //
 // Soluciones y presupuestos: administradores y contables. Factura: también
 // encargados y auxiliares (los que cargan compras). Desplegar con "Verify JWT" apagado
@@ -56,6 +58,65 @@ async function gemini(clave: string, pedido: string | Parte[], esquema: unknown,
   }
   throw new Error(errores.join(' | ') || 'sin respuesta')
 }
+
+type Fuente = { titulo: string; url: string }
+
+// Igual que gemini(), pero buscando en Google antes de responder. Con la
+// búsqueda no siempre se puede pedir JSON con esquema, así que se pide en el
+// texto y se extrae. Devuelve también las páginas y búsquedas que usó.
+async function geminiBuscar(clave: string, pedido: string, sistema: string): Promise<{ datos: unknown; fuentes: Fuente[]; busquedas: string[] }> {
+  const modelos = Array.from(new Set([Deno.env.get('GEMINI_MODEL'), 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3-flash-preview', 'gemini-2.5-flash'].filter(Boolean) as string[]))
+  const errores: string[] = []
+  for (const modelo of modelos) {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': clave },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: sistema }] },
+        contents: [{ role: 'user', parts: [{ text: pedido }] }],
+        tools: [{ google_search: {} }],
+        generationConfig: { temperature: 0.2 },
+      }),
+    })
+    const cuerpo = await r.json().catch(() => ({})) as {
+      error?: { message?: string }
+      candidates?: { content?: { parts?: { text?: string }[] }; groundingMetadata?: { groundingChunks?: { web?: { uri?: string; title?: string } }[]; webSearchQueries?: string[] } }[]
+    }
+    const mensaje = String(cuerpo.error?.message ?? '').slice(0, 300)
+    if (r.status === 404) { errores.push(`${modelo}: ${mensaje || 'no disponible'}`); continue }
+    if ((r.status === 400 || r.status === 403) && /API key|API_KEY|permission|PERMISSION/i.test(JSON.stringify(cuerpo))) throw new Error(`clave|${mensaje}`)
+    if (r.status === 429) throw new Error(`límite: ${mensaje}`)
+    if (!r.ok) { errores.push(`${modelo}: ${r.status} ${mensaje}`); continue }
+    const c = cuerpo.candidates?.[0]
+    const texto = c?.content?.parts?.map((p) => p.text ?? '').join('') ?? ''
+    const desde = texto.indexOf('{'), hasta = texto.lastIndexOf('}')
+    let datos: unknown
+    try { datos = JSON.parse(texto.slice(desde, hasta + 1)) } catch { errores.push(`${modelo}: respuesta sin formato`); continue }
+    const fuentes = (c?.groundingMetadata?.groundingChunks ?? []).map((x) => ({ titulo: recorte(x.web?.title, 80), url: String(x.web?.uri ?? '') }))
+      .filter((x) => /^https:\/\//.test(x.url))
+    return { datos, fuentes, busquedas: (c?.groundingMetadata?.webSearchQueries ?? []).map((q) => recorte(q, 120)).filter(Boolean).slice(0, 8) }
+  }
+  throw new Error(errores.join(' | ') || 'sin respuesta')
+}
+
+const SISTEMA_MERCADO = `Sos analista de precios de MOVA Tecnología Smart (Mendoza, Argentina), que vende e instala domótica, WiFi, cámaras, alarmas, riego y electricidad.
+Para cada producto de la lista buscá en Google el precio de venta actual en Argentina: Mercado Libre, tiendas de electrónica y tecnología, distribuidores y la tienda oficial de la marca.
+Reglas:
+- Buscá el mismo producto (misma marca y modelo). Si no aparece, usá uno equivalente y marcá equivalente = true.
+- precio: precio final al público por UNA unidad, con IVA incluido, en pesos argentinos, sin separador de miles. Si un pack trae varias unidades, dividí. Si la publicación está en dólares, poné el número en dólares y moneda "USD".
+- Ignorá usados, reacondicionados, repuestos, valores de cuotas y precios viejos.
+- Hasta 6 ofertas por producto, de tiendas distintas cuando se pueda.
+- url: el link exacto de la publicación que encontraste; vacío si no lo tenés. No inventes links ni precios.
+- comentario: una frase útil (por ejemplo "en Mercado Libre varía mucho según el vendedor" o "no lo encontré, comparé con un modelo parecido").
+Respondé SOLO con este JSON, sin texto antes ni después:
+{"productos":[{"n":1,"buscado":"lo que buscaste","ofertas":[{"tienda":"","titulo":"","precio":0,"moneda":"ARS","url":"","equivalente":false}],"comentario":""}]}`
+
+const SISTEMA_CATALOGO = `Ordenás el catálogo de MOVA Tecnología Smart (Mendoza, Argentina): domótica, redes WiFi, cámaras, alarmas, riego automático, electricidad, iluminación y servicios de instalación.
+Para cada producto o servicio devolvé:
+- categoria: una categoría corta y clara (1 a 3 palabras), por ejemplo "WiFi y redes", "Domótica Zigbee", "Cámaras", "Alarmas", "Iluminación", "Riego", "Electricidad", "Accesorios", "Mano de obra". Usá pocas categorías en total (idealmente 6 a 12) y siempre escritas igual; reutilizá las CATEGORÍAS YA USADAS cuando correspondan.
+- nombre_presupuesto: cómo lo ve el cliente en el presupuesto: genérico, sin marca ni modelo ni código, claro y profesional, 2 a 6 palabras (por ejemplo "Router mesh WiFi 6", "Cámara exterior IP 4 MP", "Interruptor inteligente 2 vías", "Instalación y configuración").
+- descripcion: una frase corta (máximo 160 caracteres) de qué es y para qué sirve, para uso interno. Sin precios.
+Español rioplatense, sin emojis.`
 
 const SISTEMA_PRESUPUESTO = `Sos el asistente comercial de MOVA Tecnología Smart (Mendoza, Argentina): domótica, redes WiFi, cámaras, alarmas, riego automático, electricidad y tecnología para hogares y empresas.
 Te pasan lo que pide un cliente y el CATÁLOGO de la empresa (id | nombre | categoría | tipo | unidad | precio). Armá un presupuesto:
@@ -194,6 +255,70 @@ Deno.serve(async (req) => {
       return responder({
         proveedor: recorte(r.proveedor, 120), fecha, numero: recorte(r.numero, 40), total: Number(r.total) || 0,
         items: (r.items ?? []).slice(0, 60).map((it) => ({ descripcion: recorte(it.descripcion, 160), cantidad: Number(it.cantidad) || 1, unidad: recorte(it.unidad, 20) || 'unidad', precio_unitario: Math.max(0, Number(it.precio_unitario) || 0) })).filter((it) => it.descripcion),
+      })
+    }
+    if (accion === 'mercado') {
+      // productos: [{ id?, descripcion? }] — con id se usan los datos del catálogo.
+      const pedidos = (Array.isArray(cuerpo.productos) ? cuerpo.productos : []).slice(0, 10) as { id?: number; descripcion?: string }[]
+      const cotizacion = Number(cuerpo.cotizacion) || 0
+      if (!pedidos.length) return responder({ error: 'No hay productos para comparar.' }, 400)
+      const ids = pedidos.map((x) => Number(x.id)).filter(Boolean)
+      const { data: cat } = ids.length
+        ? await db.from('productos_servicios').select('id, nombre, codigo, categoria, proveedor').in('id', ids)
+        : { data: [] }
+      const porId = new Map(((cat ?? []) as { id: number; nombre: string; codigo: string | null; categoria: string | null; proveedor: string | null }[]).map((p) => [p.id, p]))
+      const renglones = pedidos.map((x, k) => {
+        const p = porId.get(Number(x.id))
+        return p
+          ? `${k + 1}. ${p.nombre}${p.codigo ? ` (código ${p.codigo})` : ''}${p.proveedor ? ` · marca/proveedor: ${p.proveedor}` : ''}${p.categoria ? ` · ${p.categoria}` : ''}`
+          : `${k + 1}. ${recorte(x.descripcion, 160)}`
+      })
+      const { datos, fuentes, busquedas } = await geminiBuscar(clave, `Buscá el precio de mercado actual en Argentina de estos productos:\n${renglones.join('\n')}`, SISTEMA_MERCADO)
+      const lista = ((datos as { productos?: unknown[] })?.productos ?? []) as { n?: number; buscado?: string; comentario?: string; ofertas?: { tienda?: string; titulo?: string; precio?: number; moneda?: string; url?: string; equivalente?: boolean }[] }[]
+      // Solo se muestran links de páginas que la búsqueda realmente visitó.
+      const dominios = new Set(fuentes.map((f) => f.titulo.toLowerCase().replace(/^www\./, '')).filter((d) => d.includes('.')))
+      const linkValido = (u: unknown) => {
+        try {
+          const url = new URL(String(u ?? ''))
+          const host = url.hostname.toLowerCase().replace(/^www\./, '')
+          return url.protocol === 'https:' && [...dominios].some((d) => host === d || host.endsWith(`.${d}`) || d.endsWith(`.${host}`)) ? url.toString() : ''
+        } catch { return '' }
+      }
+      const resultados = pedidos.map((_, k) => {
+        const r = lista.find((x) => Number(x.n) === k + 1) ?? lista[k]
+        let ofertas = (r?.ofertas ?? []).map((o) => {
+          const usd = String(o.moneda ?? '').toUpperCase() === 'USD'
+          const precio = Number(o.precio) || 0
+          return { tienda: recorte(o.tienda, 60), titulo: recorte(o.titulo, 140), precio: usd ? (cotizacion > 0 ? Math.round(precio * cotizacion) : 0) : Math.round(precio), en_dolares: usd, url: linkValido(o.url), equivalente: o.equivalente === true }
+        }).filter((o) => o.precio > 0).slice(0, 8)
+        // Se descartan precios absurdos (muy lejos de la mediana).
+        const orden = ofertas.map((o) => o.precio).sort((a, b) => a - b)
+        const med = orden.length ? orden[Math.floor(orden.length / 2)] : 0
+        if (orden.length >= 3) ofertas = ofertas.filter((o) => o.precio >= med / 3 && o.precio <= med * 3)
+        const precios = ofertas.map((o) => o.precio).sort((a, b) => a - b)
+        return {
+          buscado: recorte(r?.buscado, 160), comentario: recorte(r?.comentario, 300), ofertas,
+          minimo: precios[0] ?? 0, maximo: precios[precios.length - 1] ?? 0,
+          promedio: precios.length ? Math.round(precios.reduce((a, b) => a + b, 0) / precios.length) : 0,
+          mediana: precios.length ? precios[Math.floor(precios.length / 2)] : 0,
+        }
+      })
+      return responder({ resultados, fuentes: fuentes.slice(0, 12), busquedas })
+    }
+    if (accion === 'ordenar_catalogo') {
+      const ids = (Array.isArray(cuerpo.ids) ? cuerpo.ids : []).map(Number).filter(Boolean).slice(0, 40)
+      if (!ids.length) return responder({ error: 'No hay productos para ordenar.' }, 400)
+      const { data } = await db.from('productos_servicios').select('id, tipo, nombre, codigo, categoria, proveedor, descripcion').in('id', ids)
+      const productos = (data ?? []) as { id: number; tipo: string; nombre: string; codigo: string | null; categoria: string | null; proveedor: string | null; descripcion: string | null }[]
+      const usadas = (Array.isArray(cuerpo.categorias) ? cuerpo.categorias : []).map((x) => recorte(x, 40)).filter(Boolean).slice(0, 40)
+      const texto = `CATEGORÍAS YA USADAS: ${usadas.join(' · ') || '(ninguna)'}\n\nPRODUCTOS (id | tipo | nombre | marca/proveedor | categoría actual | descripción actual):\n${productos.map((p) => `${p.id} | ${p.tipo} | ${p.nombre}${p.codigo ? ` (${p.codigo})` : ''} | ${p.proveedor ?? ''} | ${p.categoria ?? ''} | ${recorte(p.descripcion, 160)}`).join('\n')}`
+      const esquema = { type: 'OBJECT', properties: { productos: { type: 'ARRAY', items: { type: 'OBJECT', properties: { id: { type: 'INTEGER' }, categoria: { type: 'STRING' }, nombre_presupuesto: { type: 'STRING' }, descripcion: { type: 'STRING' } }, required: ['id', 'categoria', 'nombre_presupuesto', 'descripcion'] } } }, required: ['productos'] }
+      const r = await gemini(clave, texto, esquema, SISTEMA_CATALOGO, 0.3) as { productos?: { id: number; categoria: string; nombre_presupuesto: string; descripcion: string }[] }
+      const validos = new Set(productos.map((p) => p.id))
+      return responder({
+        productos: (r.productos ?? []).filter((p) => validos.has(Number(p.id))).map((p) => ({
+          id: Number(p.id), categoria: recorte(p.categoria, 40), nombre_presupuesto: recorte(p.nombre_presupuesto, 80), descripcion: recorte(p.descripcion, 200),
+        })),
       })
     }
     return responder({ error: 'Acción desconocida' }, 400)

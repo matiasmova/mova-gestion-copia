@@ -1371,3 +1371,73 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 .iaFacturaBtn small{color:var(--mova-muted);font-size:12.5px;font-weight:400}
 .iaFacturaBtn input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
 .iaFacturaBtn.leyendo{opacity:.7;cursor:wait}
+
+/* ===== IA: precios del mercado ===== */
+.mercadoModal{max-width:720px}
+.mercadoCargando{display:flex;align-items:center;gap:14px;padding:22px 4px}
+.mercadoCargando p{margin:0;line-height:1.45}
+.mercadoCargando small{color:var(--mova-muted)}
+.mercadoSpinner{flex:none;width:28px;height:28px;border-radius:50%;border:3px solid #e3d6f2;border-top-color:#7a45c2;animation:mercadoGira .9s linear infinite}
+@keyframes mercadoGira{to{transform:rotate(360deg)}}
+.mercadoResumen{display:flex;flex-direction:column;gap:3px;padding:12px 14px;border-radius:12px;margin-bottom:12px;font-size:13.5px;border:1px solid}
+.mercadoResumen strong{font-size:15.5px}
+.mercadoResumen.verde{background:#eefaf2;border-color:#bfe5cb;color:#1f6a3a}
+.mercadoResumen.amarillo{background:#fff8e6;border-color:#f1dc9f;color:#7a5a07}
+.mercadoResumen.rojo{background:#fff0f0;border-color:#f2c0c0;color:#9b2222}
+.mercadoLista{display:flex;flex-direction:column;gap:8px}
+.mercadoItem{border:1px solid var(--mova-border,#e5e7eb);border-left-width:4px;border-radius:12px;background:#fff;overflow:hidden}
+.mercadoItem.verde{border-left-color:#2e9e57}
+.mercadoItem.amarillo{border-left-color:#e2b021}
+.mercadoItem.rojo{border-left-color:#d64545}
+.mercadoItem.gris{border-left-color:#c4c9d1}
+.mercadoItemCab{all:unset;box-sizing:border-box;width:100%;display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer}
+.mercadoSemaforo{font-size:18px;flex:none}
+.mercadoNombre{flex:1;min-width:0;display:flex;flex-direction:column}
+.mercadoNombre b{font-size:14px;overflow:hidden;text-overflow:ellipsis}
+.mercadoNombre small{color:var(--mova-muted);font-size:12.5px}
+.mercadoPrecios{display:grid;grid-template-columns:auto auto;gap:0 8px;align-items:baseline;text-align:right;font-size:13px;flex:none}
+.mercadoPrecios small{color:var(--mova-muted);font-size:11px}
+.mercadoFlecha{color:#8a93a0;font-size:11px;flex:none}
+.mercadoDetalle{padding:4px 12px 12px;border-top:1px dashed #e5e7eb}
+.mercadoRango{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0 6px}
+.mercadoRango div{background:#f7f8fa;border-radius:9px;padding:7px 8px;display:flex;flex-direction:column}
+.mercadoRango small{color:var(--mova-muted);font-size:11px}
+.mercadoRango b{font-size:13px}
+.mercadoBarra{position:relative;height:8px;border-radius:6px;margin:12px 6px 24px;background:linear-gradient(90deg,#bfe5cb,#f1dc9f,#f2c0c0)}
+.mercadoBarraTu{position:absolute;top:-5px;width:4px;height:18px;margin-left:-2px;border-radius:2px;background:#5b2e9a}
+.mercadoBarraTu::after{content:'vos';position:absolute;top:19px;left:50%;transform:translateX(-50%);font-size:10.5px;font-weight:700;color:#5b2e9a}
+.mercadoOfertas{list-style:none;margin:16px 0 6px;padding:0;display:flex;flex-direction:column;gap:6px}
+.mercadoOfertas li{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:7px 9px;border-radius:9px;background:#fafbfc;font-size:13px}
+.mercadoOfertas li>span:first-child{display:flex;flex-direction:column;min-width:0}
+.mercadoOfertas small{color:var(--mova-muted);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mercadoOfertaPrecio{display:flex;flex-direction:column;align-items:flex-end;font-weight:700;flex:none}
+.mercadoOfertaPrecio a{font-size:12px;font-weight:600;color:#5b2e9a}
+.mercadoBuscado{display:block;color:var(--mova-muted);font-size:11.5px;margin-top:4px}
+.mercadoFuentes{margin-top:12px;font-size:12.5px}
+.mercadoFuentes summary{cursor:pointer;color:var(--mova-muted)}
+.mercadoFuentes p{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 0}
+.mercadoChip{padding:3px 9px;border-radius:999px;background:#f4eefc;color:#4b2a78;text-decoration:none;font-size:12px}
+.mercadoAviso{font-size:12px}
+.prodGrid .prodAcciones{flex-wrap:wrap}
+.prodGrid .prodAcciones button,.prodGrid .prodAcciones a{white-space:nowrap}
+.mercadoBtnPresu{margin-top:8px;align-self:flex-start}
+@media (max-width:560px){
+  .mercadoRango{grid-template-columns:repeat(2,1fr)}
+  .mercadoItemCab{flex-wrap:wrap}
+  .mercadoNombre{flex-basis:calc(100% - 60px)}
+  .mercadoPrecios{margin-left:28px}
+}
+
+/* ===== IA: ordenar catálogo ===== */
+.ordenarModal{max-width:760px}
+.ordenarBarra{display:flex;gap:14px;margin:4px 0 8px}
+.ordenarLista{display:flex;flex-direction:column;gap:8px;max-height:56vh;overflow:auto;padding-right:2px}
+.ordenarFila{border:1px solid var(--mova-border,#e5e7eb);border-radius:12px;padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;background:#fff}
+.ordenarFila.apagada{opacity:.5}
+.ordenarFila>label{display:flex;flex-direction:column;gap:3px;font-size:13px;min-width:0}
+.ordenarFila>label small{color:var(--mova-muted);font-size:11.5px}
+.ordenarFila>label small s{color:#9aa1ab}
+.ordenarCab{grid-column:1/-1;flex-direction:row!important;align-items:center;gap:8px!important}
+.ordenarCab input{width:auto;margin:0}
+.ordenarCab b{font-size:14px}
+@media (max-width:560px){.ordenarFila{grid-template-columns:1fr}}
