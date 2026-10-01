@@ -107,7 +107,7 @@ async function geminiBuscar(clave: string, pedido: string, sistema: string): Pro
 
 // Búsqueda con Claude (API de Anthropic, se paga aparte del plan Pro). Solo se
 // usa para comparar precios. Secret ANTHROPIC_API_KEY; opcional CLAUDE_MODEL.
-async function claudeBuscar(clave: string, pedido: string, sistema: string): Promise<{ datos: unknown; fuentes: Fuente[]; busquedas: string[] }> {
+async function claudeBuscar(clave: string, pedido: string, sistema: string, busquedasMax = 6): Promise<{ datos: unknown; fuentes: Fuente[]; busquedas: string[] }> {
   type Bloque = { type: string; text?: string; input?: { query?: string }; content?: { type?: string; url?: string; title?: string }[] }
   const mensajes: { role: string; content: string | Bloque[] }[] = [{ role: 'user', content: pedido }]
   const fuentes: Fuente[] = [], busquedas: string[] = []
@@ -119,7 +119,7 @@ async function claudeBuscar(clave: string, pedido: string, sistema: string): Pro
       body: JSON.stringify({
         model: Deno.env.get('CLAUDE_MODEL') || 'claude-haiku-4-5-20251001',
         max_tokens: 4000, system: sistema, messages: mensajes,
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 6, user_location: { type: 'approximate', country: 'AR', region: 'Mendoza', city: 'Mendoza', timezone: 'America/Argentina/Mendoza' } }],
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: busquedasMax, user_location: { type: 'approximate', country: 'AR', region: 'Mendoza', city: 'Mendoza', timezone: 'America/Argentina/Mendoza' } }],
       }),
     })
     const cuerpo = await r.json().catch(() => ({})) as { error?: { message?: string }; content?: Bloque[]; stop_reason?: string }
@@ -324,7 +324,7 @@ Deno.serve(async (req) => {
       const claveClaude = Deno.env.get('ANTHROPIC_API_KEY')
       const textoPedido = `Buscá el precio de mercado actual en Argentina de estos productos:\n${renglones.join('\n')}`
       let respuesta: Awaited<ReturnType<typeof geminiBuscar>>
-      if (claveClaude) respuesta = await claudeBuscar(claveClaude, textoPedido, SISTEMA_MERCADO)
+      if (claveClaude) respuesta = await claudeBuscar(claveClaude, textoPedido, SISTEMA_MERCADO, Math.min(6, pedidos.length + 2))
       else {
         try { respuesta = await geminiBuscar(clave, textoPedido, SISTEMA_MERCADO) } catch (e) {
           if (String((e as Error).message).startsWith('límite|')) throw new Error('claude|La búsqueda en Google de Gemini no tiene cupo gratis en tu cuenta. Para comparar precios hay que cargar el secret ANTHROPIC_API_KEY (Claude) en Supabase.')
