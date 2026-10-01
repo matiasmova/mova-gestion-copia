@@ -12,6 +12,7 @@ import {
 } from './pdfPresupuesto'
 import { codigoPresupuesto } from './codigoPresupuesto'
 import VidaEtapas, { pasosPresupuesto, type ObraEtapa } from './VidaEtapas'
+import { totalAPagarHoy } from './estadoObra'
 import { createPortal } from 'react-dom'
 import { fechaCorta } from './gestionFormat'
 
@@ -339,7 +340,7 @@ export default function PresupuestoFicha({
             <div className="fichaKpis">
               <div><span>TOTAL DE LA OBRA</span><strong>{moneda(estadoObra.totalActualizado)}</strong></div>
               <div><span>COBRADO</span><strong>{moneda(estadoObra.cobrado)}</strong></div>
-              <div className="alerta"><span>FALTA COBRAR HOY</span><strong>{moneda(estadoObra.pendienteHoy)}</strong></div>
+              <div className="alerta"><span>FALTA COBRAR HOY</span><strong>{moneda(totalAPagarHoy(estadoObra))}</strong>{estadoObra.gastoExtraPendiente > 0.5 && <small className="kpiNota">incluye {moneda(estadoObra.gastoExtraPendiente)} de gastos a reintegrar</small>}</div>
               <div><span>SALDO PARA TERMINAR</span><strong>{moneda(Math.max(0, estadoObra.saldoTotal))}</strong></div>
             </div>
           ) : (

@@ -5,7 +5,7 @@ import { configActual, lineaContacto, textoCondicion } from './config'
 import { COLOR_MARCA_HEX, agruparPorTipo, completarDatosDocumento, type DatosPdf } from './pdfPresupuesto'
 import { formatoPct, importeNeto, partirDescripcion, pctItem } from './presupuestoCalculos'
 import { antesYAhora, etiquetaModificacion } from './presupuestoModificaciones'
-import { mensajeEstado, PCT_ANTICIPO, type EstadoPresupuesto } from './estadoObra'
+import { mensajeEstado, PCT_ANTICIPO, totalAPagarHoy, type EstadoPresupuesto } from './estadoObra'
 import { codigoPresupuesto } from './codigoPresupuesto'
 
 // Documento del presupuesto en pantalla (ficha, vista previa y estado de obra).
@@ -85,8 +85,19 @@ function EstadoObra({ e }: { e: EstadoPresupuesto }) {
       <div style={{ ...s.caja, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
         <div><div style={s.etiqueta}>Total de la obra</div><strong style={{ fontSize: T_GRANDE, color: OSCURO }}>{moneda(e.totalActualizado)}</strong></div>
         <div><div style={s.etiqueta}>Ya pagaste</div><strong style={{ fontSize: T_GRANDE, color: VERDE }}>{moneda(e.cobrado)}</strong></div>
-        <div><div style={s.etiqueta}>Pendiente a hoy</div><strong style={{ fontSize: T_GRANDE, color: e.pendienteHoy > 0.5 ? NARANJA : VERDE }}>{moneda(e.pendienteHoy)}</strong></div>
+        <div><div style={s.etiqueta}>{e.gastoExtraPendiente > 0.5 ? 'Pendiente de la obra' : 'Pendiente a hoy'}</div><strong style={{ fontSize: T_GRANDE, color: e.pendienteHoy > 0.5 ? NARANJA : VERDE }}>{moneda(e.pendienteHoy)}</strong></div>
+        {e.gastoExtraPendiente > 0.5 && <div><div style={s.etiqueta}>Gastos a reintegrar</div><strong style={{ fontSize: T_GRANDE, color: NARANJA }}>{moneda(e.gastoExtraPendiente)}</strong></div>}
       </div>
+      {/* Total que el cliente tiene que pagar hoy: obra + gastos que todavía no devolvió */}
+      {e.gastoExtraPendiente > 0.5 && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap', background: NARANJA_SUAVE, borderLeft: `3px solid ${NARANJA}`, borderRadius: '0 6px 6px 0', padding: '10px 14px', marginTop: '10px' }}>
+          <div>
+            <div style={{ fontSize: T_CHICO, fontWeight: 700, letterSpacing: '0.8px', color: NARANJA }}>TOTAL A PAGAR HOY</div>
+            <div style={{ fontSize: T_CHICO, color: GRIS }}>Obra {moneda(Math.max(0, e.pendienteHoy))} + gastos a reintegrar {moneda(e.gastoExtraPendiente)}</div>
+          </div>
+          <strong style={{ fontSize: 'clamp(17px, 5.2vw, 22px)', color: OSCURO, whiteSpace: 'nowrap' }}>{moneda(totalAPagarHoy(e))}</strong>
+        </div>
+      )}
 
       {/* Avance de la obra: "Hoy vamos por acá" según el último informe */}
       <div style={{ margin: '20px 0 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -153,16 +164,17 @@ function EstadoObra({ e }: { e: EstadoPresupuesto }) {
 
       {e.gastosExtra.length > 0 && (
         <div style={{ marginTop: '10px' }}>
-          <TituloSeccion texto="Gastos a reintegrar (aparte del total)" />
+          <TituloSeccion texto="Gastos a reintegrar" />
+          <p style={{ color: GRIS, fontSize: T_CHICO, margin: '0 0 6px' }}>Materiales y gastos que compramos para tu obra y nos devolvés aparte del presupuesto. Los pendientes se suman al total a pagar; los ya reintegrados, no.</p>
           {e.gastosExtra.map((g) => (
             <div key={g.id} style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '6px 0', borderBottom: `1px solid ${LINEA}` }}>
               <Tilde estado={g.devuelto ? 'ok' : 'pendiente'} />
               <span style={{ flex: 1, minWidth: 0 }}>{fechaCorta(g.fecha)} · {g.descripcion}</span>
               <strong style={{ whiteSpace: 'nowrap' }}>{moneda(g.importe)}</strong>
-              <span style={{ width: '90px', textAlign: 'right', fontSize: T_CHICO, fontWeight: 700, color: g.devuelto ? VERDE : NARANJA }}>{g.devuelto ? 'Reintegrado' : 'Pendiente'}</span>
+              <span style={{ width: '96px', textAlign: 'right', fontSize: T_CHICO, fontWeight: 700, color: g.devuelto ? VERDE : NARANJA, lineHeight: 1.25 }}>{g.devuelto ? '✓ Reintegrado' : <>Pendiente<br /><span style={{ fontWeight: 400 }}>suma al total</span></>}</span>
             </div>
           ))}
-          {e.gastoExtraPendiente > 0.5 && <div style={{ marginTop: '6px', fontWeight: 700, color: NARANJA }}>Pendiente de reintegro: {moneda(e.gastoExtraPendiente)}</div>}
+          {e.gastoExtraPendiente > 0.5 && <div style={{ marginTop: '6px', fontWeight: 700, color: NARANJA }}>Pendiente de reintegro: {moneda(e.gastoExtraPendiente)} (incluido en el total a pagar)</div>}
         </div>
       )}
     </section>

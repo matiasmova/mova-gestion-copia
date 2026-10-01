@@ -182,7 +182,17 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
 }
 
 // Mensaje principal para el cliente.
+// Lo que el cliente tiene que pagar hoy: lo de la obra según el avance más los
+// gastos a reintegrar que todavía no devolvió.
+export const totalAPagarHoy = (e: EstadoPresupuesto) => Math.round((Math.max(0, e.pendienteHoy) + Math.max(0, e.gastoExtraPendiente)) * 100) / 100
+
 export function mensajeEstado(e: EstadoPresupuesto, formatoMoneda: (n: number) => string): { tono: 'ok' | 'alerta'; titulo: string; detalle: string } {
+  const m = mensajeBase(e, formatoMoneda)
+  if (e.gastoExtraPendiente <= 0.5 || m.tono === 'ok') return m
+  return { ...m, detalle: `${m.detalle} Además hay gastos a reintegrar por ${formatoMoneda(e.gastoExtraPendiente)}: en total, a pagar hoy ${formatoMoneda(totalAPagarHoy(e))}.` }
+}
+
+function mensajeBase(e: EstadoPresupuesto, formatoMoneda: (n: number) => string): { tono: 'ok' | 'alerta'; titulo: string; detalle: string } {
   if (e.saldoTotal <= 0.5 && e.gastoExtraPendiente <= 0.5) return { tono: 'ok', titulo: 'Está todo pago', detalle: '¡Gracias! No hay saldos pendientes.' }
   if (!e.anticipoCubierto && e.obraIniciada) {
     return { tono: 'alerta', titulo: `Falta completar el anticipo: ${formatoMoneda(e.faltaAnticipo)}`, detalle: `Los trabajos se iniciaron sin haber recibido el anticipo del ${PCT_ANTICIPO}% (${formatoMoneda(e.anticipo)}). Te pedimos regularizarlo a la brevedad para continuar según lo previsto.` }
@@ -192,6 +202,10 @@ export function mensajeEstado(e: EstadoPresupuesto, formatoMoneda: (n: number) =
   }
   if (e.pendienteHoy > 0.5) {
     return { tono: 'alerta', titulo: `Pendiente a hoy: ${formatoMoneda(e.pendienteHoy)}`, detalle: `Corresponde al avance de la obra (${e.avance}%). El resto se abona a medida que avanzamos.` }
+  }
+  // La obra está al día pero quedan gastos por devolver.
+  if (e.gastoExtraPendiente > 0.5) {
+    return { tono: 'alerta', titulo: `Gastos a reintegrar: ${formatoMoneda(e.gastoExtraPendiente)}`, detalle: 'Los pagos de la obra están al día. Queda devolver los gastos que compramos para tu obra (detalle abajo).' }
   }
   return { tono: 'ok', titulo: 'Estás al día', detalle: e.terminada ? 'Obra finalizada.' : `Lo que queda (${formatoMoneda(Math.max(0, e.saldoTotal))}) se abona a medida que avanza la obra y al finalizar.` }
 }

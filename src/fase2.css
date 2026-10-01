@@ -1557,3 +1557,4 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 .presuItem strong{font-size:15.5px;color:#14181e;margin-top:2px}
 .presuItemBot{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13.5px;color:#6b7280}
 .presuItemBot b{color:#14181e;font-size:14.5px;white-space:nowrap}
+.kpiNota{display:block;margin-top:4px;font-size:11px;color:#7a4a07;line-height:1.3}
