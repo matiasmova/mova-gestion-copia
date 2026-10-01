@@ -10,6 +10,7 @@ import {
   redondear,
 } from './presupuestoCalculos'
 import { cargarSoluciones, type Solucion } from './Soluciones'
+import { pedirAsistente } from './asistenteIA'
 import { cargarSolucionesPresupuesto, type SolucionPresupuesto } from './presupuestoSoluciones'
 import NuevoCliente from './NuevoCliente'
 import { configActual } from './config'
@@ -307,6 +308,40 @@ function NuevoPresupuesto({
     )
   }
 
+  // ---- Armar con IA: a partir de lo que pide el cliente ----
+  const [iaAbierta, setIaAbierta] = useState(!presupuesto)
+  const [iaPedido, setIaPedido] = useState('')
+  const [iaPensando, setIaPensando] = useState(false)
+  const [iaError, setIaError] = useState('')
+  const [iaNotas, setIaNotas] = useState('')
+
+  async function armarConIA() {
+    setIaError(''); setIaNotas(''); setIaPensando(true)
+    try {
+      const r = await pedirAsistente<{ titulo: string; descripcion: string; notas: string; soluciones: number[]; items: { catalogo_id: number | null; descripcion: string; cantidad: number; tipo: 'producto' | 'servicio' }[] }>({ accion: 'presupuesto', pedido: iaPedido })
+      const nuevos: ItemPresupuesto[] = r.items.map((it) => {
+        const p = it.catalogo_id ? catalogo.find((x) => x.id === it.catalogo_id) : undefined
+        return p
+          ? { ...itemVacio, catalogo_id: p.id, tipo: p.tipo, descripcion: p.nombre_presupuesto?.trim() || p.nombre, cantidad: it.cantidad, precio_unitario: Number(p.precio_venta), costo_unitario: Number(p.costo_unitario) }
+          : { ...itemVacio, tipo: it.tipo, descripcion: it.descripcion, cantidad: it.cantidad }
+      })
+      if (!nuevos.length) { setIaError('La IA no encontró ítems para ese pedido. Probá contarlo con más detalle.'); return }
+      // Si la lista estaba vacía se reemplaza; si ya había ítems, se suman al final.
+      setItems((actuales) => {
+        const conDatos = actuales.filter((it) => it.descripcion.trim() || it.precio_unitario > 0)
+        return [...conDatos, ...nuevos]
+      })
+      const elegidas = r.soluciones.map((id) => catalogoSoluciones.find((x) => x.id === id)).filter((x): x is Solucion => !!x)
+        .filter((x) => !soluciones.some((y) => y.titulo === x.titulo)).map((x) => ({ titulo: x.titulo, descripcion: x.descripcion }))
+      if (elegidas.length) setSoluciones((actuales) => [...actuales, ...elegidas])
+      if (r.titulo && (!titulo.trim() || !tituloManual)) { setTitulo(r.titulo); setTituloManual(true) }
+      if (r.descripcion && !descripcion.trim()) setDescripcion(r.descripcion)
+      const sinPrecio = nuevos.filter((it) => !it.catalogo_id).length
+      setIaNotas([r.notas, sinPrecio ? `${sinPrecio} ítem(s) no están en tu catálogo: completales el precio.` : ''].filter(Boolean).join(' '))
+      setIaAbierta(false)
+    } catch (e) { setIaError((e as Error).message) } finally { setIaPensando(false) }
+  }
+
   function eliminarItem(indice: number) {
     setItems((actuales) =>
       actuales.length === 1
@@ -513,6 +548,21 @@ function NuevoPresupuesto({
         )}
 
         <form className="presupuestoForm" onSubmit={guardar}>
+          <div className={`iaArmar ${iaAbierta ? 'abierto' : ''}`}>
+            <button type="button" className="iaArmarTit" onClick={() => setIaAbierta((v) => !v)}>
+              <span>✨ Armar con IA</span><small>{iaAbierta ? 'Contá lo que pide el cliente y la IA arma los ítems con tu catálogo' : 'Tocá para armar ítems desde una descripción'}</small><b>{iaAbierta ? '▲' : '▼'}</b>
+            </button>
+            {iaAbierta && <>
+              <textarea rows={3} value={iaPedido} onChange={(e) => setIaPedido(e.target.value)}
+                placeholder="Ej.: casa de 200 m², WiFi en todo el terreno, 4 cámaras afuera, domótica de luces en living y cocina, riego para 3 zonas" />
+              <div className="iaArmarAcc">
+                <small>🎤 Podés dictarlo con el micrófono del teclado. Después revisá cantidades y precios.</small>
+                <button type="button" className="newButton" disabled={!iaPedido.trim() || iaPensando || cargandoCatalogo} onClick={() => void armarConIA()}>{iaPensando ? 'Armando…' : 'Armar presupuesto'}</button>
+              </div>
+              {iaError && <p className="loginError">{iaError}</p>}
+            </>}
+            {!iaAbierta && iaNotas && <p className="iaNotas">💡 {iaNotas}</p>}
+          </div>
           <div className="formGrid">
             <label>
               <span className="npEtiqueta">Cliente *<button type="button" className="npNuevo" onClick={(e) => { e.preventDefault(); setCreando('cliente') }}>+ Nuevo cliente</button></span>

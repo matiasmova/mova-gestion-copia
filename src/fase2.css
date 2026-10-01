@@ -1353,3 +1353,21 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
   .presupuestoItem .itemCosto{order:6}
   .itemDescuentoFila{order:7}
 }
+
+/* ===== IA: armar presupuesto y leer factura ===== */
+.iaArmar{border:1px solid #e3d6f2;border-radius:14px;background:#fdfbff;padding:4px 14px}
+.iaArmar.abierto{padding-bottom:14px}
+.iaArmarTit{all:unset;box-sizing:border-box;width:100%;display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer;flex-wrap:wrap}
+.iaArmarTit span{font-weight:800;color:#5b2e9a;font-size:15px}
+.iaArmarTit small{flex:1;color:var(--mova-muted);font-size:12.5px;min-width:160px}
+.iaArmarTit b{color:#8a93a0;font-size:11px}
+.iaArmar textarea{width:100%;min-height:80px;margin-top:4px}
+.iaArmarAcc{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;margin-top:8px}
+.iaArmarAcc small{color:var(--mova-muted);font-size:12px;flex:1;min-width:180px}
+.iaNotas{margin:6px 0 4px;padding:8px 10px;border-radius:9px;background:#f4eefc;color:#4b2a78;font-size:13px;line-height:1.45}
+.iaFactura{margin-bottom:12px}
+.iaFacturaBtn{display:flex!important;flex-direction:column!important;gap:2px;padding:12px 14px;border:1.5px dashed #c9b3ea;border-radius:12px;background:#fdfbff;cursor:pointer;position:relative}
+.iaFacturaBtn span{font-weight:800;color:#5b2e9a;font-size:15px}
+.iaFacturaBtn small{color:var(--mova-muted);font-size:12.5px;font-weight:400}
+.iaFacturaBtn input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.iaFacturaBtn.leyendo{opacity:.7;cursor:wait}
