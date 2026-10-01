@@ -19,6 +19,7 @@ import {
 import { confirmarEliminacion } from './confirmar'
 import SeguimientoPresupuestos from './SeguimientoPresupuestos'
 import { etiquetaEtapa, type ObraEtapa } from './VidaEtapas'
+import { codigoPresupuesto } from './codigoPresupuesto'
 
 type PresupuestoCompleto = PresupuestoEditable & {
   created_at: string
@@ -61,6 +62,15 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
   const [telefonos, setTelefonos] = useState<Record<number, string | null>>({})
   const [faltaSqlSeguimiento, setFaltaSqlSeguimiento] = useState(false)
   const [faltaSqlEtapas, setFaltaSqlEtapas] = useState(false)
+  // En el celular se muestra una lista hacia abajo (las columnas no entran).
+  const [esMovil, setEsMovil] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 700px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia?.('(max-width: 700px)')
+    if (!mq) return
+    const cambio = () => setEsMovil(mq.matches)
+    mq.addEventListener?.('change', cambio)
+    return () => mq.removeEventListener?.('change', cambio)
+  }, [])
   // Estado y avance de cada obra (para la etapa "En obra · 30%").
   const [obrasEtapa, setObrasEtapa] = useState<Record<number, ObraEtapa>>({})
 
@@ -329,7 +339,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
         <div className="crmFiltros">
           <input type="search" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar por título, cliente u obra..." />
         </div>
-        <VistaToggle vista={vista} onCambio={setVista} />
+        {!esMovil && <VistaToggle vista={vista} onCambio={setVista} />}
       </div>
       <div className="presuChips" role="tablist" aria-label="Etapas">
         {[['todos', 'Todos'], ['borrador', '📝 Borradores'], ['enviado', '📤 Enviados'], ['aceptado', '✅ Aceptados'], ['rechazado', '❌ Rechazados']].map(([v, t]) => (
@@ -347,7 +357,23 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
         <div className="presupuestosPanel"><div className="empty"><span>📄</span><h3>No hay presupuestos</h3><p>Los presupuestos que agregues aparecerán acá.</p></div></div>
       )}
 
-      {!cargando && !error && filtrados.length > 0 && vista === 'kanban' && (
+      {!cargando && !error && filtrados.length > 0 && esMovil && (
+        <div className="presuListaMovil">
+          {filtrados.map((p) => {
+            const et = etiquetaEtapa(p, p.obra_id != null ? obrasEtapa[p.obra_id] : null, p.saldo)
+            return (
+              <button type="button" className="presuItem" key={p.id} onClick={() => abrirFicha(p)}>
+                <div className="presuItemTop"><span>{codigoPresupuesto(p.id)}{(p.version ?? 1) > 1 ? ` · v${p.version}` : ''} · {fechaCorta(p.fecha)}</span><span className={`presuEtapa ${et.clase}`}>{et.texto}</span></div>
+                <strong>{p.titulo}</strong>
+                {et.avance != null && <div className="presuEtapaBarra"><i style={{ width: `${et.avance}%` }} /></div>}
+                <div className="presuItemBot"><span>{nombreCliente(p.cliente_id)}</span><b>{moneda(p.total + p.ajustes)}</b></div>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {!cargando && !error && filtrados.length > 0 && !esMovil && vista === 'kanban' && (
         <div className="crmKanban">
           {ESTADOS.map((s) => {
             const cols = filtrados.filter((p) => p.estado === s.v)
@@ -365,7 +391,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
         </div>
       )}
 
-      {!cargando && !error && filtrados.length > 0 && vista === 'lista' && (
+      {!cargando && !error && filtrados.length > 0 && !esMovil && vista === 'lista' && (
         <div className="crmListaWrap">
           <table className="crmLista">
             <thead><tr><th>Código</th><th>Título</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Cobrado</th><th>Saldo</th><th>Estado</th></tr></thead>

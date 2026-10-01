@@ -1551,3 +1551,9 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 .orPresuBtns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
 .orPresuBtns .editButton{justify-content:center;text-align:center}
 .orVida{margin:0 0 12px}
+.presuListaMovil{display:flex;flex-direction:column;gap:8px}
+.presuItem{display:flex;flex-direction:column;gap:3px;width:100%;text-align:left;font:inherit;background:#fff;border:1px solid var(--mova-border,#e5e7eb);border-radius:14px;padding:12px 14px;cursor:pointer;color:inherit}
+.presuItemTop{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11.5px;color:#7b8491;font-weight:700}
+.presuItem strong{font-size:15.5px;color:#14181e;margin-top:2px}
+.presuItemBot{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13.5px;color:#6b7280}
+.presuItemBot b{color:#14181e;font-size:14.5px;white-space:nowrap}
