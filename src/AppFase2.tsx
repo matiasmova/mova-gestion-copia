@@ -2,8 +2,6 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, TIPO_LINK_AUTH } from './supabase'
 import Clientes from './Clientes'
-import Obras from './Obras'
-import Presupuestos from './Presupuestos'
 import Soluciones from './Soluciones'
 import ProductosServicios from './ProductosServicios'
 import Finanzas from './Finanzas'
@@ -20,7 +18,8 @@ import './menu.css'
 import IconoMenu from './iconosMenu'
 import { BuscadorGlobal, BotonMas, type Pedido, type Ir } from './BuscadorGlobal'
 
-import { ROLES, ROLES_VALIDOS, NAVEGACION, GRUPOS_MENU, puedeVer, type Rol, type Vista } from './permisos'
+import { ROLES, ROLES_VALIDOS, NAVEGACION, GRUPOS_MENU, FUERA_DEL_MENU, puedeVer, type Rol, type Vista } from './permisos'
+import Trabajos from './Trabajos'
 
 export default function AppFase2() {
   const [session, setSession] = useState<Session | null>(null)
@@ -169,14 +168,24 @@ export default function AppFase2() {
   if (crearClave) return <CrearClave tipo={crearClave} onListo={() => { setCrearClave(null); try { window.history.replaceState(null, '', window.location.pathname) } catch { /* sin acción */ } }} />
 
   const vistaSegura: Vista = puedeVer(rol, vista) ? vista : 'dashboard'
-  const modulos = NAVEGACION.filter(([clave]) => puedeVer(rol, clave))
+  const modulos = NAVEGACION.filter(([clave]) => puedeVer(rol, clave) && !FUERA_DEL_MENU.includes(clave))
+  const verPresupuestos = puedeVer(rol, 'presupuestos')
+  // "Trabajos" del menú abre en Por cerrar para quien ve presupuestos; si no, en En obra.
+  const destinoMenu = (clave: Vista): Vista => (clave === 'obras' && verPresupuestos ? 'presupuestos' : clave)
+  const activo = (clave: Vista) => vistaSegura === clave || (clave === 'obras' && vistaSegura === 'presupuestos')
+  const trabajos = (tab: 'por_cerrar' | 'en_obra') => (
+    <Trabajos tabInicial={tab} verPresupuestos={verPresupuestos} conIA={rol === 'admin' || rol === 'contable' || rol === 'encargado'}
+      obraAbrirId={obraAbrirId} onObraAbierta={() => setObraAbrirId(null)}
+      presupuestoAbrirId={presupuestoAbrirId} onPresupuestoAbierto={() => setPresupuestoAbrirId(null)}
+      pedido={pedidoPara(tab === 'por_cerrar' ? 'presupuestos' : 'obras')} onPedidoAtendido={pedidoAtendido} />
+  )
 
   const contenido: Record<Exclude<Vista, 'dashboard'>, React.ReactNode> = {
     clientes: <Clientes pedido={pedidoPara('clientes')} onPedidoAtendido={pedidoAtendido}
       onAbrirObra={puedeVer(rol, 'obras') ? (id) => { setObraAbrirId(id); navegar('obras') } : undefined}
       onAbrirPresupuesto={puedeVer(rol, 'presupuestos') ? (id) => { setPresupuestoAbrirId(id); navegar('presupuestos') } : undefined} />,
-    obras: <Obras conIA={rol === 'admin' || rol === 'contable' || rol === 'encargado'} obraAbrirId={obraAbrirId} onObraAbierta={() => setObraAbrirId(null)} onVerPresupuesto={(id) => { setPresupuestoAbrirId(id); navegar('presupuestos') }} />,
-    presupuestos: <Presupuestos onAbrirObra={puedeVer(rol, 'obras') ? (id) => { setObraAbrirId(id); navegar('obras') } : undefined} pedido={pedidoPara('presupuestos')} onPedidoAtendido={pedidoAtendido} presupuestoAbrirId={presupuestoAbrirId} onPresupuestoAbierto={() => setPresupuestoAbrirId(null)} />,
+    obras: trabajos('en_obra'),
+    presupuestos: trabajos('por_cerrar'),
     catalogo: <ProductosServicios pedido={pedidoPara('catalogo')} onPedidoAtendido={pedidoAtendido} />,
     soluciones: <Soluciones />,
     finanzas: <Finanzas pedido={pedidoPara('finanzas')} onPedidoAtendido={pedidoAtendido} onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} />,
@@ -199,7 +208,7 @@ export default function AppFase2() {
             <div key={grupo}>
               <span className="menuGrupo">{etiqueta}</span>
               {delGrupo.map(([clave, , titulo]) => (
-                <button key={clave} className={`menuItem ${vistaSegura === clave ? 'active' : ''}`} aria-current={vistaSegura === clave ? 'page' : undefined} onClick={() => navegar(clave)}>
+                <button key={clave} className={`menuItem ${activo(clave) ? 'active' : ''}`} aria-current={activo(clave) ? 'page' : undefined} onClick={() => navegar(destinoMenu(clave))}>
                   <span className="menuIcono"><IconoMenu nombre={clave} /></span>
                   <span className="menuTexto">{titulo}</span>
                 </button>

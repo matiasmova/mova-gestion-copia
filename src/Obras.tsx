@@ -8,6 +8,7 @@ import NuevaObra from './NuevaObra'
 import EstadoObraPDF from './EstadoObraPDF'
 import InformeObraIA from './InformeObraIA'
 import { CompraRapida, MenuRegistrar, type OpcionRegistrar } from './RegistrarObra'
+import { etiquetaEtapa } from './VidaEtapas'
 import AdicionalesObra from './AdicionalesObra'
 import PersonalObra from './PersonalObra'
 import RentabilidadObra from './RentabilidadObra'
@@ -88,7 +89,11 @@ const avanceInicial = {
 
 // onVerPresupuesto se sigue aceptando por compatibilidad, pero la ficha de la obra
 // ya no lo usa: todo se ve en un único documento (presupuesto y estado de obra).
-function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false }: { obraAbrirId?: number | null; onObraAbierta?: () => void; onVerPresupuesto?: (presupuestoId: number) => void; conIA?: boolean } = {}) {
+// Dentro de "Trabajos": grupo = qué obras mostrar (en curso o terminadas) y sin encabezado propio.
+export type GrupoObras = 'en_obra' | 'terminadas'
+const obraTerminada = (o: { estado: string | null; porcentaje_avance?: number | string | null }) => o.estado === 'finalizada' || o.estado === 'observacion'
+
+function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, grupo, embebido = false }: { obraAbrirId?: number | null; onObraAbierta?: () => void; onVerPresupuesto?: (presupuestoId: number) => void; conIA?: boolean; grupo?: GrupoObras; embebido?: boolean } = {}) {
   const puedeInformeIA = conIA
   const [obras, setObras] = useState<Obra[]>([])
   const [presupuestosObra, setPresupuestosObra] = useState<{ id: number; obra_id: number | null; total: number | string; estado: string; activo: boolean; titulo: string }[]>([])
@@ -137,6 +142,15 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false }: 
   const [presupuestosOk, setPresupuestosOk] = useState(true)
   const [eliminandoObra, setEliminandoObra] = useState<number | null>(null)
   const [vista, setVista] = useVista('obras', 'kanban')
+  // En el celular las columnas no entran: se muestra una lista hacia abajo.
+  const [esMovil, setEsMovil] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 700px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia?.('(max-width: 700px)')
+    if (!mq) return
+    const cambio = () => setEsMovil(mq.matches)
+    mq.addEventListener?.('change', cambio)
+    return () => mq.removeEventListener?.('change', cambio)
+  }, [])
   // Estado de cuenta de la obra abierta: el MISMO cálculo que el documento.
   const [cuenta, setCuenta] = useState<EstadoPresupuesto | null>(null)
   const [cargandoCuenta, setCargandoCuenta] = useState(false)
@@ -600,8 +614,9 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false }: 
     const coincideEstado =
       filtroEstado === 'todos' ||
       obra.estado === filtroEstado
+    const coincideGrupo = !grupo || (grupo === 'terminadas' ? obraTerminada(obra) : !obraTerminada(obra))
 
-    return coincideBusqueda && coincideEstado
+    return coincideBusqueda && coincideEstado && coincideGrupo
   })
 
   // Avisos cortos de cada tarjeta: lo que necesita atención sin abrir la obra.
@@ -618,7 +633,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false }: 
 
   return (
     <div className="obrasPage">
-      <div className="pageHeader">
+      {!embebido && <div className="pageHeader">
         <div>
           <p className="subtitle">GESTIÓN DE TRABAJOS</p>
           <h2>Obras</h2>
@@ -626,7 +641,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false }: 
             Las obras nacen de un presupuesto aceptado
           </p>
         </div>
-      </div>
+      </div>}
 
       <div className="crmToolbar">
         <div className="crmFiltros">
@@ -636,15 +651,15 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false }: 
             value={busqueda}
             onChange={(evento) => setBusqueda(evento.target.value)}
           />
-          <select
+          {!grupo && <select
             value={filtroEstado}
             onChange={(evento) => setFiltroEstado(evento.target.value as FiltroEstado)}
           >
             <option value="todos">Todos los estados</option>
             {OBRA_ESTADOS.map((e) => <option key={e.v} value={e.v}>{e.t}</option>)}
-          </select>
+          </select>}
         </div>
-        <VistaToggle vista={vista} onCambio={setVista} />
+        {!esMovil && <VistaToggle vista={vista} onCambio={setVista} />}
       </div>
 
       {cargando && <p>Cargando obras...</p>}
@@ -660,16 +675,38 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false }: 
       {!cargando && !error && obrasFiltradas.length === 0 && (
         <div className="empty obrasEmpty">
           <span>🏠</span>
-          <h3>{obrasVisibles.length === 0 ? 'Todavía no hay obras en marcha' : 'No encontramos obras'}</h3>
+          <h3>{grupo === 'terminadas' ? 'Todavía no hay obras terminadas' : obrasVisibles.length === 0 ? 'Todavía no hay obras en marcha' : grupo ? 'No hay obras en curso' : 'No encontramos obras'}</h3>
           <p>
-            {obrasVisibles.length === 0
-              ? 'Una obra aparece acá cuando su presupuesto pasa a estado Aceptado.'
-              : 'Probá con otra búsqueda o cambiá el filtro.'}
+            {grupo === 'terminadas'
+              ? 'Cuando una obra se marca como finalizada pasa a esta pestaña.'
+              : obrasVisibles.length === 0
+                ? 'Una obra aparece acá cuando el cliente acepta su presupuesto.'
+                : busqueda ? 'Probá con otra búsqueda.' : 'Las obras terminadas están en la pestaña Terminadas.'}
           </p>
         </div>
       )}
 
-      {!cargando && !error && obrasFiltradas.length > 0 && vista === 'kanban' && (
+      {/* En el celular: lista hacia abajo con la etapa de cada obra */}
+      {!cargando && !error && obrasFiltradas.length > 0 && esMovil && (
+        <div className="presuListaMovil">
+          {obrasFiltradas.map((obra) => {
+            const eco = economia[obra.id]
+            const et = etiquetaEtapa({ estado: 'aceptado', fecha: '' }, { estado: obra.estado, porcentaje_avance: Number(obra.porcentaje_avance || 0) }, eco?.pendiente ?? 0)
+            const avisos = avisosDe(obra)
+            return (
+              <button type="button" className="presuItem" key={obra.id} onClick={() => abrirSeguimiento(obra)}>
+                <div className="presuItemTop"><span>{obra.localidad || 'Sin localidad'}</span><span className={`presuEtapa ${et.clase}`}>{et.texto}</span></div>
+                <strong>{obra.nombre_obra}</strong>
+                {et.avance != null && <div className="presuEtapaBarra"><i style={{ width: `${et.avance}%` }} /></div>}
+                <div className="presuItemBot"><span>{obtenerCliente(obra.cliente_id)}</span>{eco && eco.pendiente > 0.5 ? <b className="presuFalta">Saldo {dineroFicha(eco.pendiente)}</b> : <b>{dineroFicha(eco?.valor ?? 0)}</b>}</div>
+                {avisos.length > 0 && <small className="presuAvisos">⚠ {avisos.join(' · ')}</small>}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {!cargando && !error && obrasFiltradas.length > 0 && !esMovil && vista === 'kanban' && (
         <div className="crmKanban">
           {OBRA_ESTADOS.map((s) => {
             const cols = obrasFiltradas.filter((o) => (o.estado ?? 'en_proceso') === s.v)
@@ -704,7 +741,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false }: 
         </div>
       )}
 
-      {!cargando && !error && obrasFiltradas.length > 0 && vista === 'lista' && (
+      {!cargando && !error && obrasFiltradas.length > 0 && !esMovil && vista === 'lista' && (
         <div className="crmListaWrap">
           <table className="crmLista">
             <thead><tr><th>Obra</th><th>Cliente</th><th>Avance</th><th>Valor</th><th>Cobrado</th><th>Saldo</th><th>Estado</th></tr></thead>

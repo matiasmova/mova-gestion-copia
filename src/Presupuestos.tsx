@@ -45,7 +45,12 @@ const ESTADOS = [
   { v: 'rechazado', t: 'Rechazado' },
 ]
 
-function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedidoAtendido, onAbrirObra }: { presupuestoAbrirId?: number | null; onPresupuestoAbierto?: () => void; pedido?: Pedido | null; onPedidoAtendido?: () => void; onAbrirObra?: (obraId: number) => void } = {}) {
+// Dentro de "Trabajos": grupo = qué presupuestos mostrar y sin encabezado propio.
+export type GrupoPresupuestos = 'por_cerrar' | 'rechazados'
+const enGrupo = (p: { estado: string; obra_id: number | null }, g?: GrupoPresupuestos) =>
+  !g ? true : g === 'rechazados' ? p.estado === 'rechazado' : p.estado === 'borrador' || p.estado === 'enviado' || (p.estado === 'aceptado' && p.obra_id == null)
+
+function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedidoAtendido, onAbrirObra, grupo, embebido = false }: { presupuestoAbrirId?: number | null; onPresupuestoAbierto?: () => void; pedido?: Pedido | null; onPedidoAtendido?: () => void; onAbrirObra?: (obraId: number) => void; grupo?: GrupoPresupuestos; embebido?: boolean } = {}) {
   const [presupuestos, setPresupuestos] = useState<PresupuestoCompleto[]>([])
   const [clientes, setClientes] = useState<ClienteOpcion[]>([])
   const [obras, setObras] = useState<ObraOpcion[]>([])
@@ -168,9 +173,9 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
       const nom = `${cli?.nombre ?? ''} ${cli?.apellido ?? ''}`.toLowerCase()
       const coincide = !texto || p.titulo.toLowerCase().includes(texto) || nom.includes(texto) || (ob?.nombre_obra ?? '').toLowerCase().includes(texto)
       const coincideEstado = estadoFiltro === 'todos' || p.estado === estadoFiltro
-      return coincide && coincideEstado
+      return coincide && coincideEstado && enGrupo(p, grupo)
     })
-  }, [presupuestos, clientes, obras, busqueda, estadoFiltro])
+  }, [presupuestos, clientes, obras, busqueda, estadoFiltro, grupo])
 
   const nombreCliente = (id: number) => {
     const c = clientes.find((x) => x.id === id)
@@ -314,16 +319,16 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
 
   return (
     <div className="gestionPage">
-      <div className="pageHeader">
+      {!embebido && <div className="pageHeader">
         <div>
           <p className="subtitle">GESTIÓN COMERCIAL</p>
           <h2>Presupuestos</h2>
           <p className="welcome">Propuestas, trabajos y seguimiento de pagos</p>
         </div>
         <button className="newButton" onClick={abrirNuevo}>+ Nuevo presupuesto</button>
-      </div>
+      </div>}
 
-      {!cargando && !error && (
+      {!cargando && !error && grupo !== 'rechazados' && (
         <SeguimientoPresupuestos
           presupuestos={presupuestos}
           nombreCliente={nombreCliente}
@@ -341,20 +346,22 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
         </div>
         {!esMovil && <VistaToggle vista={vista} onCambio={setVista} />}
       </div>
-      <div className="presuChips" role="tablist" aria-label="Etapas">
-        {[['todos', 'Todos'], ['borrador', '📝 Borradores'], ['enviado', '📤 Enviados'], ['aceptado', '✅ Aceptados'], ['rechazado', '❌ Rechazados']].map(([v, t]) => (
+      {grupo !== 'rechazados' && <div className="presuChips" role="tablist" aria-label="Etapas">
+        {(grupo === 'por_cerrar'
+          ? [['todos', 'Todos'], ['borrador', '📝 Borradores'], ['enviado', '📤 Enviados']]
+          : [['todos', 'Todos'], ['borrador', '📝 Borradores'], ['enviado', '📤 Enviados'], ['aceptado', '✅ Aceptados'], ['rechazado', '❌ Rechazados']]).map(([v, t]) => (
           <button type="button" key={v} className={estadoFiltro === v ? 'activo' : ''} onClick={() => setEstadoFiltro(v)}>
-            {t} <b>{v === 'todos' ? presupuestos.length : presupuestos.filter((p) => p.estado === v).length}</b>
+            {t} <b>{presupuestos.filter((p) => enGrupo(p, grupo) && (v === 'todos' || p.estado === v)).length}</b>
           </button>
         ))}
-      </div>
+      </div>}
       {faltaSqlEtapas && !cargando && <p className="gestionAyuda">Para guardar el motivo de rechazo y las versiones, corré el SQL de Etapas (fase 20) en Supabase.</p>}
 
       {cargando && <div className="presupuestosPanel"><p>Cargando presupuestos...</p></div>}
       {error && <div className="presupuestosPanel"><p className="loginError">{error}</p></div>}
 
       {!cargando && !error && filtrados.length === 0 && (
-        <div className="presupuestosPanel"><div className="empty"><span>📄</span><h3>No hay presupuestos</h3><p>Los presupuestos que agregues aparecerán acá.</p></div></div>
+        <div className="presupuestosPanel"><div className="empty"><span>📄</span><h3>{grupo === 'rechazados' ? 'No hay presupuestos rechazados' : grupo === 'por_cerrar' ? 'No hay presupuestos por cerrar' : 'No hay presupuestos'}</h3><p>{grupo === 'rechazados' ? 'Acá quedan los que el cliente no aceptó, con su motivo.' : grupo === 'por_cerrar' ? 'Los aceptados ya están en la pestaña En obra. Para uno nuevo, tocá "+ Nuevo presupuesto".' : 'Los presupuestos que agregues aparecerán acá.'}</p></div></div>
       )}
 
       {!cargando && !error && filtrados.length > 0 && esMovil && (
@@ -375,7 +382,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
 
       {!cargando && !error && filtrados.length > 0 && !esMovil && vista === 'kanban' && (
         <div className="crmKanban">
-          {ESTADOS.map((s) => {
+          {ESTADOS.filter((s) => !grupo || (grupo === 'rechazados' ? s.v === 'rechazado' : s.v !== 'rechazado')).map((s) => {
             const cols = filtrados.filter((p) => p.estado === s.v)
             return (
               <div className={`crmKanbanCol tope col-${s.v}`} key={s.v}>
