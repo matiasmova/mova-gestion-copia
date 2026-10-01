@@ -677,6 +677,12 @@ function NuevoPresupuesto({
           <div className="presupuestoItems">
             {items.map((item, indice) => (
               <div className="presupuestoItem" key={indice}>
+                {/* Cabecera del ítem (solo en el celular): número, importe y borrar. */}
+                <div className="itemCabecera">
+                  <span>Ítem {indice + 1}</span>
+                  <strong>{formatoDinero(pctItem(item) > 0 ? importeNeto(item) : importeBruto(item))}</strong>
+                  <button type="button" onClick={() => eliminarItem(indice)} aria-label={`Eliminar ítem ${indice + 1}`}>Quitar</button>
+                </div>
                 <label className="itemCampo itemCatalogo">
                   <span>Producto o servicio</span>
                   <select
@@ -700,7 +706,7 @@ function NuevoPresupuesto({
                   </select>
                 </label>
 
-                <label className="itemCampo">
+                <label className="itemCampo itemTipo">
                   <span>Tipo</span>
                   <select
                     value={item.tipo}
@@ -735,7 +741,7 @@ function NuevoPresupuesto({
                   />
                 </label>
 
-                <label className="itemCampo">
+                <label className="itemCampo itemCantidad">
                   <span>Cantidad</span>
                   <input
                     type="number"
@@ -752,7 +758,7 @@ function NuevoPresupuesto({
                   />
                 </label>
 
-                <label className="itemCampo">
+                <label className="itemCampo itemPrecio">
                   <span>Precio unitario</span>
                   <input
                     type="number"
@@ -769,7 +775,7 @@ function NuevoPresupuesto({
                   />
                 </label>
 
-                <label className="itemCampo">
+                <label className="itemCampo itemCosto">
                   <span>Costo unitario</span>
                   <input
                     type="number"
@@ -804,31 +810,15 @@ function NuevoPresupuesto({
 
                 {/* Descuento propio del ítem: ocupa una fila completa
                     debajo de los demás campos. */}
-                <div
-                  style={{
-                    gridColumn: '1 / -1',
-                    flexBasis: '100%',
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    alignItems: 'center',
-                    gap: '10px 16px',
-                    paddingTop: '4px',
-                    fontSize: '13px',
-                  }}
-                >
-                  <label
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                    }}
-                  >
+                <div className="itemDescuentoFila">
+                  <label>
                     <span>Descuento del ítem</span>
                     <input
                       type="number"
                       min="0"
                       max="100"
                       step="0.01"
+                      inputMode="decimal"
                       value={item.descuento_pct ?? 0}
                       onChange={(evento) =>
                         actualizarItem(
@@ -837,14 +827,13 @@ function NuevoPresupuesto({
                           Number(evento.target.value),
                         )
                       }
-                      style={{ width: '90px' }}
                       aria-label="Descuento del ítem en porcentaje"
                     />
                     <span>%</span>
                   </label>
 
                   {pctItem(item) > 0 && (
-                    <span style={{ color: '#c62828', fontWeight: 600 }}>
+                    <span className="itemDescuentoNeto">
                       − {formatoDinero(descuentoItem(item))} · Neto{' '}
                       {formatoDinero(importeNeto(item))}
                     </span>
@@ -900,6 +889,7 @@ function NuevoPresupuesto({
           {error && <p className="loginError">{error}</p>}
 
           <div className="modalActions">
+            <span className="presuPieTotal">Total <strong>{formatoDinero(total)}</strong></span>
             <button
               type="button"
               className="cancelButton"
