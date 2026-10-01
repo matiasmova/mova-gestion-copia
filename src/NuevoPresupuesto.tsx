@@ -318,12 +318,14 @@ function NuevoPresupuesto({
   async function armarConIA() {
     setIaError(''); setIaNotas(''); setIaPensando(true)
     try {
-      const r = await pedirAsistente<{ titulo: string; descripcion: string; notas: string; soluciones: number[]; items: { catalogo_id: number | null; descripcion: string; cantidad: number; tipo: 'producto' | 'servicio' }[] }>({ accion: 'presupuesto', pedido: iaPedido })
+      const r = await pedirAsistente<{ titulo: string; descripcion: string; notas: string; descuento_general_pct?: number; soluciones: number[]; items: { catalogo_id: number | null; descripcion: string; cantidad: number; tipo: 'producto' | 'servicio'; precio_pedido?: number; precio_catalogo?: number; descuento_pct?: number }[] }>({ accion: 'presupuesto', pedido: iaPedido })
       const nuevos: ItemPresupuesto[] = r.items.map((it) => {
-        const p = it.catalogo_id ? catalogo.find((x) => x.id === it.catalogo_id) : undefined
+        const p = it.catalogo_id ? catalogo.find((x) => Number(x.id) === Number(it.catalogo_id)) : undefined
+        // Precio: el que dijo el pedido; si no, el de tu lista de productos.
+        const precio = Number(it.precio_pedido) > 0 ? Number(it.precio_pedido) : Number(p?.precio_venta) || Number(it.precio_catalogo) || 0
         return p
-          ? { ...itemVacio, catalogo_id: p.id, tipo: p.tipo, descripcion: p.nombre_presupuesto?.trim() || p.nombre, cantidad: it.cantidad, precio_unitario: Number(p.precio_venta), costo_unitario: Number(p.costo_unitario) }
-          : { ...itemVacio, tipo: it.tipo, descripcion: it.descripcion, cantidad: it.cantidad }
+          ? { ...itemVacio, catalogo_id: p.id, tipo: p.tipo, descripcion: p.nombre_presupuesto?.trim() || p.nombre, cantidad: it.cantidad, precio_unitario: precio, costo_unitario: Number(p.costo_unitario) || 0, descuento_pct: Number(it.descuento_pct) || 0 }
+          : { ...itemVacio, catalogo_id: it.catalogo_id ?? null, tipo: it.tipo, descripcion: it.descripcion, cantidad: it.cantidad, precio_unitario: precio, descuento_pct: Number(it.descuento_pct) || 0 }
       })
       if (!nuevos.length) { setIaError('La IA no encontró ítems para ese pedido. Probá contarlo con más detalle.'); return }
       // Si la lista estaba vacía se reemplaza; si ya había ítems, se suman al final.
@@ -336,8 +338,13 @@ function NuevoPresupuesto({
       if (elegidas.length) setSoluciones((actuales) => [...actuales, ...elegidas])
       if (r.titulo && (!titulo.trim() || !tituloManual)) { setTitulo(r.titulo); setTituloManual(true) }
       if (r.descripcion && !descripcion.trim()) setDescripcion(r.descripcion)
-      const sinPrecio = nuevos.filter((it) => !it.catalogo_id).length
-      setIaNotas([r.notas, sinPrecio ? `${sinPrecio} ítem(s) no están en tu catálogo: completales el precio.` : ''].filter(Boolean).join(' '))
+      if (Number(r.descuento_general_pct) > 0) { setDescuentoTipo('porcentaje'); setDescuento(Number(r.descuento_general_pct)) }
+      const enCero = nuevos.filter((it) => !(it.precio_unitario > 0))
+      setIaNotas([
+        r.notas,
+        Number(r.descuento_general_pct) > 0 ? `Apliqué ${r.descuento_general_pct}% de bonificación general.` : '',
+        enCero.length ? `⚠ Quedaron sin precio (en tu lista están en $0 o no están): ${enCero.map((it) => it.descripcion).join(', ')}. Cargales el precio acá o en Productos y servicios.` : '',
+      ].filter(Boolean).join(' '))
       setIaAbierta(false)
     } catch (e) { setIaError((e as Error).message) } finally { setIaPensando(false) }
   }

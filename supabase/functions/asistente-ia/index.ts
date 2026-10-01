@@ -64,7 +64,9 @@ Te pasan lo que pide un cliente y el CATÁLOGO de la empresa (id | nombre | cate
 - titulo: breve, por ejemplo "Domótica y WiFi integral".
 - descripcion: 1 a 3 oraciones para el cliente, en español rioplatense con voseo, sin precios ni marcas.
 - soluciones: ids de las SOLUCIONES de la lista que correspondan a lo pedido (pueden ser ninguna).
-- notas: supuestos importantes para que el instalador revise (por ejemplo "calculé 3 nodos por 200 m²"). Corto.`
+- notas: supuestos importantes para que el instalador revise (por ejemplo "calculé 3 nodos por 200 m²"). Corto.
+- Precios: NO hace falta que pongas precios, la app usa los del catálogo. Solo si el pedido dice un precio para algo (por ejemplo "las cámaras a 90000"), ponelo en precio_unitario de ese ítem; si no, precio_unitario = 0.
+- Descuentos: si el pedido pide un descuento para un ítem o tipo de ítem (por ejemplo "20% en la mano de obra"), ponelo en descuento_pct de esos ítems. Si pide un descuento general sobre todo el presupuesto (por ejemplo "aplicá un 15% de descuento"), ponelo en descuento_general_pct y dejá descuento_pct en 0. Si no se pide descuento, todo en 0.`
 
 const SISTEMA_FACTURA = `Leés fotos de facturas, tickets y remitos de proveedores argentinos (materiales eléctricos, redes, domótica, ferretería).
 Devolvé los datos tal cual figuran:
@@ -132,22 +134,29 @@ Deno.serve(async (req) => {
       const esquema = {
         type: 'OBJECT',
         properties: {
-          titulo: { type: 'STRING' }, descripcion: { type: 'STRING' }, notas: { type: 'STRING' },
+          titulo: { type: 'STRING' }, descripcion: { type: 'STRING' }, notas: { type: 'STRING' }, descuento_general_pct: { type: 'NUMBER' },
           soluciones: { type: 'ARRAY', items: { type: 'INTEGER' } },
-          items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { catalogo_id: { type: 'INTEGER' }, descripcion: { type: 'STRING' }, cantidad: { type: 'NUMBER' }, tipo: { type: 'STRING', enum: ['producto', 'servicio'] } }, required: ['catalogo_id', 'descripcion', 'cantidad', 'tipo'] } },
+          items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { catalogo_id: { type: 'INTEGER' }, descripcion: { type: 'STRING' }, cantidad: { type: 'NUMBER' }, tipo: { type: 'STRING', enum: ['producto', 'servicio'] }, precio_unitario: { type: 'NUMBER' }, descuento_pct: { type: 'NUMBER' } }, required: ['catalogo_id', 'descripcion', 'cantidad', 'tipo', 'precio_unitario', 'descuento_pct'] } },
         },
         required: ['titulo', 'descripcion', 'items', 'soluciones', 'notas'],
       }
-      const r = await gemini(clave, texto, esquema, SISTEMA_PRESUPUESTO, 0.4) as { titulo?: string; descripcion?: string; notas?: string; soluciones?: number[]; items?: { catalogo_id: number; descripcion: string; cantidad: number; tipo: string }[] }
+      const r = await gemini(clave, texto, esquema, SISTEMA_PRESUPUESTO, 0.4) as { titulo?: string; descripcion?: string; notas?: string; descuento_general_pct?: number; soluciones?: number[]; items?: { catalogo_id: number; descripcion: string; cantidad: number; tipo: string; precio_unitario?: number; descuento_pct?: number }[] }
       const ids = new Set(catalogo.map((p) => p.id))
+      const precioDe = new Map(catalogo.map((p) => [p.id, Number(p.precio_venta) || 0]))
+      const pct = (x: unknown) => Math.min(100, Math.max(0, Number(x) || 0))
       const idsSol = new Set(soluciones.map((x) => x.id))
       return responder({
         titulo: recorte(r.titulo, 120), descripcion: recorte(r.descripcion, 800), notas: recorte(r.notas, 600),
+        descuento_general_pct: pct(r.descuento_general_pct),
         soluciones: (r.soluciones ?? []).filter((id) => idsSol.has(id)),
         items: (r.items ?? []).slice(0, 40).map((it) => ({
           catalogo_id: ids.has(Number(it.catalogo_id)) ? Number(it.catalogo_id) : null,
           descripcion: recorte(it.descripcion, 200), cantidad: Math.max(0.01, Number(it.cantidad) || 1),
           tipo: it.tipo === 'producto' ? 'producto' : 'servicio',
+          // Precio que dijo el pedido (si dijo uno); si no, el de la lista.
+          precio_pedido: Math.max(0, Number(it.precio_unitario) || 0),
+          precio_catalogo: ids.has(Number(it.catalogo_id)) ? precioDe.get(Number(it.catalogo_id)) ?? 0 : 0,
+          descuento_pct: pct(it.descuento_pct),
         })).filter((it) => it.catalogo_id || it.descripcion),
       })
     }
