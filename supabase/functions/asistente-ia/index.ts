@@ -4,7 +4,9 @@
 //   · presupuesto -> arma un presupuesto (ítems del catálogo, título, soluciones)
 //                    a partir de lo que pide el cliente
 //   · factura     -> lee la foto de una factura o ticket y devuelve la compra
-//   · mercado     -> busca en Google precios actuales de productos en Argentina
+//   · mercado     -> busca en internet precios actuales de productos en Argentina
+//                    (con Claude si está el secret ANTHROPIC_API_KEY, porque la
+//                    búsqueda de Gemini no tiene cupo gratis; si no, con Gemini)
 //   · ordenar_catalogo -> propone categoría, nombre en presupuesto y descripción
 //
 // Soluciones y presupuestos: administradores y contables. Factura: también
@@ -101,6 +103,48 @@ async function geminiBuscar(clave: string, pedido: string, sistema: string): Pro
   }
   if (limites.length) throw new Error(`límite|${limites.join(' | ')}`)
   throw new Error(errores.join(' | ') || 'sin respuesta')
+}
+
+// Búsqueda con Claude (API de Anthropic, se paga aparte del plan Pro). Solo se
+// usa para comparar precios. Secret ANTHROPIC_API_KEY; opcional CLAUDE_MODEL.
+async function claudeBuscar(clave: string, pedido: string, sistema: string): Promise<{ datos: unknown; fuentes: Fuente[]; busquedas: string[] }> {
+  type Bloque = { type: string; text?: string; input?: { query?: string }; content?: { type?: string; url?: string; title?: string }[] }
+  const mensajes: { role: string; content: string | Bloque[] }[] = [{ role: 'user', content: pedido }]
+  const fuentes: Fuente[] = [], busquedas: string[] = []
+  let textoFinal = ''
+  for (let vuelta = 0; vuelta < 4; vuelta++) {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': clave, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: Deno.env.get('CLAUDE_MODEL') || 'claude-haiku-4-5-20251001',
+        max_tokens: 4000, system: sistema, messages: mensajes,
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 6, user_location: { type: 'approximate', country: 'AR', region: 'Mendoza', city: 'Mendoza', timezone: 'America/Argentina/Mendoza' } }],
+      }),
+    })
+    const cuerpo = await r.json().catch(() => ({})) as { error?: { message?: string }; content?: Bloque[]; stop_reason?: string }
+    const mensaje = String(cuerpo.error?.message ?? '').slice(0, 300)
+    if (r.status === 401 || r.status === 403) throw new Error(`claude|Claude rechazó la clave (ANTHROPIC_API_KEY): ${mensaje}`)
+    if (/credit balance/i.test(mensaje)) throw new Error('claude|No queda saldo en la cuenta de Claude. Cargá crédito en console.anthropic.com → Billing.')
+    if (r.status === 429 || r.status === 529) throw new Error(`claude|Claude está con mucha demanda o llegaste al límite por minuto. Probá en un minuto. (${mensaje})`)
+    if (!r.ok) throw new Error(`claude|Claude respondió ${r.status}: ${mensaje}`)
+    const bloques = cuerpo.content ?? []
+    for (const b of bloques) {
+      if (b.type === 'server_tool_use' && b.input?.query) busquedas.push(recorte(b.input.query, 120))
+      if (b.type === 'web_search_tool_result' && Array.isArray(b.content)) {
+        for (const x of b.content) if (x.url && /^https:\/\//.test(x.url)) fuentes.push({ titulo: recorte(x.title, 80) || new URL(x.url).hostname, url: x.url })
+      }
+    }
+    // El JSON está en el texto que viene después de la última búsqueda.
+    const ultima = bloques.map((b) => b.type).lastIndexOf('web_search_tool_result')
+    textoFinal = bloques.slice(ultima + 1).filter((b) => b.type === 'text').map((b) => b.text ?? '').join('')
+    if (cuerpo.stop_reason !== 'pause_turn') break
+    mensajes.push({ role: 'assistant', content: bloques })
+  }
+  const desde = textoFinal.indexOf('{'), hasta = textoFinal.lastIndexOf('}')
+  let datos: unknown
+  try { datos = JSON.parse(textoFinal.slice(desde, hasta + 1)) } catch { throw new Error('claude|Claude no devolvió el resultado en el formato esperado. Probá de nuevo.') }
+  return { datos, fuentes, busquedas: Array.from(new Set(busquedas)).slice(0, 8) }
 }
 
 const SISTEMA_MERCADO = `Sos analista de precios de MOVA Tecnología Smart (Mendoza, Argentina), que vende e instala domótica, WiFi, cámaras, alarmas, riego y electricidad.
@@ -277,10 +321,24 @@ Deno.serve(async (req) => {
           ? `${k + 1}. ${p.nombre}${p.codigo ? ` (código ${p.codigo})` : ''}${p.proveedor ? ` · marca/proveedor: ${p.proveedor}` : ''}${p.categoria ? ` · ${p.categoria}` : ''}`
           : `${k + 1}. ${recorte(x.descripcion, 160)}`
       })
-      const { datos, fuentes, busquedas } = await geminiBuscar(clave, `Buscá el precio de mercado actual en Argentina de estos productos:\n${renglones.join('\n')}`, SISTEMA_MERCADO)
+      const claveClaude = Deno.env.get('ANTHROPIC_API_KEY')
+      const textoPedido = `Buscá el precio de mercado actual en Argentina de estos productos:\n${renglones.join('\n')}`
+      let respuesta: Awaited<ReturnType<typeof geminiBuscar>>
+      if (claveClaude) respuesta = await claudeBuscar(claveClaude, textoPedido, SISTEMA_MERCADO)
+      else {
+        try { respuesta = await geminiBuscar(clave, textoPedido, SISTEMA_MERCADO) } catch (e) {
+          if (String((e as Error).message).startsWith('límite|')) throw new Error('claude|La búsqueda en Google de Gemini no tiene cupo gratis en tu cuenta. Para comparar precios hay que cargar el secret ANTHROPIC_API_KEY (Claude) en Supabase.')
+          throw e
+        }
+      }
+      const { datos, fuentes, busquedas } = respuesta
       const lista = ((datos as { productos?: unknown[] })?.productos ?? []) as { n?: number; buscado?: string; comentario?: string; ofertas?: { tienda?: string; titulo?: string; precio?: number; moneda?: string; url?: string; equivalente?: boolean }[] }[]
       // Solo se muestran links de páginas que la búsqueda realmente visitó.
-      const dominios = new Set(fuentes.map((f) => f.titulo.toLowerCase().replace(/^www\./, '')).filter((d) => d.includes('.')))
+      // Gemini da el dominio en el título (y un link de redirección); Claude da el link real.
+      const dominios = new Set([
+        ...fuentes.map((f) => f.titulo.toLowerCase().replace(/^www\./, '')).filter((d) => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)),
+        ...fuentes.map((f) => { try { return new URL(f.url).hostname.toLowerCase().replace(/^www\./, '') } catch { return '' } }).filter((d) => d && !d.endsWith('vertexaisearch.cloud.google.com')),
+      ])
       const linkValido = (u: unknown) => {
         try {
           const url = new URL(String(u ?? ''))
@@ -329,6 +387,7 @@ Deno.serve(async (req) => {
   } catch (e) {
     const m = (e as Error).message
     if (m.startsWith('clave|')) return responder({ error: `Google rechazó la clave de Gemini (GEMINI_API_KEY): ${m.slice(6)}` }, 400)
+    if (m.startsWith('claude|')) return responder({ error: m.slice(7) }, 502)
     if (m.startsWith('límite|')) {
       const diario = /per ?day|PerDay|daily/i.test(m)
       return responder({ error: `${diario ? 'Se agotó el cupo gratuito de Gemini de hoy' : 'Se alcanzó el límite gratuito de Gemini por un rato: probá en un minuto'}. Detalle de Google: ${m.slice(7, 600)}` }, 429)

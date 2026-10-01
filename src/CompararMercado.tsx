@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { pedirAsistente } from './asistenteIA'
 import { formatoDinero, leerCotizacion } from './catalogoMoneda'
 
-// Compara precios propios con los del mercado (la IA busca en Google).
+// Compara precios propios con los del mercado (la IA busca en internet).
 // Solo muestra la comparación: nunca cambia un precio.
 
 export type ProductoAComparar = {
@@ -68,7 +68,7 @@ function CompararMercado({ productos, titulo, onCerrar }: { productos: ProductoA
       const salida: (Resultado | undefined)[] = productos.map((p) => cache[claveDe(p)]?.r)
       const faltan = productos.map((p, k) => ({ p, k })).filter(({ k }) => !salida[k])
       setDesdeCache(faltan.length < productos.length)
-      // De a 8 por pedido (cada pedido hace varias búsquedas en Google).
+      // De a 8 por pedido (cada pedido hace varias búsquedas).
       const nuevos: Record<string, Resultado> = {}
       const todasFuentes: Respuesta['fuentes'] = [], todasBusquedas: string[] = []
       for (let i = 0; i < faltan.length; i += 8) {
@@ -111,7 +111,7 @@ function CompararMercado({ productos, titulo, onCerrar }: { productos: ProductoA
         {buscando && !resultados.some(Boolean) && (
           <div className="mercadoCargando" role="status">
             <span className="mercadoSpinner" />
-            <p><strong>Buscando precios en Google…</strong><br /><small>Mercado Libre, tiendas y distribuidores de Argentina. Tarda entre 10 y 40 segundos.</small></p>
+            <p><strong>Buscando precios en internet…</strong><br /><small>Mercado Libre, tiendas y distribuidores de Argentina. Tarda entre 10 y 40 segundos.</small></p>
           </div>
         )}
         {error && <p className="loginError">{error}</p>}
@@ -176,14 +176,14 @@ function CompararMercado({ productos, titulo, onCerrar }: { productos: ProductoA
 
         {(fuentes.length > 0 || busquedas.length > 0) && (
           <details className="mercadoFuentes">
-            <summary>Fuentes y búsquedas de Google</summary>
+            <summary>Fuentes y búsquedas</summary>
             {busquedas.length > 0 && <p>{busquedas.map((q) => <a key={q} className="mercadoChip" href={`https://www.google.com/search?q=${encodeURIComponent(q)}`} target="_blank" rel="noreferrer noopener">🔎 {q}</a>)}</p>}
             {fuentes.length > 0 && <p>{fuentes.map((f, j) => <a key={j} className="mercadoChip" href={f.url} target="_blank" rel="noreferrer noopener">{f.titulo || 'Fuente'} ↗</a>)}</p>}
           </details>
         )}
 
         <p className="gestionAyuda mercadoAviso">
-          Precios orientativos al público (con IVA), encontrados por la IA en Google. Revisá los links antes de decidir: a veces compara un modelo parecido.
+          Precios orientativos al público (con IVA), encontrados por la IA en internet. Revisá los links antes de decidir: a veces compara un modelo parecido.
           {desdeCache && ' Algunos resultados son de una búsqueda de las últimas 24 h.'}
         </p>
         <div className="modalActions formActions">
