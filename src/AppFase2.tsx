@@ -25,7 +25,8 @@ import { ROLES, ROLES_VALIDOS, NAVEGACION, GRUPOS_MENU, puedeVer, type Rol, type
 export default function AppFase2() {
   const [session, setSession] = useState<Session | null>(null)
   const [verificando, setVerificando] = useState(true)
-  const [email, setEmail] = useState('')
+  // Se recuerda el último correo usado en este dispositivo.
+  const [email, setEmail] = useState(() => { try { return localStorage.getItem('mova_ultimo_email') ?? '' } catch { return '' } })
   const [password, setPassword] = useState('')
   const [mensajeError, setMensajeError] = useState('')
   const [ingresando, setIngresando] = useState(false)
@@ -94,6 +95,7 @@ export default function AppFase2() {
     evento.preventDefault(); setIngresando(true); setMensajeError('')
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) setMensajeError('El correo o la contraseña no son correctos.')
+    else { try { localStorage.setItem('mova_ultimo_email', email.trim()) } catch { /* sin almacenamiento */ } }
     setIngresando(false)
   }
 
@@ -134,11 +136,12 @@ export default function AppFase2() {
           <>
             <h2>Bienvenido</h2>
             <p className="fase2LoginSub">Ingresá para administrar tu empresa</p>
+            {/* Con autocomplete el iPhone guarda la contraseña en el llavero y la completa con Face ID. */}
             <label>Correo electrónico
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tu@correo.com" required />
+              <input type="email" name="email" id="login-email" autoComplete="username" inputMode="email" autoCapitalize="none" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tu@correo.com" required />
             </label>
             <label>Contraseña
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Tu contraseña" required />
+              <input type="password" name="password" id="login-password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Tu contraseña" required />
             </label>
             <button type="button" className="fase2LoginLink" onClick={() => { setModoAuth('reset'); setMensajeError(''); setAvisoReset('') }}>
               ¿Olvidaste tu contraseña?
