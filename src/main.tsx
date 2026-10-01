@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './AppFase2.tsx'
 import './index.css'
+import { vigilarActualizaciones } from './actualizacion'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -15,3 +16,6 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => { /* sin SW: la app sigue funcionando */ })
   })
 }
+
+// Aviso de versión nueva (la app abierta en el celular no se recarga sola).
+vigilarActualizaciones()

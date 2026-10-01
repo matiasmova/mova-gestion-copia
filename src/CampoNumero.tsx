@@ -84,9 +84,15 @@ export default function CampoNumero({ value, defaultValue, onChange, onBlur, onF
       onChange={(e) => cambiar(e.target.value)}
       onFocus={(e) => {
         enfocado.current = true
-        // Seleccionar todo: lo que se escribe reemplaza el valor (adiós al 0 adelante).
         const el = e.currentTarget
-        requestAnimationFrame(() => { try { el.select() } catch { /* sin selección */ } })
+        // Si tiene 0, se vacía al tocarlo: se escribe directo sin borrar nada
+        // (si se sale sin escribir, vuelve a mostrar el 0).
+        if (Number(crudoRef.current || 0) === 0 && crudoRef.current !== '-') { setTexto(''); return onFocus?.(e) }
+        // Si tiene otro número, se selecciona todo: lo que se escribe lo reemplaza.
+        // (En el iPhone hay que hacerlo un instante después del toque.)
+        const seleccionar = () => { try { el.setSelectionRange(0, el.value.length) } catch { try { el.select() } catch { /* sin selección */ } } }
+        requestAnimationFrame(seleccionar)
+        setTimeout(seleccionar, 60)
         onFocus?.(e)
       }}
       onBlur={() => {
