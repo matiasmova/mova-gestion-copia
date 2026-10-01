@@ -9,6 +9,9 @@ import {
   generarPdfPresupuesto,
   nombreArchivoPresupuesto,
   type DatosPdf,
+  leerModoComprobantes,
+  guardarModoComprobantes,
+  type ModoComprobantes,
 } from './pdfPresupuesto'
 import { codigoPresupuesto } from './codigoPresupuesto'
 import VidaEtapas, { pasosPresupuesto, type ObraEtapa } from './VidaEtapas'
@@ -113,7 +116,8 @@ export default function PresupuestoFicha({
   const [obraForm, setObraForm] = useState<DatosObra>({ nombre: '', direccion: '', localidad: '', fecha_inicio: '', fecha_fin_estimada: '' })
   const [modal, setModal] = useState<'aceptar' | 'rechazar' | null>(null)
   // Los comprobantes de los gastos a reintegrar van como anexo del PDF (se puede sacar).
-  const [incluirComprobantes, setIncluirComprobantes] = useState(true)
+  const [modoComp, setModoComp] = useState<ModoComprobantes>(leerModoComprobantes)
+  const [avisoComp, setAvisoComp] = useState('')
   const [motivo, setMotivo] = useState('')
   const [notaRechazo, setNotaRechazo] = useState('')
   const [preparado, setPreparado] = useState<Preparado | null>(null)
@@ -197,7 +201,8 @@ export default function PresupuestoFicha({
     async function preparar() {
       try {
         const datos = await completarDatosDocumento(base)
-        const blob = await generarPdfPresupuesto(datos, { comprobantes: incluirComprobantes })
+        setAvisoComp('')
+        const blob = await generarPdfPresupuesto(datos, { comprobantes: modoComp, onAviso: setAvisoComp })
         if (cancelado) return
         urlCreada = URL.createObjectURL(blob)
         setPreparado({ base, datos, blob, url: urlCreada })
@@ -213,7 +218,7 @@ export default function PresupuestoFicha({
       cancelado = true
       if (urlCreada) URL.revokeObjectURL(urlCreada)
     }
-  }, [base, reintento, incluirComprobantes])
+  }, [base, reintento, modoComp])
 
   // Cobros de presupuestos que todavía no están aceptados (en aceptados vienen del estado de obra).
   useEffect(() => {
@@ -325,9 +330,14 @@ export default function PresupuestoFicha({
               <button type="button" className="editButton waButton" onClick={enviarWhatsApp}>💬 WhatsApp</button>
             </div>
             {cantComprobantes > 0 && (
-              <label className="caCheck presuComprobantes">
-                <input type="checkbox" checked={incluirComprobantes} onChange={(e) => setIncluirComprobantes(e.target.checked)} />
-                <span>📎 Incluir {cantComprobantes === 1 ? 'el comprobante' : `los ${cantComprobantes} comprobantes`} de gastos al final del PDF{!listo ? ' (preparando…)' : ''}</span>
+              <label className="fichaEstadoSelect presuComprobantes">
+                📎 {cantComprobantes === 1 ? 'Comprobante de gasto' : `${cantComprobantes} comprobantes de gastos`}{!listo ? ' (preparando…)' : ''}
+                <select value={modoComp} onChange={(e) => { const m = e.target.value as ModoComprobantes; setModoComp(m); guardarModoComprobantes(m) }}>
+                  <option value="boton">Botón "Descargar factura" en el PDF</option>
+                  <option value="anexo">Adjuntarlos al final del PDF</option>
+                  <option value="no">No incluirlos</option>
+                </select>
+                {avisoComp && <small className="kpiNota">{avisoComp}</small>}
               </label>
             )}
           </>}

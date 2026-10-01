@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type RGB, type PDFPage } from 'pdf-lib'
+import { PDFDocument, PDFString, StandardFonts, rgb, type PDFFont, type RGB, type PDFPage } from 'pdf-lib'
 import logoUrl from './assets/mova-logo.png'
 import { moneda, fechaCorta } from './gestionFormat'
 import type { ItemPresupuesto } from './NuevoPresupuesto'
@@ -112,9 +112,28 @@ async function imagenAJpeg(blob: Blob): Promise<{ bytes: ArrayBuffer; w: number;
   } finally { URL.revokeObjectURL(url) }
 }
 
-// opciones.comprobantes: agrega al final las fotos/PDF de los comprobantes de
-// los gastos a reintegrar (por defecto sí).
-export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { comprobantes?: boolean } = {}): Promise<Blob> {
+// Cómo van los comprobantes de los gastos a reintegrar:
+//  · 'boton': un botón "Descargar factura" con link permanente (función "comprobante").
+//  · 'anexo': las fotos/PDF agregados al final del documento.
+//  · 'no':    sin comprobantes.
+export type ModoComprobantes = 'boton' | 'anexo' | 'no'
+const MODO_KEY = 'mova_modo_comprobantes'
+export function leerModoComprobantes(): ModoComprobantes {
+  try { const v = localStorage.getItem(MODO_KEY); return v === 'anexo' || v === 'no' ? v : 'boton' } catch { return 'boton' }
+}
+export function guardarModoComprobantes(m: ModoComprobantes) { try { localStorage.setItem(MODO_KEY, m) } catch { /* sin almacenamiento */ } }
+
+// Links permanentes de descarga (si la función "comprobante" no está instalada, null).
+async function linksComprobantes(ids: number[]): Promise<Record<number, string> | null> {
+  if (!ids.length) return {}
+  try {
+    const { data, error } = await supabase.functions.invoke('comprobante', { body: { ids } })
+    if (error || !data?.links) return null
+    return data.links as Record<number, string>
+  } catch { return null }
+}
+
+export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { comprobantes?: ModoComprobantes; onAviso?: (msg: string) => void } = {}): Promise<Blob> {
   const d = await completarDatosDocumento(entrada)
   const estado = d.estado ?? null
   const soluciones = d.soluciones ?? []
@@ -130,8 +149,28 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
   const CW = W - 2 * M
   const PIE = M + 34
   const codigo = codigoPresupuesto(d.id)
-  // Gastos con comprobante que van como anexo (numerados en el orden de la lista).
-  const conComprobante = opciones.comprobantes === false || !estado ? [] : estado.gastosExtra.filter((g) => g.comprobante)
+  // Comprobantes de los gastos: botón con link permanente o anexo al final.
+  let modo: ModoComprobantes = opciones.comprobantes ?? 'boton'
+  const gastosCon = !estado ? [] : estado.gastosExtra.filter((g) => g.comprobante)
+  let links: Record<number, string> = {}
+  if (modo === 'boton' && gastosCon.length) {
+    const r = await linksComprobantes(gastosCon.map((g) => g.id))
+    if (r) links = r
+    else { modo = 'anexo'; opciones.onAviso?.('Falta instalar la función "comprobante" en Supabase: por ahora los comprobantes van adjuntos al final.') }
+  }
+  const conComprobante = modo === 'anexo' ? gastosCon : []
+  // Botón con link (anotación del PDF que abre la dirección al tocarla).
+  const boton = (etiqueta: string, url: string, x: number, yy: number) => {
+    const s2 = win(etiqueta)
+    const w = bold.widthOfTextAtSize(s2, F_CHICO) + 16, h = 13
+    page.drawRectangle({ x, y: yy - 3.5, width: w, height: h, color: NARANJA })
+    page.drawText(s2, { x: x + 8, y: yy, size: F_CHICO, font: bold, color: BLANCO })
+    const anotacion = pdf.context.register(pdf.context.obj({
+      Type: 'Annot', Subtype: 'Link', Rect: [x, yy - 3.5, x + w, yy - 3.5 + h], Border: [0, 0, 0],
+      A: { Type: 'Action', S: 'URI', URI: PDFString.of(url) },
+    }))
+    page.node.addAnnot(anotacion)
+  }
   let page: PDFPage = pdf.addPage([W, H])
   let y = H - M
 
@@ -497,13 +536,14 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
       y -= 6
       for (const g of estado.gastosExtra) {
         const rr = partir(`${fechaCorta(g.fecha)} · ${g.descripcion}`, F_NORMAL, CW - 200)
-        const alto = Math.max(rr.length * 12 + (conComprobante.includes(g) ? 10 : 0), 20) + 8
+        const alto = Math.max(rr.length * 12 + (conComprobante.includes(g) ? 10 : 0) + (links[g.id] ? 16 : 0), 20) + 8
         lugar(alto)
         tilde(M + 16, y + 3, g.devuelto)
         let yy = y
         for (const r of rr) { texto(r, M + 30, yy, F_NORMAL, font, TEXTO); yy -= 12 }
         const nComp = conComprobante.indexOf(g)
         if (nComp >= 0) texto(`Comprobante N.º ${nComp + 1}: adjunto al final del documento`, M + 30, yy + 1, F_CHICO, font, NARANJA)
+        if (links[g.id]) boton('Descargar factura', links[g.id], M + 30, yy - 1)
         derecha(moneda(g.importe), M + CW - 90, y, F_NORMAL, bold, OSCURO)
         derecha(g.devuelto ? 'Reintegrado' : 'Pendiente', M + CW, y, F_CHICO + 0.5, bold, g.devuelto ? VERDE : NARANJA)
         derecha(g.devuelto ? 'no suma' : 'suma al total', M + CW, y - 10, F_CHICO, font, GRIS)
