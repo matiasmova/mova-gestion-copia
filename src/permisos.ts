@@ -12,8 +12,9 @@ export const NAVEGACION = [
   ['dashboard', 'principal', 'Inicio'],
   ['agenda', 'principal', 'Agenda'],
   ['clientes', 'comercial', 'Clientes'],
-  ['presupuestos', 'comercial', 'Presupuestos'],
-  ['obras', 'comercial', 'Obras'],
+  // Presupuestos y Obras se ven juntos en "Trabajos" (un solo ítem del menú).
+  ['presupuestos', 'comercial', 'Trabajos · presupuestos'],
+  ['obras', 'comercial', 'Trabajos'],
   ['soluciones', 'comercial', 'Soluciones'],
   ['catalogo', 'operacion', 'Productos y servicios'],
   ['compras', 'operacion', 'Compras'],
@@ -44,5 +45,8 @@ export const PERMISOS: Partial<Record<Vista, Rol[]>> = {
   usuarios: ['admin'],
   configuracion: ['admin'],
 }
+// Vistas que existen pero no tienen ítem propio en el menú.
+export const FUERA_DEL_MENU: Vista[] = ['presupuestos']
+
 export const puedeVer = (rol: Rol, vista: Vista) =>
   (PERMISOS[vista] ?? ROLES_VALIDOS).includes(rol)

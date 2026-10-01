@@ -1558,3 +1558,15 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 .presuItemBot{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13.5px;color:#6b7280}
 .presuItemBot b{color:#14181e;font-size:14.5px;white-space:nowrap}
 .kpiNota{display:block;margin-top:4px;font-size:11px;color:#7a4a07;line-height:1.3}
+
+/* ===== Trabajos (presupuestos + obras) ===== */
+.trabajosTabs{display:grid;gap:4px;padding:4px;border-radius:14px;background:#eceef1;margin:0 0 14px}
+.trabajosTabs button{border:0;border-radius:10px;padding:10px 6px;background:transparent;font:inherit;font-size:14px;font-weight:600;color:#4b5563;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trabajosTabs button.activo{background:#fff;color:#14181e;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+.trabajosTabCorto{display:none}
+.presuFalta{color:var(--mova-orange,#e8812a)!important}
+.presuAvisos{color:#b8620b;font-size:12px}
+@media (max-width:640px){
+  .trabajosTabs button{font-size:12.5px;padding:9px 2px}
+  .trabajosTabLargo{display:none}.trabajosTabCorto{display:inline}
+}
