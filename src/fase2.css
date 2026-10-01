@@ -1441,3 +1441,37 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 .ordenarCab input{width:auto;margin:0}
 .ordenarCab b{font-size:14px}
 @media (max-width:560px){.ordenarFila{grid-template-columns:1fr}}
+
+/* ===== IA: informe de obra, foto en presupuesto, qué mirar hoy ===== */
+.informeIaModal{max-width:640px}
+.informeIaOpciones{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;margin-bottom:10px}
+.informeIaOpciones label{display:flex;flex-direction:column;gap:4px;font-size:13px}
+.informeIaTexto{width:100%;min-height:260px;font-size:14.5px;line-height:1.5}
+.informeIaWa{text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+.iaFotoFila{margin-top:8px}
+.iaFotoBtn{display:flex!important;flex-direction:column!important;gap:2px;padding:10px 12px;border:1.5px dashed #c9b3ea;border-radius:12px;background:#fff;cursor:pointer;position:relative}
+.iaFotoBtn span{font-weight:700;color:#5b2e9a;font-size:14px}
+.iaFotoBtn small{color:var(--mova-muted);font-size:12px;font-weight:400}
+.iaFotoBtn input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.iaFotoElegida{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid #e3d6f2;border-radius:12px;background:#fff}
+.iaFotoElegida img{width:52px;height:52px;object-fit:cover;border-radius:8px}
+.iaFotoElegida>span{font-size:28px}
+.iaFotoElegida small{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mova-muted)}
+.hoyIA{border:1px solid #e3d6f2;border-radius:16px;background:linear-gradient(180deg,#fbf8ff,#fff);margin-bottom:14px;overflow:hidden}
+.hoyIACab{all:unset;box-sizing:border-box;width:100%;display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;flex-wrap:wrap}
+.hoyIACab span{font-weight:800;color:#5b2e9a;font-size:15.5px}
+.hoyIACab small{flex:1;min-width:160px;color:var(--mova-muted);font-size:13px}
+.hoyIACab b{margin-left:auto;color:#8a93a0;font-size:11px}
+.hoyIACuerpo{padding:0 16px 12px}
+.hoyIASaludo{margin:0 0 8px;font-weight:600;color:#3d2a5c}
+.hoyIA ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.hoyIA li button,.hoyIA li>div{all:unset;box-sizing:border-box;width:100%;display:flex;align-items:flex-start;gap:10px;padding:9px 11px;border-radius:11px;background:#fff;border:1px solid #efe8f8;font-size:14px;line-height:1.4}
+.hoyIA li button{cursor:pointer}
+.hoyIA li button:hover{border-color:#c9b3ea}
+.hoyIA li span:first-child{flex:none;font-size:17px}
+.hoyIA li span:nth-child(2){flex:1}
+.hoyIA li b{color:#8a93a0;font-size:18px;line-height:1}
+.hoyIACargando{display:flex;align-items:center;gap:10px;color:var(--mova-muted);margin:4px 0 8px}
+.hoyIACargando .mercadoSpinner{width:20px;height:20px;border-width:2.5px}
+.hoyIAError{color:#9b2222;font-size:13px;margin:6px 0}
+.hoyIAOtra{margin-top:8px;font-size:12.5px}

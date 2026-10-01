@@ -8,6 +8,8 @@
 //                    (con Claude si está el secret ANTHROPIC_API_KEY, porque la
 //                    búsqueda de Gemini no tiene cupo gratis; si no, con Gemini)
 //   · ordenar_catalogo -> propone categoría, nombre en presupuesto y descripción
+//   · informe_obra -> mensaje de avance de obra para mandarle al cliente
+//   · resumen_dia -> "qué mirar hoy" para Inicio, a partir de lo que manda la app
 //
 // Soluciones y presupuestos: administradores y contables. Factura: también
 // encargados y auxiliares (los que cargan compras). Desplegar con "Verify JWT" apagado
@@ -166,6 +168,22 @@ Para cada producto o servicio devolvé:
 - descripcion: una frase corta (máximo 160 caracteres) de qué es y para qué sirve, para uso interno. Sin precios.
 Español rioplatense, sin emojis.`
 
+const SISTEMA_INFORME = `Escribís, para MOVA Tecnología Smart (Mendoza, Argentina), el mensaje de WhatsApp con el avance de una obra para mandarle al cliente.
+- Español rioplatense con voseo, claro y profesional. Saludo con el primer nombre del cliente.
+- Contá lo que se hizo en el período (según los AVANCES), en qué porcentaje está la obra y qué sigue.
+- Si hay adicionales o cambios aprobados o pendientes de aprobación, mencionalos en una línea.
+- Formato de WhatsApp: párrafos cortos, se pueden usar viñetas con "•" y *negrita* con asteriscos. Entre 400 y 1200 caracteres. Sin montos de dinero salvo que se pida.
+- No inventes trabajos que no figuren en los datos. Si no hay avances en el período, decilo con naturalidad y contá cómo sigue.
+- Cerrá ofreciendo responder dudas, firmado con el nombre de la empresa.`
+
+const SISTEMA_RESUMEN_DIA = `Sos el asistente del dueño de MOVA Tecnología Smart (Mendoza, Argentina). Te pasan los datos de hoy de su app de gestión.
+Elegí lo MÁS importante para hoy: entre 3 y 5 puntos, ordenados por urgencia (primero lo que pierde plata o tiene horario hoy).
+- texto: una oración corta y concreta, en español rioplatense con voseo, con nombres y montos cuando ayuden ("Cobrale a Pérez el saldo de $350.000: la obra ya terminó").
+- icono: un emoji que lo represente.
+- ir: a qué pantalla lleva, uno de: agenda, obras, presupuestos, cobranzas, personal, gastos, ninguno.
+- saludo: una frase breve de arranque según el día ("Lunes tranquilo: 2 cosas para cobrar y una visita").
+No inventes datos que no estén en la lista. Si no hay nada urgente, decilo y sugerí algo útil (seguir presupuestos, cargar gastos).`
+
 const SISTEMA_PRESUPUESTO = `Sos el asistente comercial de MOVA Tecnología Smart (Mendoza, Argentina): domótica, redes WiFi, cámaras, alarmas, riego automático, electricidad y tecnología para hogares y empresas.
 Te pasan lo que pide un cliente y el CATÁLOGO de la empresa (id | nombre | categoría | tipo | unidad | precio). Armá un presupuesto:
 - items: usá productos y servicios del catálogo (catalogo_id = su id) con cantidades razonables para lo pedido. Incluí la mano de obra / instalación si está en el catálogo. Solo si algo necesario no está en el catálogo, agregalo con catalogo_id 0, una descripción clara para el cliente (sin marcas) y tipo producto o servicio.
@@ -176,6 +194,7 @@ Te pasan lo que pide un cliente y el CATÁLOGO de la empresa (id | nombre | cate
 - notas: supuestos importantes para que el instalador revise (por ejemplo "calculé 3 nodos por 200 m²"). Corto.
 - Precios: NO hace falta que pongas precios, la app usa los del catálogo. Solo si el pedido dice un precio para algo (por ejemplo "las cámaras a 90000"), ponelo en precio_unitario de ese ítem; si no, precio_unitario = 0.
 - Cliente y obra: si el pedido nombra al cliente (por ejemplo "para Sergio Baigoria") o la obra (por ejemplo "en la finca de Junín"), buscalos en la lista de CLIENTES y OBRAS y devolvé cliente_id y obra_id (la obra tiene que ser de ese cliente). Si nombra un cliente u obra que no está en la lista, dejá el id en 0 y escribí el nombre en cliente_texto u obra_texto. Si no nombra ninguno, todo en 0 y vacío.
+- Imagen: si viene una imagen, leela con atención. En un plano o croquis contá ambientes, metros y aberturas para calcular cantidades (por ejemplo nodos WiFi según superficie y paredes, cámaras en accesos y perímetro, puntos de luz y módulos por ambiente). En una foto del lugar, fijate qué se ve (tablero, techo, jardín). Si es un pedido escrito a mano, transcribilo. Explicá en notas lo que viste y los supuestos ("vi 3 dormitorios y living de ~40 m²").
 - Descuentos: si el pedido pide un descuento para un ítem o tipo de ítem (por ejemplo "20% en la mano de obra"), ponelo en descuento_pct de esos ítems. Si pide un descuento general sobre todo el presupuesto (por ejemplo "aplicá un 15% de descuento"), ponelo en descuento_general_pct y dejá descuento_pct en 0. Si no se pide descuento, todo en 0.`
 
 const SISTEMA_FACTURA = `Leés fotos de facturas, tickets y remitos de proveedores argentinos (materiales eléctricos, redes, domótica, ferretería).
@@ -203,7 +222,7 @@ Deno.serve(async (req) => {
   const { data: perfil } = await db.from('profiles').select('rol, activo').eq('id', quien.user.id).maybeSingle()
   const cuerpo = await req.json().catch(() => ({})) as Record<string, unknown>
   const { accion, idea, titulo, descripcion, existentes } = cuerpo
-  const roles = accion === 'factura' ? ['admin', 'contable', 'encargado', 'auxiliar'] : ['admin', 'contable']
+  const roles = accion === 'factura' ? ['admin', 'contable', 'encargado', 'auxiliar'] : accion === 'informe_obra' ? ['admin', 'contable', 'encargado'] : ['admin', 'contable']
   if (!perfil || !roles.includes(perfil.rol) || perfil.activo === false) return responder({ error: 'No tenés permiso para usar el asistente.' }, 403)
 
   const clave = Deno.env.get('GEMINI_API_KEY')
@@ -233,7 +252,11 @@ Deno.serve(async (req) => {
     }
     if (accion === 'presupuesto') {
       const pedido = recorte(cuerpo.pedido, 2000)
-      if (!pedido) return responder({ error: 'Contá qué necesita el cliente.' }, 400)
+      // Opcional: foto de un plano, croquis, el lugar o un pedido escrito a mano.
+      const imagen = String(cuerpo.imagen ?? '')
+      const mime = String(cuerpo.mime ?? 'image/jpeg')
+      if (imagen && (imagen.length > 8_000_000 || !/^(image\/(jpeg|png|webp|heic|heif)|application\/pdf)$/.test(mime))) return responder({ error: 'La foto no es válida o es muy pesada.' }, 400)
+      if (!pedido && !imagen) return responder({ error: 'Contá qué necesita el cliente o subí una foto.' }, 400)
       const [rCat, rSol, rCli, rObr] = await Promise.all([
         db.from('productos_servicios').select('id, nombre, categoria, tipo, unidad, precio_venta').eq('activo', true).order('nombre').limit(600),
         db.from('soluciones').select('id, titulo').eq('activo', true).limit(60),
@@ -244,7 +267,7 @@ Deno.serve(async (req) => {
       const obras = (rObr.data ?? []) as { id: number; nombre_obra: string; cliente_id: number; localidad: string | null }[]
       const catalogo = (rCat.data ?? []) as { id: number; nombre: string; categoria: string | null; tipo: string; unidad: string; precio_venta: number }[]
       const soluciones = (rSol.data ?? []) as { id: number; titulo: string }[]
-      const texto = `PEDIDO DEL CLIENTE:\n${pedido}\n\nCATÁLOGO:\n${catalogo.map((p) => `${p.id} | ${p.nombre} | ${p.categoria ?? ''} | ${p.tipo} | ${p.unidad} | ${Number(p.precio_venta) || 0}`).join('\n') || '(vacío)'}\n\nSOLUCIONES:\n${soluciones.map((x) => `${x.id} | ${x.titulo}`).join('\n') || '(ninguna)'}\n\nCLIENTES (id | nombre | localidad):\n${clientes.map((c) => `${c.id} | ${c.nombre} ${c.apellido ?? ''} | ${c.localidad ?? ''}`).join('\n') || '(ninguno)'}\n\nOBRAS (id | nombre | id del cliente | localidad):\n${obras.map((o) => `${o.id} | ${o.nombre_obra} | ${o.cliente_id} | ${o.localidad ?? ''}`).join('\n') || '(ninguna)'}`
+      const texto = `${imagen ? 'Te paso además una IMAGEN (plano, croquis, foto del lugar o pedido escrito): usala para armar el presupuesto.\n\n' : ''}PEDIDO DEL CLIENTE:\n${pedido || '(solo la imagen)'}\n\nCATÁLOGO:\n${catalogo.map((p) => `${p.id} | ${p.nombre} | ${p.categoria ?? ''} | ${p.tipo} | ${p.unidad} | ${Number(p.precio_venta) || 0}`).join('\n') || '(vacío)'}\n\nSOLUCIONES:\n${soluciones.map((x) => `${x.id} | ${x.titulo}`).join('\n') || '(ninguna)'}\n\nCLIENTES (id | nombre | localidad):\n${clientes.map((c) => `${c.id} | ${c.nombre} ${c.apellido ?? ''} | ${c.localidad ?? ''}`).join('\n') || '(ninguno)'}\n\nOBRAS (id | nombre | id del cliente | localidad):\n${obras.map((o) => `${o.id} | ${o.nombre_obra} | ${o.cliente_id} | ${o.localidad ?? ''}`).join('\n') || '(ninguna)'}`
       const esquema = {
         type: 'OBJECT',
         properties: {
@@ -255,7 +278,7 @@ Deno.serve(async (req) => {
         },
         required: ['titulo', 'descripcion', 'items', 'soluciones', 'notas', 'cliente_id', 'obra_id'],
       }
-      const r = await gemini(clave, texto, esquema, SISTEMA_PRESUPUESTO, 0.4) as { titulo?: string; descripcion?: string; notas?: string; descuento_general_pct?: number; cliente_id?: number; obra_id?: number; cliente_texto?: string; obra_texto?: string; soluciones?: number[]; items?: { catalogo_id: number; descripcion: string; cantidad: number; tipo: string; precio_unitario?: number; descuento_pct?: number }[] }
+      const r = await gemini(clave, imagen ? [{ inlineData: { mimeType: mime, data: imagen } }, { text: texto }] : texto, esquema, SISTEMA_PRESUPUESTO, 0.4) as { titulo?: string; descripcion?: string; notas?: string; descuento_general_pct?: number; cliente_id?: number; obra_id?: number; cliente_texto?: string; obra_texto?: string; soluciones?: number[]; items?: { catalogo_id: number; descripcion: string; cantidad: number; tipo: string; precio_unitario?: number; descuento_pct?: number }[] }
       const ids = new Set(catalogo.map((p) => p.id))
       const precioDe = new Map(catalogo.map((p) => [p.id, Number(p.precio_venta) || 0]))
       const pct = (x: unknown) => Math.min(100, Math.max(0, Number(x) || 0))
@@ -382,6 +405,40 @@ Deno.serve(async (req) => {
           id: Number(p.id), categoria: recorte(p.categoria, 40), nombre_presupuesto: recorte(p.nombre_presupuesto, 80), descripcion: recorte(p.descripcion, 200),
         })),
       })
+    }
+    if (accion === 'informe_obra') {
+      const obraId = Number(cuerpo.obra_id)
+      const dias = Math.min(365, Math.max(1, Number(cuerpo.dias) || 7))
+      const tono = cuerpo.tono === 'formal' ? 'formal' : 'cercano'
+      const { data: obra } = await db.from('obras').select('id, nombre_obra, cliente_id, direccion, localidad, estado, porcentaje_avance, fecha_fin_estimada').eq('id', obraId).maybeSingle()
+      if (!obra) return responder({ error: 'No encontré la obra.' }, 404)
+      const desde = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10)
+      const [rCli, rAv, rAd, rImg, rConf] = await Promise.all([
+        db.from('Clientes').select('nombre, apellido, telefono').eq('id', obra.cliente_id).maybeSingle(),
+        db.from('obra_avances').select('fecha, titulo, descripcion, estado, porcentaje').eq('obra_id', obraId).order('fecha', { ascending: true }).limit(200),
+        db.from('adicionales').select('fecha, tipo, descripcion, estado').eq('obra_id', obraId).gte('fecha', desde).limit(50),
+        db.from('obra_imagenes').select('id', { count: 'exact', head: true }).eq('obra_id', obraId).gte('created_at', desde),
+        db.from('configuracion').select('valor').eq('clave', 'empresa').maybeSingle(),
+      ])
+      const avances = (rAv.data ?? []) as { fecha: string; titulo: string; descripcion: string | null; estado: string | null; porcentaje: number | null }[]
+      const recientes = avances.filter((a) => a.fecha >= desde)
+      const anteriores = avances.filter((a) => a.fecha < desde).slice(-3)
+      const empresa = recorte((rConf.data?.valor as { nombre?: string } | null)?.nombre, 80) || 'MOVA Tecnología Smart'
+      const cli = rCli.data as { nombre: string; apellido: string | null; telefono: string | null } | null
+      const linea = (a: typeof avances[number]) => `- ${a.fecha} · ${a.titulo}${a.descripcion ? `: ${recorte(a.descripcion, 400)}` : ''}${a.porcentaje != null ? ` (${a.porcentaje}%)` : ''}`
+      const texto = `EMPRESA: ${empresa}\nCLIENTE: ${cli ? `${cli.nombre} ${cli.apellido ?? ''}` : ''}\nOBRA: ${obra.nombre_obra}${obra.localidad ? ` (${obra.localidad})` : ''}\nESTADO: ${obra.estado ?? 'en_proceso'} · AVANCE TOTAL: ${Number(obra.porcentaje_avance) || 0}%${obra.fecha_fin_estimada ? ` · fin estimado ${obra.fecha_fin_estimada}` : ''}\nPERÍODO: últimos ${dias} días (desde ${desde})\nTONO: ${tono}\n\nAVANCES DEL PERÍODO:\n${recientes.map(linea).join('\n') || '(ninguno)'}\n\nAVANCES ANTERIORES (contexto):\n${anteriores.map(linea).join('\n') || '(ninguno)'}\n\nADICIONALES Y CAMBIOS DEL PERÍODO:\n${((rAd.data ?? []) as { fecha: string; tipo: string; descripcion: string; estado: string }[]).map((a) => `- ${a.fecha} · ${a.tipo}: ${recorte(a.descripcion, 200)} (${a.estado})`).join('\n') || '(ninguno)'}\n\nFOTOS CARGADAS EN EL PERÍODO: ${rImg.count ?? 0}`
+      const r = await gemini(clave, texto, { type: 'OBJECT', properties: { mensaje: { type: 'STRING' } }, required: ['mensaje'] }, SISTEMA_INFORME, 0.6) as { mensaje?: string }
+      return responder({ mensaje: recorte(r.mensaje, 3000), telefono: cli?.telefono ?? null, avances_periodo: recientes.length, fotos_periodo: rImg.count ?? 0 })
+    }
+    if (accion === 'resumen_dia') {
+      const hechos = (Array.isArray(cuerpo.hechos) ? cuerpo.hechos : []).map((x) => recorte(x, 220)).filter(Boolean).slice(0, 60)
+      const hoy = recorte(cuerpo.hoy, 60)
+      const esquema = { type: 'OBJECT', properties: {
+        saludo: { type: 'STRING' },
+        puntos: { type: 'ARRAY', items: { type: 'OBJECT', properties: { icono: { type: 'STRING' }, texto: { type: 'STRING' }, ir: { type: 'STRING', enum: ['agenda', 'obras', 'presupuestos', 'cobranzas', 'personal', 'gastos', 'ninguno'] } }, required: ['icono', 'texto', 'ir'] } },
+      }, required: ['saludo', 'puntos'] }
+      const r = await gemini(clave, `HOY: ${hoy}\n\nDATOS:\n${hechos.map((h) => `- ${h}`).join('\n') || '(no hay nada pendiente)'}`, esquema, SISTEMA_RESUMEN_DIA, 0.5) as { saludo?: string; puntos?: { icono: string; texto: string; ir: string }[] }
+      return responder({ saludo: recorte(r.saludo, 200), puntos: (r.puntos ?? []).slice(0, 5).map((x) => ({ icono: recorte(x.icono, 8), texto: recorte(x.texto, 260), ir: x.ir })).filter((x) => x.texto) })
     }
     return responder({ error: 'Acción desconocida' }, 400)
   } catch (e) {

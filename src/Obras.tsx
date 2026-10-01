@@ -6,6 +6,7 @@ import {
 import { supabase } from './supabase'
 import NuevaObra from './NuevaObra'
 import EstadoObraPDF from './EstadoObraPDF'
+import InformeObraIA from './InformeObraIA'
 import AdicionalesObra from './AdicionalesObra'
 import PersonalObra from './PersonalObra'
 import RentabilidadObra from './RentabilidadObra'
@@ -85,10 +86,12 @@ const avanceInicial = {
 
 // onVerPresupuesto se sigue aceptando por compatibilidad, pero la ficha de la obra
 // ya no lo usa: todo se ve en un único documento (presupuesto y estado de obra).
-function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; onObraAbierta?: () => void; onVerPresupuesto?: (presupuestoId: number) => void } = {}) {
+function Obras({ obraAbrirId, onObraAbierta, conIA = false }: { obraAbrirId?: number | null; onObraAbierta?: () => void; onVerPresupuesto?: (presupuestoId: number) => void; conIA?: boolean } = {}) {
+  const puedeInformeIA = conIA
   const [obras, setObras] = useState<Obra[]>([])
   const [presupuestosObra, setPresupuestosObra] = useState<{ id: number; obra_id: number | null; total: number | string; estado: string; activo: boolean; titulo: string }[]>([])
   const [informeObra, setInformeObra] = useState<Obra | null>(null)
+  const [informeIA, setInformeIA] = useState<Obra | null>(null)
   const [seguTab, setSeguTab] = useState<TabSeguimiento>('resumen')
   const [menuFicha, setMenuFicha] = useState(false)
   const [clientes, setClientes] = useState<Cliente[]>([])
@@ -696,6 +699,7 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
                 </p>
               </div>
               <div className="fichaHeadAcciones">
+                {puedeInformeIA && <button type="button" className="fichaPdf" title="Mensaje de avance para el cliente, escrito con IA" onClick={() => setInformeIA(obraSeguimiento)}>✨ Informe</button>}
                 <button type="button" className="fichaPdf" disabled={!presupuestoAceptado} title="Presupuesto y estado de obra" onClick={() => setInformeObra(obraSeguimiento)}>📄 PDF</button>
                 <div className="fichaMenuWrap">
                   <button type="button" className="fichaIcono" aria-label="Más opciones" aria-expanded={menuFicha} onClick={() => setMenuFicha((v) => !v)}>⋯</button>
@@ -1024,6 +1028,8 @@ function Obras({ obraAbrirId, onObraAbierta }: { obraAbrirId?: number | null; on
           onGuardada={obraGuardada}
         />
       )}
+
+      {informeIA && <InformeObraIA obraId={informeIA.id} obra={informeIA.nombre_obra} onCerrar={() => setInformeIA(null)} />}
 
       {informeObra && (
         <EstadoObraPDF

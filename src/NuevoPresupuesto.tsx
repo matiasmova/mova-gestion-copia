@@ -10,7 +10,7 @@ import {
   redondear,
 } from './presupuestoCalculos'
 import { cargarSoluciones, type Solucion } from './Soluciones'
-import { pedirAsistente } from './asistenteIA'
+import { archivoParaIA, pedirAsistente } from './asistenteIA'
 import CompararMercado, { type ProductoAComparar } from './CompararMercado'
 import { cargarSolucionesPresupuesto, type SolucionPresupuesto } from './presupuestoSoluciones'
 import NuevoCliente from './NuevoCliente'
@@ -330,10 +330,20 @@ function NuevoPresupuesto({
   }
   const hayProductos = items.some((it) => it.tipo === 'producto' && it.descripcion.trim())
 
+  // Foto o plano opcional para la IA (plano, croquis, el lugar o un pedido escrito).
+  const [iaFoto, setIaFoto] = useState<File | null>(null)
+  const [iaFotoVista, setIaFotoVista] = useState('')
+  useEffect(() => () => { if (iaFotoVista) URL.revokeObjectURL(iaFotoVista) }, [iaFotoVista])
+  function elegirFoto(archivo: File | null) {
+    setIaFoto(archivo)
+    setIaFotoVista(archivo && archivo.type.startsWith('image/') ? URL.createObjectURL(archivo) : '')
+  }
+
   async function armarConIA() {
     setIaError(''); setIaNotas(''); setIaPensando(true)
     try {
-      const r = await pedirAsistente<{ titulo: string; descripcion: string; notas: string; descuento_general_pct?: number; cliente_id?: number | null; obra_id?: number | null; cliente_texto?: string; obra_texto?: string; soluciones: number[]; items: { catalogo_id: number | null; descripcion: string; cantidad: number; tipo: 'producto' | 'servicio'; precio_pedido?: number; precio_catalogo?: number; descuento_pct?: number }[] }>({ accion: 'presupuesto', pedido: iaPedido })
+      const foto = iaFoto ? await archivoParaIA(iaFoto) : null
+      const r = await pedirAsistente<{ titulo: string; descripcion: string; notas: string; descuento_general_pct?: number; cliente_id?: number | null; obra_id?: number | null; cliente_texto?: string; obra_texto?: string; soluciones: number[]; items: { catalogo_id: number | null; descripcion: string; cantidad: number; tipo: 'producto' | 'servicio'; precio_pedido?: number; precio_catalogo?: number; descuento_pct?: number }[] }>({ accion: 'presupuesto', pedido: iaPedido, ...(foto ? { imagen: foto.data, mime: foto.mime } : {}) })
       const nuevos: ItemPresupuesto[] = r.items.map((it) => {
         const p = it.catalogo_id ? catalogo.find((x) => Number(x.id) === Number(it.catalogo_id)) : undefined
         // Precio: el que dijo el pedido; si no, el de tu lista de productos.
@@ -371,6 +381,7 @@ function NuevoPresupuesto({
         enCero.length ? `⚠ Quedaron sin precio (en tu lista están en $0 o no están): ${enCero.map((it) => it.descripcion).join(', ')}. Cargales el precio acá o en Productos y servicios.` : '',
       ].filter(Boolean).join(' '))
       setIaAbierta(false)
+      elegirFoto(null)
     } catch (e) { setIaError((e as Error).message) } finally { setIaPensando(false) }
   }
 
@@ -584,14 +595,29 @@ function NuevoPresupuesto({
         <form className="presupuestoForm" onSubmit={guardar}>
           <div className={`iaArmar ${iaAbierta ? 'abierto' : ''}`}>
             <button type="button" className="iaArmarTit" onClick={() => setIaAbierta((v) => !v)}>
-              <span>✨ Armar con IA</span><small>{iaAbierta ? 'Contá lo que pide el cliente y la IA arma los ítems con tu catálogo' : 'Tocá para armar ítems desde una descripción'}</small><b>{iaAbierta ? '▲' : '▼'}</b>
+              <span>✨ Armar con IA</span><small>{iaAbierta ? 'Contá lo que pide el cliente (o sumá una foto o plano) y la IA arma los ítems' : 'Tocá para armar ítems desde una descripción'}</small><b>{iaAbierta ? '▲' : '▼'}</b>
             </button>
             {iaAbierta && <>
               <textarea rows={3} value={iaPedido} onChange={(e) => setIaPedido(e.target.value)}
                 placeholder="Ej.: casa de 200 m², WiFi en todo el terreno, 4 cámaras afuera, domótica de luces en living y cocina, riego para 3 zonas" />
+              <div className="iaFotoFila">
+                {iaFoto ? (
+                  <div className="iaFotoElegida">
+                    {iaFotoVista ? <img src={iaFotoVista} alt="" /> : <span>📄</span>}
+                    <small>{iaFoto.name}</small>
+                    <button type="button" className="caLink" onClick={() => elegirFoto(null)}>Quitar</button>
+                  </div>
+                ) : (
+                  <label className="iaFotoBtn">
+                    <span>📷 Sumar foto o plano</span>
+                    <small>Plano, croquis, foto del lugar o un pedido escrito a mano</small>
+                    <input type="file" accept="image/*,application/pdf" onChange={(e) => { elegirFoto(e.target.files?.[0] ?? null); e.target.value = '' }} />
+                  </label>
+                )}
+              </div>
               <div className="iaArmarAcc">
                 <small>🎤 Podés dictarlo con el micrófono del teclado. Después revisá cantidades y precios.</small>
-                <button type="button" className="newButton" disabled={!iaPedido.trim() || iaPensando || cargandoCatalogo} onClick={() => void armarConIA()}>{iaPensando ? 'Armando…' : 'Armar presupuesto'}</button>
+                <button type="button" className="newButton" disabled={(!iaPedido.trim() && !iaFoto) || iaPensando || cargandoCatalogo} onClick={() => void armarConIA()}>{iaPensando ? 'Armando…' : 'Armar presupuesto'}</button>
               </div>
               {iaError && <p className="loginError">{iaError}</p>}
             </>}
