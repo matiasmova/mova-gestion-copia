@@ -98,7 +98,7 @@ type EditorItem = {
 }
 
 // Edición de un registro del historial.
-type EdicionRegistro = { id: number; descripcion: string; importe: string; cantidad: string; precio: string; motivo: string; observaciones: string; fecha: string }
+type EdicionRegistro = { id: number; descripcion: string; importe: string; cantidad: string; precio: string; motivo: string; observaciones: string; fecha: string; proveedor: string; medioPago: string }
 
 type Filtro = 'todos' | 'pendiente' | 'aprobado'
 
@@ -435,6 +435,8 @@ function AdicionalesObra({ obraId, puedeEditar = true, onCambio, abrir }: Props)
       motivo: a.motivo ?? '',
       observaciones: a.observaciones ?? '',
       fecha: a.fecha?.slice(0, 10) || hoy(),
+      proveedor: a.proveedor ?? '',
+      medioPago: a.medio_pago ?? 'transferencia',
     })
   }
 
@@ -471,10 +473,18 @@ function AdicionalesObra({ obraId, puedeEditar = true, onCambio, abrir }: Props)
         motivo: edicion.motivo.trim() || null,
         observaciones: edicion.observaciones.trim() || null,
         fecha: edicion.fecha,
+        ...(a.tipo === 'gasto_extra' ? { proveedor: edicion.proveedor.trim() || null, medio_pago: edicion.medioPago } : {}),
       }
     }
     setGuardando('edicion')
     const { error: fallo } = await supabase.from('adicionales').update(cambios).eq('id', a.id)
+    // Si el gasto ya estaba aprobado, el costo de la obra que generó se corrige igual.
+    if (!fallo && a.tipo === 'gasto_extra' && a.costo_id) {
+      const desc = String(cambios.descripcion ?? a.descripcion)
+      const prov = a.tipo === 'gasto_extra' ? edicion.proveedor.trim() : ''
+      const { error: errCosto } = await supabase.from('costos').update({ monto: Math.abs(Number(cambios.importe) || 0), descripcion: prov ? `${desc} (${prov})` : desc, fecha: edicion.fecha }).eq('id', a.costo_id)
+      if (errCosto) console.error(errCosto)
+    }
     setGuardando(null)
     if (fallo) { console.error(fallo); setErrorEditor(`No se pudo guardar: ${fallo.message || 'volvé a intentar.'}`); return }
     setEdicion(null)
@@ -490,6 +500,27 @@ function AdicionalesObra({ obraId, puedeEditar = true, onCambio, abrir }: Props)
       setProcesando(null)
       setError(`No se pudo eliminar: ${fallo.message || 'volvé a intentar.'}`)
       return
+    }
+    if (a.comprobante_path) await supabase.storage.from('comprobantes').remove([a.comprobante_path])
+    setProcesando(null)
+    terminar()
+  }
+
+  // Comprobante que llegó tarde o que hay que reemplazar.
+  async function cambiarComprobante(a: Adicional, archivo: File | null) {
+    setProcesando(a.id); setError('')
+    let ruta: string | null = null
+    if (archivo) {
+      const nombreSeguro = archivo.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      ruta = `${obraId}/${Date.now()}-${nombreSeguro}`
+      const subida = await supabase.storage.from('comprobantes').upload(ruta, archivo, { contentType: archivo.type, upsert: false })
+      if (subida.error) { console.error(subida.error); setError(`No se pudo subir el comprobante: ${subida.error.message || 'volvé a intentar.'}`); setProcesando(null); return }
+    } else if (!window.confirm('¿Quitar el comprobante de este gasto?')) { setProcesando(null); return }
+    const { error: fallo } = await supabase.from('adicionales').update({ comprobante_path: ruta }).eq('id', a.id)
+    if (fallo) {
+      console.error(fallo)
+      if (ruta) await supabase.storage.from('comprobantes').remove([ruta])
+      setError(`No se pudo guardar el comprobante: ${fallo.message || 'volvé a intentar.'}`); setProcesando(null); return
     }
     if (a.comprobante_path) await supabase.storage.from('comprobantes').remove([a.comprobante_path])
     setProcesando(null)
@@ -720,7 +751,9 @@ function AdicionalesObra({ obraId, puedeEditar = true, onCambio, abrir }: Props)
             <div className="caHist">
               {visibles.map((a) => {
                 const { antes, ahora } = antesYAhora(a, moneda)
-                const editable = puedeEditar && (a.estado === 'pendiente' || a.estado === 'rechazado')
+                // Se puede corregir siempre (también aprobado o pagado); borrar, solo si no se aprobó.
+                const editable = puedeEditar
+                const borrable = puedeEditar && (a.estado === 'pendiente' || a.estado === 'rechazado')
                 const editando = edicion?.id === a.id
                 const esCambio = a.tipo === 'cambio'
                 return (
@@ -748,6 +781,12 @@ function AdicionalesObra({ obraId, puedeEditar = true, onCambio, abrir }: Props)
                           <label>Fecha<input type="date" value={edicion.fecha} onChange={(e) => setEdicion({ ...edicion, fecha: e.target.value })} /></label>
                           <label className="caDesc">Motivo<input value={edicion.motivo} onChange={(e) => setEdicion({ ...edicion, motivo: e.target.value })} /></label>
                           {!esCambio && <label className="caDesc">Observaciones<input value={edicion.observaciones} onChange={(e) => setEdicion({ ...edicion, observaciones: e.target.value })} /></label>}
+                          {a.tipo === 'gasto_extra' && <>
+                            <label>Proveedor / lugar<input value={edicion.proveedor} onChange={(e) => setEdicion({ ...edicion, proveedor: e.target.value })} /></label>
+                            <label>Cómo se pagó<select value={edicion.medioPago} onChange={(e) => setEdicion({ ...edicion, medioPago: e.target.value })}>
+                              {Object.entries(MEDIOS_PAGO).map(([valor, texto]) => <option key={valor} value={valor}>{texto}</option>)}
+                            </select></label>
+                          </>}
                         </div>
                         {errorEditor && <p className="loginError">{errorEditor}</p>}
                         <div className="caEditorPie">
@@ -798,7 +837,14 @@ function AdicionalesObra({ obraId, puedeEditar = true, onCambio, abrir }: Props)
                         )}
                         {editable && <span className="caSep" />}
                         {editable && <button type="button" className="editButton" onClick={() => abrirEdicion(a)}>✏️ Editar</button>}
-                        {editable && <button type="button" className="adicNo" disabled={procesando === a.id} onClick={() => void eliminar(a)}>🗑 Eliminar</button>}
+                        {a.tipo === 'gasto_extra' && (
+                          <label className={`editButton caArchivoBtn ${procesando === a.id ? 'deshabilitado' : ''}`}>
+                            📎 {a.comprobante_path ? 'Cambiar comprobante' : 'Adjuntar comprobante'}
+                            <input type="file" accept="image/*,application/pdf" disabled={procesando === a.id} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void cambiarComprobante(a, f) }} />
+                          </label>
+                        )}
+                        {a.tipo === 'gasto_extra' && a.comprobante_path && <button type="button" className="caLink" disabled={procesando === a.id} onClick={() => void cambiarComprobante(a, null)}>Quitar comprobante</button>}
+                        {borrable && <button type="button" className="adicNo" disabled={procesando === a.id} onClick={() => void eliminar(a)}>🗑 Eliminar</button>}
                       </div>
                     )}
                   </article>
