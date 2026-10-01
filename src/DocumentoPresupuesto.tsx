@@ -7,6 +7,7 @@ import { formatoPct, importeNeto, partirDescripcion, pctItem } from './presupues
 import { antesYAhora, etiquetaModificacion } from './presupuestoModificaciones'
 import { mensajeEstado, PCT_ANTICIPO, totalAPagarHoy, type EstadoPresupuesto } from './estadoObra'
 import { codigoPresupuesto } from './codigoPresupuesto'
+import { supabase } from './supabase'
 
 // Documento del presupuesto en pantalla (ficha, vista previa y estado de obra).
 // Mismo contenido y diseño que el PDF (pdfPresupuesto.ts), en HTML directo.
@@ -57,6 +58,13 @@ function Tilde({ estado }: { estado: 'ok' | 'pendiente' | 'futuro' }) {
       {estado === 'ok' ? '✓' : estado === 'pendiente' ? '!' : ''}
     </span>
   )
+}
+
+// Abre el comprobante de un gasto (link temporal del archivo guardado).
+async function verComprobante(ruta: string) {
+  const { data, error } = await supabase.storage.from('comprobantes').createSignedUrl(ruta, 600)
+  if (error || !data?.signedUrl) { window.alert('No se pudo abrir el comprobante.'); return }
+  window.open(data.signedUrl, '_blank', 'noopener')
 }
 
 const conSigno = (n: number) => (n < 0 ? `− ${moneda(Math.abs(n))}` : `+ ${moneda(n)}`)
@@ -169,7 +177,9 @@ function EstadoObra({ e }: { e: EstadoPresupuesto }) {
           {e.gastosExtra.map((g) => (
             <div key={g.id} style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '6px 0', borderBottom: `1px solid ${LINEA}` }}>
               <Tilde estado={g.devuelto ? 'ok' : 'pendiente'} />
-              <span style={{ flex: 1, minWidth: 0 }}>{fechaCorta(g.fecha)} · {g.descripcion}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>{fechaCorta(g.fecha)} · {g.descripcion}
+                {g.comprobante && <button type="button" onClick={() => void verComprobante(g.comprobante!)} style={{ display: 'block', border: 0, background: 'none', padding: '2px 0 0', color: NARANJA, fontSize: T_CHICO, fontWeight: 700, cursor: 'pointer' }}>📎 Ver comprobante</button>}
+              </span>
               <strong style={{ whiteSpace: 'nowrap' }}>{moneda(g.importe)}</strong>
               <span style={{ width: '96px', textAlign: 'right', fontSize: T_CHICO, fontWeight: 700, color: g.devuelto ? VERDE : NARANJA, lineHeight: 1.25 }}>{g.devuelto ? '✓ Reintegrado' : <>Pendiente<br /><span style={{ fontWeight: 400 }}>suma al total</span></>}</span>
             </div>

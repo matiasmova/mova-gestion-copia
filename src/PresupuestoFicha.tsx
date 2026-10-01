@@ -112,6 +112,8 @@ export default function PresupuestoFicha({
   const [estadoLocal, setEstadoLocal] = useState(presupuesto.estado)
   const [obraForm, setObraForm] = useState<DatosObra>({ nombre: '', direccion: '', localidad: '', fecha_inicio: '', fecha_fin_estimada: '' })
   const [modal, setModal] = useState<'aceptar' | 'rechazar' | null>(null)
+  // Los comprobantes de los gastos a reintegrar van como anexo del PDF (se puede sacar).
+  const [incluirComprobantes, setIncluirComprobantes] = useState(true)
   const [motivo, setMotivo] = useState('')
   const [notaRechazo, setNotaRechazo] = useState('')
   const [preparado, setPreparado] = useState<Preparado | null>(null)
@@ -119,6 +121,9 @@ export default function PresupuestoFicha({
   const [reintento, setReintento] = useState(0)
   const [compartiendo, setCompartiendo] = useState(false)
   const conObra = presupuesto.obra_id != null && presupuesto.estado === 'aceptado'
+  // Se recuerda mientras se rearma el PDF (así la casilla no desaparece).
+  const [cantComprobantes, setCantComprobantes] = useState(0)
+  useEffect(() => { if (preparado) setCantComprobantes(preparado.datos.estado?.gastosExtra.filter((g) => g.comprobante).length ?? 0) }, [preparado])
 
   // El presupuesto aceptado queda fijo: los cambios se cargan en la obra.
   function editar() {
@@ -192,7 +197,7 @@ export default function PresupuestoFicha({
     async function preparar() {
       try {
         const datos = await completarDatosDocumento(base)
-        const blob = await generarPdfPresupuesto(datos)
+        const blob = await generarPdfPresupuesto(datos, { comprobantes: incluirComprobantes })
         if (cancelado) return
         urlCreada = URL.createObjectURL(blob)
         setPreparado({ base, datos, blob, url: urlCreada })
@@ -208,7 +213,7 @@ export default function PresupuestoFicha({
       cancelado = true
       if (urlCreada) URL.revokeObjectURL(urlCreada)
     }
-  }, [base, reintento])
+  }, [base, reintento, incluirComprobantes])
 
   // Cobros de presupuestos que todavía no están aceptados (en aceptados vienen del estado de obra).
   useEffect(() => {
@@ -319,6 +324,12 @@ export default function PresupuestoFicha({
               <button type="button" className="editButton" onClick={compartir} disabled={!listo || compartiendo}>{compartiendo ? 'Compartiendo...' : '📲 Compartir PDF'}</button>
               <button type="button" className="editButton waButton" onClick={enviarWhatsApp}>💬 WhatsApp</button>
             </div>
+            {cantComprobantes > 0 && (
+              <label className="caCheck presuComprobantes">
+                <input type="checkbox" checked={incluirComprobantes} onChange={(e) => setIncluirComprobantes(e.target.checked)} />
+                <span>📎 Incluir {cantComprobantes === 1 ? 'el comprobante' : `los ${cantComprobantes} comprobantes`} de gastos al final del PDF{!listo ? ' (preparando…)' : ''}</span>
+              </label>
+            )}
           </>}
 
           {presupuesto.estado === 'rechazado' && <>

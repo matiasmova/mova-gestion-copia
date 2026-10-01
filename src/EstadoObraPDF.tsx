@@ -14,6 +14,9 @@ export default function EstadoObraPDF({ obra, cliente, onCerrar }: Props) {
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
   const [compartiendo, setCompartiendo] = useState(false)
+  const [incluirComprobantes, setIncluirComprobantes] = useState(true)
+  const [hayComprobantes, setHayComprobantes] = useState(false)
+  useEffect(() => { if (listo) setHayComprobantes(!!listo.datos.estado?.gastosExtra.some((g) => g.comprobante)) }, [listo])
 
   useEffect(() => {
     let vigente = true
@@ -33,14 +36,14 @@ export default function EstadoObraPDF({ obra, cliente, onCerrar }: Props) {
         cliente, obra: obra.nombre_obra, soluciones: normalizarSoluciones(p.soluciones),
       }
       const datos = await completarDatosDocumento(base)
-      const blob = await generarPdfPresupuesto(datos)
+      const blob = await generarPdfPresupuesto(datos, { comprobantes: incluirComprobantes })
       if (!vigente) return
       url = URL.createObjectURL(blob)
       setListo({ datos, url, blob })
     }
     void cargar().catch((e) => { console.error(e); if (vigente) setError(e instanceof Error ? e.message : 'No se pudo cargar el documento completo. Reintentá.') })
     return () => { vigente = false; if (url) URL.revokeObjectURL(url) }
-  }, [obra.id, obra.nombre_obra, cliente, revision])
+  }, [obra.id, obra.nombre_obra, cliente, revision, incluirComprobantes])
 
   const nombre = nombreArchivoPresupuesto({ id: listo?.datos.id ?? obra.id, cliente, obra: obra.nombre_obra })
 
@@ -64,6 +67,9 @@ export default function EstadoObraPDF({ obra, cliente, onCerrar }: Props) {
     <div className="pdfPreviewBar"><span>Presupuesto y estado de obra · {obra.nombre_obra}</span><div>
       <button className="pdfBtnGhost" onClick={onCerrar}>Cerrar</button>
       <button className="pdfBtnGhost" onClick={() => setRevision((v) => v + 1)}>Actualizar</button>
+      {hayComprobantes && (
+        <label className="pdfCheck"><input type="checkbox" checked={incluirComprobantes} onChange={(e) => setIncluirComprobantes(e.target.checked)} /> 📎 Incluir comprobantes</label>
+      )}
       <button className="pdfBtnPrimary" disabled={!listo} onClick={descargar}>Descargar PDF</button>
       <button className="pdfBtnPrimary" disabled={!listo || compartiendo} onClick={() => void compartir()}>Compartir</button>
     </div></div>
