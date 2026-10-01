@@ -1,4 +1,5 @@
 import GraficosInicio from './GraficosInicio'
+import QueMirarHoy, { type DestinoHoy } from './QueMirarHoy'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { supabase } from './supabase'
 import { TIPOS_EVENTO } from './Agenda'
@@ -324,6 +325,30 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
     }) : []),
   ]
 
+  // Datos del día para "Qué mirar hoy" (la IA elige lo más importante).
+  const hechosHoy = useMemo(() => {
+    if (cargando) return []
+    const h: string[] = []
+    agendaHoy.forEach((e) => h.push(`Agenda de hoy${e.hora ? ` a las ${e.hora.slice(0, 5)}` : ''}: ${e.titulo}`))
+    obrasInfo.terminadasConSaldo.forEach((d) => h.push(`Obra TERMINADA con saldo sin cobrar: ${d.obra.nombre_obra} de ${nombreCli(d.obra.cliente_id)}, debe ${moneda(d.saldo)}`))
+    obrasInfo.deudas.filter((d) => d.situacion === 'naranja').slice(0, 6).forEach((d) => h.push(`Cobro atrasado según el avance: ${d.obra.nombre_obra} de ${nombreCli(d.obra.cliente_id)} (${num(d.obra.porcentaje_avance)}% de avance), correspondería cobrar ${moneda(d.faltaAvance)} más`))
+    obrasInfo.enObservacion.forEach((o) => h.push(`Obra en observación para revisar: ${o.nombre_obra} de ${nombreCli(o.cliente_id)}`))
+    borradores.slice(0, 6).forEach((p) => { const d = diasDesde(p.fecha); h.push(`Presupuesto en borrador sin enviar: "${p.titulo}" de ${nombreCli(p.cliente_id)} por ${moneda(p.total)}${d != null ? `, hace ${d} días` : ''}`) })
+    personal.filas.filter((f) => f.debe > 0.5).slice(0, 5).forEach((f) => h.push(`Le debés al personal: ${f.nombre} (${f.obra}) ${moneda(f.debe)}`))
+    if (mes.esMesActual && mes.recurrentesPendientes.length) h.push(`Gastos fijos del mes sin cargar: ${mes.recurrentesPendientes.map((g) => g.descripcion || g.categoria).join(', ')} (${moneda(mes.recurrentesMonto)})`)
+    if (mes.esMesActual) h.push(`Neto del mes hasta hoy: ${moneda(mes.neto)}${mes.recurrentesMonto > 0 || mes.personalPendiente > 0 ? `; si pagás lo previsto quedaría ${moneda(mes.netoProyectado)}` : ''}`)
+    h.push(`Obras activas: ${obrasInfo.activas.length}, avance promedio ${obrasInfo.avancePromedio}%`)
+    return h
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cargando, agendaHoy, obrasInfo, borradores, personal, mes])
+
+  const irDesdeHoy = (d: DestinoHoy) => {
+    if (d === 'cobranzas') setTab('caja')
+    else if (d === 'personal') setTab('personal')
+    else if (d === 'gastos') setTab('gastos')
+    else onNavegar(d)
+  }
+
   const pestanas: [TabInicio, string][] = [
     ['resumen', 'Resumen'],
     ...(verFinanzas ? [['graficos', '📊 Gráficos'], ['pyl', 'Balance'], ['caja', 'Cobranzas'], ['personal', 'Personal'], ['gastos', 'Gastos fijos'], ['inventario', 'Inventario']] as [TabInicio, string][] : []),
@@ -348,6 +373,7 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
 
 
     {tab === 'resumen' && (cargando ? <p>Cargando resumen...</p> : <>
+      {verFinanzas && <QueMirarHoy hechos={hechosHoy} nombreCli={nombreCli} onIr={irDesdeHoy} />}
       {/* ---- Neto del mes: número grande, mes y detalle desplegable ---- */}
       {verFinanzas && (
         <section className="homeNeto">
