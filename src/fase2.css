@@ -1475,3 +1475,39 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 .hoyIACargando .mercadoSpinner{width:20px;height:20px;border-width:2.5px}
 .hoyIAError{color:#9b2222;font-size:13px;margin:6px 0}
 .hoyIAOtra{margin-top:8px;font-size:12.5px}
+
+/* ===== Ficha de presupuesto: acciones, pestañas y facturas ===== */
+.presuAcciones{flex-direction:column;align-items:stretch;gap:10px}
+.presuAccEstado{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.presuAccEstado .obraVinculadaTag{align-self:center;margin:0}
+.presuAccBotones{display:flex;flex-wrap:wrap;gap:8px}
+.presuTabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px;border-radius:12px;background:#f1f2f4}
+.presuTabs button{border:0;border-radius:9px;padding:9px 6px;background:transparent;font:inherit;font-size:14px;font-weight:600;color:#4b5563;cursor:pointer;white-space:nowrap}
+.presuTabs button.active{background:#fff;color:#14181e;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+.presuSeccion{display:flex;flex-direction:column;gap:10px}
+.presuPeligro{display:flex;justify-content:flex-end;padding-top:10px;border-top:1px dashed var(--mova-border)}
+.presuPeligro .deactivateButton{font-size:13px}
+.facturasObra{display:flex;flex-direction:column;gap:10px}
+.facturasTotales{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.facturasTotales>div{border:1px solid var(--mova-border);border-radius:12px;padding:10px 12px;background:#fff;display:flex;flex-direction:column}
+.facturasTotales span{font-size:10.5px;font-weight:800;letter-spacing:.8px;color:#9099a6;text-transform:uppercase}
+.facturasTotales strong{font-size:16px;margin-top:4px}
+.facturasTotales .alerta{border-color:#f1c38d;background:#fff6e9}
+.facturasTotales .alerta strong{color:var(--mova-orange)}
+.facturaCard{border:1px solid var(--mova-border);border-radius:12px;padding:10px 12px;background:#fff;display:flex;flex-direction:column;gap:6px}
+.facturaCard .editButton{align-self:flex-start}
+.facturaCab{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.facturaCab>div{display:flex;flex-direction:column;min-width:0}
+.facturaCab small{color:var(--mova-muted);font-size:12px}
+.facturaCab b{white-space:nowrap}
+.facturaCard ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+.facturaCard li{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+.facturaCard li small{color:var(--mova-muted);white-space:nowrap}
+.facturaPagada{color:#23764e;font-weight:700}
+.facturaImpaga{color:var(--mova-orange);font-weight:700}
+@media (max-width:640px){
+  .presuAccBotones{display:grid;grid-template-columns:1fr 1fr}
+  .presuAccBotones .editButton{justify-content:center;text-align:center}
+  .presuTabs button{font-size:13px;padding:9px 2px;overflow:hidden;text-overflow:ellipsis}
+  .presuTabLargo,.presuTabIcono{display:none}
+}
