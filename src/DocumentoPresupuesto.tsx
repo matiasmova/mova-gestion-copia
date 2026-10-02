@@ -9,6 +9,7 @@ import { antesYAhora, etiquetaModificacion } from './presupuestoModificaciones'
 import { mensajeEstado, PCT_ANTICIPO, totalAPagarHoy, type EstadoPresupuesto, type PasoLinea } from './estadoObra'
 import { codigoPresupuesto } from './codigoPresupuesto'
 import { supabase } from './supabase'
+import { estadoLinkPago, urlPago } from './pagoLink'
 
 // Documento del presupuesto en pantalla (ficha, vista previa y estado de obra).
 // Mismo contenido y diseño que el PDF (pdfPresupuesto.ts), en HTML directo.
@@ -202,6 +203,13 @@ function EstadoCuenta({ e }: { e: EstadoPresupuesto }) {
 
 export default function DocumentoPresupuesto({ datos, embebido = false }: Props) {
   const [completos, setCompletos] = useState<DatosPdf | null>(null)
+  // Botón "Pagar ahora": el mismo link de pago que va en el PDF (si está activo).
+  const [linkPago, setLinkPago] = useState<string | null>(null)
+  useEffect(() => {
+    let vigente = true
+    void estadoLinkPago(datos.id).then((l) => { if (vigente) setLinkPago(l && l.activo ? urlPago(l.token) : null) })
+    return () => { vigente = false }
+  }, [datos])
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -286,6 +294,13 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
           ]} />
         )}
       </div>
+      {linkPago && (!e || aPagarHoy > 0.5) && (
+        <a href={linkPago} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '12px', padding: '13px 16px', borderRadius: '13px', background: OSCURO, color: '#fff', textDecoration: 'none' }}>
+          <span style={{ fontSize: '11.5px', fontWeight: 800, letterSpacing: '1.6px' }}>PAGAR AHORA</span>
+          <span style={{ flex: 1, fontSize: '12.5px', color: '#C9CED6' }}>Transferencia o efectivo · tocá acá</span>
+          <b style={{ color: NARANJA, fontSize: '18px' }}>›</b>
+        </a>
+      )}
 
       {/* Qué vas a disfrutar */}
       {soluciones.length > 0 && (
