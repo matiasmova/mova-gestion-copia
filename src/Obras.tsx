@@ -28,6 +28,7 @@ import { confirmarEliminacion } from './confirmar'
 import CampoNumero from './CampoNumero'
 import CuentaObraResumen from './CuentaObraResumen'
 import EditarPresupuestoObra from './EditarPresupuestoObra'
+import PanelPresupuestoObra from './PanelPresupuestoObra'
 import { avanceEfectivo } from './cuentaObra'
 import { cargarFormasPago, cobradoPorMedio, textoMedios, type FormasPago } from './formasPago'
 
@@ -96,6 +97,8 @@ const avanceInicial = {
 // ya no lo usa: todo se ve en un único documento (presupuesto y estado de obra).
 // Dentro de "Trabajos": grupo = qué obras mostrar (en curso o terminadas) y sin encabezado propio.
 export type GrupoObras = 'en_obra' | 'terminadas'
+// Una obra al 100% se muestra Finalizada aunque haya quedado guardada "En proceso".
+const estadoMostrado = (o: { estado: string | null; porcentaje_avance?: number | string | null }) => (Number(o.porcentaje_avance) >= 100 && (o.estado ?? 'en_proceso') === 'en_proceso' ? 'finalizada' : o.estado) as EstadoObra | null
 const obraTerminada = (o: { estado: string | null; porcentaje_avance?: number | string | null }) => o.estado === 'finalizada' || o.estado === 'observacion' || Number(o.porcentaje_avance) >= 100
 
 function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, grupo, embebido = false }: { obraAbrirId?: number | null; onObraAbierta?: () => void; onVerPresupuesto?: (presupuestoId: number) => void; conIA?: boolean; grupo?: GrupoObras; embebido?: boolean } = {}) {
@@ -795,12 +798,11 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                 <h2>{obraSeguimiento.nombre_obra}</h2>
                 <p className="fichaHeadCli">
                   {obtenerCliente(obraSeguimiento.cliente_id)}
-                  <span className={`crmBadge est-${claseEstado(obraSeguimiento.estado)}`}>{etiquetaEstado(obraSeguimiento.estado)}</span>
+                  <span className={`crmBadge est-${claseEstado(estadoMostrado(obraSeguimiento))}`}>{etiquetaEstado(estadoMostrado(obraSeguimiento))}</span>
                 </p>
               </div>
               <div className="fichaHeadAcciones">
                 {puedeInformeIA && <button type="button" className="fichaPdf" title="Mensaje de avance para el cliente, escrito con IA" onClick={() => setInformeIA(obraSeguimiento)}>✨ Informe</button>}
-                <button type="button" className="fichaPdf" disabled={!presupuestoAceptado} title="Documento del cliente: compartir, formas de pago, comprobantes" onClick={() => setInformeObra(obraSeguimiento)}>📄 Documento</button>
                 <div className="fichaMenuWrap">
                   <button type="button" className="fichaIcono" aria-label="Más opciones" aria-expanded={menuFicha} onClick={() => setMenuFicha((v) => !v)}>⋯</button>
                   {menuFicha && <div className="fichaMenu" role="menu">
@@ -848,8 +850,15 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
               dinero={dineroFicha}
               onIr={setSeguTab}
               presupuesto={presupuestoAceptado ? { id: presupuestoAceptado.id, titulo: presupuestoAceptado.titulo } : null}
-              onVerDocumento={() => setInformeObra(obraSeguimiento)}
-              onEditarPresupuesto={onVerPresupuesto && presupuestoAceptado ? () => setEditarPresupuestoId(presupuestoAceptado.id) : undefined}
+              panelPresupuesto={presupuestoAceptado ? (
+                <PanelPresupuestoObra
+                  obra={obraSeguimiento}
+                  cliente={obtenerCliente(obraSeguimiento.cliente_id)}
+                  version={docVersion + actualizacion}
+                  onVerDocumento={() => setInformeObra(obraSeguimiento)}
+                  onEditarPresupuesto={onVerPresupuesto ? (id) => setEditarPresupuestoId(id) : undefined}
+                />
+              ) : undefined}
             />}
 
             {seguTab === 'accesos' && <AccesosObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} cliente={obtenerCliente(obraSeguimiento.cliente_id)} obra={obraSeguimiento.nombre_obra} ubicacion={[obraSeguimiento.direccion, obraSeguimiento.localidad].filter(Boolean).join(', ') || null} />}
@@ -1124,7 +1133,6 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
       {informeObra && (
         <EstadoObraPDF
           key={`${informeObra.id}-${docVersion}`}
-          onEditarPresupuesto={onVerPresupuesto ? (id) => setEditarPresupuestoId(id) : undefined}
           obra={informeObra}
           cliente={obtenerCliente(informeObra.cliente_id)}
           onCerrar={() => { setInformeObra(null); setActualizacion((v) => v + 1) }}

@@ -1674,3 +1674,8 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 .docComprobantes select{margin-top:4px;width:100%}
 .docBarra .pdfBtnGhost{white-space:nowrap;flex:none}
 .docAcciones .newButton{white-space:nowrap}
+.panelPresu{display:flex;flex-direction:column;gap:10px;margin-top:12px;padding-top:12px;border-top:1px dashed var(--mova-border)}
+.panelPresu .presuMercadoBtn,.panelPresu .formasPagoCard,.panelPresu .presuRecos{margin:0}
+.panelPresu .presuRecos{border:1px solid var(--mova-border);border-radius:14px;padding:10px 14px}
+.docBarra span{flex:1;min-width:0}
+.docBarraBtn{white-space:nowrap;flex:none}
