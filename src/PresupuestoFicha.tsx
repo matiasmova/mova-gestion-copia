@@ -386,14 +386,15 @@ export default function PresupuestoFicha({
             </div>
           )}
 
-          {listo ? <DocumentoPresupuesto datos={listo.datos} /> : !error && <p role="status" style={{ color: '#64748b', fontSize: '13px' }}>Cargando documento…</p>}
-
           {presupuesto.items.length > 0 && (
             <button type="button" className="presuMercadoBtn" onClick={compararMercado}>
               <span>💲</span><span><b>¿Cómo estoy en el mercado?</b><small>La IA busca precios de productos y mano de obra, y analiza todo el presupuesto</small></span><b>›</b>
             </button>
           )}
           {mercado && <CompararMercado titulo={presupuesto.titulo} productos={mercado} total={Number(presupuesto.total)} onCerrar={() => setMercado(null)} />}
+
+          {listo ? <DocumentoPresupuesto datos={listo.datos} /> : !error && <p role="status" style={{ color: '#64748b', fontSize: '13px' }}>Cargando documento…</p>}
+
 
           {/* ---------- Formas de uso (opcional, con IA) ---------- */}
           <RecomendacionesUso presupuestoId={presupuesto.id} titulo={presupuesto.titulo} descripcion={presupuesto.descripcion} items={presupuesto.items} onGuardado={() => setReintento((v) => v + 1)} />

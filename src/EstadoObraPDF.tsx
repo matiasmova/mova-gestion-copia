@@ -4,6 +4,8 @@ import { completarDatosDocumento, generarPdfPresupuesto, nombreArchivoPresupuest
 import { normalizarSoluciones } from './presupuestoSoluciones'
 import DocumentoPresupuesto from './DocumentoPresupuesto'
 import RecomendacionesUso from './RecomendacionesUso'
+import CompararMercado, { type ProductoAComparar } from './CompararMercado'
+import { importeNeto } from './presupuestoCalculos'
 import type { ItemPresupuesto } from './NuevoPresupuesto'
 
 // Estado de la obra: es el mismo documento del presupuesto aceptado,
@@ -18,6 +20,18 @@ export default function EstadoObraPDF({ obra, cliente, onCerrar }: Props) {
   const [modoComp, setModoComp] = useState<ModoComprobantes>(leerModoComprobantes)
   const [avisoComp, setAvisoComp] = useState('')
   const [hayComprobantes, setHayComprobantes] = useState(false)
+  const [mercado, setMercado] = useState<ProductoAComparar[] | null>(null)
+  function compararMercado() {
+    if (!listo) return
+    const d = listo.datos
+    const neto = d.items.reduce((t, it) => t + importeNeto(it), 0)
+    const factor = neto > 0 ? Number(d.total) / neto : 1
+    setMercado(d.items.filter((it) => it.descripcion.trim() && Number(it.cantidad) > 0).slice(0, 24).map((it) => ({
+      id: it.catalogo_id ? Number(it.catalogo_id) : null, nombre: it.descripcion.split('\n')[0].trim(), tipo: it.tipo,
+      cantidad: Number(it.cantidad), costo: Number(it.costo_unitario) || 0,
+      precio: Math.round((importeNeto(it) / Number(it.cantidad)) * factor * 100) / 100,
+    })))
+  }
   useEffect(() => { if (listo) setHayComprobantes(!!listo.datos.estado?.gastosExtra.some((g) => g.comprobante)) }, [listo])
 
   useEffect(() => {
@@ -80,9 +94,15 @@ export default function EstadoObraPDF({ obra, cliente, onCerrar }: Props) {
       <button className="pdfBtnPrimary" disabled={!listo} onClick={descargar}>Descargar PDF</button>
       <button className="pdfBtnPrimary" disabled={!listo || compartiendo} onClick={() => void compartir()}>Compartir</button>
     </div></div>
+    {mercado && listo && <CompararMercado titulo={listo.datos.titulo} productos={mercado} total={Number(listo.datos.total)} onCerrar={() => setMercado(null)} />}
     <div className="pdfDoc">
       {listo && (
         <div className="pdfRecos">
+          {listo.datos.items.length > 0 && (
+            <button type="button" className="presuMercadoBtn" onClick={compararMercado}>
+              <span>💲</span><span><b>¿Cómo estoy en el mercado?</b><small>La IA busca precios de productos y mano de obra, y analiza todo el presupuesto</small></span><b>›</b>
+            </button>
+          )}
           <RecomendacionesUso presupuestoId={listo.datos.id} titulo={listo.datos.titulo} descripcion={listo.datos.descripcion ?? null} items={listo.datos.items} onGuardado={() => setRevision((v) => v + 1)} />
         </div>
       )}
