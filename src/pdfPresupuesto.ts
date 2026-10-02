@@ -385,20 +385,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
         ? { e: 'A PAGAR HOY', v: moneda(aPagarHoy), s: estado.gastoExtraPendiente > 0.5 ? 'Obra + gastos a reintegrar' : 'Según el avance de la obra', destacada: 'naranja' }
         : { e: 'A PAGAR HOY', v: moneda(0), s: 'Estás al día', destacada: 'verde' },
     ])
-    // Avance de la obra en una línea
-    lugar(20)
-    const ultimo = estado.avances.length ? estado.avances[estado.avances.length - 1] : null
-    const izq = 'Avance de la obra'
-    texto(izq, M, y, F_CHICO, font, TEXTO)
-    const pctTxt = `${estado.avance}%`
-    const xPct = M + ancho(izq, F_CHICO) + 4
-    texto(pctTxt, xPct, y, F_CHICO, bold, OSCURO)
-    const der = ultimo ? `Último informe ${diaMes(ultimo.fecha)} · ${ultimo.titulo}` : 'Sin informes de avance todavía'
-    const derCorto = partir(der, F_CHICO, 170)[0] ?? ''
-    derecha(derCorto, M + CW, y, F_CHICO, font, GRIS)
-    const xb = xPct + ancho(pctTxt, F_CHICO, bold) + 10
-    barra(xb, y + 0.3, M + CW - ancho(derCorto, F_CHICO) - 10 - xb, estado.avance / 100)
-    y -= 26
+    y -= 8
   } else {
     tarjetas([
       { e: 'TOTAL DEL PRESUPUESTO', v: moneda(d.total), s: 'Precio final', destacada: 'naranja' },
@@ -596,7 +583,8 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     titulo('Línea de tiempo de pagos')
     // Franja destacada: los pasos de pago unidos de izquierda a derecha.
     {
-      const todos = estado.linea
+      // Sin el paso final cuando ya no suma nada (el avance llegó al 100%).
+      const todos = estado.linea.filter((p) => !(p.tipo === 'final' && p.importe <= 0.5 && estado.linea.length > 1))
       const pasos = todos.length > 6 ? [todos[0], ...todos.slice(-5)] : todos
       const n = pasos.length
       const altoCaja = 128
