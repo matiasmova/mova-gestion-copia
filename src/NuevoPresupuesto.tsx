@@ -110,6 +110,14 @@ function NuevoPresupuesto({
   // Clientes y obras creados desde acá se suman a la lista sin salir del presupuesto.
   const [clientesLista, setClientesLista] = useState<ClienteOpcion[]>(clientes)
   const [obrasLista, setObrasLista] = useState<ObraOpcion[]>(obras)
+  // Si el formulario se abre antes de que terminen de cargar los clientes y
+  // las obras, se completan cuando llegan (sin perder los creados acá).
+  useEffect(() => {
+    setClientesLista((actual) => [...clientes, ...actual.filter((c) => !clientes.some((x) => x.id === c.id))])
+  }, [clientes])
+  useEffect(() => {
+    setObrasLista((actual) => [...obras, ...actual.filter((o) => !obras.some((x) => x.id === o.id))])
+  }, [obras])
   const [creando, setCreando] = useState<'cliente' | 'obra' | null>(null)
   const [titulo, setTitulo] = useState(presupuesto?.titulo ?? '')
   // Si el título ya existe o se escribe a mano, las soluciones no lo pisan.
