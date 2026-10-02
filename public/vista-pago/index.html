@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pagar · MOVA Tecnología Smart</title>
+<style>
+:root{--o:#de7015;--osc:#14181e;--gris:#78818f;--borde:#e6e8ec;--verde:#1f7a4d;--bg:#f4f5f7}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;color:var(--osc)}
+.aviso{background:#7c5cc4;color:#fff;text-align:center;font-size:12px;font-weight:700;padding:6px}
+.wrap{max-width:460px;margin:0 auto;padding:18px 16px 40px}
+.top{display:flex;justify-content:space-between;align-items:center}
+.top img{height:34px}
+.top span{font-size:11px;font-weight:800;letter-spacing:.12em;color:var(--o)}
+.hola{margin:20px 0 4px;font-size:15px;color:var(--gris)}
+h1{margin:0;font-size:22px}
+.obra{color:var(--gris);font-size:13.5px;margin-top:2px}
+.monto{margin:18px 0 12px;border-radius:18px;padding:16px 18px;color:#fff;background:linear-gradient(120deg,#de7015,#f08a2c,#c95f0c,#de7015);background-size:300% 300%;animation:fluye 6s ease infinite;box-shadow:0 14px 30px -14px rgba(222,112,21,.9)}
+@keyframes fluye{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+.monto small{font-size:11px;font-weight:800;letter-spacing:.1em}
+.monto strong{display:block;font-size:31px;margin:4px 0 2px;font-variant-numeric:tabular-nums}
+.monto em{font-style:normal;font-size:13px;opacity:.92}
+.detalle{background:#fff;border:1px solid var(--borde);border-radius:14px;padding:4px 14px;margin-bottom:18px}
+.detalle div{display:flex;justify-content:space-between;gap:10px;padding:9px 0;font-size:14px;border-bottom:1px solid #f1f2f4}
+.detalle div:last-child{border:0}
+.detalle span{color:var(--gris)}
+.titulo{font-size:11.5px;font-weight:800;letter-spacing:.1em;color:var(--gris);margin:4px 2px 8px;text-transform:uppercase}
+.medio{background:#fff;border:1px solid var(--borde);border-radius:16px;margin-bottom:10px;overflow:hidden}
+.medio>button{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:12px;width:100%;padding:14px;cursor:pointer}
+.medio .ico{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:22px;flex:none}
+.medio .txt{flex:1}.medio .txt b{display:block;font-size:16px}.medio .txt small{color:var(--gris);font-size:12.5px}
+.medio .flecha{color:var(--gris);font-size:18px;transition:transform .2s}
+.medio.abierto .flecha{transform:rotate(90deg)}
+.cuerpo{display:none;padding:0 14px 14px}
+.medio.abierto .cuerpo{display:block}
+.mp .ico{background:#e6f6fd}.tr .ico{background:#eef2ff}.ef .ico{background:#e8f5ee}
+.btnMp{display:block;width:100%;border:0;border-radius:12px;padding:14px;background:#009ee3;color:#fff;font:inherit;font-weight:800;font-size:16px;text-align:center;text-decoration:none;cursor:pointer}
+.nota{font-size:12px;color:var(--gris);margin:8px 2px 0;line-height:1.45}
+.dato{display:flex;align-items:center;gap:10px;border:1px solid var(--borde);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.dato div{flex:1;min-width:0}.dato small{display:block;font-size:11px;color:var(--gris);font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.dato b{font-size:15px;word-break:break-all}
+.copiar{border:1px solid var(--borde);background:#fff;border-radius:10px;padding:8px 11px;font:inherit;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap}
+.copiar.ok{background:var(--verde);border-color:var(--verde);color:#fff}
+.btnWa{display:block;width:100%;border:0;border-radius:12px;padding:13px;background:#25d366;color:#fff;font:inherit;font-weight:800;font-size:15px;text-align:center;text-decoration:none;margin-top:6px}
+.pie{text-align:center;font-size:12px;color:var(--gris);margin-top:22px;line-height:1.5}
+.pie b{color:var(--osc)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style></head>
+<body>
+<div class="aviso">VISTA PREVIA · datos de ejemplo</div>
+<div class="wrap">
+  <div class="top"><img src="./logo.png" alt="MOVA Tecnología Smart"><span>PAGO SEGURO</span></div>
+  <p class="hola">Hola Sergio 👋</p>
+  <h1>Instalación eléctrica general</h1>
+  <div class="obra">Finca Junín · Presupuesto MV-IHHVQ</div>
+
+  <div class="monto"><small>A PAGAR HOY</small><strong>$ 2.536.396,71</strong><em>Obra + gastos a reintegrar</em></div>
+  <div class="detalle">
+    <div><span>Anticipo 70% + avance de obra</span><b>$ 1.764.000,00</b></div>
+    <div><span>Gastos a reintegrar (2)</span><b>$ 772.396,71</b></div>
+    <div><span>Ya pagaste</span><b style="color:var(--verde)">$ 0,00</b></div>
+  </div>
+
+  <div class="titulo">Elegí cómo pagar</div>
+
+  <div class="medio mp abierto">
+    <button type="button" data-abrir><span class="ico">💳</span><span class="txt"><b>Mercado Pago</b><small>Tarjeta de crédito o débito, cuotas o dinero en cuenta</small></span><span class="flecha">›</span></button>
+    <div class="cuerpo">
+      <a class="btnMp" href="#" data-demo>Pagar $ 2.536.396,71 con Mercado Pago</a>
+      <p class="nota">Te lleva al pago de Mercado Pago con el monto ya cargado. Cuando se acredita, nos llega el aviso y lo registramos automáticamente.</p>
+    </div>
+  </div>
+
+  <div class="medio tr">
+    <button type="button" data-abrir><span class="ico">🏦</span><span class="txt"><b>Transferencia</b><small>Desde la app de tu banco, MODO o billetera</small></span><span class="flecha">›</span></button>
+    <div class="cuerpo">
+      <div class="dato"><div><small>Alias</small><b>mova.smart.mp</b></div><button class="copiar" data-copiar="mova.smart.mp">Copiar</button></div>
+      <div class="dato"><div><small>CBU / CVU</small><b>0000003100012345678901</b></div><button class="copiar" data-copiar="0000003100012345678901">Copiar</button></div>
+      <div class="dato"><div><small>Titular</small><b>MOVA Tecnología Smart</b></div></div>
+      <div class="dato"><div><small>Monto</small><b>$ 2.536.396,71</b></div><button class="copiar" data-copiar="2536396.71">Copiar</button></div>
+      <p class="nota">Copiá el alias, abrí tu banco o MODO y pegalo. Cuando transfieras, avisanos así lo registramos:</p>
+      <a class="btnWa" href="#" data-demo>💬 Ya transferí · avisar por WhatsApp</a>
+    </div>
+  </div>
+
+  <div class="medio ef">
+    <button type="button" data-abrir><span class="ico">💵</span><span class="txt"><b>Efectivo</b><small>Coordinamos día y lugar</small></span><span class="flecha">›</span></button>
+    <div class="cuerpo">
+      <a class="btnWa" href="#" data-demo>💬 Coordinar pago en efectivo</a>
+    </div>
+  </div>
+
+  <p class="pie">¿Dudas? Escribinos al <b>+54 9 261 555 7970</b><br>MOVA Tecnología Smart · movaelectronica.com.ar</p>
+</div>
+<script src="./app.js"></script>
+</body></html>
