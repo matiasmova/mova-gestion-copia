@@ -380,7 +380,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
               <button type="button" className="presuItem" key={p.id} onClick={() => abrirFicha(p)}>
                 <div className="presuItemTop"><span>{codigoPresupuesto(p.id)}{(p.version ?? 1) > 1 ? ` · v${p.version}` : ''} · {fechaCorta(p.fecha)}</span><span className={`presuEtapa ${et.clase}`}>{et.texto}</span></div>
                 <strong>{p.titulo}</strong>
-                {et.avance != null && <div className="presuEtapaBarra"><i style={{ width: `${et.avance}%` }} /></div>}
+                {et.avance != null && <div className={`presuEtapaBarra ${et.clase.includes('et-encurso') ? 'encurso' : ''}`}><i style={{ width: `${et.avance}%` }} /></div>}
                 <div className="presuItemBot"><span>{nombreCliente(p.cliente_id)}</span><b>{moneda(p.total + p.ajustes)}</b></div>
               </button>
             )
@@ -475,7 +475,7 @@ function TarjetaPresupuesto({ p, cliente, obra, onAbrir, onPDF }: { p: Presupues
         </div>
         <span className={`presuEtapa ${et.clase}`}>{et.texto}</span>
       </div>
-      {et.avance != null && <div className="presuEtapaBarra"><i style={{ width: `${et.avance}%` }} /></div>}
+      {et.avance != null && <div className={`presuEtapaBarra ${et.clase.includes('et-encurso') ? 'encurso' : ''}`}><i style={{ width: `${et.avance}%` }} /></div>}
       <div className="crmCardMeta">
         <span>#{p.id.toString().padStart(4, '0')}{(p.version ?? 1) > 1 ? ` · v${p.version}` : ''}</span>
         <span>{fechaCorta(p.fecha)}</span>
