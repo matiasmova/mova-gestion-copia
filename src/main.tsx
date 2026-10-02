@@ -1,12 +1,16 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './AppFase2.tsx'
+import PaginaPago from './PaginaPago'
 import './index.css'
 import { vigilarActualizaciones } from './actualizacion'
 
+// Página pública de pago del cliente (?pagar=código): sin login ni el resto de la app.
+const tokenPago = new URLSearchParams(window.location.search).get('pagar')
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    {tokenPago ? <PaginaPago token={tokenPago} /> : <App />}
   </React.StrictMode>,
 )
 
@@ -18,4 +22,4 @@ if ('serviceWorker' in navigator) {
 }
 
 // Aviso de versión nueva (la app abierta en el celular no se recarga sola).
-vigilarActualizaciones()
+if (!tokenPago) vigilarActualizaciones()

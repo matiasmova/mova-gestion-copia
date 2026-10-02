@@ -17,6 +17,11 @@ export type Empresa = {
   email: string
   web: string
   instagram: string
+  // Datos para recibir transferencias (página de pago del cliente).
+  alias?: string
+  cbu?: string
+  titular?: string
+  banco?: string
 }
 
 export type ConfigApp = {
@@ -37,6 +42,10 @@ export const DEFAULTS: ConfigApp = {
     email: '',
     web: 'www.movaelectronica.com.ar',
     instagram: '@mova.smart',
+    alias: '',
+    cbu: '',
+    titular: '',
+    banco: '',
   },
   cotizacion: { usd: 0, fecha: null, fuente: null },
   presupuestos: { validezDias: 15, condiciones: CONDICIONES_GENERALES.map((c) => ({ ...c })) },

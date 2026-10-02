@@ -859,6 +859,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                   version={docVersion + actualizacion}
                   onVerDocumento={() => setInformeObra(obraSeguimiento)}
                   onEditarPresupuesto={onVerPresupuesto ? (id) => setEditarPresupuestoId(id) : undefined}
+                  onRegistrarCobro={() => elegirRegistro('cobro')}
                 />
               ) : undefined}
             />}

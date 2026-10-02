@@ -82,7 +82,12 @@ function EmpresaForm({ habilitado }: { habilitado: boolean }) {
   return <section className="cfgSeccion">
     <p className="gestionAyuda">Estos datos salen al pie de todos los PDF: presupuestos, estado de obra, remitos, accesos y cuentas del personal.</p>
     <div className="clienteForm"><div className="formGrid">
-      {campos.map(([k, t, ph]) => <label key={k}>{t}<input value={e[k]} placeholder={ph} onChange={(ev) => set(k, ev.target.value)} disabled={!habilitado} /></label>)}
+      {campos.map(([k, t, ph]) => <label key={k}>{t}<input value={e[k] ?? ''} placeholder={ph} onChange={(ev) => set(k, ev.target.value)} disabled={!habilitado} /></label>)}
+    </div></div>
+    <h4 className="cfgSub">🏦 Datos para recibir transferencias</h4>
+    <p className="gestionAyuda" style={{ marginTop: 0 }}>Aparecen en la página de pago que recibe el cliente (botón "Pagar" del presupuesto), con botones para copiarlos. Las transferencias no tienen comisión.</p>
+    <div className="clienteForm"><div className="formGrid">
+      {([['alias', 'Alias', 'mova.smart'], ['cbu', 'CBU / CVU', '22 números'], ['titular', 'Titular de la cuenta', 'Nombre o razón social'], ['banco', 'Banco o billetera (opcional)', 'Ej.: Banco Nación, Mercado Pago']] as [keyof Empresa, string, string][]).map(([k, t, ph]) => <label key={k}>{t}<input value={e[k] ?? ''} placeholder={ph} onChange={(ev) => set(k, ev.target.value)} disabled={!habilitado} /></label>)}
     </div></div>
     <div className="cfgVista"><span>Así se ve el pie de los documentos</span><strong>{e.nombre}</strong><small>{lineaContacto(e) || '—'}</small></div>
     <BarraGuardar estado={estado} habilitado={habilitado} onGuardar={() => void guardar(() => guardarConfig('empresa', e))} onRestaurar={() => setE({ ...DEFAULTS.empresa })} />
