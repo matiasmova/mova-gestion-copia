@@ -154,10 +154,15 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
     return { desde, hasta, meses: mesesEntre(desde, hasta) }
   }, [periodo, desdeSel, hastaSel])
 
+  // Los gastos extra (plata que adelantás y el cliente te devuelve) no son
+  // costo del negocio: se dejan fuera del resultado y se muestran aparte.
+  const costosNegocio = useMemo(() => costos.filter((c) => c.tipo !== 'gasto_extra'), [costos])
+  const extraPorReintegrar = useMemo(() => redondear(costos.filter((c) => c.tipo === 'gasto_extra').reduce((s, c) => s + c.monto, 0)), [costos])
+
   const balance = useMemo(() => {
     const calc = (ym: string) => {
       const ingresos = pagos.filter((p) => enMes(p.fecha, ym)).reduce((s, p) => s + p.monto, 0)
-      const costosDir = costos.filter((c) => enMes(c.fecha, ym)).reduce((s, c) => s + c.monto, 0)
+      const costosDir = costosNegocio.filter((c) => enMes(c.fecha, ym)).reduce((s, c) => s + c.monto, 0)
       const fijos = gastos.filter((g) => enMes(g.fecha, ym)).reduce((s, g) => s + g.monto, 0)
       return { ingresos, costosDir, fijos, resultado: ingresos - costosDir - fijos }
     }
@@ -178,7 +183,7 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
         const hasta = Math.min(desde + 6, diasDelMes)
         const enSemana = (f: string | null | undefined) => enMes(f, ym) && diaDe(f) >= desde && diaDe(f) <= hasta
         const ingresos = pagos.filter((p) => enSemana(p.fecha)).reduce((s, p) => s + p.monto, 0)
-        const costosDir = costos.filter((c) => enSemana(c.fecha)).reduce((s, c) => s + c.monto, 0)
+        const costosDir = costosNegocio.filter((c) => enSemana(c.fecha)).reduce((s, c) => s + c.monto, 0)
         const fijos = gastos.filter((g) => enSemana(g.fecha)).reduce((s, g) => s + g.monto, 0)
         grafico.push({ ym: `${ym}-s${n}`, etiqueta: `Sem ${n} (${desde}–${hasta})`, ingresos, costosDir, fijos, resultado: ingresos - costosDir - fijos })
       }
@@ -187,7 +192,7 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
     }
     return { total, grafico }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagos, costos, gastos, rango])
+  }, [pagos, costosNegocio, gastos, rango])
 
   const etiquetaPeriodo = rango.meses.length === 1
     ? nombreMes(rango.desde)
@@ -199,11 +204,11 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
   // ---- Histórico de toda la empresa: lo invertido, lo ganado y los impuestos ----
   const historico = useMemo(() => {
     const pagosTotal = redondear(pagos.reduce((s, p) => s + p.monto, 0))
-    const costosTotal = redondear(costos.reduce((s, c) => s + c.monto, 0))
+    const costosTotal = redondear(costosNegocio.reduce((s, c) => s + c.monto, 0))
     const gastosTotal = redondear(gastos.reduce((s, g) => s + g.monto, 0))
     const impuestosTotal = redondear(gastos.filter((g) => (g.categoria || '').toLowerCase() === 'impuestos').reduce((s, g) => s + g.monto, 0))
     return { pagosTotal, costosTotal, gastosTotal, impuestosTotal, invertido: costosTotal, ganancia: redondear(pagosTotal - costosTotal - gastosTotal) }
-  }, [pagos, costos, gastos])
+  }, [pagos, costosNegocio, gastos])
 
   const nombreCli = (id: number) => { const c = clientes.find((x) => x.id === id); return c ? `${c.nombre} ${c.apellido ?? ''}`.trim() : 'Cliente' }
   const nombreObra = (id: number | null) => (id != null ? obras.find((o) => o.id === id)?.nombre_obra ?? `Obra #${id}` : '—')
@@ -484,6 +489,7 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
           <span>IVA aprox. del período: <strong>{moneda(ivaDebito - ivaCredito)}</strong></span>
           <span>Ganancia acumulada (histórica): <strong style={{ color: color(historico.ganancia) }}>{moneda(historico.ganancia)}</strong></span>
           <span>Impuestos pagados (histórico): <strong>{moneda(historico.impuestosTotal)}</strong></span>
+          {extraPorReintegrar > 0.5 && <span>Gastos extra por reintegrar (adelantados a clientes): <strong>{moneda(extraPorReintegrar)}</strong> · no cuentan en el resultado</span>}
         </div>
         <p className="gestionAyuda">Resultado neto = cobrado − costos directos de obras − gastos fijos. El IVA es una estimación al 21% (para la liquidación exacta usá los comprobantes con factura).</p>
       </>}

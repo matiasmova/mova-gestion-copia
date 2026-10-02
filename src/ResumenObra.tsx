@@ -48,7 +48,8 @@ type Datos = {
   fotos: number
   accesos: number | null
   adic: { aprobados: number; pendientes: number; rechazados: number }
-  gastado: number
+  gastado: number // gastos propios de la obra (sin los gastos extra a reintegrar)
+  extraNoPagado: number // gastos extra que adelantaste y el cliente todavía no devolvió
 }
 
 type Pendiente = { tono: 'alerta' | 'info'; texto: string; tab?: TabSeguimiento }
@@ -56,6 +57,7 @@ type Pendiente = { tono: 'alerta' | 'info'; texto: string; tab?: TabSeguimiento 
 const VERDE = '#1f7a4d'
 const NARANJA = '#e47b00'
 const GRIS = '#e6e9ee'
+const VIOLETA = '#7c5cc4'
 
 const diasDesde = (fecha: string) =>
   Math.floor((Date.now() - new Date(`${fecha.slice(0, 10)}T00:00:00`).getTime()) / 86400000)
@@ -85,8 +87,12 @@ async function cargarDatos(obraId: number, avance: number): Promise<Datos> {
     else if (a.estado === 'rechazado') adic.rechazados++
     else adic.aprobados++
   }
+  // El gasto extra (costo tipo "gasto_extra") no es gasto tuyo: lo devuelve el
+  // cliente. Mientras está pendiente se muestra aparte, en contra.
+  const filasCostos = (rCostos.data ?? []) as { monto: number | string; tipo: string }[]
+  const extraNoPagado = filasCostos.filter((c) => c.tipo === 'gasto_extra').reduce((s, c) => s + (Number(c.monto) || 0), 0)
   const gastado =
-    ((rCostos.data ?? []) as { monto: number | string }[]).reduce((s, c) => s + (Number(c.monto) || 0), 0) +
+    filasCostos.filter((c) => c.tipo !== 'gasto_extra').reduce((s, c) => s + (Number(c.monto) || 0), 0) +
     ((rCompras.data ?? []) as { cantidad: number | string; precio_unitario: number | string }[]).reduce((s, c) => s + (Number(c.cantidad) || 0) * (Number(c.precio_unitario) || 0), 0)
 
   // Equipo: igual que la sección Personal (personalCalculos.ts).
@@ -118,7 +124,7 @@ async function cargarDatos(obraId: number, avance: number): Promise<Datos> {
     }
   })
   const jornales = jornalesObra.reduce((s, j) => s + (j.jornada || 0), 0)
-  return { personal: equipo.length, equipo, jornales, fotos, accesos, adic, gastado }
+  return { personal: equipo.length, equipo, jornales, fotos, accesos, adic, gastado, extraNoPagado }
 }
 
 // Gráfico circular de avance (lo usa también el encabezado de la ficha).
@@ -228,13 +234,16 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
             <Barra partes={[
               { valor: cuenta.cobrado, color: VERDE },
               { valor: cuenta.pendienteHoy, color: NARANJA },
+              { valor: Math.max(0, cuenta.gastoExtraPendiente), color: VIOLETA },
               { valor: Math.max(0, cuenta.totalActualizado - cuenta.cobrado - cuenta.pendienteHoy), color: GRIS },
             ]} />
             <div className="orLeyenda">
               <span><i style={{ background: VERDE }} />Cobrado</span>
-              {cuenta.pendienteHoy > 0.5 && <span className="pend"><i style={{ background: NARANJA }} />Pendiente hoy {dinero(cuenta.pendienteHoy)}</span>}
+              {cuenta.pendienteHoy > 0.5 && <span className="pend"><i style={{ background: NARANJA }} />Obra hoy {dinero(cuenta.pendienteHoy)}</span>}
+              {cuenta.gastoExtraPendiente > 0.5 && <span className="pend"><i style={{ background: VIOLETA }} />Gastos a reintegrar {dinero(cuenta.gastoExtraPendiente)}</span>}
               <span><i style={{ background: GRIS }} />Saldo {dinero(Math.max(0, cuenta.saldoTotal))}</span>
             </div>
+            {aCobrarHoy > 0.5 && <small className="orTotalHoy">A cobrar hoy: <b>{dinero(aCobrarHoy)}</b>{cuenta.gastoExtraPendiente > 0.5 && cuenta.pendienteHoy > 0.5 ? ' (obra + gastos)' : ''}</small>}
           </>}
       </Tarjeta>
 
@@ -242,14 +251,17 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
       <Tarjeta icono="📊" titulo="Rentabilidad" onClick={() => onIr('rentabilidad')}>
         {!datos || (tienePresupuesto && !cuenta) ? <small>Cargando…</small> : (() => {
           const cobrado = cuenta?.cobrado ?? 0
-          const max = Math.max(cobrado, datos.gastado, 1)
-          const caja = cobrado - datos.gastado
+          const extra = datos.extraNoPagado
+          const max = Math.max(cobrado, datos.gastado, extra, 1)
+          const caja = cobrado - datos.gastado - extra
           return <>
             <strong className="orValor" style={{ color: caja >= 0 ? VERDE : '#b23b32' }}>{caja >= 0 ? '+' : '−'} {dinero(Math.abs(caja))} <em>en caja</em></strong>
-            <div className="orComparar">
+            <div className={`orComparar${extra > 0.5 ? ' conExtra' : ''}`}>
               <div><span>Cobrado</span><div className="orBarra"><span style={{ width: `${(cobrado / max) * 100}%`, background: VERDE }} /></div><b>{dinero(cobrado)}</b></div>
               <div><span>Gastado</span><div className="orBarra"><span style={{ width: `${(datos.gastado / max) * 100}%`, background: NARANJA }} /></div><b>{dinero(datos.gastado)}</b></div>
+              {extra > 0.5 && <div className="orExtra"><span>Extra no pagado</span><div className="orBarra"><span style={{ width: `${(extra / max) * 100}%`, background: VIOLETA }} /></div><b>− {dinero(extra)}</b></div>}
             </div>
+            {extra > 0.5 && <small className="orExtraNota">El extra no pagado es un gasto extra que adelantaste y el cliente todavía no te devolvió. Resta en la caja mientras está pendiente, pero no es gasto tuyo: no cuenta en la ganancia ni en la rentabilidad del negocio.</small>}
             <small>Tocá para ver la ganancia proyectada</small>
           </>
         })()}
