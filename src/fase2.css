@@ -1588,3 +1588,23 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 .pdfRecos .presuMas{border-top:0}
 @media print{.pdfRecos{display:none !important}}
 .presuDesglose{display:block;color:#6d4bb8;font-size:12px;font-weight:600}
+.cuentaObra{margin:4px 0 18px}
+.cuentaObraKpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.cuentaObraKpis>div{border:1px solid var(--mova-border);border-radius:12px;padding:10px 12px;background:#fff;min-width:0}
+.cuentaObraKpis span{display:block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--mova-muted)}
+.cuentaObraKpis strong{display:block;font-size:17px;margin-top:3px;color:#14181e;overflow-wrap:anywhere}
+.cuentaObraKpis small{display:block;font-size:11.5px;color:var(--mova-muted);margin-top:2px}
+.cuentaObraKpis strong.ok{color:#1f7a4d}.cuentaObraKpis strong.pend{color:#c2410c}
+.cuentaObraKpis .extra strong{color:#6d4bb8}
+.cuentaObraKpis .hoy{background:#de7015;border-color:#de7015}.cuentaObraKpis .hoy span,.cuentaObraKpis .hoy strong,.cuentaObraKpis .hoy small{color:#fff}
+.cuentaObraKpis .hoy.aldia{background:#1f7a4d;border-color:#1f7a4d}
+.cuentaObraMsg{margin:8px 0 0;font-size:13px;color:#64748b}.cuentaObraMsg b{color:#c2410c}.cuentaObraMsg.ok b{color:#1f7a4d}
+.cuentaObraTit{margin:18px 0 6px}
+.cuentaObraLinea{list-style:none;margin:0;padding:0}
+.cuentaObraLinea li{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:10px;align-items:start;padding:9px 0;border-bottom:1px solid #f1f2f4;font-size:13.5px}
+.cuentaObraLinea i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-weight:800;font-size:12px;color:#fff;background:#de7015}
+.cuentaObraLinea li.ok i{background:#1f7a4d}.cuentaObraLinea li.futuro i{background:#fff;border:1.5px solid #c4c9d1}.cuentaObraLinea li.extra i{background:#7c5cc4}
+.cuentaObraLinea b{color:#14181e}.cuentaObraLinea small{display:block;color:var(--mova-muted);font-size:12px}
+.cuentaObraLinea .m{text-align:right;white-space:nowrap}.cuentaObraLinea .m small{font-weight:700;color:#c2410c}
+.cuentaObraLinea li.ok .m small{color:#1f7a4d}.cuentaObraLinea li.futuro .m small{color:var(--mova-muted)}.cuentaObraLinea li.extra .m small{color:#6d4bb8}
+.cuentaObraKpis .hoy{grid-column:1/-1}

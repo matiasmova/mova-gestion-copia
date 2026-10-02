@@ -18,7 +18,7 @@ import VistaToggle, { useVista } from './VistaToggle'
 import './obrasCard.css'
 import { OBRA_ESTADOS, etiquetaObra, claseObra } from './obraEstado'
 import { leerFinanzasObra } from './finanzasObra'
-import { cargarEstadoPresupuesto, mensajeEstado, type EstadoPresupuesto } from './estadoObra'
+import { cargarEstadoPresupuesto, type EstadoPresupuesto } from './estadoObra'
 import {
   eliminarObraCompleta,
   mensajeEliminacionObra,
@@ -26,6 +26,7 @@ import {
 } from './eliminarObra'
 import { confirmarEliminacion } from './confirmar'
 import CampoNumero from './CampoNumero'
+import CuentaObraResumen from './CuentaObraResumen'
 
 type EstadoObra = 'en_proceso' | 'finalizada' | 'observacion'
 
@@ -803,7 +804,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
               </div>
             )}
 
-            {seguTab === 'finanzas' && <EconomiaObra key={obraSeguimiento.id} abrirCobro={abrirCobro} obraId={obraSeguimiento.id} onGenerarPdf={() => setInformeObra(obraSeguimiento)} onCambio={() => setActualizacion(v => v + 1)} />}
+            {seguTab === 'finanzas' && <EconomiaObra key={obraSeguimiento.id} cuenta={cuenta} abrirCobro={abrirCobro} obraId={obraSeguimiento.id} onGenerarPdf={() => setInformeObra(obraSeguimiento)} onCambio={() => setActualizacion(v => v + 1)} />}
 
             {seguTab === 'adicionales' && <AdicionalesObra key={obraSeguimiento.id} abrir={abrirAdic} obraId={obraSeguimiento.id} onCambio={() => setActualizacion(v => v + 1)} />}
 
@@ -996,26 +997,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
             )}
 
             {/* Estado de cuenta: los mismos números que el documento */}
-            {!presupuestoAceptado ? null : cargandoCuenta ? <p role="status">Cargando cuenta…</p> : errorCuenta ? <p role="alert">{errorCuenta}</p> : cuenta && (() => {
-              const msg = mensajeEstado(cuenta, dineroFicha)
-              return (
-                <div style={{ margin: '4px 0 18px' }}>
-                  <div className="seguimientoResumen">
-                    <div><span>Total de la obra</span><strong>{dineroFicha(cuenta.totalActualizado)}</strong></div>
-                    <div><span>Ya pagó</span><strong style={{ color: '#1f7a4d' }}>{dineroFicha(cuenta.cobrado)}</strong></div>
-                    <div>
-                      <span>{cuenta.adelanto > 0.5 ? 'Adelanto del cliente' : 'Pendiente a hoy'}</span>
-                      <strong style={{ color: cuenta.pendienteHoy > 0.5 ? '#c2410c' : '#1f7a4d' }}>{dineroFicha(cuenta.adelanto > 0.5 ? cuenta.adelanto : cuenta.pendienteHoy)}</strong>
-                    </div>
-                    <div><span>Saldo para terminar</span><strong>{dineroFicha(Math.max(0, cuenta.saldoTotal))}</strong></div>
-                  </div>
-                  <p style={{ margin: '8px 0 0', fontSize: 13, fontWeight: 600, color: msg.tono === 'ok' ? '#1f7a4d' : '#c2410c' }}>
-                    {msg.tono === 'ok' ? '✓' : '⚠'} {msg.titulo}
-                    {cuenta.gastoExtraPendiente > 0.5 && <span style={{ fontWeight: 400, color: '#64748b' }}> · Reintegros pendientes aparte: {dineroFicha(cuenta.gastoExtraPendiente)}</span>}
-                  </p>
-                </div>
-              )
-            })()}
+            {!presupuestoAceptado ? null : cargandoCuenta ? <p role="status">Cargando cuenta…</p> : errorCuenta ? <p role="alert">{errorCuenta}</p> : cuenta && <CuentaObraResumen cuenta={cuenta} dinero={dineroFicha} />}
 
             <div className="obraTimeline">
               {cargandoAvances && <p>Cargando avances...</p>}
@@ -1208,7 +1190,7 @@ const ESTADO_ADIC_LABEL: Record<string, string> = {
 // Pestaña Finanzas, simplificada: solo registrar los cobros del cliente y ver
 // los movimientos de Adicionales (se editan en esa pestaña). El documento con
 // todo (presupuesto, pagos y estado de la obra) se abre con el botón de arriba.
-function EconomiaObra({ obraId, onGenerarPdf, onCambio, abrirCobro = 0 }: { obraId: number; onGenerarPdf: () => void; onCambio: () => void; abrirCobro?: number }) {
+function EconomiaObra({ obraId, cuenta, onGenerarPdf, onCambio, abrirCobro = 0 }: { obraId: number; cuenta: EstadoPresupuesto | null; onGenerarPdf: () => void; onCambio: () => void; abrirCobro?: number }) {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
@@ -1296,6 +1278,7 @@ function EconomiaObra({ obraId, onGenerarPdf, onCambio, abrirCobro = 0 }: { obra
 
     {cargando && <p role="status">Cargando...</p>}
     {error && <p className="loginError" role="alert">{error}</p>}
+    {cuenta && <CuentaObraResumen cuenta={cuenta} dinero={dineroFicha} lineaTiempo />}
     {!cargando && !error && <>
       <h4>Cobros registrados</h4>
       {cobros.length === 0 ? <p className="adicVacio">Todavía no registraste ningún cobro de esta obra.</p> : (
