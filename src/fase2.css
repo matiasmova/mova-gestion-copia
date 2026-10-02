@@ -1728,3 +1728,25 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
   .orResumen>*,.orGrid>*,.homeKpis>*,.homeNeto,.homeSeccion,.presuListaMovil>*,.crmKanbanBody>*,.fichaKpis>*,.cuentaObraKpis>*,.panelPresu>*,.orBarra span,.tabBar span,.homeNetoBarra span,.presuEtapaBarra i,.liAvance,.donaVal,.orPend li.alerta>span[aria-hidden],.obraRegistrarBtn::after,.presuPaso::after{animation:none!important}
   .avisoOk,.avisoOk path{transition:none!important;animation:none!important;stroke-dashoffset:0}
 }
+
+/* ===== Movimiento constante (pocos lugares, para que llamen la atención) ===== */
+@keyframes movBrilloLoop{0%{left:-60%}35%,100%{left:130%}}
+@keyframes movRespira{0%,100%{transform:scale(1)}50%{transform:scale(1.02)}}
+@keyframes movFluye{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+@keyframes movRayas{to{background-position:18px 0}}
+@keyframes movVivo{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}
+/* A. Brillo que pasa cada tanto por "Registrar" */
+.obraRegistrarBtn::after{animation:movBrilloLoop 3.6s ease-in-out 1s infinite}
+/* C. El siguiente paso del presupuesto "respira" */
+.presuPaso:not(:disabled){animation:movRespira 2.6s ease-in-out infinite}
+.presuPaso:not(:disabled):active{animation:none;transform:scale(.97)}
+/* D. Color que fluye en "Total a cobrar hoy" */
+.cuentaObraKpis .hoy:not(.aldia){background:linear-gradient(120deg,#de7015,#f08a2c,#c95f0c,#de7015);background-size:300% 300%;animation:movEntra .45s cubic-bezier(.2,.8,.2,1) .18s both,movFluye 6s ease 1s infinite}
+/* F. Barra con rayas en las obras en curso */
+.presuEtapaBarra.encurso{height:7px}
+.presuEtapaBarra.encurso i{background-color:#de7015;background-image:linear-gradient(45deg,rgba(255,255,255,.3) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.3) 50%,rgba(255,255,255,.3) 75%,transparent 75%);background-size:18px 18px;animation:movLlenar 1.1s cubic-bezier(.2,.8,.2,1) both,movRayas 1s linear 1.1s infinite}
+/* G. Punto "en vivo" en las obras en curso */
+.presuEtapa.et-encurso::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:#de7015;margin-right:6px;vertical-align:1px;animation:movVivo 1.4s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){
+  .obraRegistrarBtn::after,.presuPaso,.cuentaObraKpis .hoy,.presuEtapaBarra.encurso i,.presuEtapa.et-encurso::before{animation:none!important}
+}

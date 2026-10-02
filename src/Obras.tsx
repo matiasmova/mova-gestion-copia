@@ -723,7 +723,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
               <button type="button" className="presuItem" key={obra.id} onClick={() => abrirSeguimiento(obra)}>
                 <div className="presuItemTop"><span>{obra.localidad || 'Sin localidad'}</span><span className={`presuEtapa ${et.clase}`}>{et.texto}</span></div>
                 <strong>{obra.nombre_obra}</strong>
-                {et.avance != null && <div className="presuEtapaBarra"><i style={{ width: `${et.avance}%` }} /></div>}
+                {et.avance != null && <div className={`presuEtapaBarra ${et.clase.includes('et-encurso') ? 'encurso' : ''}`}><i style={{ width: `${et.avance}%` }} /></div>}
                 <div className="presuItemBot"><span>{obtenerCliente(obra.cliente_id)}</span>{eco && eco.pendiente > 0.5 ? <b className="presuFalta">Saldo {dineroFicha(eco.pendiente)}</b> : <b>{dineroFicha(eco?.valor ?? 0)}</b>}</div>
                 {eco && eco.extras > 0.5 && <small className="presuDesglose">Obra {dineroFicha(eco.obra)} + extras a reintegrar {dineroFicha(eco.extras)}</small>}
                 {avisos.length > 0 && <small className="presuAvisos">⚠ {avisos.join(' · ')}</small>}

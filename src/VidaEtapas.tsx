@@ -38,7 +38,7 @@ export function etiquetaEtapa(p: { estado: string; enviado_at?: string | null; f
     case 1: return { texto: `📤 Enviado · ${dias === 0 ? 'hoy' : `${dias} día${dias === 1 ? '' : 's'}`}`, clase: 'et-enviado' }
     case -1: return { texto: `❌ Rechazado${p.motivo_rechazo ? ` · ${p.motivo_rechazo.split(':')[0].toLowerCase()}` : ''}`, clase: 'et-rechazado' }
     case 2: return { texto: '✅ Aceptado · falta crear la obra', clase: 'et-aceptado' }
-    case 3: { const a = Math.round(Number(obra?.porcentaje_avance) || 0); return { texto: `🏗️ En obra · ${a}%`, clase: 'et-obra', avance: a } }
+    case 3: { const a = Math.round(Number(obra?.porcentaje_avance) || 0); return { texto: `🏗️ En obra · ${a}%`, clase: 'et-obra et-encurso', avance: a } }
     case 4: return { texto: '🏁 Terminada · falta cobrar', clase: 'et-obra', avance: 100 }
     default: return { texto: '✅ Terminada y cobrada', clase: 'et-cobrada' }
   }
