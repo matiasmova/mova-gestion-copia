@@ -188,7 +188,7 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
   const serie = [...avances].reverse().slice(-8)
 
   return <section className="orResumen" aria-label="Resumen de la obra">
-    <div className="orVida"><VidaEtapas pasos={pasosObra({ estado, porcentaje_avance: avance }, cuenta ? cuenta.saldoTotal : undefined)} /></div>
+    <div className="orVida"><VidaEtapas pasos={pasosObra({ estado, porcentaje_avance: avance }, cuenta ? Math.max(0, cuenta.saldoTotal) + cuenta.gastoExtraPendiente : undefined)} /></div>
 
     {presupuesto && <div className="orPresu">
       <div className="orPresuTit"><span>📄 PRESUPUESTO {codigoPresupuesto(presupuesto.id)}</span><span className="presuEtapa et-aceptado">Aceptado</span></div>

@@ -4,6 +4,7 @@ import { moneda, fechaCorta, hoy } from './gestionFormat'
 import { armarPdfCuenta } from './pdfPersonal'
 import VistaPreviaPdf from './VistaPreviaPdf'
 import { calcularPersona } from './personalCalculos'
+import { avanceEfectivo, cuentasPorObra } from './cuentaObra'
 import { etiquetaObra, claseObra } from './obraEstado'
 import { confirmarEliminacion } from './confirmar'
 import CampoNumero from './CampoNumero'
@@ -66,6 +67,7 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
   const [obras, setObras] = useState<Obra[]>([])
   const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([])
   const [pagos, setPagos] = useState<Pago[]>([])
+  const [compras, setCompras] = useState<Costo[]>([])
   const [costos, setCostos] = useState<Costo[]>([])
   const [gastos, setGastos] = useState<Gasto[]>([])
   const [productos, setProductos] = useState<Prod[]>([])
@@ -91,7 +93,7 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
   useEffect(() => {
     async function cargar() {
       setCargando(true); setError('')
-      const [rO, rP, rPa, rC, rG, rProd, rA, rItems, rCli, rPer, rJor, rAdic] = await Promise.all([
+      const [rO, rP, rPa, rC, rG, rProd, rA, rItems, rCli, rPer, rJor, rAdic, rMat] = await Promise.all([
         supabase.from('obras').select('id,cliente_id,nombre_obra,estado,porcentaje_avance,activo'),
         supabase.from('presupuestos').select('id,obra_id,cliente_id,titulo,total,total_pagado,saldo,estado,activo,fecha').eq('activo', true),
         supabase.from('pagos').select('monto,fecha,obra_id,presupuesto_id'),
@@ -104,6 +106,7 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
         supabase.from('personal').select('id,nombre,apellido,tipo,costo_dia'),
         supabase.from('jornales').select('obra_id,personal_id,jornada,horas'),
         supabase.from('adicionales').select('obra_id,importe,estado,tipo'),
+        supabase.from('materiales').select('obra_id,cantidad,precio_unitario,fecha,pagado'),
       ])
       if (rO.error || rP.error) { console.error(rO.error || rP.error); setError('No se pudo cargar el tablero.'); setCargando(false); return }
       const num = (x: unknown) => Number(x) || 0
@@ -111,6 +114,7 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
       setPresupuestos((rP.data ?? []).map((p) => ({ ...p, total: num(p.total), total_pagado: num(p.total_pagado), saldo: num(p.saldo) })) as Presupuesto[])
       setPagos(rPa.error ? [] : (rPa.data ?? []).map((p) => ({ ...p, monto: num(p.monto) })) as Pago[])
       setCostos(rC.error ? [] : (rC.data ?? []).map((c) => ({ ...c, monto: num(c.monto) })) as Costo[])
+      setCompras(rMat.error ? [] : ((rMat.data ?? []) as { obra_id: number | null; cantidad: unknown; precio_unitario: unknown; fecha: string; pagado: boolean | null }[]).filter((m) => m.pagado !== false).map((m) => ({ monto: num(m.cantidad) * num(m.precio_unitario), fecha: m.fecha, tipo: 'material', personal_id: null, obra_id: m.obra_id })))
       setGastos(rG.error ? [] : (rG.data ?? []).map((g) => ({ ...g, monto: num(g.monto) })) as Gasto[])
       setProductos(rProd.error ? [] : (rProd.data ?? []).map((p) => ({ ...p, costo_unitario: num(p.costo_unitario), stock: num(p.stock), stock_minimo: num(p.stock_minimo) })) as Prod[])
       setAsigTablero(rA.error ? [] : (rA.data ?? []).map((a) => ({ ...a, valor_acordado: a.valor_acordado == null ? null : num(a.valor_acordado) })) as AsigTablero[])
@@ -156,7 +160,8 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
 
   // Los gastos extra (plata que adelantás y el cliente te devuelve) no son
   // costo del negocio: se dejan fuera del resultado y se muestran aparte.
-  const costosNegocio = useMemo(() => costos.filter((c) => c.tipo !== 'gasto_extra'), [costos])
+  // Las compras a proveedores ya pagadas también son costo directo de las obras.
+  const costosNegocio = useMemo(() => [...costos.filter((c) => c.tipo !== 'gasto_extra'), ...compras], [costos, compras])
   const extraPorReintegrar = useMemo(() => redondear(costos.filter((c) => c.tipo === 'gasto_extra').reduce((s, c) => s + c.monto, 0)), [costos])
 
   const balance = useMemo(() => {
@@ -214,49 +219,25 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
   const nombreObra = (id: number | null) => (id != null ? obras.find((o) => o.id === id)?.nombre_obra ?? `Obra #${id}` : '—')
 
   // ---- Cobranzas: semáforo por obra ----
-  // Se calcula igual que las tarjetas de Obras:
-  //   valor   = presupuestos aceptados + adicionales aprobados de la obra
-  //   cobrado = todos los pagos de la obra (cargados en la obra o en su presupuesto)
-  //   corresponde cobrar = valor × % de avance (100% si la obra está terminada)
+  // Misma regla que el documento del cliente (cuentaObra.ts):
+  //   corresponde hoy = 70% de anticipo + el 30% restante según el avance
+  //   (100% si la obra está terminada) + los gastos extra sin devolver.
   //  🔴 Terminada con saldo: obra finalizada / en observación y todavía hay saldo.
-  //  🟠 Atrasada por avance: en proceso y se cobró menos de lo que corresponde al avance.
-  //  🟢 Al día: se cobró lo que corresponde al avance (o más).
+  //  🟠 Atrasada: en proceso y se cobró menos de lo que corresponde hoy.
+  //  🟢 Al día: se cobró lo que corresponde hoy (queda saldo para más adelante).
   const cobranzas = useMemo(() => {
     type Situacion = 'rojo' | 'naranja' | 'verde'
     type FilaCobranza = {
       obraId: number; obra: string; cliente: string; estado: string | null; avance: number
       valor: number; cobrado: number; saldo: number; faltaAvance: number; situacion: Situacion
     }
-    const valorPorObra: Record<number, number> = {}
-    const obraDePresupuesto: Record<number, number> = {}
-    presupuestos.forEach((p) => {
-      if (p.obra_id == null) return
-      obraDePresupuesto[p.id] = p.obra_id
-      if (p.activo !== false && p.estado === 'aceptado') valorPorObra[p.obra_id] = (valorPorObra[p.obra_id] || 0) + p.total
-    })
-    const conAceptado = new Set(Object.keys(valorPorObra).map(Number))
-    adicionalesTablero.forEach((a) => {
-      if (a.estado === 'aprobado' && conAceptado.has(a.obra_id)) valorPorObra[a.obra_id] += a.importe
-    })
-    const cobradoPorObra: Record<number, number> = {}
-    pagos.forEach((pago) => {
-      const obraId = pago.obra_id ?? (pago.presupuesto_id != null ? obraDePresupuesto[pago.presupuesto_id] : undefined)
-      if (obraId == null) return
-      cobradoPorObra[obraId] = (cobradoPorObra[obraId] || 0) + pago.monto
-    })
-
+    const cuentas = cuentasPorObra(obras.filter((o) => o.activo !== false), presupuestos, adicionalesTablero, pagos)
     const filas: FilaCobranza[] = []
-    obras.filter((o) => o.activo !== false && conAceptado.has(o.id)).forEach((o) => {
-      const valor = redondear(valorPorObra[o.id] || 0)
-      const cobrado = redondear(cobradoPorObra[o.id] || 0)
-      const saldo = redondear(Math.max(0, valor - cobrado))
-      if (saldo <= 0) return
-      const terminada = o.estado === 'finalizada' || o.estado === 'observacion'
-      const avance = terminada ? 100 : Math.min(100, Math.max(0, Number(o.porcentaje_avance || 0)))
-      const corresponde = redondear(valor * avance / 100)
-      const faltaAvance = redondear(Math.max(0, corresponde - cobrado))
-      const situacion: Situacion = terminada ? 'rojo' : faltaAvance > 0.5 ? 'naranja' : 'verde'
-      filas.push({ obraId: o.id, obra: o.nombre_obra, cliente: nombreCli(o.cliente_id), estado: o.estado, avance, valor, cobrado, saldo, faltaAvance, situacion })
+    obras.filter((o) => o.activo !== false && cuentas[o.id]).forEach((o) => {
+      const c = cuentas[o.id]
+      if (c.saldo <= 0.5) return
+      const situacion: Situacion = c.terminada ? 'rojo' : c.pendienteHoy > 0.5 ? 'naranja' : 'verde'
+      filas.push({ obraId: o.id, obra: o.nombre_obra, cliente: nombreCli(o.cliente_id), estado: o.estado, avance: c.avance, valor: redondear(c.valor + c.extras), cobrado: c.cobrado, saldo: c.saldo, faltaAvance: c.pendienteHoy, situacion })
     })
 
     const orden: Record<Situacion, number> = { rojo: 0, naranja: 1, verde: 2 }
@@ -283,16 +264,15 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
       const pagosPersona = costos.filter((c) => c.personal_id === a.personal_id && c.obra_id === a.obra_id).map((c) => ({ personal_id: c.personal_id, monto: c.monto }))
       const jornalesObra = jornalesTablero.filter((j) => j.obra_id === a.obra_id)
       const valorObra = valorObraDe(a.obra_id)
-      const avanceObra = obras.find((o) => o.id === a.obra_id)?.porcentaje_avance ?? 0
-      const calc = calcularPersona(a, persona, pagosPersona, jornalesObra, valorObra, avanceObra)
+      const obraA = obras.find((o) => o.id === a.obra_id)
+      const calc = calcularPersona(a, persona, pagosPersona, jornalesObra, valorObra, avanceEfectivo(obraA?.estado, obraA?.porcentaje_avance))
       const saldo = calc.totalContrato != null ? Math.max(calc.totalContrato - calc.pagado, 0) : Math.max(calc.diferencia, 0)
 
       // Qué corresponde pagar HOY según el avance de la obra:
       //  · Con total pactado (por obra / etapa / %): total × % de avance (100% si la obra terminó).
       //  · Por día u hora: lo devengado según los jornales cargados (ya viene en calc.diferencia).
-      const estadoObra = obras.find((o) => o.id === a.obra_id)?.estado ?? null
-      const terminada = estadoObra === 'finalizada' || estadoObra === 'observacion'
-      const avance = terminada ? 100 : Math.min(100, Math.max(0, Number(avanceObra || 0)))
+      const estadoObra = obraA?.estado ?? null
+      const avance = avanceEfectivo(estadoObra, obraA?.porcentaje_avance)
       let debe = 0
       let adelantado = 0
       if (calc.totalContrato != null) {
@@ -473,7 +453,7 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
 
         <div className="gestionKpis">
           <div><span>INGRESOS</span><strong>{moneda(balance.total.ingresos)}</strong><small>Cobrado</small></div>
-          <div><span>COSTOS DIRECTOS</span><strong>{moneda(balance.total.costosDir)}</strong><small>Obras</small></div>
+          <div><span>COSTOS DIRECTOS</span><strong>{moneda(balance.total.costosDir)}</strong><small>Obras y compras</small></div>
           <div><span>GASTOS FIJOS</span><strong>{moneda(balance.total.fijos)}</strong><small>Estructura</small></div>
           <div className="destacado"><span>RESULTADO NETO</span><strong style={{ color: color(balance.total.resultado) }}>{moneda(balance.total.resultado)}</strong><small>{margenNeto != null ? `${margenNeto}% de lo cobrado` : 'Sin ingresos en el período'}</small></div>
         </div>
@@ -491,7 +471,7 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
           <span>Impuestos pagados (histórico): <strong>{moneda(historico.impuestosTotal)}</strong></span>
           {extraPorReintegrar > 0.5 && <span>Gastos extra por reintegrar (adelantados a clientes): <strong>{moneda(extraPorReintegrar)}</strong> · no cuentan en el resultado</span>}
         </div>
-        <p className="gestionAyuda">Resultado neto = cobrado − costos directos de obras − gastos fijos. El IVA es una estimación al 21% (para la liquidación exacta usá los comprobantes con factura).</p>
+        <p className="gestionAyuda">Resultado neto = cobrado − costos directos de obras (incluye compras pagadas) − gastos fijos. El IVA es una estimación al 21% (para la liquidación exacta usá los comprobantes con factura).</p>
       </>}
 
       {!cargando && !error && pestana === 'caja' && <>

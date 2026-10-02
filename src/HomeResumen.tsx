@@ -6,6 +6,7 @@ import { TIPOS_EVENTO } from './Agenda'
 import Tablero, { type Pestana } from './Tablero'
 import { moneda } from './gestionFormat'
 import { calcularPersona } from './personalCalculos'
+import { avanceEfectivo, cuentasPorObra } from './cuentaObra'
 
 // Pantalla de Inicio: resumen rápido de la empresa y, en pestañas, el detalle
 // que antes estaba en Tablero (balance, cobranzas, personal, gastos, inventario).
@@ -85,13 +86,15 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
   const [adicionales, setAdicionales] = useState<Adicional[]>([])
   const [asignaciones, setAsignaciones] = useState<Asig[]>([])
   const [personas, setPersonas] = useState<Persona[]>([])
+  // Compras a proveedores ya pagadas (salen de la caja como los demás costos).
+  const [compras, setCompras] = useState<{ fecha: string; monto: number }[]>([])
   const [jornales, setJornales] = useState<Jornal[]>([])
 
   useEffect(() => {
     let vigente = true
     async function cargar() {
       setCargando(true)
-      const [rO, rC, rP, rPa, rCo, rG, rAd, rAs, rPe, rJ] = await Promise.all([
+      const [rO, rC, rP, rPa, rCo, rG, rAd, rAs, rPe, rJ, rM] = await Promise.all([
         supabase.from('obras').select('id,cliente_id,nombre_obra,localidad,estado,porcentaje_avance,activo').eq('activo', true).order('created_at', { ascending: false }),
         supabase.from('Clientes').select('id,nombre,apellido'),
         supabase.from('presupuestos').select('id,cliente_id,obra_id,titulo,estado,total,activo,fecha').eq('activo', true),
@@ -102,6 +105,7 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
         supabase.from('obra_asignaciones').select('obra_id,personal_id,modalidad,valor_acordado'),
         supabase.from('personal').select('id,nombre,apellido,tipo,costo_dia'),
         supabase.from('jornales').select('obra_id,personal_id,jornada,horas'),
+        supabase.from('materiales').select('cantidad,precio_unitario,fecha,pagado'),
       ])
       if (!vigente) return
       setObras(rO.error ? [] : (rO.data ?? []) as Obra[])
@@ -114,6 +118,7 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
       setAsignaciones(rAs.error ? [] : (rAs.data ?? []).map((a) => ({ ...a, valor_acordado: a.valor_acordado == null ? null : num(a.valor_acordado) })) as Asig[])
       setPersonas(rPe.error ? [] : (rPe.data ?? []).map((p) => ({ ...p, costo_dia: p.costo_dia == null ? null : num(p.costo_dia) })) as Persona[])
       setJornales(rJ.error ? [] : (rJ.data ?? []).map((j) => ({ ...j, jornada: num(j.jornada), horas: j.horas == null ? null : num(j.horas) })) as Jornal[])
+      setCompras(rM.error ? [] : ((rM.data ?? []) as { cantidad: unknown; precio_unitario: unknown; fecha: string; pagado: boolean | null }[]).filter((m) => m.pagado !== false).map((m) => ({ fecha: m.fecha, monto: num(m.cantidad) * num(m.precio_unitario) })))
       setCargando(false)
     }
     void cargar()
@@ -122,38 +127,20 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
 
   const nombreCli = (id: number) => { const c = clientes.find((x) => x.id === id); return c ? `${c.nombre} ${c.apellido ?? ''}`.trim() : 'Cliente' }
 
-  // ---- Obras: valor, cobrado y situación (igual que Obras y Tablero) ----
+  // ---- Obras: valor, cobrado y situación (misma regla que el documento del cliente) ----
   const obrasInfo = useMemo(() => {
-    const valorPorObra: Record<number, number> = {}
-    const obraDePresupuesto: Record<number, number> = {}
-    presupuestos.forEach((p) => {
-      if (p.obra_id == null) return
-      obraDePresupuesto[p.id] = p.obra_id
-      if (p.estado === 'aceptado') valorPorObra[p.obra_id] = (valorPorObra[p.obra_id] || 0) + p.total
-    })
-    const conAceptado = new Set(Object.keys(valorPorObra).map(Number))
-    adicionales.forEach((a) => { if (a.estado === 'aprobado' && conAceptado.has(a.obra_id)) valorPorObra[a.obra_id] += a.importe })
-    const cobradoPorObra: Record<number, number> = {}
-    pagos.forEach((p) => {
-      const obraId = p.obra_id ?? (p.presupuesto_id != null ? obraDePresupuesto[p.presupuesto_id] : undefined)
-      if (obraId != null) cobradoPorObra[obraId] = (cobradoPorObra[obraId] || 0) + p.monto
-    })
-
+    const cuentas = cuentasPorObra(obras, presupuestos, adicionales, pagos)
     // Solo cuentan las obras con presupuesto aceptado (misma regla que la pantalla Obras).
-    const vigentes = obras.filter((o) => conAceptado.has(o.id))
+    const vigentes = obras.filter((o) => cuentas[o.id])
     const activas = vigentes.filter((o) => (o.estado ?? 'en_proceso') === 'en_proceso')
     const enObservacion = vigentes.filter((o) => o.estado === 'observacion')
 
     const deudas = vigentes.map((o) => {
-      const valor = redondear(valorPorObra[o.id] || 0)
-      const cobrado = redondear(cobradoPorObra[o.id] || 0)
-      const saldo = redondear(Math.max(0, valor - cobrado))
-      const terminada = o.estado === 'finalizada' || o.estado === 'observacion'
-      const avance = terminada ? 100 : Math.min(100, Math.max(0, num(o.porcentaje_avance)))
-      const faltaAvance = redondear(Math.max(0, valor * avance / 100 - cobrado))
-      const situacion: 'rojo' | 'naranja' | 'verde' = terminada ? 'rojo' : faltaAvance > 0.5 ? 'naranja' : 'verde'
-      return { obra: o, saldo, faltaAvance, situacion }
-    }).filter((d) => d.saldo > 0)
+      const c = cuentas[o.id]
+      // saldo = lo que falta de la obra + extras sin devolver; faltaAvance = lo que corresponde cobrar hoy.
+      const situacion: 'rojo' | 'naranja' | 'verde' = c.terminada ? 'rojo' : c.pendienteHoy > 0.5 ? 'naranja' : 'verde'
+      return { obra: o, saldo: c.saldo, faltaAvance: c.pendienteHoy, extras: c.extras, situacion }
+    }).filter((d) => d.saldo > 0.5)
     const orden = { rojo: 0, naranja: 1, verde: 2 }
     deudas.sort((a, b) => orden[a.situacion] - orden[b.situacion] || b.saldo - a.saldo)
 
@@ -179,10 +166,8 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
       const persona = personas.find((p) => p.id === a.personal_id)
       const obra = obras.find((o) => o.id === a.obra_id)
       const pagosPersona = costos.filter((c) => c.personal_id === a.personal_id && c.obra_id === a.obra_id).map((c) => ({ personal_id: c.personal_id, monto: c.monto }))
-      const avanceObra = obra?.porcentaje_avance ?? 0
-      const calc = calcularPersona(a, persona, pagosPersona, jornales.filter((j) => j.obra_id === a.obra_id), valorObra(a.obra_id), avanceObra)
-      const terminada = obra?.estado === 'finalizada' || obra?.estado === 'observacion'
-      const avance = terminada ? 100 : Math.min(100, Math.max(0, num(avanceObra)))
+      const avance = avanceEfectivo(obra?.estado, obra?.porcentaje_avance)
+      const calc = calcularPersona(a, persona, pagosPersona, jornales.filter((j) => j.obra_id === a.obra_id), valorObra(a.obra_id), avance)
       let debe = 0
       let adelantado = 0
       if (calc.totalContrato != null) {
@@ -217,6 +202,7 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
     const manoObra = costos.filter((c) => enMes(c.fecha, mesSel) && c.personal_id != null).reduce((s, c) => s + c.monto, 0)
     // Los gastos extra que el cliente devuelve no son costo tuyo: van aparte.
     const otrosCostos = costos.filter((c) => enMes(c.fecha, mesSel) && c.personal_id == null && c.tipo !== 'gasto_extra').reduce((s, c) => s + c.monto, 0)
+      + compras.filter((c) => enMes(c.fecha, mesSel)).reduce((s, c) => s + c.monto, 0)
     const extraPorReintegrar = costos.filter((c) => c.tipo === 'gasto_extra').reduce((s, c) => s + c.monto, 0)
     const gastosMes = gastos.filter((g) => enMes(g.fecha, mesSel))
     const fijos = gastosMes.reduce((s, g) => s + g.monto, 0)
@@ -247,7 +233,7 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
       recurrentesMes: gastosMes.filter((g) => g.recurrente).reduce((s, g) => s + g.monto, 0),
       porCategoria: Object.entries(categorias).sort((a, b) => b[1] - a[1]),
     }
-  }, [pagos, costos, gastos, mesSel, personal.debe])
+  }, [pagos, costos, compras, gastos, mesSel, personal.debe])
 
   const colorMonto = (v: number) => (v > 0 ? VERDE : v < 0 ? ROJO : undefined)
   const salidas = mes.manoObra + mes.otrosCostos + mes.fijos

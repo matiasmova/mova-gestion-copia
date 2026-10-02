@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import type { Pedido } from './BuscadorGlobal'
 import { supabase } from './supabase'
 import { moneda, fechaCorta } from './gestionFormat'
+import { avanceEfectivo } from './cuentaObra'
 import { calcularPersona, MODALIDADES_PRINCIPALES, modalidadDePersona, type CalculoPersona } from './personalCalculos'
 import { armarPdfCuenta } from './pdfPersonal'
 import VistaPreviaPdf from './VistaPreviaPdf'
@@ -92,7 +93,8 @@ async function cargarDatos(): Promise<Datos> {
   ])
   return {
     personas: personas.map((p) => ({ ...p, costo_dia: p.costo_dia == null ? null : num(p.costo_dia) })).sort((a, b) => nombrePersona(a).localeCompare(nombrePersona(b))),
-    obras: obras.map((o) => ({ ...o, porcentaje_avance: num(o.porcentaje_avance) })),
+    // Una obra terminada cuenta como 100% de avance (igual que en el resto de la app).
+    obras: obras.map((o) => ({ ...o, porcentaje_avance: avanceEfectivo(o.estado, o.porcentaje_avance) })),
     asignaciones: asig.map((a) => ({ ...a, valor_acordado: a.valor_acordado == null ? null : num(a.valor_acordado) })),
     costos: costos.map((c) => ({ ...c, monto: num(c.monto) })).sort((a, b) => b.fecha.localeCompare(a.fecha) || b.id - a.id),
     jornales: jornales.map((j) => ({ ...j, jornada: num(j.jornada), horas: j.horas == null ? null : num(j.horas) })),
