@@ -132,7 +132,7 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
     const cuentas = cuentasPorObra(obras, presupuestos, adicionales, pagos)
     // Solo cuentan las obras con presupuesto aceptado (misma regla que la pantalla Obras).
     const vigentes = obras.filter((o) => cuentas[o.id])
-    const activas = vigentes.filter((o) => (o.estado ?? 'en_proceso') === 'en_proceso')
+    const activas = vigentes.filter((o) => (o.estado ?? 'en_proceso') === 'en_proceso' && num(o.porcentaje_avance) < 100)
     const enObservacion = vigentes.filter((o) => o.estado === 'observacion')
 
     const deudas = vigentes.map((o) => {

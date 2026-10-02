@@ -58,8 +58,8 @@ export function cuentasPorObra(
     const suyos = presupuestos.filter((p) => p.obra_id === o.id)
     const v = valoresObra(suyos, adicionales.filter((a) => a.obra_id === o.id))
     if (v.totalOriginal <= 0 && !suyos.some((p) => p.estado === 'aceptado' && p.activo !== false)) continue
-    const terminada = obraTerminada(o.estado)
     const avance = avanceEfectivo(o.estado, o.porcentaje_avance)
+    const terminada = obraTerminada(o.estado) || avance >= 100
     salida[o.id] = { ...cuentaObra(v.valorProgresivo, v.gastoExtraPendiente, cobrado[o.id] || 0, avance, terminada, v.totalOriginal), valor: v.valorProgresivo, extras: v.gastoExtraPendiente, terminada, avance }
   }
   return salida
