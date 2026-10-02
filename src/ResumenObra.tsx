@@ -35,7 +35,7 @@ type Props = {
   // Presupuesto aceptado de la obra (tarjeta con totales y accesos al documento).
   presupuesto?: { id: number; titulo: string } | null
   onVerDocumento?: () => void
-  onVerPresupuesto?: () => void
+  onEditarPresupuesto?: () => void
 }
 
 // Una persona del equipo, con los mismos números que la sección Personal.
@@ -155,7 +155,7 @@ function Tarjeta({ icono, titulo, onClick, children }: { icono: string; titulo: 
   </button>
 }
 
-export default function ResumenObra({ obraId, estado, avance, avances, cargandoAvances, tienePresupuesto, cuenta, cargandoCuenta, dinero, onIr, presupuesto, onVerDocumento, onVerPresupuesto }: Props) {
+export default function ResumenObra({ obraId, estado, avance, avances, cargandoAvances, tienePresupuesto, cuenta, cargandoCuenta, dinero, onIr, presupuesto, onVerDocumento, onEditarPresupuesto }: Props) {
   const [datos, setDatos] = useState<Datos | null>(null)
 
   useEffect(() => {
@@ -199,8 +199,8 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
         <div className="orPresuTotal"><span>TOTAL ACTUALIZADO</span><span>{dinero(cuenta.totalActualizado)}</span></div>
       </> : <small>Cargando…</small>}
       <div className="orPresuBtns">
-        {onVerDocumento && <button type="button" className="editButton" onClick={onVerDocumento}>👁️ Ver documento</button>}
-        {onVerPresupuesto && <button type="button" className="editButton" onClick={onVerPresupuesto}>📄 Abrir presupuesto</button>}
+        {onVerDocumento && <button type="button" className="editButton" onClick={onVerDocumento}>📄 Documento del cliente</button>}
+        {onEditarPresupuesto && <button type="button" className="editButton" onClick={onEditarPresupuesto}>✏️ Editar presupuesto</button>}
       </div>
     </div>}
     <div className={`orPend ${listo && alertas === 0 ? 'ok' : ''}`}>

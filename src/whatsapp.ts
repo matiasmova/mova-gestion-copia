@@ -33,3 +33,7 @@ export function mensajeSeguimientoPresupuesto(o: { cliente: string; titulo: stri
     ? `${base} Ya pasó su validez, pero si te interesa lo actualizamos sin problema.`
     : `${base} Si tenés alguna duda o querés ajustar algo, lo vemos. ¡Quedo atento!`
 }
+
+export function mensajeEstadoObra(o: { cliente: string; obra: string; codigo: string }) {
+  return `¡Hola ${primerNombre(o.cliente)}! Te escribo de ${empresa()}. Te comparto el presupuesto y estado actualizado de tu obra "${o.obra}" (${o.codigo}): ahí ves los avances, los pagos y lo que queda pendiente. Cualquier duda, avisame. ¡Gracias!`
+}

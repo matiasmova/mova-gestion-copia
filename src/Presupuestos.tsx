@@ -318,7 +318,11 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
     await cargarDatos()
   }
 
-  const abrirFicha = (p: PresupuestoCompleto) => setFicha(p)
+  // Un presupuesto aceptado con obra se maneja desde la obra (un solo lugar).
+  const abrirFicha = (p: PresupuestoCompleto) => {
+    if (p.estado === 'aceptado' && p.obra_id != null && onAbrirObra) onAbrirObra(p.obra_id)
+    else setFicha(p)
+  }
 
   return (
     <div className="gestionPage">
