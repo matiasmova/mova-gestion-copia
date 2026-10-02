@@ -1,12 +1,12 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import logo from './assets/mova-logo.jpg'
 import { moneda, fechaCorta } from './gestionFormat'
 import { configActual, lineaContacto, textoCondicion } from './config'
 import { textoMedios } from './formasPago'
 import { COLOR_MARCA_HEX, agruparPorTipo, completarDatosDocumento, lineasRecomendaciones, type DatosPdf } from './pdfPresupuesto'
-import { formatoPct, importeNeto, partirDescripcion, pctItem } from './presupuestoCalculos'
+import { formatoPct, importeBruto, importeNeto, partirDescripcion, pctItem } from './presupuestoCalculos'
 import { antesYAhora, etiquetaModificacion } from './presupuestoModificaciones'
-import { mensajeEstado, PCT_ANTICIPO, totalAPagarHoy, type EstadoPresupuesto } from './estadoObra'
+import { mensajeEstado, PCT_ANTICIPO, totalAPagarHoy, type EstadoPresupuesto, type PasoLinea } from './estadoObra'
 import { codigoPresupuesto } from './codigoPresupuesto'
 import { supabase } from './supabase'
 
@@ -20,44 +20,94 @@ type Props = {
   archivoUrl?: string
 }
 
+// Paleta (igual que el PDF)
 const NARANJA = COLOR_MARCA_HEX
-const NARANJA_SUAVE = '#FFF6EC'
-const OSCURO = '#101318'
-const TEXTO = '#333a45'
-const GRIS = '#78828f'
-const GRIS_CLARO = '#F6F7F9'
-const LINEA = '#E6E8EC'
-const VERDE = '#23764e'
-const VERDE_SUAVE = '#ECF6F1'
+const NARANJA_SUAVE = '#FFEEDD'
+const NARANJA_OSC = '#A85008'
+const AVISO_FONDO = '#FFF6EC'
+const AVISO_BORDE = '#F6D6B3'
+const OSCURO = '#14181E'
+const TEXTO = '#5B6270'
+const GRIS = '#8A93A0'
+const LINEA = '#E8EAEE'
+const LINEA_SUAVE = '#F1F2F4'
+const VERDE = '#23764E'
+const VERDE_SUAVE = '#E8F5EE'
+const VERDE_CLARO = '#7FD1A3'
 
-const T_GRANDE = '22px'
-const T_NORMAL = '13.5px'
-const T_CHICO = '11px'
-
-const base: CSSProperties = { background: '#fff', color: TEXTO, fontFamily: 'Helvetica, Arial, sans-serif', fontSize: T_NORMAL, lineHeight: 1.45, minWidth: 0 }
+const base: CSSProperties = { background: '#fff', color: TEXTO, fontFamily: 'Helvetica, Arial, sans-serif', fontSize: '13.5px', lineHeight: 1.45, minWidth: 0 }
 const s: Record<string, CSSProperties> = {
-  documento: { ...base, border: `1px solid ${LINEA}`, borderRadius: '12px', padding: 'clamp(16px, 4vw, 40px)', marginTop: '20px' },
+  documento: { ...base, border: `1px solid ${LINEA}`, borderRadius: '14px', padding: 'clamp(16px, 4vw, 40px)', marginTop: '20px' },
   embebido: base,
-  etiqueta: { fontSize: T_CHICO, fontWeight: 700, letterSpacing: '0.6px', textTransform: 'uppercase', color: GRIS },
-  caja: { background: GRIS_CLARO, borderRadius: '6px', padding: '12px 14px', minWidth: 0 },
-  tablaWrap: { overflowX: 'auto', margin: '0 0 6px' },
-  tabla: { width: '100%', minWidth: '520px', borderCollapse: 'collapse', fontSize: T_NORMAL },
-  th: { background: GRIS_CLARO, color: GRIS, fontSize: T_CHICO, fontWeight: 700, letterSpacing: '0.6px', textTransform: 'uppercase', padding: '8px 10px', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: `1.5px solid ${NARANJA}` },
-  td: { padding: '9px 10px', borderBottom: `1px solid ${LINEA}`, verticalAlign: 'top' },
-  num: { textAlign: 'right', whiteSpace: 'nowrap' },
-  filaTotal: { display: 'flex', justifyContent: 'space-between', gap: '12px', padding: '3px 12px' },
+  et: { fontSize: '10px', fontWeight: 700, letterSpacing: '1.3px', textTransform: 'uppercase', color: GRIS },
+  tarjeta: { border: `1px solid ${LINEA}`, borderRadius: '11px', padding: '11px 13px', minWidth: 0, background: '#fff' },
+  fila: { display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '11px 2px', borderBottom: `1px solid ${LINEA_SUAVE}` },
+  chico: { fontSize: '12px', color: GRIS },
 }
 
-function TituloSeccion({ texto }: { texto: string }) {
-  return <h4 style={{ borderLeft: `3px solid ${NARANJA}`, paddingLeft: '10px', margin: '0 0 12px', fontSize: T_NORMAL, fontWeight: 700, letterSpacing: '0.4px', textTransform: 'uppercase', color: OSCURO }}>{texto}</h4>
+function Seccion({ texto, children, mt = 28 }: { texto: string; children: ReactNode; mt?: number }) {
+  return (
+    <section style={{ marginTop: `${mt}px` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '0 0 10px' }}>
+        <span style={{ fontSize: '11.5px', fontWeight: 700, letterSpacing: '1.6px', textTransform: 'uppercase', color: OSCURO, whiteSpace: 'nowrap' }}>{texto}</span>
+        <span style={{ flex: 1, height: '1px', background: LINEA }} />
+      </div>
+      {children}
+    </section>
+  )
 }
 
-function Tilde({ estado }: { estado: 'ok' | 'pendiente' | 'futuro' }) {
+function Icono({ estado, tam = 22 }: { estado: 'ok' | 'pendiente' | 'futuro'; tam?: number }) {
   const fondo = estado === 'ok' ? VERDE : estado === 'pendiente' ? NARANJA : '#fff'
   return (
-    <span style={{ flex: '0 0 22px', width: '22px', height: '22px', borderRadius: '50%', background: fondo, border: estado === 'futuro' ? `1.5px solid ${GRIS}` : 'none', color: '#fff', display: 'grid', placeItems: 'center', fontSize: T_CHICO, fontWeight: 700, position: 'relative', zIndex: 1 }}>
+    <span style={{ flex: `0 0 ${tam}px`, width: `${tam}px`, height: `${tam}px`, borderRadius: '50%', background: fondo, border: estado === 'futuro' ? '1.6px solid #C4C9D1' : 'none', boxSizing: 'border-box', color: '#fff', display: 'grid', placeItems: 'center', fontSize: `${Math.round(tam / 2)}px`, fontWeight: 800, position: 'relative', zIndex: 1 }}>
       {estado === 'ok' ? '✓' : estado === 'pendiente' ? '!' : ''}
     </span>
+  )
+}
+
+function Insignia({ n }: { n: number }) {
+  return <span style={{ flex: '0 0 24px', width: '24px', height: '24px', borderRadius: '7px', background: NARANJA_SUAVE, color: NARANJA_OSC, fontWeight: 700, fontSize: '11px', display: 'grid', placeItems: 'center' }}>{String(n).padStart(2, '0')}</span>
+}
+
+// Tres tarjetas de cifras; la destacada va llena (naranja, o verde si está al día).
+function Tarjetas({ cifras }: { cifras: { e: string; v: string; s?: string; destacada?: 'naranja' | 'verde'; color?: string }[] }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px' }}>
+      {cifras.map((c) => {
+        const fondo = c.destacada === 'naranja' ? NARANJA : c.destacada === 'verde' ? VERDE : undefined
+        return (
+          <div key={c.e} style={{ ...s.tarjeta, borderRadius: '13px', padding: '12px 14px', ...(fondo ? { background: fondo, borderColor: fondo } : {}) }}>
+            <div style={{ ...s.et, color: fondo ? '#fff' : GRIS }}>{c.e}</div>
+            <strong style={{ display: 'block', fontSize: 'clamp(18px, 5vw, 21px)', color: fondo ? '#fff' : c.color ?? OSCURO, marginTop: '4px', whiteSpace: 'nowrap' }}>{c.v}</strong>
+            {c.s && <div style={{ fontSize: '11.5px', color: fondo ? '#fff' : GRIS, opacity: fondo ? 0.92 : 1, marginTop: '2px' }}>{c.s}</div>}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function Barra({ pct, color = NARANJA }: { pct: number; color?: string }) {
+  return (
+    <div style={{ flex: 1, minWidth: '60px', height: '6px', borderRadius: '9px', background: '#EEF0F3', overflow: 'hidden' }}>
+      <div style={{ width: `${Math.max(0, Math.min(100, pct))}%`, height: '100%', background: color, borderRadius: '9px' }} />
+    </div>
+  )
+}
+
+// Caja negra de totales.
+function CajaNegra({ filas, etiqueta, total }: { filas: { t: string; v: string; verde?: boolean }[]; etiqueta: string; total: string }) {
+  return (
+    <div style={{ background: OSCURO, color: '#fff', borderRadius: '13px', padding: '14px 18px', minWidth: 0 }}>
+      {filas.map((f) => (
+        <div key={f.t} style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', fontSize: '12.5px', color: f.verde ? VERDE_CLARO : '#C9CED6', padding: '2px 0' }}><span>{f.t}</span><span style={{ whiteSpace: 'nowrap' }}>{f.v}</span></div>
+      ))}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '12px', ...(filas.length ? { borderTop: '1px solid #39404B', marginTop: '8px', paddingTop: '10px' } : {}) }}>
+        <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '1.6px' }}>{etiqueta}</span>
+        <strong style={{ fontSize: 'clamp(19px, 5.4vw, 23px)', whiteSpace: 'nowrap' }}>{total}</strong>
+      </div>
+    </div>
   )
 }
 
@@ -69,148 +119,103 @@ async function verComprobante(ruta: string) {
 }
 
 const conSigno = (n: number) => (n < 0 ? `− ${moneda(Math.abs(n))}` : `+ ${moneda(n)}`)
+const diaMes = (f: string) => fechaCorta(f).replace(/\/\d{4}$/, '')
 
-function CajaTotales({ filas, total, etiquetaTotal }: { filas: { t: string; v: string; color?: string }[]; total: number; etiquetaTotal: string }) {
+// Franja destacada: los pasos de pago unidos de izquierda a derecha.
+function FranjaLinea({ e }: { e: EstadoPresupuesto }) {
+  const pasos: PasoLinea[] = e.linea.length > 6 ? [e.linea[0], ...e.linea.slice(-5)] : e.linea
+  const color = (p: PasoLinea) => (p.estado === 'ok' ? VERDE : p.estado === 'pendiente' ? NARANJA : '#DADDE2')
+  const pct = e.totalActualizado > 0 ? Math.min(100, (e.cobrado / e.totalActualizado) * 100) : 0
   return (
-    <div style={{ marginLeft: 'auto', width: 'min(330px, 100%)', marginTop: '12px' }}>
-      {filas.map((f) => (
-        <div key={f.t} style={{ ...s.filaTotal, color: f.color ?? GRIS }}><span>{f.t}</span><span style={{ whiteSpace: 'nowrap', color: f.color ?? TEXTO }}>{f.v}</span></div>
-      ))}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', background: NARANJA_SUAVE, borderLeft: `3px solid ${NARANJA}`, borderRadius: '0 6px 6px 0', padding: '10px 14px', marginTop: '8px' }}>
-        <span style={{ fontSize: T_CHICO, fontWeight: 700, letterSpacing: '0.8px', color: NARANJA }}>{etiquetaTotal}</span>
-        <strong style={{ fontSize: 'clamp(17px, 5.2vw, 22px)', color: OSCURO, whiteSpace: 'nowrap' }}>{moneda(total)}</strong>
+    <div style={{ background: AVISO_FONDO, border: `1px solid ${AVISO_BORDE}`, borderRadius: '14px', padding: '16px 10px 12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${pasos.length}, minmax(0, 1fr))` }}>
+        {pasos.map((p, i) => (
+          <div key={`${p.tipo}-${i}`} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '0 3px' }}>
+            {i > 0 && <span style={{ position: 'absolute', top: '11px', right: '50%', width: '100%', height: '3px', background: p.estado === 'futuro' ? '#DADDE2' : color(p) }} />}
+            <span style={{ background: '#fff', borderRadius: '50%', padding: '2px', position: 'relative', zIndex: 1, margin: '-2px 0 0' }}><Icono estado={p.estado} tam={22} /></span>
+            <strong style={{ color: OSCURO, fontSize: '12px', marginTop: '8px', lineHeight: 1.2 }}>{p.tipo === 'anticipo' ? `Anticipo ${PCT_ANTICIPO}%` : p.tipo === 'final' ? (e.terminada ? 'Obra finalizada' : 'Al finalizar') : `Avance ${p.porcentaje ?? 0}%`}</strong>
+            <span style={{ fontSize: '10.5px', color: GRIS }}>{p.tipo === 'avance' && p.fecha ? diaMes(p.fecha) : p.tipo === 'anticipo' ? 'Al confirmar' : e.terminada ? '' : 'Saldo final'}</span>
+            <strong style={{ color: OSCURO, fontSize: '11.5px', marginTop: '3px', overflowWrap: 'anywhere' }}>{p.tipo === 'anticipo' ? moneda(p.importe) : `+ ${moneda(p.importe)}`}</strong>
+            <span style={{ fontSize: '10.5px', fontWeight: 700, color: p.estado === 'ok' ? VERDE : p.estado === 'futuro' ? GRIS : NARANJA_OSC, overflowWrap: 'anywhere' }}>{p.estado === 'ok' ? (p.tipo === 'anticipo' ? 'Pagado' : 'Al día') : p.estado === 'futuro' ? 'Pendiente' : `Falta ${moneda(p.falta)}`}</span>
+          </div>
+        ))}
       </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginTop: '14px', padding: '0 4px', fontSize: '12px', fontWeight: 700 }}>
+        <span style={{ color: OSCURO }}>Pagado {moneda(e.cobrado)} de {moneda(e.totalActualizado)}</span>
+        <Barra pct={pct} color={VERDE} />
+        <span style={{ color: e.pendienteHoy > 0.5 ? NARANJA_OSC : VERDE }}>{e.pendienteHoy > 0.5 ? `A pagar hoy (obra): ${moneda(e.pendienteHoy)}` : 'Obra al día'}</span>
+      </div>
+      {e.linea.length > pasos.length && <div style={{ ...s.chico, fontSize: '10.5px', padding: '4px 4px 0' }}>Se muestran el anticipo y los últimos {pasos.length - 1} avances; el detalle completo está abajo.</div>}
     </div>
   )
 }
 
-function EstadoObra({ e }: { e: EstadoPresupuesto }) {
+function EstadoCuenta({ e }: { e: EstadoPresupuesto }) {
   const msg = mensajeEstado(e, moneda)
-  const total = Math.max(e.totalActualizado, 1)
-  const pct = (n: number) => `${Math.min(100, Math.max(0, (n / total) * 100))}%`
-  return (
-    <section style={{ margin: '0 0 30px' }}>
-      <TituloSeccion texto="Estado de tu obra" />
-      <div style={{ ...s.caja, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
-        <div><div style={s.etiqueta}>Total de la obra</div><strong style={{ fontSize: T_GRANDE, color: OSCURO }}>{moneda(e.totalActualizado)}</strong></div>
-        <div><div style={s.etiqueta}>Ya pagaste</div><strong style={{ fontSize: T_GRANDE, color: VERDE }}>{moneda(e.cobrado)}</strong></div>
-        <div><div style={s.etiqueta}>{e.gastoExtraPendiente > 0.5 ? 'Pendiente de la obra' : 'Pendiente a hoy'}</div><strong style={{ fontSize: T_GRANDE, color: e.pendienteHoy > 0.5 ? NARANJA : VERDE }}>{moneda(e.pendienteHoy)}</strong></div>
-        {e.gastoExtraPendiente > 0.5 && <div><div style={s.etiqueta}>Gastos a reintegrar</div><strong style={{ fontSize: T_GRANDE, color: NARANJA }}>{moneda(e.gastoExtraPendiente)}</strong></div>}
+  const hoy = totalAPagarHoy(e)
+  const nPend = e.gastosExtra.filter((g) => !g.devuelto).length
+  const ok = msg.tono === 'ok'
+  return <>
+    <Seccion texto="Estado de cuenta">
+      <Tarjetas cifras={[
+        { e: 'Pendiente de la obra', v: moneda(e.pendienteHoy), s: `Según el avance (${e.avance}%)`, color: e.pendienteHoy > 0.5 ? OSCURO : VERDE },
+        { e: 'Gastos a reintegrar', v: moneda(e.gastoExtraPendiente), s: nPend ? `${nPend} ${nPend === 1 ? 'gasto pendiente' : 'gastos pendientes'}` : 'Sin gastos pendientes' },
+        hoy > 0.5
+          ? { e: 'Total a pagar hoy', v: moneda(hoy), s: e.gastoExtraPendiente > 0.5 ? 'Obra + gastos' : 'Según el avance', destacada: 'naranja' }
+          : { e: 'Total a pagar hoy', v: moneda(0), s: 'Estás al día', destacada: 'verde' },
+      ]} />
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', background: ok ? VERDE_SUAVE : AVISO_FONDO, border: `1px solid ${ok ? '#C7E3D4' : AVISO_BORDE}`, borderRadius: '11px', padding: '11px 13px', marginTop: '12px', color: ok ? VERDE : '#7A4A07' }}>
+        <Icono estado={ok ? 'ok' : 'pendiente'} tam={20} />
+        <div><strong style={{ color: ok ? VERDE : NARANJA_OSC }}>{msg.titulo}.</strong> {msg.detalle}</div>
       </div>
-      {/* Total que el cliente tiene que pagar hoy: obra + gastos que todavía no devolvió */}
-      {e.gastoExtraPendiente > 0.5 && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap', background: NARANJA_SUAVE, borderLeft: `3px solid ${NARANJA}`, borderRadius: '0 6px 6px 0', padding: '10px 14px', marginTop: '10px' }}>
-          <div>
-            <div style={{ fontSize: T_CHICO, fontWeight: 700, letterSpacing: '0.8px', color: NARANJA }}>TOTAL A PAGAR HOY</div>
-            <div style={{ fontSize: T_CHICO, color: GRIS }}>Obra {moneda(Math.max(0, e.pendienteHoy))} + gastos a reintegrar {moneda(e.gastoExtraPendiente)}</div>
+    </Seccion>
+
+    <Seccion texto="Línea de tiempo de pagos">
+      <FranjaLinea e={e} />
+      <div style={{ ...s.et, margin: '16px 0 2px' }}>Detalle</div>
+      {e.linea.map((p, i) => (
+        <div key={`${p.tipo}-${i}`} style={s.fila}>
+          <Icono estado={p.estado} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <strong style={{ color: OSCURO }}>{p.fecha && p.tipo !== 'anticipo' ? `${diaMes(p.fecha)} · ` : ''}{p.titulo}{p.tipo === 'avance' && p.porcentaje != null ? ` · ${p.porcentaje}%` : ''}</strong>
+            {p.detalle && <div style={s.chico}>{p.detalle}</div>}
+            {p.tipo !== 'anticipo' && <div style={s.chico}>A pagar hasta acá: {moneda(p.acumulado)}</div>}
           </div>
-          <strong style={{ fontSize: 'clamp(17px, 5.2vw, 22px)', color: OSCURO, whiteSpace: 'nowrap' }}>{moneda(totalAPagarHoy(e))}</strong>
+          <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+            <strong style={{ color: OSCURO }}>{p.tipo === 'anticipo' ? moneda(p.importe) : `+ ${moneda(p.importe)}`}</strong>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: p.estado === 'ok' ? VERDE : p.estado === 'futuro' ? GRIS : NARANJA_OSC }}>
+              {p.estado === 'ok' ? (p.tipo === 'anticipo' ? 'Recibido' : 'Al día') : p.estado === 'futuro' ? 'Al finalizar' : `Falta ${moneda(p.falta)}`}
+            </div>
+          </div>
         </div>
-      )}
+      ))}
+    </Seccion>
 
-      {/* Avance de la obra: "Hoy vamos por acá" según el último informe */}
-      <div style={{ margin: '20px 0 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span style={s.etiqueta}>Avance de la obra</span>
-        <strong style={{ color: NARANJA }}>{e.avance}%</strong>
-      </div>
-      <div style={{ position: 'relative', paddingTop: '30px' }}>
-        <div style={{ position: 'absolute', top: 0, left: `clamp(62px, ${e.avance}%, calc(100% - 62px))`, transform: 'translateX(-50%)', background: NARANJA, color: '#fff', fontSize: T_CHICO, fontWeight: 700, padding: '3px 9px', borderRadius: '999px', whiteSpace: 'nowrap', boxShadow: '0 4px 12px -4px rgba(228,123,0,0.6)' }}>
-          📍 Hoy vamos por acá
-        </div>
-        <span style={{ position: 'absolute', top: '21px', left: `${e.avance}%`, transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: `6px solid ${NARANJA}` }} />
-        <div style={{ height: '10px', background: '#EEF0F3', borderRadius: '999px', overflow: 'hidden' }}>
-          <div style={{ width: `${e.avance}%`, height: '100%', background: `linear-gradient(90deg, #FFB547, ${NARANJA})`, borderRadius: '999px' }} />
-        </div>
-      </div>
-      <div style={{ fontSize: T_CHICO, color: GRIS, marginTop: '6px' }}>
-        {e.avances.length ? `Último informe: ${fechaCorta(e.avances[e.avances.length - 1].fecha)} · ${e.avances[e.avances.length - 1].titulo}` : 'Todavía no hay informes de avance cargados.'}
-      </div>
-
-      {/* Pagos: pagado (verde) vs. lo que corresponde a hoy, con el anticipo marcado */}
-      <div style={{ margin: '18px 0 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap' }}>
-        <span style={s.etiqueta}>Pagos</span>
-        <strong style={{ color: VERDE, fontSize: T_CHICO }}>
-          {e.cobrado > total + 0.5 ? `Pagado 100% · saldo a favor ${moneda(e.cobrado - total)}` : `Pagado ${Math.round((e.cobrado / total) * 100)}% del total`}
-        </strong>
-      </div>
-      <div style={{ position: 'relative' }}>
-        <div style={{ height: '10px', background: '#EEF0F3', borderRadius: '999px', overflow: 'hidden' }}>
-          <div style={{ width: pct(e.cobrado), height: '100%', background: VERDE, borderRadius: '999px' }} />
-        </div>
-        <span style={{ position: 'absolute', left: pct(e.anticipo), top: '-4px', width: '3px', height: '18px', background: NARANJA, borderRadius: '2px', transform: 'translateX(-50%)' }} />
-        <span style={{ position: 'absolute', left: pct(e.corresponde), top: '-4px', width: '3px', height: '18px', background: OSCURO, borderRadius: '2px', transform: 'translateX(-50%)' }} />
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', fontSize: T_CHICO, marginTop: '8px' }}>
-        <span><span style={{ display: 'inline-block', width: '9px', height: '9px', background: NARANJA, borderRadius: '2px', marginRight: '6px' }} />Anticipo ({PCT_ANTICIPO}%): {moneda(e.anticipo)}</span>
-        <strong style={{ color: OSCURO }}><span style={{ display: 'inline-block', width: '9px', height: '9px', background: OSCURO, borderRadius: '2px', marginRight: '6px' }} />A pagar a hoy: {moneda(e.corresponde)}</strong>
-      </div>
-
-      <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', background: msg.tono === 'ok' ? VERDE_SUAVE : NARANJA_SUAVE, borderLeft: `3px solid ${msg.tono === 'ok' ? VERDE : NARANJA}`, borderRadius: '0 6px 6px 0', padding: '10px 14px', margin: '14px 0 22px' }}>
-        <Tilde estado={msg.tono === 'ok' ? 'ok' : 'pendiente'} />
-        <div><strong style={{ color: msg.tono === 'ok' ? VERDE : NARANJA }}>{msg.titulo}</strong><div>{msg.detalle}</div></div>
-      </div>
-
-      <TituloSeccion texto="Línea de tiempo de pagos y avances" />
-      <div style={{ position: 'relative' }}>
-        {e.linea.map((p, i) => (
-          <div key={`${p.tipo}-${i}`} style={{ position: 'relative', display: 'flex', gap: '12px', padding: '0 0 16px' }}>
-            {i < e.linea.length - 1 && <span style={{ position: 'absolute', left: '10px', top: '22px', bottom: 0, width: '2px', background: LINEA }} />}
-            <Tilde estado={p.estado} />
+    {e.gastosExtra.length > 0 && (
+      <Seccion texto="Gastos a reintegrar">
+        <p style={{ ...s.chico, margin: '0 0 4px' }}>Materiales que compramos para tu obra y nos devolvés aparte del presupuesto. Los pendientes se suman al total a pagar; los ya reintegrados, no.</p>
+        {e.gastosExtra.map((g) => (
+          <div key={g.id} style={{ ...s.fila, alignItems: 'center' }}>
+            <Icono estado={g.devuelto ? 'ok' : 'pendiente'} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <strong style={{ color: OSCURO }}>{p.fecha && p.tipo !== 'anticipo' ? `${fechaCorta(p.fecha)} · ` : ''}{p.titulo}{p.tipo === 'avance' && p.porcentaje != null ? ` · ${p.porcentaje}%` : ''}</strong>
-              {p.detalle && <div style={{ color: GRIS, fontSize: T_CHICO }}>{p.detalle}</div>}
-              {p.tipo !== 'anticipo' && <div style={{ color: GRIS, fontSize: T_CHICO }}>A pagar hasta acá: {moneda(p.acumulado)}</div>}
+              <strong style={{ color: OSCURO, overflowWrap: 'anywhere' }}>{g.descripcion}</strong>
+              <div style={s.chico}>{fechaCorta(g.fecha)}</div>
+              {g.comprobante && <button type="button" onClick={() => void verComprobante(g.comprobante!)} style={{ marginTop: '4px', border: 0, background: NARANJA, color: '#fff', borderRadius: '6px', padding: '4px 9px', fontSize: '11.5px', fontWeight: 700, cursor: 'pointer' }}>⬇ Ver comprobante</button>}
             </div>
             <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-              <strong style={{ color: OSCURO }}>{p.tipo === 'anticipo' ? moneda(p.importe) : `+ ${moneda(p.importe)}`}</strong>
-              <div style={{ fontSize: T_CHICO, fontWeight: 700, color: p.estado === 'ok' ? VERDE : p.estado === 'futuro' ? GRIS : NARANJA }}>
-                {p.estado === 'ok' ? (p.tipo === 'anticipo' ? 'Recibido' : 'Al día') : p.estado === 'futuro' ? 'Al finalizar' : `Falta ${moneda(p.falta)}`}
-              </div>
+              <strong style={{ color: OSCURO }}>{moneda(g.importe)}</strong>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: g.devuelto ? VERDE : NARANJA_OSC }}>{g.devuelto ? 'Reintegrado' : 'Pendiente'}</div>
+              <div style={{ ...s.chico, fontSize: '11px' }}>{g.devuelto ? 'no suma' : 'suma al total'}</div>
             </div>
           </div>
         ))}
-      </div>
-
-      {e.gastosExtra.length > 0 && (
-        <div style={{ marginTop: '10px' }}>
-          <TituloSeccion texto="Gastos a reintegrar" />
-          <p style={{ color: GRIS, fontSize: T_CHICO, margin: '0 0 6px' }}>Materiales y gastos que compramos para tu obra y nos devolvés aparte del presupuesto. Los pendientes se suman al total a pagar; los ya reintegrados, no.</p>
-          {e.gastosExtra.map((g) => (
-            <div key={g.id} style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '6px 0', borderBottom: `1px solid ${LINEA}` }}>
-              <Tilde estado={g.devuelto ? 'ok' : 'pendiente'} />
-              <span style={{ flex: 1, minWidth: 0 }}>{fechaCorta(g.fecha)} · {g.descripcion}
-                {g.comprobante && <button type="button" onClick={() => void verComprobante(g.comprobante!)} style={{ display: 'block', border: 0, background: 'none', padding: '2px 0 0', color: NARANJA, fontSize: T_CHICO, fontWeight: 700, cursor: 'pointer' }}>📎 Ver comprobante</button>}
-              </span>
-              <strong style={{ whiteSpace: 'nowrap' }}>{moneda(g.importe)}</strong>
-              <span style={{ width: '96px', textAlign: 'right', fontSize: T_CHICO, fontWeight: 700, color: g.devuelto ? VERDE : NARANJA, lineHeight: 1.25 }}>{g.devuelto ? '✓ Reintegrado' : <>Pendiente<br /><span style={{ fontWeight: 400 }}>suma al total</span></>}</span>
-            </div>
-          ))}
-          {e.gastoExtraPendiente > 0.5 && <div style={{ marginTop: '6px', fontWeight: 700, color: NARANJA }}>Pendiente de reintegro: {moneda(e.gastoExtraPendiente)} (incluido en el total a pagar)</div>}
-        </div>
-      )}
-    </section>
-  )
+        {e.gastoExtraPendiente > 0.5 && <div style={{ textAlign: 'right', marginTop: '8px', fontWeight: 700, color: NARANJA_OSC }}>Pendiente de reintegro {moneda(e.gastoExtraPendiente)}</div>}
+      </Seccion>
+    )}
+  </>
 }
-
-// En pantallas angostas (celular) las tablas se muestran como lista, para que
-// no se corten los montos a la derecha.
-function useAngosto() {
-  const consulta = '(max-width: 640px)'
-  const [angosto, setAngosto] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.(consulta).matches)
-  useEffect(() => {
-    const mq = window.matchMedia?.(consulta)
-    if (!mq) return
-    const cambio = () => setAngosto(mq.matches)
-    mq.addEventListener?.('change', cambio)
-    return () => mq.removeEventListener?.('change', cambio)
-  }, [])
-  return angosto
-}
-
-const fila: CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', padding: '10px 0', borderBottom: `1px solid ${LINEA}` }
 
 export default function DocumentoPresupuesto({ datos, embebido = false }: Props) {
-  const angosto = useAngosto()
   const [completos, setCompletos] = useState<DatosPdf | null>(null)
   const [error, setError] = useState('')
 
@@ -235,268 +240,208 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
   const notas = (d.notas ?? '').trim()
   const recos = lineasRecomendaciones(d.recomendaciones)
   const hayObra = !!d.obra && d.obra !== 'Sin obra asociada'
-  const hayDescuento = d.items.some((it) => pctItem(it) > 0)
   const sumaNeta = d.items.reduce((acc, it) => acc + importeNeto(it), 0)
-  const bonificacion = Math.round((sumaNeta - Number(d.total)) * 100) / 100
-  const columnas = hayDescuento ? 6 : 5
+  const sumaBruta = d.items.reduce((acc, it) => acc + importeBruto(it), 0)
+  const ahorro = Math.round((sumaBruta - Number(d.total)) * 100) / 100
+  const validez = d.validez_dias ?? configActual().presupuestos.validezDias
+  const venceEl = fechaCorta(new Date(new Date(`${d.fecha.slice(0, 10)}T12:00:00`).getTime() + validez * 86400000).toISOString().slice(0, 10))
+  const aPagarHoy = e ? totalAPagarHoy(e) : 0
+  const condiciones = configActual().presupuestos.condiciones.filter((c) => c.titulo.trim() || c.texto.trim())
   let numero = 0
+
+  const partes = [
+    { e: 'Cliente', n: d.cliente, l: [contacto?.telefono ? `Tel. ${contacto.telefono}` : null, contacto?.email ?? null, contacto?.documento ? `${contacto.documento.etiqueta}: ${contacto.documento.valor}` : null, contacto?.direccionCliente ?? null] },
+    { e: hayObra ? 'Obra' : 'Presupuesto', n: hayObra ? d.obra : codigo, l: [hayObra ? (contacto?.direccionObra || contacto?.direccionCliente || null) : null, e ? (e.terminada ? 'Obra finalizada' : e.enObra ? `En obra · avance ${e.avance}%` : 'Presupuesto aceptado') : `Válido hasta el ${venceEl}`] },
+    { e: 'Condiciones', n: `Seña ${PCT_ANTICIPO}%`, l: ['Saldo al finalizar', `Validez ${validez} ${validez === 1 ? 'día' : 'días'}`] },
+  ]
 
   return (
     <div style={embebido ? s.embebido : s.documento}>
       {/* Encabezado */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap' }}>
-        <img src={logo} alt="MOVA Tecnología Smart" style={{ width: '170px', maxWidth: '100%', height: 'auto', objectFit: 'contain' }} />
+        <img src={logo} alt="MOVA Tecnología Smart" style={{ width: '160px', maxWidth: '100%', height: 'auto', objectFit: 'contain' }} />
         <div style={{ textAlign: 'right', marginLeft: 'auto' }}>
-          <div style={{ color: NARANJA, fontWeight: 700, fontSize: T_CHICO, letterSpacing: '0.8px' }}>{e ? 'PRESUPUESTO Y ESTADO DE OBRA' : 'PRESUPUESTO'}</div>
-          <div style={{ color: OSCURO, fontWeight: 700, fontSize: T_GRANDE, lineHeight: 1.2, margin: '2px 0' }}>{codigo}</div>
-          <div style={{ color: GRIS, fontSize: T_CHICO }}>Fecha: {fechaCorta(d.fecha)}</div>
-          {e ? <div style={{ color: NARANJA, fontSize: T_CHICO, fontWeight: 700 }}>Última actualización: {fechaCorta(e.ultimaActualizacion)}</div>
-            : d.validez_dias ? <div style={{ color: GRIS, fontSize: T_CHICO }}>Validez: {d.validez_dias} {d.validez_dias === 1 ? 'día' : 'días'}</div> : null}
+          <div style={{ color: NARANJA, fontWeight: 700, fontSize: '10px', letterSpacing: '1.8px' }}>{e ? 'PRESUPUESTO Y ESTADO DE OBRA' : 'PRESUPUESTO'}</div>
+          <div style={{ color: OSCURO, fontWeight: 700, fontSize: '23px', lineHeight: 1.2, margin: '2px 0' }}>{codigo}</div>
+          <div style={s.chico}>Emitido {fechaCorta(d.fecha)} · {e ? `Actualizado ${fechaCorta(e.ultimaActualizacion)}` : `Válido hasta ${venceEl}`}</div>
         </div>
       </div>
-      <div style={{ position: 'relative', height: '1px', background: LINEA, margin: '16px 0 20px' }}>
-        <span style={{ position: 'absolute', left: 0, top: '-1px', width: '70px', height: '2px', background: NARANJA }} />
-      </div>
+      <div style={{ height: '3px', borderRadius: '2px', background: `linear-gradient(90deg, ${NARANJA} 0 18%, #EEF0F3 18%)`, margin: '14px 0 18px' }} />
 
-      {/* Cliente y obra */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '22px' }}>
-        <div style={s.caja}>
-          <div style={s.etiqueta}>Cliente</div>
-          <strong style={{ color: OSCURO, overflowWrap: 'anywhere' }}>{d.cliente}</strong>
-          <div style={{ fontSize: T_CHICO, marginTop: '4px', lineHeight: 1.6 }}>
-            {contacto?.telefono && <div>Tel.: {contacto.telefono}</div>}
-            {contacto?.email && <div>Email: {contacto.email}</div>}
-            {contacto?.documento && <div>{contacto.documento.etiqueta}: {contacto.documento.valor}</div>}
-            {contacto?.direccionCliente && <div>Domicilio: {contacto.direccionCliente}</div>}
+      {/* Cliente / obra / condiciones */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px' }}>
+        {partes.map((p) => (
+          <div key={p.e} style={s.tarjeta}>
+            <div style={s.et}>{p.e}</div>
+            <strong style={{ display: 'block', color: OSCURO, fontSize: '14.5px', margin: '3px 0 2px', overflowWrap: 'anywhere' }}>{p.n}</strong>
+            {p.l.filter(Boolean).map((x) => <div key={x} style={{ fontSize: '12px', overflowWrap: 'anywhere' }}>{x}</div>)}
           </div>
-        </div>
-        <div style={s.caja}>
-          <div style={s.etiqueta}>{hayObra ? 'Obra' : 'Presupuesto'}</div>
-          <strong style={{ color: OSCURO, overflowWrap: 'anywhere' }}>{hayObra ? d.obra : codigo}</strong>
-          <div style={{ fontSize: T_CHICO, marginTop: '4px', lineHeight: 1.6 }}>
-            {hayObra && (contacto?.direccionObra || contacto?.direccionCliente) && <div>Ubicación: {contacto?.direccionObra || contacto?.direccionCliente}</div>}
-            {e && <div>Estado: {e.terminada ? 'Obra finalizada' : e.enObra ? `En obra · avance ${e.avance}%` : 'Presupuesto aceptado'}</div>}
-          </div>
-        </div>
+        ))}
       </div>
 
       {/* Título */}
-      <h3 style={{ fontSize: T_GRANDE, fontWeight: 700, color: OSCURO, margin: '0 0 6px', overflowWrap: 'anywhere' }}>{d.titulo}</h3>
-      {d.descripcion && <p style={{ color: GRIS, margin: '0 0 22px', whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>{d.descripcion}</p>}
+      <h3 style={{ fontSize: '22px', fontWeight: 700, color: OSCURO, margin: '22px 0 3px', overflowWrap: 'anywhere' }}>{d.titulo}</h3>
+      {d.descripcion && <p style={{ color: GRIS, margin: 0, whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>{d.descripcion}</p>}
+
+      {/* Cifras principales */}
+      <div style={{ marginTop: '16px' }}>
+        {e ? <>
+          <Tarjetas cifras={[
+            { e: 'Total de la obra', v: moneda(e.totalActualizado), s: e.modificaciones.length ? 'Con modificaciones' : 'Presupuesto aceptado' },
+            { e: 'Ya pagaste', v: moneda(e.cobrado), s: `${e.totalActualizado > 0 ? Math.round(Math.min(1, e.cobrado / e.totalActualizado) * 100) : 0}% del total`, color: e.cobrado > 0 ? VERDE : OSCURO },
+            aPagarHoy > 0.5
+              ? { e: 'A pagar hoy', v: moneda(aPagarHoy), s: e.gastoExtraPendiente > 0.5 ? 'Obra + gastos a reintegrar' : 'Según el avance de la obra', destacada: 'naranja' }
+              : { e: 'A pagar hoy', v: moneda(0), s: 'Estás al día', destacada: 'verde' },
+          ]} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', margin: '12px 0 0', fontSize: '12px' }}>
+            <span>Avance de la obra <strong style={{ color: OSCURO }}>{e.avance}%</strong></span>
+            <Barra pct={e.avance} />
+            <span style={{ color: GRIS }}>{e.avances.length ? `Último informe ${diaMes(e.avances[e.avances.length - 1].fecha)} · ${e.avances[e.avances.length - 1].titulo}` : 'Sin informes de avance todavía'}</span>
+          </div>
+        </> : (
+          <Tarjetas cifras={[
+            { e: 'Total del presupuesto', v: moneda(Number(d.total)), s: 'Precio final', destacada: 'naranja' },
+            { e: `Seña para confirmar (${PCT_ANTICIPO}%)`, v: moneda(Math.round(Number(d.total) * PCT_ANTICIPO) / 100), s: 'Reserva la fecha y los materiales' },
+            { e: 'Válido hasta', v: venceEl, s: `${validez} ${validez === 1 ? 'día' : 'días'} desde la emisión` },
+          ]} />
+        )}
+      </div>
 
       {/* Qué vas a disfrutar */}
       {soluciones.length > 0 && (
-        <section style={{ margin: '0 0 28px' }}>
-          <TituloSeccion texto="Qué vas a disfrutar con este proyecto" />
+        <Seccion texto="Qué vas a disfrutar">
           {soluciones.map((sol) => (
-            <div key={sol.titulo} style={{ display: 'flex', gap: '10px', border: `1px solid ${LINEA}`, borderLeft: `3px solid ${NARANJA}`, borderRadius: '0 8px 8px 0', padding: '12px 14px', marginBottom: '8px' }}>
-              <Tilde estado="ok" />
-              <div><strong style={{ color: OSCURO }}>{sol.titulo}</strong><div style={{ fontSize: T_CHICO, lineHeight: 1.55, whiteSpace: 'pre-line' }}>{sol.descripcion}</div></div>
+            <div key={sol.titulo} style={{ ...s.tarjeta, display: 'flex', gap: '10px', marginBottom: '8px' }}>
+              <Icono estado="ok" tam={20} />
+              <div><strong style={{ color: OSCURO }}>{sol.titulo}</strong><div style={{ fontSize: '12.5px', lineHeight: 1.55, whiteSpace: 'pre-line' }}>{sol.descripcion}</div></div>
             </div>
           ))}
-        </section>
+        </Seccion>
       )}
 
       {/* Ítems */}
-      <TituloSeccion texto={e ? 'Presupuesto aceptado' : 'Detalle del presupuesto'} />
-      {grupos.length === 0 ? <p style={{ color: GRIS }}>Sin ítems.</p> : angosto ? (
-        <div>
-          {grupos.map((g) => (
-            <div key={`g-${g.clave}`}>
-              <div style={{ color: NARANJA, fontWeight: 700, fontSize: T_CHICO, letterSpacing: '0.6px', textTransform: 'uppercase', padding: '10px 0 2px' }}>{g.titulo}</div>
-              {g.items.map((it) => {
-                numero++
-                const { titulo, detalle } = partirDescripcion(it.descripcion)
-                return (
-                  <div key={`${g.clave}-${it.id ?? numero}`} style={fila}>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <strong style={{ color: OSCURO, overflowWrap: 'anywhere' }}><span style={{ color: GRIS, fontWeight: 400 }}>{String(numero).padStart(2, '0')} · </span>{titulo}</strong>
-                      {detalle && <div style={{ color: GRIS, fontSize: T_CHICO, whiteSpace: 'pre-line' }}>{detalle}</div>}
-                      <div style={{ color: GRIS, fontSize: T_CHICO, marginTop: '2px' }}>
-                        {Number(it.cantidad)} × {moneda(it.precio_unitario)}{pctItem(it) > 0 && <span style={{ color: NARANJA }}> · −{formatoPct(pctItem(it))}%</span>}
-                      </div>
+      <Seccion texto={e ? 'Presupuesto aceptado' : 'Detalle del presupuesto'}>
+        {grupos.length === 0 ? <p style={{ color: GRIS }}>Sin ítems.</p> : grupos.map((g) => (
+          <div key={`g-${g.clave}`}>
+            <div style={{ color: NARANJA, fontWeight: 700, fontSize: '10px', letterSpacing: '1.4px', textTransform: 'uppercase', padding: '8px 2px 0' }}>{g.titulo}</div>
+            {g.items.map((it) => {
+              numero++
+              const { titulo, detalle } = partirDescripcion(it.descripcion)
+              const pct = pctItem(it)
+              return (
+                <div key={`${g.clave}-${it.id ?? numero}`} style={s.fila}>
+                  <Insignia n={numero} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <strong style={{ color: OSCURO, overflowWrap: 'anywhere' }}>{titulo}</strong>
+                    {detalle && <div style={{ ...s.chico, whiteSpace: 'pre-line' }}>{detalle}</div>}
+                    <div style={{ ...s.chico, marginTop: '2px' }}>
+                      {Number(it.cantidad).toLocaleString('es-AR')} × {moneda(it.precio_unitario)}
+                      {pct > 0 && <span style={{ display: 'inline-block', marginLeft: '5px', background: NARANJA_SUAVE, color: NARANJA_OSC, fontWeight: 700, borderRadius: '999px', padding: '0 7px', fontSize: '11px' }}>−{formatoPct(pct)}%</span>}
                     </div>
-                    <strong style={{ color: OSCURO, whiteSpace: 'nowrap' }}>{moneda(importeNeto(it))}</strong>
                   </div>
-                )
-              })}
+                  <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <strong style={{ color: OSCURO, fontSize: '14px' }}>{moneda(importeNeto(it))}</strong>
+                    {pct > 0 && <div style={{ ...s.chico, fontSize: '11.5px', textDecoration: 'line-through' }}>{moneda(importeBruto(it))}</div>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ))}
+        {/* Formas de pago + total */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px', marginTop: '14px', alignItems: 'stretch' }}>
+          {d.formasPago && d.formasPago.medios.length > 0 ? (
+            <div style={{ ...s.tarjeta, borderRadius: '13px' }}>
+              <div style={s.et}>Formas de pago</div>
+              <strong style={{ display: 'block', color: OSCURO, marginTop: '4px' }}>{textoMedios(d.formasPago)}</strong>
+              {d.formasPago.nota && <div style={{ fontSize: '12px', marginTop: '2px' }}>{d.formasPago.nota}</div>}
             </div>
-          ))}
+          ) : <span />}
+          <CajaNegra
+            filas={ahorro > 0.5 ? [{ t: 'Subtotal', v: moneda(sumaBruta) }, { t: 'Te ahorrás (descuentos)', v: `− ${moneda(ahorro)}`, verde: true }]
+              : Math.abs(sumaNeta - Number(d.total)) > 0.5 ? [{ t: 'Subtotal', v: moneda(sumaNeta) }, { t: 'Ajuste', v: conSigno(Number(d.total) - sumaNeta) }] : []}
+            etiqueta={e ? 'TOTAL ACEPTADO' : 'TOTAL'}
+            total={moneda(Number(d.total))}
+          />
         </div>
-      ) : (
-        <div style={s.tablaWrap}>
-          <table style={s.tabla}>
-            <thead>
-              <tr>
-                <th style={{ ...s.th, width: '34px' }}>#</th>
-                <th style={s.th}>Descripción</th>
-                <th style={{ ...s.th, ...s.num }}>Cant.</th>
-                <th style={{ ...s.th, ...s.num }}>P. unitario</th>
-                {hayDescuento && <th style={{ ...s.th, ...s.num }}>Desc.</th>}
-                <th style={{ ...s.th, ...s.num }}>Importe</th>
-              </tr>
-            </thead>
-            <tbody>
-              {grupos.map((g) => [
-                <tr key={`g-${g.clave}`}><td colSpan={columnas} style={{ color: NARANJA, fontWeight: 700, fontSize: T_CHICO, letterSpacing: '0.6px', textTransform: 'uppercase', padding: '12px 10px 4px' }}>{g.titulo}</td></tr>,
-                ...g.items.map((it) => {
-                  numero++
-                  const { titulo, detalle } = partirDescripcion(it.descripcion)
-                  return (
-                    <tr key={`${g.clave}-${it.id ?? numero}`}>
-                      <td style={{ ...s.td, color: GRIS }}>{String(numero).padStart(2, '0')}</td>
-                      <td style={s.td}><strong style={{ color: OSCURO, overflowWrap: 'anywhere' }}>{titulo}</strong>{detalle && <div style={{ color: GRIS, fontSize: T_CHICO, whiteSpace: 'pre-line' }}>{detalle}</div>}</td>
-                      <td style={{ ...s.td, ...s.num }}>{Number(it.cantidad)}</td>
-                      <td style={{ ...s.td, ...s.num }}>{moneda(it.precio_unitario)}</td>
-                      {hayDescuento && <td style={{ ...s.td, ...s.num, color: pctItem(it) > 0 ? NARANJA : GRIS }}>{pctItem(it) > 0 ? `${formatoPct(pctItem(it))}%` : '—'}</td>}
-                      <td style={{ ...s.td, ...s.num }}><strong style={{ color: OSCURO }}>{moneda(importeNeto(it))}</strong></td>
-                    </tr>
-                  )
-                }),
-              ])}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <CajaTotales
-        filas={[{ t: 'Subtotal', v: moneda(sumaNeta) }, ...(bonificacion > 0.5 ? [{ t: 'Bonificación', v: `− ${moneda(bonificacion)}`, color: NARANJA }] : [])]}
-        etiquetaTotal={e ? 'TOTAL ACEPTADO' : 'TOTAL'}
-        total={Number(d.total)}
-      />
-      {d.formasPago && d.formasPago.medios.length > 0 && (
-        <div style={{ ...s.caja, marginLeft: 'auto', width: 'min(330px, 100%)', marginTop: '10px', boxSizing: 'border-box' }}>
-          <div style={{ ...s.etiqueta, color: NARANJA, marginBottom: '4px' }}>Formas de pago</div>
-          <div style={{ fontWeight: 700, color: OSCURO }}>{textoMedios(d.formasPago)}</div>
-          {d.formasPago.nota && <div style={{ color: GRIS, fontSize: T_CHICO, marginTop: '2px' }}>{d.formasPago.nota}</div>}
-        </div>
-      )}
+      </Seccion>
 
       {/* Modificaciones */}
       {e && e.modificaciones.length > 0 && (
-        <section style={{ marginTop: '32px' }}>
-          <TituloSeccion texto="Modificaciones durante la obra" />
-          <p style={{ color: GRIS, fontSize: T_CHICO, margin: '0 0 10px' }}>El presupuesto de arriba se mantiene tal como fue aceptado. Estos son los cambios registrados después:</p>
-          {angosto ? (
-            <div>
-              {e.modificaciones.map((m) => {
-                const { antes, ahora } = antesYAhora(m, moneda)
-                return (
-                  <div key={m.id} style={fila}>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={s.etiqueta}>{fechaCorta(m.fecha)} · {etiquetaModificacion(m)}</div>
-                      <strong style={{ color: OSCURO, overflowWrap: 'anywhere' }}>{m.descripcion}</strong>
-                      {antes && <div style={{ color: GRIS, fontSize: T_CHICO, overflowWrap: 'anywhere' }}>Antes: {antes}</div>}
-                      {ahora && <div style={{ fontSize: T_CHICO, overflowWrap: 'anywhere' }}>Ahora: {ahora}</div>}
-                      {m.motivo && <div style={{ color: GRIS, fontSize: T_CHICO }}>Motivo: {m.motivo}</div>}
-                    </div>
-                    <strong style={{ color: m.importe < 0 ? VERDE : OSCURO, whiteSpace: 'nowrap' }}>{m.importe === 0 ? moneda(0) : conSigno(m.importe)}</strong>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-          <div style={s.tablaWrap}>
-            <table style={s.tabla}>
-              <thead><tr><th style={{ ...s.th, width: '90px' }}>Fecha</th><th style={s.th}>Concepto</th><th style={{ ...s.th, ...s.num }}>Importe</th></tr></thead>
-              <tbody>
-                {e.modificaciones.map((m) => {
-                  const { antes, ahora } = antesYAhora(m, moneda)
-                  return (
-                    <tr key={m.id}>
-                      <td style={s.td}>{fechaCorta(m.fecha)}</td>
-                      <td style={s.td}>
-                        <div style={s.etiqueta}>{etiquetaModificacion(m)}</div>
-                        <strong style={{ color: OSCURO }}>{m.descripcion}</strong>
-                        {antes && <div style={{ color: GRIS, fontSize: T_CHICO }}>Antes: {antes}</div>}
-                        {ahora && <div style={{ fontSize: T_CHICO }}>Ahora: {ahora}</div>}
-                        {m.motivo && <div style={{ color: GRIS, fontSize: T_CHICO }}>Motivo: {m.motivo}</div>}
-                      </td>
-                      <td style={{ ...s.td, ...s.num }}><strong style={{ color: m.importe < 0 ? VERDE : OSCURO }}>{m.importe === 0 ? moneda(0) : conSigno(m.importe)}</strong></td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+        <Seccion texto="Modificaciones durante la obra">
+          <p style={{ ...s.chico, margin: '0 0 4px' }}>El presupuesto de arriba se mantiene tal como fue aceptado. Estos son los cambios registrados después:</p>
+          {e.modificaciones.map((m) => {
+            const { antes, ahora } = antesYAhora(m, moneda)
+            return (
+              <div key={m.id} style={s.fila}>
+                <span style={{ flex: '0 0 24px', width: '24px', height: '24px', borderRadius: '7px', background: m.importe < 0 ? VERDE_SUAVE : NARANJA_SUAVE, color: m.importe < 0 ? VERDE : NARANJA_OSC, fontWeight: 800, display: 'grid', placeItems: 'center' }}>{m.importe < 0 ? '−' : '+'}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <strong style={{ color: OSCURO, overflowWrap: 'anywhere' }}>{m.descripcion}</strong>
+                  <div style={s.chico}>{fechaCorta(m.fecha)} · {etiquetaModificacion(m)}</div>
+                  {antes && <div style={{ ...s.chico, overflowWrap: 'anywhere' }}>Antes: {antes}</div>}
+                  {ahora && <div style={{ fontSize: '12px', overflowWrap: 'anywhere' }}>Ahora: {ahora}</div>}
+                  {m.motivo && <div style={s.chico}>Motivo: {m.motivo}</div>}
+                </div>
+                <strong style={{ color: m.importe < 0 ? VERDE : OSCURO, whiteSpace: 'nowrap' }}>{m.importe === 0 ? moneda(0) : conSigno(m.importe)}</strong>
+              </div>
+            )
+          })}
+          <div style={{ marginLeft: 'auto', width: 'min(360px, 100%)', marginTop: '12px' }}>
+            <CajaNegra filas={[{ t: 'Total original aceptado', v: moneda(e.totalOriginal) }, { t: 'Modificaciones', v: conSigno(e.totalCambios), verde: e.totalCambios < 0 }]} etiqueta="TOTAL ACTUALIZADO" total={moneda(e.totalActualizado)} />
           </div>
-          )}
-          <CajaTotales
-            filas={[{ t: 'Total original aceptado', v: moneda(e.totalOriginal) }, { t: 'Modificaciones', v: conSigno(e.totalCambios), color: e.totalCambios < 0 ? VERDE : OSCURO }]}
-            etiquetaTotal="TOTAL ACTUALIZADO"
-            total={e.totalActualizado}
-          />
-        </section>
+        </Seccion>
       )}
 
       {/* Pagos recibidos */}
       {e && (
-        <section style={{ marginTop: '32px' }}>
-          <TituloSeccion texto="Pagos recibidos" />
-          {e.pagos.length === 0 ? <p style={{ color: GRIS }}>Todavía no registramos pagos.</p> : <>
-            {angosto ? e.pagos.map((p) => (
-              <div key={p.id} style={fila}>
-                <div style={{ minWidth: 0 }}>
-                  <strong style={{ color: OSCURO }}>{fechaCorta(p.fecha)}</strong>
-                  <div style={{ color: GRIS, fontSize: T_CHICO, textTransform: 'capitalize' }}>{(p.medio ?? '—').replace('_', ' ')}{p.referencia ? ` · ${p.referencia}` : ''}</div>
+        <Seccion texto="Pagos recibidos">
+          {e.pagos.length === 0 ? <p style={{ color: GRIS, margin: 0 }}>Todavía no registramos pagos.</p> : <>
+            {e.pagos.map((p) => (
+              <div key={p.id} style={{ ...s.fila, alignItems: 'center' }}>
+                <Icono estado="ok" />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <strong style={{ color: OSCURO }}>Pago recibido{p.medio ? ` · ${p.medio.replace('_', ' ').replace(/^./, (c) => c.toUpperCase())}` : ''}</strong>
+                  <div style={s.chico}>{fechaCorta(p.fecha)}{p.referencia ? ` · ${p.referencia}` : ''}</div>
                 </div>
-                <strong style={{ color: OSCURO, whiteSpace: 'nowrap' }}>{moneda(p.monto)}</strong>
+                <strong style={{ color: VERDE, whiteSpace: 'nowrap' }}>{moneda(p.monto)}</strong>
               </div>
-            )) : (
-            <div style={s.tablaWrap}>
-              <table style={s.tabla}>
-                <thead><tr><th style={s.th}>Fecha</th><th style={s.th}>Medio</th><th style={s.th}>Referencia</th><th style={{ ...s.th, ...s.num }}>Monto</th></tr></thead>
-                <tbody>
-                  {e.pagos.map((p) => (
-                    <tr key={p.id}>
-                      <td style={s.td}>{fechaCorta(p.fecha)}</td>
-                      <td style={{ ...s.td, textTransform: 'capitalize' }}>{(p.medio ?? '—').replace('_', ' ')}</td>
-                      <td style={{ ...s.td, color: GRIS }}>{p.referencia || '—'}</td>
-                      <td style={{ ...s.td, ...s.num }}><strong style={{ color: OSCURO }}>{moneda(p.monto)}</strong></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            )}
-            <div style={{ ...s.filaTotal, marginLeft: 'auto', width: 'min(330px, 100%)', fontWeight: 700 }}><span style={{ color: OSCURO }}>Total pagado</span><span style={{ color: VERDE }}>{moneda(e.cobrado)}</span></div>
+            ))}
+            <div style={{ textAlign: 'right', marginTop: '8px', fontWeight: 700, color: VERDE }}>Total pagado {moneda(e.cobrado)}</div>
           </>}
-        </section>
+        </Seccion>
       )}
 
-      {e && <div style={{ marginTop: '32px' }}><EstadoObra e={e} /></div>}
+      {e && <EstadoCuenta e={e} />}
 
       {recos.length > 0 && (
-        <section style={{ marginTop: '28px' }}>
-          <TituloSeccion texto="Formas de uso y recomendaciones" />
+        <Seccion texto="Formas de uso y recomendaciones">
           <ul style={{ margin: 0, paddingLeft: '18px', lineHeight: 1.7 }}>
-            {recos.map((r, i) => <li key={i}>{r}</li>)}
+            {recos.map((r, i) => <li key={i} style={{ color: TEXTO }}>{r}</li>)}
           </ul>
-        </section>
+        </Seccion>
       )}
 
-      {/* Notas y vigencia */}
-      {(notas || !e) && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '30px' }}>
-          {notas && <div style={s.caja}><div style={{ ...s.etiqueta, color: NARANJA, marginBottom: '4px' }}>Notas</div><div style={{ whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>{notas}</div></div>}
-          {!e && <div style={s.caja}><div style={{ ...s.etiqueta, color: NARANJA, marginBottom: '4px' }}>Vigencia</div><div>Este presupuesto tiene una validez de {d.validez_dias ?? configActual().presupuestos.validezDias} días corridos desde su emisión.</div></div>}
-        </div>
+      {notas && (
+        <Seccion texto="Notas">
+          <div style={{ background: '#F6F7F9', borderRadius: '11px', padding: '12px 14px', whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>{notas}</div>
+        </Seccion>
       )}
 
-      {configActual().presupuestos.condiciones.length > 0 && (
-        <section style={{ marginTop: '28px' }}>
-          <TituloSeccion texto="Condiciones generales" />
-          {configActual().presupuestos.condiciones.filter((c) => c.titulo.trim() || c.texto.trim()).map((c, i) => (
-            <div key={`${i}-${c.titulo}`} style={{ marginBottom: '10px' }}>
-              <strong style={{ color: OSCURO }}>{c.titulo}</strong>
-              <p style={{ margin: '2px 0 0', color: GRIS, fontSize: T_CHICO, lineHeight: 1.55 }}>
-                {textoCondicion(c, d.validez_dias)}
-              </p>
-            </div>
-          ))}
-        </section>
+      {condiciones.length > 0 && (
+        <Seccion texto="Condiciones generales">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '10px 26px' }}>
+            {condiciones.map((c, i) => (
+              <div key={`${i}-${c.titulo}`}>
+                <strong style={{ color: OSCURO, fontSize: '12.5px' }}>{c.titulo}</strong>
+                <p style={{ margin: '2px 0 0', fontSize: '11.5px', lineHeight: 1.5 }}>{textoCondicion(c, d.validez_dias)}</p>
+              </div>
+            ))}
+          </div>
+        </Seccion>
       )}
 
-      <footer style={{ marginTop: '28px', paddingTop: '10px', borderTop: `1px solid ${LINEA}`, position: 'relative', fontSize: T_CHICO }}>
-        <span style={{ position: 'absolute', top: '-2px', left: 0, width: '46px', height: '2px', background: NARANJA }} />
+      <footer style={{ marginTop: '28px', paddingTop: '10px', borderTop: `1px solid ${LINEA}`, position: 'relative', fontSize: '11px' }}>
+        <span style={{ position: 'absolute', top: '-1px', left: 0, width: '40px', height: '2px', background: NARANJA }} />
         <strong style={{ color: OSCURO }}>{configActual().empresa.nombre}</strong>
         <div style={{ color: GRIS }}>{lineaContacto()}</div>
       </footer>
