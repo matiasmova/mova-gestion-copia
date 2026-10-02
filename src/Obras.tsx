@@ -95,7 +95,7 @@ const avanceInicial = {
 // ya no lo usa: todo se ve en un único documento (presupuesto y estado de obra).
 // Dentro de "Trabajos": grupo = qué obras mostrar (en curso o terminadas) y sin encabezado propio.
 export type GrupoObras = 'en_obra' | 'terminadas'
-const obraTerminada = (o: { estado: string | null; porcentaje_avance?: number | string | null }) => o.estado === 'finalizada' || o.estado === 'observacion'
+const obraTerminada = (o: { estado: string | null; porcentaje_avance?: number | string | null }) => o.estado === 'finalizada' || o.estado === 'observacion' || Number(o.porcentaje_avance) >= 100
 
 function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, grupo, embebido = false }: { obraAbrirId?: number | null; onObraAbierta?: () => void; onVerPresupuesto?: (presupuestoId: number) => void; conIA?: boolean; grupo?: GrupoObras; embebido?: boolean } = {}) {
   const puedeInformeIA = conIA
@@ -454,6 +454,8 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
     setFormularioAvance((anterior) => ({
       ...anterior,
       [campo]: valor,
+      // Al llegar al 100% la obra pasa sola a Finalizada.
+      ...(campo === 'porcentaje' && Number(valor) >= 100 && anterior.estado === 'en_proceso' ? { estado: 'finalizada' as EstadoObra } : {}),
     }))
   }
 
@@ -462,7 +464,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
       ...anterior,
       estado,
       porcentaje:
-        estado === 'finalizada' ? 100 : anterior.porcentaje,
+        estado === 'finalizada' || estado === 'observacion' ? 100 : anterior.porcentaje,
     }))
   }
 
@@ -486,8 +488,9 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
       fecha: formularioAvance.fecha,
       titulo: formularioAvance.titulo.trim(),
       descripcion: formularioAvance.descripcion.trim() || null,
-      estado: formularioAvance.estado,
-      porcentaje: Number(formularioAvance.porcentaje),
+      // 100% = terminada; y una obra terminada siempre queda en 100%.
+      estado: Number(formularioAvance.porcentaje) >= 100 && formularioAvance.estado === 'en_proceso' ? 'finalizada' : formularioAvance.estado,
+      porcentaje: formularioAvance.estado === 'en_proceso' ? Number(formularioAvance.porcentaje) : 100,
     }
 
     let avanceId = editandoAvanceId
