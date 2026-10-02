@@ -636,28 +636,10 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
       const derTxt = estado.pendienteHoy > 0.5 ? `A pagar hoy (obra): ${moneda(estado.pendienteHoy)}` : 'Obra al día'
       derecha(derTxt, M + CW - 14, yPie, F_CHICO, bold, estado.pendienteHoy > 0.5 ? NARANJA_OSC : VERDE)
       barra(xb, yPie + 0.5, M + CW - 14 - ancho(derTxt, F_CHICO, bold) - 10 - xb, pct, VERDE)
-      if (todos.length > n) derecha(`(se muestran los últimos ${n - 1} avances)`, M + CW - 12, y - 6, F_MINI, font, GRIS)
+      if (todos.length > n) derecha(`(anticipo y últimos ${n - 1} avances)`, M + CW - 12, y - 6, F_MINI, font, GRIS)
       y -= altoCaja + 18
     }
-    espaciado('DETALLE', M, y, F_MINI, GRIS); y -= 14
-    const anchoTexto = CW - 30 - 140
-    for (const p of estado.linea) {
-      const tit = partir(`${p.fecha && p.tipo !== 'anticipo' ? `${diaMes(p.fecha)} · ` : ''}${p.titulo}${p.porcentaje != null && p.tipo === 'avance' ? ` · ${p.porcentaje}%` : ''}`, F_NORMAL, anchoTexto, bold)
-      const sub = [p.detalle, p.tipo === 'anticipo' ? null : `A pagar hasta acá: ${moneda(p.acumulado)}`].filter((x): x is string => !!x)
-      const det = sub.flatMap((s) => partir(s, F_CHICO, anchoTexto))
-      const estadoTxt = p.estado === 'ok' ? (p.tipo === 'anticipo' ? 'Recibido' : 'Al día') : p.estado === 'futuro' ? 'Al finalizar' : `Falta ${moneda(p.falta)}`
-      const alto = Math.max(tit.length * 11.5 + det.length * 10, 22) + 12
-      lugar(alto)
-      icono(M + 10, y + 0.5, p.estado)
-      let yy = y + 3
-      for (const r of tit) { texto(r, M + 24, yy, F_NORMAL, bold, OSCURO); yy -= 11.5 }
-      for (const r of det) { texto(r, M + 24, yy + 0.5, F_CHICO, font, GRIS); yy -= 10 }
-      derecha(p.tipo === 'anticipo' ? moneda(p.importe) : `+ ${moneda(p.importe)}`, xImp, y + 3, F_NORMAL, bold, OSCURO)
-      derecha(estadoTxt, xImp, y - 8.5, F_CHICO, bold, p.estado === 'ok' ? VERDE : p.estado === 'futuro' ? GRIS : NARANJA_OSC)
-      y -= alto
-      linea(M, y + 11, M + CW, 0.6, LINEA_SUAVE)
-    }
-    y -= 14
+    y -= 6
 
     // ---------- Gastos a reintegrar ----------
     if (estado.gastosExtra.length > 0) {

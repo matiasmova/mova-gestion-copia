@@ -145,7 +145,7 @@ function FranjaLinea({ e }: { e: EstadoPresupuesto }) {
         <Barra pct={pct} color={VERDE} />
         <span style={{ color: e.pendienteHoy > 0.5 ? NARANJA_OSC : VERDE }}>{e.pendienteHoy > 0.5 ? `A pagar hoy (obra): ${moneda(e.pendienteHoy)}` : 'Obra al día'}</span>
       </div>
-      {e.linea.length > pasos.length && <div style={{ ...s.chico, fontSize: '10.5px', padding: '4px 4px 0' }}>Se muestran el anticipo y los últimos {pasos.length - 1} avances; el detalle completo está abajo.</div>}
+      {e.linea.length > pasos.length && <div style={{ ...s.chico, fontSize: '10.5px', padding: '4px 4px 0' }}>Se muestran el anticipo y los últimos {pasos.length - 1} avances.</div>}
     </div>
   )
 }
@@ -172,23 +172,6 @@ function EstadoCuenta({ e }: { e: EstadoPresupuesto }) {
 
     <Seccion texto="Línea de tiempo de pagos">
       <FranjaLinea e={e} />
-      <div style={{ ...s.et, margin: '16px 0 2px' }}>Detalle</div>
-      {e.linea.map((p, i) => (
-        <div key={`${p.tipo}-${i}`} style={s.fila}>
-          <Icono estado={p.estado} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <strong style={{ color: OSCURO }}>{p.fecha && p.tipo !== 'anticipo' ? `${diaMes(p.fecha)} · ` : ''}{p.titulo}{p.tipo === 'avance' && p.porcentaje != null ? ` · ${p.porcentaje}%` : ''}</strong>
-            {p.detalle && <div style={s.chico}>{p.detalle}</div>}
-            {p.tipo !== 'anticipo' && <div style={s.chico}>A pagar hasta acá: {moneda(p.acumulado)}</div>}
-          </div>
-          <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-            <strong style={{ color: OSCURO }}>{p.tipo === 'anticipo' ? moneda(p.importe) : `+ ${moneda(p.importe)}`}</strong>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: p.estado === 'ok' ? VERDE : p.estado === 'futuro' ? GRIS : NARANJA_OSC }}>
-              {p.estado === 'ok' ? (p.tipo === 'anticipo' ? 'Recibido' : 'Al día') : p.estado === 'futuro' ? 'Al finalizar' : `Falta ${moneda(p.falta)}`}
-            </div>
-          </div>
-        </div>
-      ))}
     </Seccion>
 
     {e.gastosExtra.length > 0 && (
