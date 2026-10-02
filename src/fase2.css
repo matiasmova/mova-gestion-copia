@@ -1587,3 +1587,4 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 .pdfRecos{background:#fafbfc;border:1px solid var(--mova-border);border-radius:12px;padding:4px 14px 10px;margin:0 0 24px}
 .pdfRecos .presuMas{border-top:0}
 @media print{.pdfRecos{display:none !important}}
+.presuDesglose{display:block;color:#6d4bb8;font-size:12px;font-weight:600}
