@@ -10,6 +10,7 @@ import { cargarEstadoPresupuesto, mensajeEstado, PCT_ANTICIPO, totalAPagarHoy, t
 import { cargarDatosContacto, type DatosContacto } from './presupuestoContacto'
 import { codigoPresupuesto, nombreArchivo } from './codigoPresupuesto'
 import { supabase } from './supabase'
+import { cargarFormasPago, textoMedios, type FormasPago } from './formasPago'
 
 export const GRUPOS_DOCUMENTO: Record<string, string> = {
   producto: 'Productos y equipos', servicio: 'Servicios', material: 'Materiales',
@@ -39,6 +40,8 @@ export type DatosPdf = {
   contacto?: DatosContacto | null
   // "Formas de uso y recomendaciones": solo si se eligió incluirlas (null = no van).
   recomendaciones?: string | null
+  // Formas de pago que acepta (solo informativas).
+  formasPago?: FormasPago
   // Campo viejo, ya no se usa (se deja para no romper llamadas anteriores).
   resumen?: unknown
 }
@@ -49,13 +52,14 @@ export async function completarDatosDocumento(d: DatosPdf): Promise<DatosPdf> {
   // el estado de obra. Solo se reutiliza si es un estado de obra ya calculado.
   const estadoValido = (x: unknown): x is EstadoPresupuesto | null =>
     x === null || (typeof x === 'object' && x !== null && Array.isArray((x as EstadoPresupuesto).linea))
-  const [estado, soluciones, contacto, recomendaciones] = await Promise.all([
+  const [estado, soluciones, contacto, recomendaciones, formasPago] = await Promise.all([
     estadoValido(d.estado) ? Promise.resolve(d.estado) : cargarEstadoPresupuesto(d.id, Number(d.total) || 0),
     d.soluciones ? Promise.resolve(d.soluciones) : cargarSolucionesPresupuesto(d.id).catch(() => [] as SolucionPresupuesto[]),
     d.contacto !== undefined ? Promise.resolve(d.contacto) : cargarDatosContacto(d.id).catch(() => null),
     d.recomendaciones !== undefined ? Promise.resolve(d.recomendaciones) : cargarRecomendaciones(d.id),
+    d.formasPago !== undefined ? Promise.resolve(d.formasPago) : cargarFormasPago(d.id),
   ])
-  return { ...d, estado, soluciones, contacto, recomendaciones }
+  return { ...d, estado, soluciones, contacto, recomendaciones, formasPago }
 }
 
 // Recomendaciones guardadas del presupuesto, si se eligió incluirlas.
@@ -285,6 +289,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     const w = 270, x = M + CW - w
     const h = 22 + renglones.length * 14 + (renglones.length ? 10 : 0) + 18
     lugar(h + 6)
+    const arriba = y
     caja(x, y, w, h, { fondo: OSCURO, r: 9 })
     let yy = y - 18
     for (const r of renglones) {
@@ -296,6 +301,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     espaciado(etiqueta, x + 14, yy + 1, F_CHICO, BLANCO)
     derecha(monto, x + w - 14, yy - 1, F_CIFRA, bold, BLANCO)
     y -= h + 14
+    return { arriba, alto: h }
   }
   // Botón con link (anotación del PDF que abre la dirección al tocarla).
   const boton = (etiqueta: string, url: string, x: number, yy: number) => {
@@ -477,11 +483,24 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
 
   // ---------- Totales (caja negra) ----------
   const ahorro = Math.round((sumaBruta - d.total) * 100) / 100
-  cajaNegra(
+  const totalCaja = cajaNegra(
     ahorro > 0.5 ? [{ t: 'Subtotal', v: moneda(sumaBruta) }, { t: 'Te ahorrás (descuentos)', v: `- ${moneda(ahorro)}`, verde: true }]
       : Math.abs(sumaNeta - d.total) > 0.5 ? [{ t: 'Subtotal', v: moneda(sumaNeta) }, { t: 'Ajuste', v: conSigno(d.total - sumaNeta) }] : [],
     estado ? 'TOTAL ACEPTADO' : 'TOTAL', moneda(d.total),
   )
+  // Formas de pago, a la izquierda de la caja del total.
+  const formas = d.formasPago
+  if (formas && formas.medios.length) {
+    const anchoF = CW - 270 - 18
+    const notaF = formas.nota ? partir(formas.nota, F_CHICO, anchoF - 24) : []
+    const altoF = Math.max(totalCaja.alto, 44 + notaF.length * 10)
+    caja(M, totalCaja.arriba, anchoF, altoF, { borde: LINEA, r: 9 })
+    espaciado('FORMAS DE PAGO', M + 12, totalCaja.arriba - 15, F_MINI, GRIS)
+    let yf = totalCaja.arriba - 30
+    for (const r of partir(textoMedios(formas), F_NORMAL, anchoF - 24, bold)) { texto(r, M + 12, yf, F_NORMAL, bold, OSCURO); yf -= 12 }
+    for (const r of notaF) { texto(r, M + 12, yf, F_CHICO, font, TEXTO); yf -= 10 }
+    if (altoF > totalCaja.alto) y -= altoF - totalCaja.alto
+  }
   y -= 6
 
   if (estado) {

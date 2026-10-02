@@ -17,6 +17,7 @@ import NuevoCliente from './NuevoCliente'
 import { configActual } from './config'
 import NuevaObra from './NuevaObra'
 import CampoNumero from './CampoNumero'
+import { MEDIOS_PAGO, cargarFormasPago, guardarFormasPago, normalizarFormas, type FormasPago } from './formasPago'
 
 export type ClienteOpcion = {
   id: number
@@ -140,6 +141,9 @@ function NuevoPresupuesto({
   const [descuentoTipo, setDescuentoTipo] = useState<'monto' | 'porcentaje'>('monto')
   const totalPagado = presupuesto?.total_pagado ?? 0
   const [notas, setNotas] = useState(presupuesto?.notas ?? '')
+  // Formas de pago que acepta (solo informativas). Al editar se leen las guardadas.
+  const [formas, setFormas] = useState<FormasPago>(() => normalizarFormas(null))
+  useEffect(() => { if (presupuesto?.id) void cargarFormasPago(presupuesto.id).then(setFormas) }, [presupuesto?.id])
   const [items, setItems] = useState<ItemPresupuesto[]>(
     presupuesto?.items.length
       ? presupuesto.items
@@ -526,6 +530,10 @@ function NuevoPresupuesto({
       setError('El presupuesto se guardó, pero hubo un error con los ítems.')
       setGuardando(false)
       return
+    }
+
+    if (presupuestoId && !(await guardarFormasPago(Number(presupuestoId), formas))) {
+      window.alert('El presupuesto se guardó, pero no las formas de pago: falta correr en Supabase el SQL "supabase-formas-pago-fase-22.sql".')
     }
 
     setGuardando(false)
@@ -976,6 +984,18 @@ function NuevoPresupuesto({
               <span>Saldo: {formatoDinero(saldo)}</span>
               {hayProductos && <button type="button" className="editButton mercadoBtnPresu" onClick={compararMercado}>💲 ¿Cómo estoy de precio?</button>}
             </div>
+          </div>
+
+          <div className="formFull presuFormasPago">
+            <span className="presuFormasTit">Formas de pago que aceptás</span>
+            <div className="caChips">
+              {MEDIOS_PAGO.map((m) => {
+                const activo = formas.medios.includes(m.id)
+                return <button type="button" key={m.id} className={activo ? 'activo' : ''} onClick={() => setFormas((f) => ({ ...f, medios: activo ? f.medios.filter((x) => x !== m.id) : MEDIOS_PAGO.map((x) => x.id).filter((x) => x === m.id || f.medios.includes(x)) }))}>{m.icono} {m.texto}</button>
+              })}
+            </div>
+            <input value={formas.nota} maxLength={200} onChange={(e) => setFormas((f) => ({ ...f, nota: e.target.value }))} placeholder="Aclaración opcional (ej.: tarjeta hasta 3 cuotas, CBU/alias al confirmar)" />
+            <small>Solo se informan en el presupuesto: no cambian el precio.</small>
           </div>
 
           <label className="formFull">

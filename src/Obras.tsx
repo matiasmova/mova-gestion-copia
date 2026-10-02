@@ -28,6 +28,7 @@ import { confirmarEliminacion } from './confirmar'
 import CampoNumero from './CampoNumero'
 import CuentaObraResumen from './CuentaObraResumen'
 import { avanceEfectivo } from './cuentaObra'
+import { cargarFormasPago, cobradoPorMedio, textoMedios, type FormasPago } from './formasPago'
 
 type EstadoObra = 'en_proceso' | 'finalizada' | 'observacion'
 
@@ -805,7 +806,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
               </div>
             )}
 
-            {seguTab === 'finanzas' && <EconomiaObra key={obraSeguimiento.id} cuenta={cuenta} abrirCobro={abrirCobro} obraId={obraSeguimiento.id} onGenerarPdf={() => setInformeObra(obraSeguimiento)} onCambio={() => setActualizacion(v => v + 1)} />}
+            {seguTab === 'finanzas' && <EconomiaObra key={obraSeguimiento.id} cuenta={cuenta} presupuestoId={presupuestoAceptado?.id ?? null} abrirCobro={abrirCobro} obraId={obraSeguimiento.id} onGenerarPdf={() => setInformeObra(obraSeguimiento)} onCambio={() => setActualizacion(v => v + 1)} />}
 
             {seguTab === 'adicionales' && <AdicionalesObra key={obraSeguimiento.id} abrir={abrirAdic} obraId={obraSeguimiento.id} onCambio={() => setActualizacion(v => v + 1)} />}
 
@@ -1191,7 +1192,7 @@ const ESTADO_ADIC_LABEL: Record<string, string> = {
 // Pestaña Finanzas, simplificada: solo registrar los cobros del cliente y ver
 // los movimientos de Adicionales (se editan en esa pestaña). El documento con
 // todo (presupuesto, pagos y estado de la obra) se abre con el botón de arriba.
-function EconomiaObra({ obraId, cuenta, onGenerarPdf, onCambio, abrirCobro = 0 }: { obraId: number; cuenta: EstadoPresupuesto | null; onGenerarPdf: () => void; onCambio: () => void; abrirCobro?: number }) {
+function EconomiaObra({ obraId, cuenta, presupuestoId, onGenerarPdf, onCambio, abrirCobro = 0 }: { obraId: number; cuenta: EstadoPresupuesto | null; presupuestoId: number | null; onGenerarPdf: () => void; onCambio: () => void; abrirCobro?: number }) {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
@@ -1200,6 +1201,8 @@ function EconomiaObra({ obraId, cuenta, onGenerarPdf, onCambio, abrirCobro = 0 }
   const [mostrarCobro, setMostrarCobro] = useState(false)
   const [cobroForm, setCobroForm] = useState({ monto: '', fecha: new Date().toISOString().slice(0, 10), medio_pago: 'transferencia', referencia: '' })
   const [guardandoCobro, setGuardandoCobro] = useState(false)
+  const [formas, setFormas] = useState<FormasPago | null>(null)
+  useEffect(() => { if (presupuestoId) void cargarFormasPago(Number(presupuestoId)).then(setFormas) }, [presupuestoId])
   // Abierto desde "Registrar": muestra el formulario de cobro.
   useEffect(() => {
     if (!abrirCobro || Date.now() - abrirCobro > 15000) return
@@ -1281,6 +1284,15 @@ function EconomiaObra({ obraId, cuenta, onGenerarPdf, onCambio, abrirCobro = 0 }
     {error && <p className="loginError" role="alert">{error}</p>}
     {cuenta && <CuentaObraResumen cuenta={cuenta} dinero={dineroFicha} lineaTiempo />}
     {!cargando && !error && <>
+      {(formas?.medios.length || cobros.length > 0) && (
+        <div className="cobroMedios">
+          {formas && formas.medios.length > 0 && <p><span>Formas de pago acordadas</span><b>{textoMedios(formas)}</b>{formas.nota && <small>{formas.nota}</small>}</p>}
+          {cobros.length > 0 && <div className="cobroMediosLista">
+            <span>Cobrado por medio</span>
+            {cobradoPorMedio(cobros).map((m) => <div key={m.medio}><span>{m.texto}</span><b>{dineroFicha(m.monto)}</b></div>)}
+          </div>}
+        </div>
+      )}
       <h4>Cobros registrados</h4>
       {cobros.length === 0 ? <p className="adicVacio">Todavía no registraste ningún cobro de esta obra.</p> : (
         <div className="gestionTabla" style={{ maxWidth: '100%', overflowX: 'auto' }}><table>
