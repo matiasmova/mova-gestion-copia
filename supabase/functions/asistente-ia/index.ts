@@ -197,6 +197,12 @@ Te pasan lo que pide un cliente y el CATÁLOGO de la empresa (id | nombre | cate
 - Imagen: si viene una imagen, leela con atención. En un plano o croquis contá ambientes, metros y aberturas para calcular cantidades (por ejemplo nodos WiFi según superficie y paredes, cámaras en accesos y perímetro, puntos de luz y módulos por ambiente). En una foto del lugar, fijate qué se ve (tablero, techo, jardín). Si es un pedido escrito a mano, transcribilo. Explicá en notas lo que viste y los supuestos ("vi 3 dormitorios y living de ~40 m²").
 - Descuentos: si el pedido pide un descuento para un ítem o tipo de ítem (por ejemplo "20% en la mano de obra"), ponelo en descuento_pct de esos ítems. Si pide un descuento general sobre todo el presupuesto (por ejemplo "aplicá un 15% de descuento"), ponelo en descuento_general_pct y dejá descuento_pct en 0. Si no se pide descuento, todo en 0.`
 
+const SISTEMA_RECOMENDACIONES = `Escribís, para MOVA Tecnología Smart (Mendoza, Argentina), la sección "Formas de uso y recomendaciones" que se le entrega al cliente junto con su presupuesto u obra terminada.
+- Basate SOLO en los productos y servicios del presupuesto: cómo se usan en el día a día (apps, escenas, control por voz, horarios), cuidados y mantenimiento, qué hacer ante un corte de luz o de internet, y consejos para aprovecharlos.
+- Entre 4 y 8 recomendaciones, cada una una oración clara y concreta (máximo 220 caracteres), en español rioplatense con voseo, tono profesional y cercano.
+- No menciones precios ni inventes equipos que no estén en el presupuesto. Sin emojis ni viñetas: solo el texto de cada recomendación.
+- Si te pasan un texto actual, mejoralo manteniendo lo que sirva; si te pasan un pedido, respetalo.`
+
 const SISTEMA_FACTURA = `Leés fotos de facturas, tickets y remitos de proveedores argentinos (materiales eléctricos, redes, domótica, ferretería).
 Devolvé los datos tal cual figuran:
 - proveedor: razón social o nombre del comercio.
@@ -222,7 +228,7 @@ Deno.serve(async (req) => {
   const { data: perfil } = await db.from('profiles').select('rol, activo').eq('id', quien.user.id).maybeSingle()
   const cuerpo = await req.json().catch(() => ({})) as Record<string, unknown>
   const { accion, idea, titulo, descripcion, existentes } = cuerpo
-  const roles = accion === 'factura' ? ['admin', 'contable', 'encargado', 'auxiliar'] : accion === 'informe_obra' ? ['admin', 'contable', 'encargado'] : ['admin', 'contable']
+  const roles = accion === 'factura' ? ['admin', 'contable', 'encargado', 'auxiliar'] : accion === 'informe_obra' || accion === 'recomendaciones' ? ['admin', 'contable', 'encargado'] : ['admin', 'contable']
   if (!perfil || !roles.includes(perfil.rol) || perfil.activo === false) return responder({ error: 'No tenés permiso para usar el asistente.' }, 403)
 
   const clave = Deno.env.get('GEMINI_API_KEY')
@@ -429,6 +435,14 @@ Deno.serve(async (req) => {
       const texto = `EMPRESA: ${empresa}\nCLIENTE: ${cli ? `${cli.nombre} ${cli.apellido ?? ''}` : ''}\nOBRA: ${obra.nombre_obra}${obra.localidad ? ` (${obra.localidad})` : ''}\nESTADO: ${obra.estado ?? 'en_proceso'} · AVANCE TOTAL: ${Number(obra.porcentaje_avance) || 0}%${obra.fecha_fin_estimada ? ` · fin estimado ${obra.fecha_fin_estimada}` : ''}\nPERÍODO: últimos ${dias} días (desde ${desde})\nTONO: ${tono}\n\nAVANCES DEL PERÍODO:\n${recientes.map(linea).join('\n') || '(ninguno)'}\n\nAVANCES ANTERIORES (contexto):\n${anteriores.map(linea).join('\n') || '(ninguno)'}\n\nADICIONALES Y CAMBIOS DEL PERÍODO:\n${((rAd.data ?? []) as { fecha: string; tipo: string; descripcion: string; estado: string }[]).map((a) => `- ${a.fecha} · ${a.tipo}: ${recorte(a.descripcion, 200)} (${a.estado})`).join('\n') || '(ninguno)'}\n\nFOTOS CARGADAS EN EL PERÍODO: ${rImg.count ?? 0}`
       const r = await gemini(clave, texto, { type: 'OBJECT', properties: { mensaje: { type: 'STRING' } }, required: ['mensaje'] }, SISTEMA_INFORME, 0.6) as { mensaje?: string }
       return responder({ mensaje: recorte(r.mensaje, 3000), telefono: cli?.telefono ?? null, avances_periodo: recientes.length, fotos_periodo: rImg.count ?? 0 })
+    }
+    if (accion === 'recomendaciones') {
+      const items = (Array.isArray(cuerpo.items) ? cuerpo.items : []).map((x) => recorte(x, 200)).filter(Boolean).slice(0, 60)
+      if (!items.length && !t) return responder({ error: 'El presupuesto no tiene ítems para basarse.' }, 400)
+      const actual = recorte(cuerpo.actual, 3000), pedido = recorte(cuerpo.pedido, 400)
+      const texto = `PRESUPUESTO: ${t}\n${d ? `DESCRIPCIÓN: ${d}\n` : ''}\nÍTEMS:\n${items.map((x) => `- ${x}`).join('\n')}${actual ? `\n\nTEXTO ACTUAL:\n${actual}` : ''}${pedido ? `\n\nPEDIDO: ${pedido}` : ''}`
+      const r = await gemini(clave, texto, { type: 'OBJECT', properties: { recomendaciones: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['recomendaciones'] }, SISTEMA_RECOMENDACIONES, 0.6) as { recomendaciones?: string[] }
+      return responder({ recomendaciones: (r.recomendaciones ?? []).map((x) => recorte(String(x).replace(/^[\s•\-*·]+/, ''), 260)).filter(Boolean).slice(0, 10) })
     }
     if (accion === 'resumen_dia') {
       const hechos = (Array.isArray(cuerpo.hechos) ? cuerpo.hechos : []).map((x) => recorte(x, 220)).filter(Boolean).slice(0, 60)
