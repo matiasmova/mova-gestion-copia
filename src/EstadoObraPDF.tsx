@@ -7,13 +7,15 @@ import RecomendacionesUso from './RecomendacionesUso'
 import FormasPagoEditor from './FormasPagoEditor'
 import CompararMercado, { type ProductoAComparar } from './CompararMercado'
 import { importeNeto } from './presupuestoCalculos'
+import { linkWhatsApp, mensajeEstadoObra } from './whatsapp'
+import { codigoPresupuesto } from './codigoPresupuesto'
 import type { ItemPresupuesto } from './NuevoPresupuesto'
 
 // Estado de la obra: es el mismo documento del presupuesto aceptado,
 // con pagos, avances, modificaciones y línea de tiempo.
-type Props = { obra: { id: number; nombre_obra: string }; cliente: string; onCerrar: () => void }
+type Props = { obra: { id: number; nombre_obra: string }; cliente: string; onCerrar: () => void; onEditarPresupuesto?: (presupuestoId: number) => void }
 
-export default function EstadoObraPDF({ obra, cliente, onCerrar }: Props) {
+export default function EstadoObraPDF({ obra, cliente, onCerrar, onEditarPresupuesto }: Props) {
   const [listo, setListo] = useState<{ datos: DatosPdf; url: string; blob: Blob } | null>(null)
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
@@ -81,31 +83,53 @@ export default function EstadoObraPDF({ obra, cliente, onCerrar }: Props) {
     finally { setCompartiendo(false) }
   }
 
+  const linkWa = listo ? linkWhatsApp(listo.datos.contacto?.telefono ?? null, mensajeEstadoObra({ cliente, obra: obra.nombre_obra, codigo: codigoPresupuesto(listo.datos.id) })) : null
+
   return <div className="pdfPreview">
-    <div className="pdfPreviewBar"><span>Presupuesto y estado de obra · {obra.nombre_obra}</span><div>
-      <button className="pdfBtnGhost" onClick={onCerrar}>Cerrar</button>
-      <button className="pdfBtnGhost" onClick={() => setRevision((v) => v + 1)}>Actualizar</button>
-      {hayComprobantes && (
-        <label className="pdfCheck" title={avisoComp || undefined}>📎 <select value={modoComp} onChange={(e) => { const m = e.target.value as ModoComprobantes; setModoComp(m); guardarModoComprobantes(m) }}>
-          <option value="boton">Botón de descarga</option>
-          <option value="anexo">Adjuntar al final</option>
-          <option value="no">Sin comprobantes</option>
-        </select></label>
-      )}
-      <button className="pdfBtnPrimary" disabled={!listo} onClick={descargar}>Descargar PDF</button>
-      <button className="pdfBtnPrimary" disabled={!listo || compartiendo} onClick={() => void compartir()}>Compartir</button>
-    </div></div>
+    <div className="pdfPreviewBar docBarra">
+      <button className="pdfBtnGhost" onClick={onCerrar}>← Volver</button>
+      <span>📄 Documento del cliente · {obra.nombre_obra}</span>
+    </div>
     {mercado && listo && <CompararMercado titulo={listo.datos.titulo} productos={mercado} total={Number(listo.datos.total)} onCerrar={() => setMercado(null)} />}
     <div className="pdfDoc">
       {listo && (
-        <div className="pdfRecos">
-          {listo.datos.items.length > 0 && (
-            <button type="button" className="presuMercadoBtn" onClick={compararMercado}>
-              <span>💲</span><span><b>¿Cómo estoy en el mercado?</b><small>La IA busca precios de productos y mano de obra, y analiza todo el presupuesto</small></span><b>›</b>
+        <div className="pdfRecos docPanel">
+          {/* Enviar el documento */}
+          <div className="docAcciones">
+            <button type="button" className="newButton" disabled={compartiendo} onClick={() => void compartir()}>{compartiendo ? 'Compartiendo…' : '📲 Compartir PDF'}</button>
+            {linkWa && <a className="newButton docWa" href={linkWa} target="_blank" rel="noreferrer">💬 WhatsApp</a>}
+            <button type="button" className="editButton" onClick={descargar}>⬇ Descargar</button>
+            <button type="button" className="editButton" onClick={() => setRevision((v) => v + 1)}>↻ Actualizar</button>
+          </div>
+          {linkWa && <small className="docAyuda">WhatsApp abre el chat con el mensaje listo; el PDF lo adjuntás con Compartir PDF.</small>}
+
+          {/* Lo que ve el cliente */}
+          <div className="docGrupo">Lo que ve el cliente</div>
+          {onEditarPresupuesto && (
+            <button type="button" className="presuMercadoBtn docEditar" onClick={() => onEditarPresupuesto(listo.datos.id)}>
+              <span>✏️</span><span><b>Editar presupuesto</b><small>Ítems, precios, descuentos y textos</small></span><b>›</b>
             </button>
           )}
           <FormasPagoEditor presupuestoId={listo.datos.id} onGuardado={() => setRevision((v) => v + 1)} />
+          {hayComprobantes && (
+            <label className="formasPagoCard docComprobantes" title={avisoComp || undefined}>
+              <span className="formasPagoIcono">📎</span>
+              <div><small>Comprobantes de gastos</small><select value={modoComp} onChange={(e) => { const m = e.target.value as ModoComprobantes; setModoComp(m); guardarModoComprobantes(m) }}>
+                <option value="boton">Botón "Descargar factura" en el PDF</option>
+                <option value="anexo">Adjuntarlos al final del PDF</option>
+                <option value="no">No incluirlos</option>
+              </select>{avisoComp && <span>{avisoComp}</span>}</div>
+            </label>
+          )}
           <RecomendacionesUso presupuestoId={listo.datos.id} titulo={listo.datos.titulo} descripcion={listo.datos.descripcion ?? null} items={listo.datos.items} onGuardado={() => setRevision((v) => v + 1)} />
+
+          {/* Solo para vos */}
+          {listo.datos.items.length > 0 && <>
+            <div className="docGrupo">Solo para vos</div>
+            <button type="button" className="presuMercadoBtn" onClick={compararMercado}>
+              <span>💲</span><span><b>¿Cómo estoy en el mercado?</b><small>La IA busca precios de productos y mano de obra, y analiza todo el presupuesto</small></span><b>›</b>
+            </button>
+          </>}
         </div>
       )}
       {error ? <p role="alert">{error}</p> : listo ? <DocumentoPresupuesto datos={listo.datos} embebido /> : <p role="status">Cargando presupuesto, pagos y avances…</p>}

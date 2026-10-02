@@ -27,6 +27,7 @@ import {
 import { confirmarEliminacion } from './confirmar'
 import CampoNumero from './CampoNumero'
 import CuentaObraResumen from './CuentaObraResumen'
+import EditarPresupuestoObra from './EditarPresupuestoObra'
 import { avanceEfectivo } from './cuentaObra'
 import { cargarFormasPago, cobradoPorMedio, textoMedios, type FormasPago } from './formasPago'
 
@@ -102,6 +103,9 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
   const [obras, setObras] = useState<Obra[]>([])
   const [presupuestosObra, setPresupuestosObra] = useState<{ id: number; obra_id: number | null; total: number | string; estado: string; activo: boolean; titulo: string }[]>([])
   const [informeObra, setInformeObra] = useState<Obra | null>(null)
+  // Editor del presupuesto abierto desde la obra; docVersion rearma el documento al guardar.
+  const [editarPresupuestoId, setEditarPresupuestoId] = useState<number | null>(null)
+  const [docVersion, setDocVersion] = useState(0)
   const [informeIA, setInformeIA] = useState<Obra | null>(null)
   const [seguTab, setSeguTab] = useState<TabSeguimiento>('resumen')
   // "➕ Registrar": menú único para cargar cosas en la obra.
@@ -796,11 +800,12 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
               </div>
               <div className="fichaHeadAcciones">
                 {puedeInformeIA && <button type="button" className="fichaPdf" title="Mensaje de avance para el cliente, escrito con IA" onClick={() => setInformeIA(obraSeguimiento)}>✨ Informe</button>}
-                <button type="button" className="fichaPdf" disabled={!presupuestoAceptado} title="Presupuesto y estado de obra" onClick={() => setInformeObra(obraSeguimiento)}>📄 PDF</button>
+                <button type="button" className="fichaPdf" disabled={!presupuestoAceptado} title="Documento del cliente: compartir, formas de pago, comprobantes" onClick={() => setInformeObra(obraSeguimiento)}>📄 Documento</button>
                 <div className="fichaMenuWrap">
                   <button type="button" className="fichaIcono" aria-label="Más opciones" aria-expanded={menuFicha} onClick={() => setMenuFicha((v) => !v)}>⋯</button>
                   {menuFicha && <div className="fichaMenu" role="menu">
                     <button type="button" role="menuitem" onClick={() => { setMenuFicha(false); setObraEditando(obraSeguimiento); setMostrarFormulario(true) }}>✏️ Editar datos de la obra</button>
+                    {onVerPresupuesto && presupuestoAceptado && <button type="button" role="menuitem" onClick={() => { setMenuFicha(false); onVerPresupuesto(presupuestoAceptado.id) }}>📋 Ficha del presupuesto (duplicar, estado, eliminar)</button>}
                     <button type="button" role="menuitem" className="peligro" disabled={eliminandoObra === obraSeguimiento.id} onClick={() => { setMenuFicha(false); void eliminarObra(obraSeguimiento) }}>{eliminandoObra === obraSeguimiento.id ? 'Revisando...' : '🗑 Eliminar obra'}</button>
                   </div>}
                 </div>
@@ -844,7 +849,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
               onIr={setSeguTab}
               presupuesto={presupuestoAceptado ? { id: presupuestoAceptado.id, titulo: presupuestoAceptado.titulo } : null}
               onVerDocumento={() => setInformeObra(obraSeguimiento)}
-              onVerPresupuesto={onVerPresupuesto && presupuestoAceptado ? () => onVerPresupuesto(presupuestoAceptado.id) : undefined}
+              onEditarPresupuesto={onVerPresupuesto && presupuestoAceptado ? () => setEditarPresupuestoId(presupuestoAceptado.id) : undefined}
             />}
 
             {seguTab === 'accesos' && <AccesosObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} cliente={obtenerCliente(obraSeguimiento.cliente_id)} obra={obraSeguimiento.nombre_obra} ubicacion={[obraSeguimiento.direccion, obraSeguimiento.localidad].filter(Boolean).join(', ') || null} />}
@@ -1118,9 +1123,18 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
 
       {informeObra && (
         <EstadoObraPDF
+          key={`${informeObra.id}-${docVersion}`}
+          onEditarPresupuesto={onVerPresupuesto ? (id) => setEditarPresupuestoId(id) : undefined}
           obra={informeObra}
           cliente={obtenerCliente(informeObra.cliente_id)}
           onCerrar={() => { setInformeObra(null); setActualizacion((v) => v + 1) }}
+        />
+      )}
+      {editarPresupuestoId != null && (
+        <EditarPresupuestoObra
+          presupuestoId={editarPresupuestoId}
+          onCerrar={() => setEditarPresupuestoId(null)}
+          onGuardado={() => { setEditarPresupuestoId(null); setActualizacion((v) => v + 1); setRefrescoResumen((v) => v + 1); setDocVersion((v) => v + 1) }}
         />
       )}
     </div>

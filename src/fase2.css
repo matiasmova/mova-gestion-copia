@@ -1660,3 +1660,17 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 .avanceCobro{display:flex;flex-direction:column;gap:3px;background:#fff6ec;border:1px solid #f6d6b3;border-radius:12px;padding:10px 12px;font-size:13px;color:#5b6270}
 .avanceCobro b{color:#14181e;font-size:14px}
 .avanceCobro .pend{color:#c2410c}.avanceCobro .ok{color:#1f7a4d}
+.docBarra{justify-content:flex-start!important}
+.docBarra span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.docPanel{display:flex;flex-direction:column;gap:10px;padding:14px!important}
+.docAcciones{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.docAcciones>*{width:100%;justify-content:center;text-align:center;text-decoration:none;box-sizing:border-box}
+.docWa{background:#25d366!important;border-color:#25d366!important;display:inline-flex;align-items:center}
+.docAyuda{color:var(--mova-muted);font-size:12px;margin-top:-4px}
+.docGrupo{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--mova-muted);margin-top:6px}
+.docPanel .presuMercadoBtn,.docPanel .formasPagoCard,.docPanel .presuRecos{margin:0}
+.docEditar{background:#14181e!important;border-color:#14181e!important;color:#fff}
+.docEditar small{color:#c9ced6!important}.docEditar>b{color:#fff!important}
+.docComprobantes select{margin-top:4px;width:100%}
+.docBarra .pdfBtnGhost{white-space:nowrap;flex:none}
+.docAcciones .newButton{white-space:nowrap}
