@@ -164,7 +164,7 @@ async function linksComprobantes(ids: number[]): Promise<Record<number, string> 
   } catch { return null }
 }
 
-export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { comprobantes?: ModoComprobantes; onAviso?: (msg: string) => void } = {}): Promise<Blob> {
+export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { comprobantes?: ModoComprobantes; onAviso?: (msg: string) => void; linkPago?: string | null } = {}): Promise<Blob> {
   const d = await completarDatosDocumento(entrada)
   const estado = d.estado ?? null
   const soluciones = d.soluciones ?? []
@@ -393,6 +393,22 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
       { e: 'VÁLIDO HASTA', v: venceEl, s: `${validez} ${validez === 1 ? 'día' : 'días'} desde la emisión` },
     ])
     y -= 14
+  }
+
+  // ---------- Botón "Pagar" (página de pago del cliente) ----------
+  if (opciones.linkPago && (!estado || aPagarHoy > 0.5)) {
+    const alto = 34
+    lugar(alto + 12)
+    caja(M, y, CW, alto, { fondo: OSCURO, r: 10 })
+    espaciado('PAGAR AHORA', M + 16, y - 21, F_CHICO + 0.5, BLANCO)
+    texto('Transferencia o efectivo  ·  tocá acá', M + 16 + anchoEsp('PAGAR AHORA', F_CHICO + 0.5) + 12, y - 21, F_CHICO + 0.5, font, GRIS_CAJA)
+    derecha('>', M + CW - 16, y - 22, F_GRANDE - 2, bold, NARANJA)
+    const anotacion = pdf.context.register(pdf.context.obj({
+      Type: 'Annot', Subtype: 'Link', Rect: [M, y - alto, M + CW, y], Border: [0, 0, 0],
+      A: { Type: 'Action', S: 'URI', URI: PDFString.of(opciones.linkPago) },
+    }))
+    page.node.addAnnot(anotacion)
+    y -= alto + 16
   }
 
   // ---------- Qué vas a disfrutar (soluciones) ----------

@@ -1,0 +1,39 @@
+.pp{min-height:100vh;background:#f4f5f7;color:#14181e;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+.ppWrap{max-width:460px;margin:0 auto;padding:20px 16px 40px}
+.ppTop{display:flex;justify-content:space-between;align-items:center}
+.ppLogo{height:34px}
+.ppTop span{font-size:11px;font-weight:800;letter-spacing:.12em;color:#de7015}
+.ppHola{margin:20px 0 4px;font-size:15px;color:#78818f}
+.pp h1{margin:0;font-size:22px;line-height:1.25}
+.ppObra{color:#78818f;font-size:13.5px;margin-top:3px}
+.ppCargando{color:#78818f;text-align:center;margin-top:40vh}
+.ppMonto{margin:18px 0 12px;border-radius:18px;padding:16px 18px;color:#fff;background:linear-gradient(120deg,#de7015,#f08a2c,#c95f0c,#de7015);background-size:300% 300%;animation:ppFluye 6s ease infinite;box-shadow:0 14px 30px -14px rgba(222,112,21,.9)}
+.ppMonto.alDia{background:#1f7a4d;animation:none;box-shadow:none}
+@keyframes ppFluye{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+.ppMonto small{font-size:11px;font-weight:800;letter-spacing:.1em}
+.ppMonto strong{display:block;font-size:31px;margin:4px 0 2px;font-variant-numeric:tabular-nums}
+.ppMonto em{font-style:normal;font-size:13px;opacity:.92}
+.ppDetalle{background:#fff;border:1px solid #e6e8ec;border-radius:14px;padding:4px 14px;margin-bottom:18px}
+.ppDetalle div{display:flex;justify-content:space-between;gap:10px;padding:9px 0;font-size:14px;border-bottom:1px solid #f1f2f4}
+.ppDetalle div:last-child{border:0}
+.ppDetalle span{color:#78818f}.ppDetalle .ok{color:#1f7a4d}
+.ppTitulo{font-size:11.5px;font-weight:800;letter-spacing:.1em;color:#78818f;margin:4px 2px 8px;text-transform:uppercase}
+.ppMedio{background:#fff;border:1px solid #e6e8ec;border-radius:16px;margin-bottom:10px;overflow:hidden}
+.ppMedioCab{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:12px;width:100%;padding:14px;cursor:pointer}
+.ppIco{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:22px;flex:none}
+.tr .ppIco{background:#eef2ff}.ef .ppIco{background:#e8f5ee}
+.ppTxt{flex:1}.ppTxt b{display:block;font-size:16px}.ppTxt small{color:#78818f;font-size:12.5px}
+.ppFlecha{color:#78818f;font-size:18px;transition:transform .2s}
+.ppMedio.abierto .ppFlecha{transform:rotate(90deg)}
+.ppCuerpo{padding:0 14px 14px}
+.ppDato{display:flex;align-items:center;gap:10px;border:1px solid #e6e8ec;border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.ppDato div{flex:1;min-width:0}.ppDato small{display:block;font-size:11px;color:#78818f;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.ppDato b{font-size:15px;word-break:break-all}.ppDato span{display:block;font-size:12.5px;color:#78818f}
+.ppCopiar{border:1px solid #e6e8ec;background:#fff;border-radius:10px;padding:8px 11px;font:inherit;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;transition:transform .12s}
+.ppCopiar:active{transform:scale(.95)}
+.ppCopiar.ok{background:#1f7a4d;border-color:#1f7a4d;color:#fff}
+.ppNota{font-size:12.5px;color:#78818f;margin:8px 2px;line-height:1.45}
+.ppWa{display:block;border-radius:12px;padding:13px;background:#25d366;color:#fff;font-weight:800;font-size:15px;text-align:center;text-decoration:none;margin-top:6px}
+.ppPie{text-align:center;font-size:12px;color:#78818f;margin-top:22px;line-height:1.5}
+.ppPie b{color:#14181e}
+@media (prefers-reduced-motion:reduce){.ppMonto{animation:none}}

@@ -21,6 +21,7 @@ import { fechaCorta } from './gestionFormat'
 import RecomendacionesUso from './RecomendacionesUso'
 import FormasPagoEditor from './FormasPagoEditor'
 import { Cifra } from './Animados'
+import { asegurarLinkPago } from './pagoLink'
 import CompararMercado, { type ProductoAComparar } from './CompararMercado'
 import { importeNeto } from './presupuestoCalculos'
 
@@ -126,6 +127,7 @@ export default function PresupuestoFicha({
   const [notaRechazo, setNotaRechazo] = useState('')
   const [preparado, setPreparado] = useState<Preparado | null>(null)
   const [mercado, setMercado] = useState<ProductoAComparar[] | null>(null)
+  const [linkPago, setLinkPago] = useState<string | null>(null)
   // Todo el presupuesto (productos, materiales, servicios y mano de obra) con el
   // precio por unidad que paga el cliente: con el descuento del ítem y la bonificación general.
   function compararMercado() {
@@ -178,7 +180,7 @@ export default function PresupuestoFicha({
   // Abre WhatsApp con el mensaje listo y, si era borrador, pasa solo a Enviado.
   // El PDF se adjunta con "Compartir PDF".
   function enviarWhatsApp() {
-    const url = linkWhatsApp(telefono, mensajeEnvioPresupuesto({ cliente, titulo: presupuesto.titulo, codigo, validezDias: presupuesto.validez_dias ?? null }))
+    const url = linkWhatsApp(telefono, mensajeEnvioPresupuesto({ cliente, titulo: presupuesto.titulo, codigo, validezDias: presupuesto.validez_dias ?? null, linkPago }))
     if (url) window.open(url, '_blank', 'noopener')
     if (presupuesto.estado === 'borrador') onCambiarEstado('enviado')
   }
@@ -225,7 +227,11 @@ export default function PresupuestoFicha({
       try {
         const datos = await completarDatosDocumento(base)
         setAvisoComp('')
-        const blob = await generarPdfPresupuesto(datos, { comprobantes: modoComp, onAviso: setAvisoComp })
+        // Link de pago (seña o lo pendiente): solo en presupuestos que se envían o ya se aceptaron.
+        const link = presupuesto.estado === 'rechazado' ? null : await asegurarLinkPago(datos)
+        if (cancelado) return
+        setLinkPago(link)
+        const blob = await generarPdfPresupuesto(datos, { comprobantes: modoComp, onAviso: setAvisoComp, linkPago: link })
         if (cancelado) return
         urlCreada = URL.createObjectURL(blob)
         setPreparado({ base, datos, blob, url: urlCreada })

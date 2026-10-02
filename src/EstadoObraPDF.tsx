@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { generarPdfPresupuesto, nombreArchivoPresupuesto, leerModoComprobantes, type DatosPdf } from './pdfPresupuesto'
 import { cargarDocumentoObra } from './documentoObra'
+import { asegurarLinkPago } from './pagoLink'
 import DocumentoPresupuesto from './DocumentoPresupuesto'
 
 // Vista del documento del cliente (presupuesto aceptado + estado de obra), tal
@@ -18,7 +19,8 @@ export default function EstadoObraPDF({ obra, cliente, onCerrar }: Props) {
     setListo(null); setError('')
     async function cargar() {
       const datos = await cargarDocumentoObra(obra, cliente)
-      const blob = await generarPdfPresupuesto(datos, { comprobantes: leerModoComprobantes() })
+      const linkPago = await asegurarLinkPago(datos)
+      const blob = await generarPdfPresupuesto(datos, { comprobantes: leerModoComprobantes(), linkPago })
       if (!vigente) return
       url = URL.createObjectURL(blob)
       setListo({ datos, url, blob })

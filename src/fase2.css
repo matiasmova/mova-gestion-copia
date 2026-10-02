@@ -1750,3 +1750,9 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 @media (prefers-reduced-motion:reduce){
   .obraRegistrarBtn::after,.presuPaso,.cuentaObraKpis .hoy,.presuEtapaBarra.encurso i,.presuEtapa.et-encurso::before{animation:none!important}
 }
+.cfgSub{margin:18px 0 4px;font-size:15px}
+.linkPagoCard{align-items:flex-start}
+.linkPagoCard>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.linkPagoCard b{font-size:13.5px}
+.linkPagoBtns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.linkPagoBtns>*{padding:7px 11px!important;font-size:13px;text-decoration:none}

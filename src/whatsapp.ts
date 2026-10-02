@@ -22,9 +22,10 @@ export function linkWhatsApp(telefono: string | null | undefined, texto: string)
 const primerNombre = (n: string) => n.trim().split(/\s+/)[0] || ''
 const empresa = () => configActual().empresa.nombre || 'MOVA'
 
-export function mensajeEnvioPresupuesto(o: { cliente: string; titulo: string; codigo: string; validezDias: number | null }) {
+export function mensajeEnvioPresupuesto(o: { cliente: string; titulo: string; codigo: string; validezDias: number | null; linkPago?: string | null }) {
   return `¡Hola ${primerNombre(o.cliente)}! Te escribo de ${empresa()}. Te comparto el presupuesto "${o.titulo}" (${o.codigo})`
-    + `${o.validezDias ? `, válido por ${o.validezDias} días` : ''}. Cualquier duda o ajuste que necesites, avisame. ¡Gracias!`
+    + `${o.validezDias ? `, válido por ${o.validezDias} días` : ''}. Cualquier duda o ajuste que necesites, avisame.`
+    + `${o.linkPago ? `\n\nPara confirmar con la seña podés pagar acá (transferencia o efectivo): ${o.linkPago}` : ''}\n\n¡Gracias!`
 }
 
 export function mensajeSeguimientoPresupuesto(o: { cliente: string; titulo: string; codigo: string; fecha: string; vencido: boolean }) {
@@ -34,6 +35,7 @@ export function mensajeSeguimientoPresupuesto(o: { cliente: string; titulo: stri
     : `${base} Si tenés alguna duda o querés ajustar algo, lo vemos. ¡Quedo atento!`
 }
 
-export function mensajeEstadoObra(o: { cliente: string; obra: string; codigo: string }) {
-  return `¡Hola ${primerNombre(o.cliente)}! Te escribo de ${empresa()}. Te comparto el presupuesto y estado actualizado de tu obra "${o.obra}" (${o.codigo}): ahí ves los avances, los pagos y lo que queda pendiente. Cualquier duda, avisame. ¡Gracias!`
+export function mensajeEstadoObra(o: { cliente: string; obra: string; codigo: string; linkPago?: string | null }) {
+  return `¡Hola ${primerNombre(o.cliente)}! Te escribo de ${empresa()}. Te comparto el presupuesto y estado actualizado de tu obra "${o.obra}" (${o.codigo}): ahí ves los avances, los pagos y lo que queda pendiente.`
+    + `${o.linkPago ? `\n\nPodés pagar lo pendiente acá (transferencia o efectivo): ${o.linkPago}` : ''}\n\nCualquier duda, avisame. ¡Gracias!`
 }
