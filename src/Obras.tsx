@@ -74,7 +74,8 @@ type ImagenObra = {
 
 type FiltroEstado = 'todos' | EstadoObra
 
-type ResumenEco = { valor: number; cobrado: number; pendiente: number }
+// pendiente = saldo de la obra + gastos extra que el cliente todavía no devolvió.
+type ResumenEco = { valor: number; cobrado: number; pendiente: number; obra: number; extras: number }
 
 // Datos para los avisos de las tarjetas del tablero.
 type AvisosObra = { adicPendientes: number; personal: number; accesos: number }
@@ -699,6 +700,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                 <strong>{obra.nombre_obra}</strong>
                 {et.avance != null && <div className="presuEtapaBarra"><i style={{ width: `${et.avance}%` }} /></div>}
                 <div className="presuItemBot"><span>{obtenerCliente(obra.cliente_id)}</span>{eco && eco.pendiente > 0.5 ? <b className="presuFalta">Saldo {dineroFicha(eco.pendiente)}</b> : <b>{dineroFicha(eco?.valor ?? 0)}</b>}</div>
+                {eco && eco.extras > 0.5 && <small className="presuDesglose">Obra {dineroFicha(eco.obra)} + extras a reintegrar {dineroFicha(eco.extras)}</small>}
                 {avisos.length > 0 && <small className="presuAvisos">⚠ {avisos.join(' · ')}</small>}
               </button>
             )
@@ -731,6 +733,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                         <div><span>Cobrado</span><strong>{dineroFicha(economia[obra.id]?.cobrado ?? 0)}</strong></div>
                         <div><span>Saldo</span><strong className={(economia[obra.id]?.pendiente ?? 0) > 0 ? 'pend' : ''}>{dineroFicha(economia[obra.id]?.pendiente ?? 0)}</strong></div>
                       </div>
+                      {(economia[obra.id]?.extras ?? 0) > 0.5 && <small className="presuDesglose">Obra {dineroFicha(economia[obra.id].obra)} + extras {dineroFicha(economia[obra.id].extras)}</small>}
                       <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--mova-muted)', textAlign: 'right' }}>Tocá para abrir la ficha →</p>
                     </div>
                   ))}
@@ -753,7 +756,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                   <td>{Number(obra.porcentaje_avance || 0)}%</td>
                   <td>{dineroFicha(economia[obra.id]?.valor ?? 0)}</td>
                   <td>{dineroFicha(economia[obra.id]?.cobrado ?? 0)}</td>
-                  <td>{dineroFicha(economia[obra.id]?.pendiente ?? 0)}</td>
+                  <td>{dineroFicha(economia[obra.id]?.pendiente ?? 0)}{(economia[obra.id]?.extras ?? 0) > 0.5 && <small className="presuDesglose">incl. extras {dineroFicha(economia[obra.id].extras)}</small>}</td>
                   <td><span className={`crmBadge est-${claseObra(obra.estado)}`}>{etiquetaObra(obra.estado)}</span><AvisosTarjeta avisos={avisosDe(obra)} /></td>
                 </tr>
               ))}
@@ -1137,7 +1140,7 @@ function calcularEconomia(
   pagos: Array<{ monto: number | string; obra_id: number | null; presupuesto_id: number | null }>,
 ): Record<number, ResumenEco> {
   const mapa: Record<number, ResumenEco> = {}
-  const asegurar = (id: number) => (mapa[id] ??= { valor: 0, cobrado: 0, pendiente: 0 })
+  const asegurar = (id: number) => (mapa[id] ??= { valor: 0, cobrado: 0, pendiente: 0, obra: 0, extras: 0 })
   // Presupuesto -> obra (para atribuir pagos por presupuesto)
   const obraDePresupuesto: Record<number, number> = {}
   for (const p of presupuestos) {
@@ -1146,8 +1149,10 @@ function calcularEconomia(
     if (p.activo !== false && p.estado === 'aceptado') asegurar(p.obra_id).valor += Number(p.total) || 0
   }
   for (const a of adicionales) {
-    if (a.obra_id == null || a.estado !== 'aprobado' || a.tipo === 'gasto_extra') continue
-    asegurar(a.obra_id).valor += Number(a.importe) || 0
+    if (a.obra_id == null || a.estado !== 'aprobado') continue
+    // Gasto extra aprobado = adelantado y sin devolver: se suma aparte al saldo.
+    if (a.tipo === 'gasto_extra') asegurar(a.obra_id).extras += Math.abs(Number(a.importe) || 0)
+    else asegurar(a.obra_id).valor += Number(a.importe) || 0
   }
   for (const pago of pagos) {
     const obraId = pago.obra_id ?? (pago.presupuesto_id != null ? obraDePresupuesto[pago.presupuesto_id] : undefined)
@@ -1156,7 +1161,8 @@ function calcularEconomia(
   }
   for (const id of Object.keys(mapa)) {
     const eco = mapa[Number(id)]
-    eco.pendiente = Math.max(0, eco.valor - eco.cobrado)
+    eco.obra = Math.max(0, eco.valor - eco.cobrado)
+    eco.pendiente = eco.obra + eco.extras
   }
   return mapa
 }
