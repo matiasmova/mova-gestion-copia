@@ -123,7 +123,9 @@ const diaMes = (f: string) => fechaCorta(f).replace(/\/\d{4}$/, '')
 
 // Franja destacada: los pasos de pago unidos de izquierda a derecha.
 function FranjaLinea({ e }: { e: EstadoPresupuesto }) {
-  const pasos: PasoLinea[] = e.linea.length > 6 ? [e.linea[0], ...e.linea.slice(-5)] : e.linea
+  // Sin el paso final cuando ya no suma nada (el avance llegó al 100%).
+  const todos = e.linea.filter((p) => !(p.tipo === 'final' && p.importe <= 0.5 && e.linea.length > 1))
+  const pasos: PasoLinea[] = todos.length > 6 ? [todos[0], ...todos.slice(-5)] : todos
   const color = (p: PasoLinea) => (p.estado === 'ok' ? VERDE : p.estado === 'pendiente' ? NARANJA : '#DADDE2')
   const pct = e.totalActualizado > 0 ? Math.min(100, (e.cobrado / e.totalActualizado) * 100) : 0
   return (
@@ -145,7 +147,7 @@ function FranjaLinea({ e }: { e: EstadoPresupuesto }) {
         <Barra pct={pct} color={VERDE} />
         <span style={{ color: e.pendienteHoy > 0.5 ? NARANJA_OSC : VERDE }}>{e.pendienteHoy > 0.5 ? `A pagar hoy (obra): ${moneda(e.pendienteHoy)}` : 'Obra al día'}</span>
       </div>
-      {e.linea.length > pasos.length && <div style={{ ...s.chico, fontSize: '10.5px', padding: '4px 4px 0' }}>Se muestran el anticipo y los últimos {pasos.length - 1} avances.</div>}
+      {todos.length > pasos.length && <div style={{ ...s.chico, fontSize: '10.5px', padding: '4px 4px 0' }}>Se muestran el anticipo y los últimos {pasos.length - 1} avances.</div>}
     </div>
   )
 }
@@ -276,11 +278,6 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
               ? { e: 'A pagar hoy', v: moneda(aPagarHoy), s: e.gastoExtraPendiente > 0.5 ? 'Obra + gastos a reintegrar' : 'Según el avance de la obra', destacada: 'naranja' }
               : { e: 'A pagar hoy', v: moneda(0), s: 'Estás al día', destacada: 'verde' },
           ]} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', margin: '12px 0 0', fontSize: '12px' }}>
-            <span>Avance de la obra <strong style={{ color: OSCURO }}>{e.avance}%</strong></span>
-            <Barra pct={e.avance} />
-            <span style={{ color: GRIS }}>{e.avances.length ? `Último informe ${diaMes(e.avances[e.avances.length - 1].fecha)} · ${e.avances[e.avances.length - 1].titulo}` : 'Sin informes de avance todavía'}</span>
-          </div>
         </> : (
           <Tarjetas cifras={[
             { e: 'Total del presupuesto', v: moneda(Number(d.total)), s: 'Precio final', destacada: 'naranja' },
