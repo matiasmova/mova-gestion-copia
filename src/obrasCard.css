@@ -120,3 +120,8 @@
 .orEquipoSaldo { white-space: nowrap; font-weight: 700; }
 .orEquipoSaldo.pend { color: #c2410c; }
 .orEquipoSaldo.ok { color: #1f7a4d; }
+.orComparar .orExtra span, .orComparar .orExtra b { color: #6d4bb8; }
+.orExtraNota { display: block; margin-top: 6px; background: #f4f0fc; color: #5b3fa3; border-radius: 8px; padding: 6px 8px; line-height: 1.4; }
+.orTotalHoy { display: block; margin-top: 4px; color: #c2410c; }
+.orTotalHoy b { font-weight: 800; }
+.orComparar.conExtra > div { grid-template-columns: 96px 1fr auto; }

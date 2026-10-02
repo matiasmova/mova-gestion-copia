@@ -23,7 +23,7 @@ type Obra = { id: number; cliente_id: number; nombre_obra: string; localidad: st
 type Cliente = { id: number; nombre: string; apellido: string | null }
 type Presupuesto = { id: number; cliente_id: number; obra_id: number | null; titulo: string; estado: string; total: number; activo: boolean; fecha: string | null }
 type Pago = { monto: number; fecha: string; obra_id: number | null; presupuesto_id: number | null }
-type Costo = { monto: number; fecha: string; personal_id: number | null; obra_id: number | null }
+type Costo = { monto: number; fecha: string; tipo?: string | null; personal_id: number | null; obra_id: number | null }
 type Gasto = { id: number; fecha: string; categoria: string | null; descripcion: string | null; monto: number; recurrente: boolean }
 type Adicional = { obra_id: number; importe: number; estado: string; tipo: string }
 type Asig = { obra_id: number; personal_id: number | null; modalidad: string | null; valor_acordado: number | null }
@@ -96,7 +96,7 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
         supabase.from('Clientes').select('id,nombre,apellido'),
         supabase.from('presupuestos').select('id,cliente_id,obra_id,titulo,estado,total,activo,fecha').eq('activo', true),
         supabase.from('pagos').select('monto,fecha,obra_id,presupuesto_id'),
-        supabase.from('costos').select('monto,fecha,personal_id,obra_id'),
+        supabase.from('costos').select('monto,fecha,tipo,personal_id,obra_id'),
         supabase.from('gastos_generales').select('id,fecha,categoria,descripcion,monto,recurrente'),
         supabase.from('adicionales').select('obra_id,importe,estado,tipo'),
         supabase.from('obra_asignaciones').select('obra_id,personal_id,modalidad,valor_acordado'),
@@ -215,7 +215,9 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
   const mes = useMemo(() => {
     const cobrado = pagos.filter((p) => enMes(p.fecha, mesSel)).reduce((s, p) => s + p.monto, 0)
     const manoObra = costos.filter((c) => enMes(c.fecha, mesSel) && c.personal_id != null).reduce((s, c) => s + c.monto, 0)
-    const otrosCostos = costos.filter((c) => enMes(c.fecha, mesSel) && c.personal_id == null).reduce((s, c) => s + c.monto, 0)
+    // Los gastos extra que el cliente devuelve no son costo tuyo: van aparte.
+    const otrosCostos = costos.filter((c) => enMes(c.fecha, mesSel) && c.personal_id == null && c.tipo !== 'gasto_extra').reduce((s, c) => s + c.monto, 0)
+    const extraPorReintegrar = costos.filter((c) => c.tipo === 'gasto_extra').reduce((s, c) => s + c.monto, 0)
     const gastosMes = gastos.filter((g) => enMes(g.fecha, mesSel))
     const fijos = gastosMes.reduce((s, g) => s + g.monto, 0)
     const neto = cobrado - manoObra - otrosCostos - fijos
@@ -240,7 +242,7 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
     const categorias: Record<string, number> = {}
     gastosMes.forEach((g) => { const k = g.categoria || 'Otros'; categorias[k] = (categorias[k] || 0) + g.monto })
     return {
-      cobrado, manoObra, otrosCostos, fijos, neto, esMesActual,
+      cobrado, manoObra, otrosCostos, fijos, neto, esMesActual, extraPorReintegrar,
       recurrentesPendientes, recurrentesMonto, personalPendiente, netoProyectado,
       recurrentesMes: gastosMes.filter((g) => g.recurrente).reduce((s, g) => s + g.monto, 0),
       porCategoria: Object.entries(categorias).sort((a, b) => b[1] - a[1]),
@@ -403,6 +405,7 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
             {barraNeto('Mano de obra', mes.manoObra, '−', '#b23b32')}
             {barraNeto('Materiales y otros', mes.otrosCostos, '−', '#d0645b')}
             {barraNeto('Gastos fijos', mes.fijos, '−', '#b86608')}
+            {mes.extraPorReintegrar > 0.5 && <p>Gastos extra por reintegrar (adelantados a clientes): <strong>{moneda(mes.extraPorReintegrar)}</strong>. No cuentan acá: el cliente te los devuelve.</p>}
             {mes.esMesActual && (mes.recurrentesMonto > 0 || mes.personalPendiente > 0) && (
               <p>
                 Previsto por pagar:
