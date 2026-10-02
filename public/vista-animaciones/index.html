@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vista previa de animaciones</title>
+<style>
+:root{--o:#de7015;--osc:#14181e;--gris:#78818f;--borde:#e6e8ec;--verde:#1f7a4d;--bg:#f3f4f6}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;color:var(--osc)}
+.wrap{max-width:440px;margin:0 auto;padding:16px}
+.top{display:flex;justify-content:space-between;align-items:center;margin:4px 0 14px}
+.top h1{font-size:15px;margin:0;color:var(--gris);letter-spacing:.06em;text-transform:uppercase}
+.repetir{border:0;background:var(--osc);color:#fff;border-radius:10px;padding:9px 12px;font-weight:700;font-size:13px}
+.tag{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:999px;background:#7c5cc4;color:#fff;font-size:12px;font-weight:800;margin-right:6px;vertical-align:2px}
+.card{background:#fff;border:1px solid var(--borde);border-radius:16px;padding:14px;margin-bottom:12px}
+.lbl{font-size:12px;color:var(--gris);margin:0 0 10px;font-weight:600}
+/* 1 tarjetas que entran */
+.entra{opacity:0;transform:translateY(14px)}
+.animando .entra{animation:entra .5s cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes entra{to{opacity:1;transform:none}}
+/* cabecera con dona */
+.head{display:flex;gap:14px;align-items:center}
+.dona{width:74px;height:74px;flex:none;position:relative}
+.dona svg{transform:rotate(-90deg)}
+.dona circle{fill:none;stroke-width:8}
+.dona .pista{stroke:#e9ecef}.dona .val{stroke:var(--verde);stroke-linecap:round;stroke-dasharray:201;stroke-dashoffset:201;transition:stroke-dashoffset 1.3s cubic-bezier(.2,.8,.2,1)}
+.dona b{position:absolute;inset:0;display:grid;place-items:center;font-size:17px}
+.head h2{margin:0;font-size:20px}.head small{color:var(--gris)}
+/* 3 kpis */
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.kpi{border:1px solid var(--borde);border-radius:13px;padding:10px 12px}
+.kpi>span{display:block;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--gris);text-transform:uppercase}
+.kpi strong{display:block;font-size:19px;margin-top:3px;font-variant-numeric:tabular-nums}
+.kpi.hoy{grid-column:1/-1;background:var(--o);border-color:var(--o);color:#fff}.kpi.hoy>span{color:#fff}
+/* 4 barra */
+.barra{height:10px;background:#eef0f3;border-radius:999px;overflow:hidden}
+.barra i{display:block;height:100%;width:0;background:linear-gradient(90deg,#ffb547,var(--o));border-radius:999px;transition:width 1.3s cubic-bezier(.2,.8,.2,1)}
+.barraTxt{display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;color:var(--gris)}
+/* 2 botones */
+.btn{display:flex;flex-direction:column;align-items:flex-start;width:100%;border:0;border-radius:14px;padding:13px 16px;background:var(--o);color:#fff;font:inherit;text-align:left;cursor:pointer;position:relative;overflow:hidden;transition:transform .12s ease,box-shadow .2s;box-shadow:0 6px 18px -8px rgba(222,112,21,.8)}
+.btn b{font-size:17px}.btn small{opacity:.92}
+.btn:active{transform:scale(.97);box-shadow:0 2px 8px -4px rgba(222,112,21,.8)}
+.btn::after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.45),transparent);transform:skewX(-20deg)}
+.animando .btn::after{animation:brillo 1.1s .9s ease}
+@keyframes brillo{to{left:130%}}
+.fila{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.btn2{border:1px solid var(--borde);background:#fff;border-radius:11px;padding:11px;font:inherit;font-weight:700;cursor:pointer;transition:transform .12s ease,background .2s}
+.btn2:active{transform:scale(.96);background:#f6f7f9}
+/* 5 pulso */
+.alerta{display:flex;gap:10px;align-items:center;border-radius:12px;padding:11px 12px;background:#fff6ec;border:1px solid #f6d6b3;color:#7a4a07;font-size:14px}
+.alerta i{width:12px;height:12px;border-radius:50%;background:#c2410c;flex:none;box-shadow:0 0 0 0 rgba(194,65,12,.5);animation:pulso 1.8s infinite}
+@keyframes pulso{70%{box-shadow:0 0 0 10px rgba(194,65,12,0)}100%{box-shadow:0 0 0 0 rgba(194,65,12,0)}}
+/* 6 tilde */
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,30px);opacity:0;background:var(--osc);color:#fff;border-radius:14px;padding:12px 16px;display:flex;gap:10px;align-items:center;font-weight:700;transition:all .3s cubic-bezier(.2,.8,.2,1);pointer-events:none}
+.toast.ver{transform:translate(-50%,0);opacity:1}
+.toast svg{width:24px;height:24px}
+.toast circle{fill:var(--verde)}
+.toast path{fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:20;stroke-dashoffset:20}
+.toast.ver path{animation:tilde .4s .15s ease forwards}
+@keyframes tilde{to{stroke-dashoffset:0}}
+.nota{font-size:12.5px;color:var(--gris);line-height:1.5;margin:14px 2px 30px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.entra{opacity:1;transform:none}}
+</style></head>
+<body>
+<div class="wrap" id="app">
+  <div class="top"><h1>Vista previa · efectos</h1><button class="repetir" data-accion="repetir">↻ Repetir</button></div>
+
+  <div class="card entra" style="animation-delay:0s">
+    <p class="lbl"><span class="tag">1</span>Las tarjetas entran deslizándose, una tras otra (mirá toda la pantalla)</p>
+    <div class="head">
+      <div class="dona"><svg width="74" height="74" viewBox="0 0 74 74"><circle class="pista" cx="37" cy="37" r="32"/><circle class="val" id="dona" cx="37" cy="37" r="32"/></svg><b><span class="cuenta" data-fin="65" data-dec="0">0</span>%</b></div>
+      <div><small>SEGUIMIENTO DE OBRA</small><h2>Finca Junín</h2><small>Sergio Baigoria</small></div>
+    </div>
+  </div>
+
+  <div class="card entra" style="animation-delay:.1s">
+    <p class="lbl"><span class="tag">2</span>Botón que se hunde al tocarlo, con un brillo suave al aparecer</p>
+    <button class="btn" data-accion="toast"><b>➕ Registrar</b><small>Tocalo: muestra el efecto 6</small></button>
+    <div class="fila"><button class="btn2">📲 Compartir PDF</button><button class="btn2">✏️ Editar</button></div>
+  </div>
+
+  <div class="card entra" style="animation-delay:.2s">
+    <p class="lbl"><span class="tag">3</span>Los montos "cuentan" hasta su valor</p>
+    <div class="kpis">
+      <div class="kpi"><span>Total de la obra</span><strong>$ <span class="cuenta" data-fin="1764000">0</span></strong></div>
+      <div class="kpi"><span>Ya pagó</span><strong style="color:var(--verde)">$ <span class="cuenta" data-fin="500000">0</span></strong></div>
+      <div class="kpi hoy"><span>Total a cobrar hoy</span><strong>$ <span class="cuenta" data-fin="2536396.71" data-dec="2">0</span></strong></div>
+    </div>
+  </div>
+
+  <div class="card entra" style="animation-delay:.3s">
+    <p class="lbl"><span class="tag">4</span>Barras y círculo de avance que se llenan</p>
+    <div class="barra"><i id="barra"></i></div>
+    <div class="barraTxt"><span>Pagado 28% del total</span><b style="color:var(--osc)">Avance 65%</b></div>
+  </div>
+
+  <div class="card entra" style="animation-delay:.4s">
+    <p class="lbl"><span class="tag">5</span>Pulso suave en lo que pide atención</p>
+    <div class="alerta"><i></i><span>Falta cobrar <b>$ 2.536.396,71</b> a hoy</span></div>
+  </div>
+
+  <div class="card entra" style="animation-delay:.5s">
+    <p class="lbl"><span class="tag">6</span>Tilde animado al guardar (tocá el botón naranja de arriba)</p>
+    <button class="btn2" style="width:100%" data-accion="toast">Probar "✓ Cobro guardado"</button>
+  </div>
+
+  <p class="nota">Si en el celular está activado "Reducir movimiento", la app muestra todo quieto, sin animaciones. Decime qué números te gustan (por ejemplo "1, 3 y 5") y los aplico en la app.</p>
+</div>
+<div class="toast" id="toast"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="12"/><path d="M7 12.5l3.2 3.2L17 9"/></svg>Cobro guardado</div>
+<script src="./app.js"></script>
+</body></html>
