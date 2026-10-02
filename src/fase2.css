@@ -1651,3 +1651,12 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 .presuEditarTop b{font-size:16px}
 .presuEditarTop small{font-size:12.5px;opacity:.8}
 .presuEditarTop>i{font-style:normal;font-size:20px;opacity:.8}
+.avancePct{display:flex;flex-direction:column;gap:8px}
+.avancePctTit{font-weight:600;font-size:14px}
+.avancePctFila{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.avancePctFila>input{width:80px}
+.avancePctFila>span{font-weight:700;color:#4b5059}
+.avancePctEstado{font-size:13px;font-weight:600;color:#4b5059}
+.avanceCobro{display:flex;flex-direction:column;gap:3px;background:#fff6ec;border:1px solid #f6d6b3;border-radius:12px;padding:10px 12px;font-size:13px;color:#5b6270}
+.avanceCobro b{color:#14181e;font-size:14px}
+.avanceCobro .pend{color:#c2410c}.avanceCobro .ok{color:#1f7a4d}
