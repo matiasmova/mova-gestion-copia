@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { cobradoPorMedio } from './formasPago'
 import type { Pedido } from './BuscadorGlobal'
 import { supabase } from './supabase'
 import { fechaCorta, moneda, hoy } from './gestionFormat'
@@ -290,6 +291,16 @@ function Finanzas({ onAbrirObra, pedido, onPedidoAtendido }: { onAbrirObra?: (ob
             <small>{sinObraPeriodo.length === 0 ? 'Todo asignado' : filtroObra === 'sin' ? 'Filtrando ✓' : 'Tocá para verlos'}</small>
           </button>
         </div>
+
+        {(() => {
+          const porMedio = cobradoPorMedio(filtrados.filter((m) => m.pago).map((m) => ({ monto: m.monto, medio_pago: m.pago?.medio_pago ?? null })))
+          return porMedio.length > 0 && (
+            <div className="cobroMediosLista enLinea">
+              <span>Cobros por medio</span>
+              {porMedio.map((m) => <div key={m.medio}><span>{m.texto}</span><b>{moneda(m.monto)}</b></div>)}
+            </div>
+          )
+        })()}
 
         {/* ---- Filtros ---- */}
         <div className="crmToolbar">

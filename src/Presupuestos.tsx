@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { cargarFormasPago, guardarFormasPago } from './formasPago'
 import type { Pedido } from './BuscadorGlobal'
 import { supabase } from './supabase'
 import NuevoPresupuesto, {
@@ -284,6 +285,8 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
     if (!faltaSqlEtapas && comoVersion) { fila.version = version; fila.version_de = p.id }
     const { data: nuevo, error: err } = await supabase.from('presupuestos').insert(fila).select('id').single()
     if (err || !nuevo) { console.error(err); window.alert('No se pudo copiar el presupuesto.'); return }
+    // Las formas de pago también se copian (si la columna existe).
+    await cargarFormasPago(p.id).then((f) => guardarFormasPago(Number(nuevo.id), f))
     if (p.items.length) {
       const { error: errItems } = await supabase.from('presupuesto_items').insert(p.items.map((it, i) => ({
         presupuesto_id: nuevo.id, catalogo_id: it.catalogo_id ?? null, tipo: it.tipo, descripcion: it.descripcion,

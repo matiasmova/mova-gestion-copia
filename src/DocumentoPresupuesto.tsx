@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import logo from './assets/mova-logo.jpg'
 import { moneda, fechaCorta } from './gestionFormat'
 import { configActual, lineaContacto, textoCondicion } from './config'
+import { textoMedios } from './formasPago'
 import { COLOR_MARCA_HEX, agruparPorTipo, completarDatosDocumento, lineasRecomendaciones, type DatosPdf } from './pdfPresupuesto'
 import { formatoPct, importeNeto, partirDescripcion, pctItem } from './presupuestoCalculos'
 import { antesYAhora, etiquetaModificacion } from './presupuestoModificaciones'
@@ -362,6 +363,13 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
         etiquetaTotal={e ? 'TOTAL ACEPTADO' : 'TOTAL'}
         total={Number(d.total)}
       />
+      {d.formasPago && d.formasPago.medios.length > 0 && (
+        <div style={{ ...s.caja, marginLeft: 'auto', width: 'min(330px, 100%)', marginTop: '10px', boxSizing: 'border-box' }}>
+          <div style={{ ...s.etiqueta, color: NARANJA, marginBottom: '4px' }}>Formas de pago</div>
+          <div style={{ fontWeight: 700, color: OSCURO }}>{textoMedios(d.formasPago)}</div>
+          {d.formasPago.nota && <div style={{ color: GRIS, fontSize: T_CHICO, marginTop: '2px' }}>{d.formasPago.nota}</div>}
+        </div>
+      )}
 
       {/* Modificaciones */}
       {e && e.modificaciones.length > 0 && (
