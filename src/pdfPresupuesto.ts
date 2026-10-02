@@ -2,7 +2,7 @@ import { PDFDocument, PDFString, StandardFonts, rgb, type PDFFont, type RGB, typ
 import logoUrl from './assets/mova-logo.png'
 import { moneda, fechaCorta } from './gestionFormat'
 import type { ItemPresupuesto } from './NuevoPresupuesto'
-import { importeNeto, partirDescripcion, pctItem, formatoPct } from './presupuestoCalculos'
+import { importeBruto, importeNeto, partirDescripcion, pctItem, formatoPct } from './presupuestoCalculos'
 import { antesYAhora, etiquetaModificacion } from './presupuestoModificaciones'
 import { cargarSolucionesPresupuesto, type SolucionPresupuesto } from './presupuestoSoluciones'
 import { configActual, lineaContacto, textoCondicion } from './config'
@@ -59,33 +59,42 @@ export async function completarDatosDocumento(d: DatosPdf): Promise<DatosPdf> {
 export const nombreArchivoPresupuesto = (d: Pick<DatosPdf, 'id' | 'cliente' | 'obra'>) => nombreArchivo(d.cliente, d.obra, d.id)
 
 // Color de marca en hex, usado también en la vista en pantalla.
-export const COLOR_MARCA_HEX = '#E47B00'
+export const COLOR_MARCA_HEX = '#DE7015'
 
 // Paleta
-const NARANJA = rgb(0.894, 0.482, 0)
-const NARANJA_SUAVE = rgb(1, 0.965, 0.925)
-const OSCURO = rgb(0.063, 0.075, 0.094)
-const TEXTO = rgb(0.2, 0.23, 0.27)
-const GRIS = rgb(0.47, 0.51, 0.56)
+const NARANJA = rgb(0.871, 0.439, 0.082) // #DE7015
+const NARANJA_SUAVE = rgb(1, 0.933, 0.867) // #FFEEDD
+const NARANJA_OSC = rgb(0.659, 0.314, 0.031) // #A85008
+const AVISO_FONDO = rgb(1, 0.965, 0.925)
+const AVISO_BORDE = rgb(0.965, 0.839, 0.702)
+const OSCURO = rgb(0.078, 0.094, 0.118) // #14181E
+const TEXTO = rgb(0.357, 0.384, 0.439)
+const GRIS = rgb(0.541, 0.576, 0.627)
 const GRIS_CLARO = rgb(0.965, 0.969, 0.976)
-const LINEA = rgb(0.9, 0.91, 0.93)
+const LINEA = rgb(0.91, 0.918, 0.933)
+const LINEA_SUAVE = rgb(0.945, 0.949, 0.957)
 const VERDE = rgb(0.137, 0.463, 0.306)
 const VERDE_SUAVE = rgb(0.925, 0.965, 0.945)
+const VERDE_CLARO = rgb(0.498, 0.82, 0.639)
+const GRIS_CAJA = rgb(0.788, 0.808, 0.839)
+const DIVISOR_CAJA = rgb(0.224, 0.251, 0.294)
 const BLANCO = rgb(1, 1, 1)
 
-// Solo tres tamaños de letra en todo el documento.
-const F_GRANDE = 17
-const F_NORMAL = 9.5
+// Tamaños de letra
+const F_GRANDE = 16.5
+const F_CIFRA = 14
+const F_NORMAL = 9
 const F_CHICO = 7.5
+const F_MINI = 6.8
 
 // Sanitiza a caracteres que las fuentes estándar (WinAnsi) pueden dibujar.
 function win(s: string): string {
   return (s ?? '')
-    .replace(/[\u00A0\u202F]/g, ' ')
-    .replace(/[\u2012-\u2015\u2212]/g, '-')
-    .replace(/[\u2018\u2019]/g, "'")
-    .replace(/[\u201C\u201D]/g, '"')
-    .replace(/\u2192/g, '->')
+    .replace(/[  ]/g, ' ')
+    .replace(/[‒-―−]/g, '-')
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/→/g, '->')
     .replace(/[^\x00-\xFF]/g, '')
 }
 
@@ -149,9 +158,11 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
   const CW = W - 2 * M
   const PIE = M + 34
   const codigo = codigoPresupuesto(d.id)
+  const validez = d.validez_dias ?? configActual().presupuestos.validezDias
+  const venceEl = fechaCorta(new Date(new Date(`${d.fecha.slice(0, 10)}T12:00:00`).getTime() + validez * 86400000).toISOString().slice(0, 10))
   // Comprobantes de los gastos: botón con link permanente o anexo al final.
   let modo: ModoComprobantes = opciones.comprobantes ?? 'boton'
-  const gastosCon = !estado ? [] : estado.gastosExtra.filter((g) => g.comprobante)
+  const gastosCon = !estado || modo === 'no' ? [] : estado.gastosExtra.filter((g) => g.comprobante)
   let links: Record<number, string> = {}
   if (modo === 'boton' && gastosCon.length) {
     const r = await linksComprobantes(gastosCon.map((g) => g.id))
@@ -159,29 +170,35 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     else { modo = 'anexo'; opciones.onAviso?.('Falta instalar la función "comprobante" en Supabase: por ahora los comprobantes van adjuntos al final.') }
   }
   const conComprobante = modo === 'anexo' ? gastosCon : []
-  // Botón con link (anotación del PDF que abre la dirección al tocarla).
-  const boton = (etiqueta: string, url: string, x: number, yy: number) => {
-    const s2 = win(etiqueta)
-    const w = bold.widthOfTextAtSize(s2, F_CHICO) + 16, h = 13
-    page.drawRectangle({ x, y: yy - 3.5, width: w, height: h, color: NARANJA })
-    page.drawText(s2, { x: x + 8, y: yy, size: F_CHICO, font: bold, color: BLANCO })
-    const anotacion = pdf.context.register(pdf.context.obj({
-      Type: 'Annot', Subtype: 'Link', Rect: [x, yy - 3.5, x + w, yy - 3.5 + h], Border: [0, 0, 0],
-      A: { Type: 'Action', S: 'URI', URI: PDFString.of(url) },
-    }))
-    page.node.addAnnot(anotacion)
-  }
+  const diaMes = (f: string) => fechaCorta(f).replace(/\/\d{4}$/, '')
   let page: PDFPage = pdf.addPage([W, H])
   let y = H - M
 
   // ---------- Utilidades ----------
   const texto = (t: string, x: number, yy: number, size: number, f: PDFFont = font, color: RGB = TEXTO) =>
     page.drawText(win(t), { x, y: yy, size, font: f, color })
-  const derecha = (t: string, right: number, yy: number, size: number, f: PDFFont = font, color: RGB = TEXTO) => {
-    const s = win(t); page.drawText(s, { x: right - f.widthOfTextAtSize(s, size), y: yy, size, font: f, color })
+  const ancho = (t: string, size: number, f: PDFFont = font) => f.widthOfTextAtSize(win(t), size)
+  const derecha = (t: string, right: number, yy: number, size: number, f: PDFFont = font, color: RGB = TEXTO) =>
+    texto(t, right - ancho(t, size, f), yy, size, f, color)
+  // Mayúsculas con letras separadas (títulos y etiquetas).
+  const SEP = 1.1
+  const anchoEsp = (t: string, size: number, f: PDFFont = bold) => {
+    const s = win(t); return s.length ? f.widthOfTextAtSize(s, size) + SEP * (s.length - 1) : 0
   }
-  const rect = (x: number, yy: number, w: number, h: number, color: RGB, borde?: RGB) =>
-    page.drawRectangle({ x, y: yy, width: w, height: h, color, ...(borde ? { borderColor: borde, borderWidth: 0.7 } : {}) })
+  const espaciado = (t: string, x: number, yy: number, size: number, color: RGB = GRIS, f: PDFFont = bold) => {
+    let xx = x
+    for (const c of win(t)) { page.drawText(c, { x: xx, y: yy, size, font: f, color }); xx += f.widthOfTextAtSize(c, size) + SEP }
+    return xx - SEP - x
+  }
+  const espaciadoDer = (t: string, right: number, yy: number, size: number, color: RGB = GRIS) => espaciado(t, right - anchoEsp(t, size), yy, size, color)
+  const rect = (x: number, yy: number, w: number, h: number, color: RGB) => page.drawRectangle({ x, y: yy, width: w, height: h, color })
+  // Rectángulo con puntas redondeadas; (x, arriba) es la esquina superior izquierda.
+  const caja = (x: number, arriba: number, w: number, h: number, o: { fondo?: RGB; borde?: RGB; r?: number } = {}) => {
+    const r = Math.min(o.r ?? 7, w / 2, h / 2)
+    page.drawSvgPath(`M ${r} 0 H ${w - r} Q ${w} 0 ${w} ${r} V ${h - r} Q ${w} ${h} ${w - r} ${h} H ${r} Q 0 ${h} 0 ${h - r} V ${r} Q 0 0 ${r} 0 Z`, {
+      x, y: arriba, ...(o.fondo ? { color: o.fondo } : {}), ...(o.borde ? { borderColor: o.borde, borderWidth: 0.75 } : { borderWidth: 0 }),
+    })
+  }
   const linea = (x1: number, yy: number, x2: number, grosor = 0.6, color: RGB = LINEA) =>
     page.drawLine({ start: { x: x1, y: yy }, end: { x: x2, y: yy }, thickness: grosor, color })
   const partir = (t: string, size: number, maxW: number, f: PDFFont = font): string[] => {
@@ -197,366 +214,400 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     }
     return salida.filter((r, i, arr) => r !== '' || (i > 0 && i < arr.length - 1))
   }
+  // Título de sección: mayúsculas espaciadas y una línea fina hasta el borde.
   const titulo = (t: string) => {
-    rect(M, y - 2, 3, 12, NARANJA)
-    texto(t.toUpperCase(), M + 10, y, F_NORMAL, bold, OSCURO)
-    y -= 18
+    const w = espaciado(t.toUpperCase(), M, y, F_CHICO + 0.4, OSCURO)
+    linea(M + w + 8, y + 2.6, M + CW, 0.7)
+    y -= 17
   }
   const nuevaPagina = () => {
     page = pdf.addPage([W, H]); y = H - M
     texto(`Presupuesto ${codigo} · ${d.cliente}`, M, y, F_CHICO, font, GRIS)
     derecha('continuación', M + CW, y, F_CHICO, font, GRIS)
-    y -= 10; linea(M, y, M + CW); y -= 20
+    y -= 26
   }
   const lugar = (alto: number) => { if (y - alto < PIE) { nuevaPagina(); return true } return false }
-  const cajaTotal = (x: number, w: number, etiqueta: string, monto: string) => {
-    rect(x, y - 16, w, 34, NARANJA_SUAVE)
-    rect(x, y - 16, 2.5, 34, NARANJA)
-    texto(etiqueta, x + 12, y - 5, F_CHICO, bold, NARANJA)
-    derecha(monto, x + w - 10, y - 7, F_GRANDE, bold, OSCURO)
-    y -= 34
-  }
-  const encabezadoFila = (celdas: { t: string; x: number; der?: boolean }[]) => {
-    rect(M, y - 6, CW, 20, GRIS_CLARO)
-    linea(M, y - 6, M + CW, 0.8, NARANJA)
-    for (const c of celdas) {
-      if (c.der) derecha(c.t, c.x, y, F_CHICO, bold, GRIS)
-      else texto(c.t, c.x, y, F_CHICO, bold, GRIS)
-    }
-    y -= 22
-  }
-  const tilde = (x: number, yy: number, ok: boolean) => {
-    page.drawCircle({ x, y: yy, size: 6.5, color: ok ? VERDE : NARANJA })
-    if (ok) {
+  // Circulito de estado: tilde verde, "!" naranja o vacío (lo que viene).
+  const icono = (x: number, yy: number, tipo: 'ok' | 'pendiente' | 'futuro', r = 7) => {
+    if (tipo === 'futuro') { page.drawCircle({ x, y: yy, size: r - 0.6, color: BLANCO, borderColor: GRIS_CAJA, borderWidth: 1.1 }); return }
+    page.drawCircle({ x, y: yy, size: r, color: tipo === 'ok' ? VERDE : NARANJA })
+    if (tipo === 'ok') {
       page.drawLine({ start: { x: x - 3, y: yy }, end: { x: x - 0.8, y: yy - 2.4 }, thickness: 1.3, color: BLANCO })
       page.drawLine({ start: { x: x - 0.8, y: yy - 2.4 }, end: { x: x + 3.2, y: yy + 2.6 }, thickness: 1.3, color: BLANCO })
     } else {
-      page.drawLine({ start: { x, y: yy + 3 }, end: { x, y: yy - 0.5 }, thickness: 1.4, color: BLANCO })
+      page.drawLine({ start: { x, y: yy + 3.2 }, end: { x, y: yy - 0.4 }, thickness: 1.4, color: BLANCO })
       page.drawCircle({ x, y: yy - 2.6, size: 0.8, color: BLANCO })
     }
+  }
+  // Tres tarjetas de cifras; la marcada va llena de naranja (o verde si está al día).
+  type Cifra = { e: string; v: string; s?: string; destacada?: 'naranja' | 'verde'; color?: RGB }
+  const tarjetas = (cifras: Cifra[]) => {
+    const gap = 8, w = (CW - gap * 2) / 3, h = 54
+    lugar(h + 8)
+    cifras.forEach((c, i) => {
+      const x = M + i * (w + gap)
+      const fondo = c.destacada === 'naranja' ? NARANJA : c.destacada === 'verde' ? VERDE : undefined
+      caja(x, y, w, h, fondo ? { fondo, r: 9 } : { borde: LINEA, r: 9 })
+      espaciado(c.e, x + 11, y - 15, F_MINI, fondo ? BLANCO : GRIS)
+      let size = F_CIFRA
+      while (size > 9 && ancho(c.v, size, bold) > w - 22) size -= 0.5
+      texto(c.v, x + 11, y - 33, size, bold, fondo ? BLANCO : (c.color ?? OSCURO))
+      if (c.s) texto(partir(c.s, F_MINI + 0.4, w - 22)[0] ?? '', x + 11, y - 45, F_MINI + 0.4, font, fondo ? BLANCO : GRIS)
+    })
+    y -= h + 10
+  }
+  // Barra de progreso redondeada.
+  const barra = (x: number, yy: number, w: number, pct: number, color: RGB = NARANJA, alto = 4.5) => {
+    caja(x, yy + alto, w, alto, { fondo: LINEA, r: alto / 2 })
+    const p = Math.max(0, Math.min(1, pct))
+    if (p > 0) caja(x, yy + alto, Math.max(w * p, alto), alto, { fondo: color, r: alto / 2 })
+  }
+  // Caja negra de totales: renglones chicos arriba y el total grande abajo.
+  const cajaNegra = (renglones: { t: string; v: string; verde?: boolean }[], etiqueta: string, monto: string) => {
+    const w = 270, x = M + CW - w
+    const h = 22 + renglones.length * 14 + (renglones.length ? 10 : 0) + 18
+    lugar(h + 6)
+    caja(x, y, w, h, { fondo: OSCURO, r: 9 })
+    let yy = y - 18
+    for (const r of renglones) {
+      texto(r.t, x + 14, yy, F_NORMAL - 0.5, font, r.verde ? VERDE_CLARO : GRIS_CAJA)
+      derecha(r.v, x + w - 14, yy, F_NORMAL - 0.5, font, r.verde ? VERDE_CLARO : GRIS_CAJA)
+      yy -= 14
+    }
+    if (renglones.length) { linea(x + 14, yy + 6, x + w - 14, 0.7, DIVISOR_CAJA); yy -= 10 }
+    espaciado(etiqueta, x + 14, yy + 1, F_CHICO, BLANCO)
+    derecha(monto, x + w - 14, yy - 1, F_CIFRA, bold, BLANCO)
+    y -= h + 14
+  }
+  // Botón con link (anotación del PDF que abre la dirección al tocarla).
+  const boton = (etiqueta: string, url: string, x: number, yy: number) => {
+    const s2 = win(etiqueta)
+    const w = bold.widthOfTextAtSize(s2, F_MINI + 0.4) + 22, h = 13
+    caja(x, yy + h - 3.5, w, h, { fondo: NARANJA, r: 3.5 })
+    // flechita de descarga
+    const fx = x + 8, fy = yy + 3
+    page.drawLine({ start: { x: fx, y: fy + 4 }, end: { x: fx, y: fy - 0.5 }, thickness: 1, color: BLANCO })
+    page.drawSvgPath('M -2.3 0 L 2.3 0 L 0 2.6 Z', { x: fx, y: fy - 0.2, color: BLANCO })
+    page.drawLine({ start: { x: fx - 2.8, y: fy - 3 }, end: { x: fx + 2.8, y: fy - 3 }, thickness: 0.8, color: BLANCO })
+    page.drawText(s2, { x: x + 15, y: yy, size: F_MINI + 0.4, font: bold, color: BLANCO })
+    const anotacion = pdf.context.register(pdf.context.obj({
+      Type: 'Annot', Subtype: 'Link', Rect: [x, yy - 3.5, x + w, yy - 3.5 + h], Border: [0, 0, 0],
+      A: { Type: 'Action', S: 'URI', URI: PDFString.of(url) },
+    }))
+    page.node.addAnnot(anotacion)
   }
 
   // ---------- Encabezado ----------
   if (logo) {
-    const lw = 150, lh = lw * (logo.height / logo.width)
-    page.drawImage(logo, { x: M, y: y - lh + 6, width: lw, height: lh })
+    const lh = 34, lw = lh * (logo.width / logo.height)
+    page.drawImage(logo, { x: M, y: y - lh + 4, width: lw, height: lh })
   }
-  derecha(estado ? 'PRESUPUESTO Y ESTADO DE OBRA' : 'PRESUPUESTO', M + CW, y, F_CHICO, bold, NARANJA); y -= 20
-  derecha(codigo, M + CW, y, F_GRANDE, bold, OSCURO); y -= 15
-  derecha(`Fecha: ${fechaCorta(d.fecha)}`, M + CW, y, F_CHICO, font, GRIS); y -= 11
-  if (estado) {
-    derecha(`Última actualización: ${fechaCorta(estado.ultimaActualizacion)}`, M + CW, y, F_CHICO, bold, NARANJA); y -= 11
-  } else if (d.validez_dias) { derecha(`Validez: ${d.validez_dias} ${d.validez_dias === 1 ? 'día' : 'días'}`, M + CW, y, F_CHICO, font, GRIS); y -= 11 }
-  y -= 8
-  linea(M, y, M + CW, 0.8, LINEA)
-  rect(M, y - 0.4, 60, 1.6, NARANJA)
-  y -= 22
-
-  // ---------- Cliente y obra (con datos de contacto) ----------
-  const cajaW = (CW - 12) / 2
-  const hayObra = !!d.obra && d.obra !== 'Sin obra asociada'
-  const lineasCliente = [
-    contacto?.telefono ? `Tel.: ${contacto.telefono}` : null,
-    contacto?.email ? `Email: ${contacto.email}` : null,
-    contacto?.documento ? `${contacto.documento.etiqueta}: ${contacto.documento.valor}` : null,
-    contacto?.direccionCliente ? `Domicilio: ${contacto.direccionCliente}` : null,
-  ].filter((l): l is string => !!l).flatMap((l) => partir(l, F_CHICO + 0.5, cajaW - 24))
-  const etapa = !estado ? null : estado.terminada ? 'Obra finalizada' : estado.enObra ? `En obra · avance ${estado.avance}%` : 'Presupuesto aceptado'
-  const lineasObra = [
-    hayObra && (contacto?.direccionObra || contacto?.direccionCliente) ? `Ubicación: ${contacto?.direccionObra || contacto?.direccionCliente}` : null,
-    etapa ? `Estado: ${etapa}` : null,
-    estado ? null : `Presupuesto válido hasta el ${fechaCorta(new Date(new Date(`${d.fecha.slice(0, 10)}T12:00:00`).getTime() + (d.validez_dias ?? configActual().presupuestos.validezDias) * 86400000).toISOString().slice(0, 10))}`,
-  ].filter((l): l is string => !!l).flatMap((l) => partir(l, F_CHICO + 0.5, cajaW - 24))
-  const altoCaja = 34 + Math.max(lineasCliente.length, lineasObra.length) * 10.5
-  rect(M, y - altoCaja + 12, cajaW, altoCaja, GRIS_CLARO)
-  rect(M + cajaW + 12, y - altoCaja + 12, cajaW, altoCaja, GRIS_CLARO)
-  texto('CLIENTE', M + 12, y, F_CHICO, bold, GRIS)
-  texto(hayObra ? 'OBRA' : 'PRESUPUESTO', M + cajaW + 24, y, F_CHICO, bold, GRIS)
-  let yCaja = y - 15
-  texto(partir(d.cliente, F_NORMAL, cajaW - 24, bold)[0] ?? '', M + 12, yCaja, F_NORMAL, bold, OSCURO)
-  texto(partir(hayObra ? d.obra : codigo, F_NORMAL, cajaW - 24, bold)[0] ?? '', M + cajaW + 24, yCaja, F_NORMAL, bold, OSCURO)
-  yCaja -= 13
-  let yl = yCaja
-  for (const l of lineasCliente) { texto(l, M + 12, yl, F_CHICO + 0.5, font, TEXTO); yl -= 10.5 }
-  yl = yCaja
-  for (const l of lineasObra) { texto(l, M + cajaW + 24, yl, F_CHICO + 0.5, font, TEXTO); yl -= 10.5 }
-  y -= altoCaja + 22
-
-  // ---------- Título y descripción ----------
-  for (const r of partir(d.titulo, F_GRANDE, CW, bold)) { texto(r, M, y, F_GRANDE, bold, OSCURO); y -= 21 }
-  if (d.descripcion) for (const r of partir(d.descripcion, F_NORMAL, CW)) { lugar(13); texto(r, M, y, F_NORMAL, font, GRIS); y -= 13 }
+  espaciadoDer(estado ? 'PRESUPUESTO Y ESTADO DE OBRA' : 'PRESUPUESTO', M + CW, y - 2, F_MINI, NARANJA); y -= 20
+  derecha(codigo, M + CW, y, 17, bold, OSCURO); y -= 12
+  derecha(estado ? `Emitido ${fechaCorta(d.fecha)} · Actualizado ${fechaCorta(estado.ultimaActualizacion)}` : `Emitido ${fechaCorta(d.fecha)} · Válido hasta ${venceEl}`, M + CW, y, F_CHICO, font, GRIS)
+  y -= 14
+  caja(M, y, CW, 2.2, { fondo: LINEA, r: 1.1 })
+  caja(M, y, CW * 0.18, 2.2, { fondo: NARANJA, r: 1.1 })
   y -= 14
 
-  // ---------- Qué vas a disfrutar (soluciones), a todo el ancho ----------
+  // ---------- Cliente / obra / condiciones ----------
+  const hayObra = !!d.obra && d.obra !== 'Sin obra asociada'
+  const gap = 8
+  const anchos = [(CW - 2 * gap) * 0.38, (CW - 2 * gap) * 0.36, (CW - 2 * gap) * 0.26]
+  const etapa = !estado ? null : estado.terminada ? 'Obra finalizada' : estado.enObra ? `En obra · avance ${estado.avance}%` : 'Presupuesto aceptado'
+  const partes = [
+    { e: 'CLIENTE', n: d.cliente, l: [
+      contacto?.telefono ? `Tel. ${contacto.telefono}` : null,
+      contacto?.email ?? null,
+      contacto?.documento ? `${contacto.documento.etiqueta}: ${contacto.documento.valor}` : null,
+      contacto?.direccionCliente ?? null,
+    ] },
+    { e: hayObra ? 'OBRA' : 'PRESUPUESTO', n: hayObra ? d.obra : codigo, l: [
+      hayObra ? (contacto?.direccionObra || contacto?.direccionCliente || null) : null,
+      etapa ?? `Válido hasta el ${venceEl}`,
+    ] },
+    { e: 'CONDICIONES', n: `Seña ${PCT_ANTICIPO}%`, l: ['Saldo al finalizar', `Validez ${validez} ${validez === 1 ? 'día' : 'días'}`] },
+  ].map((p, i) => ({
+    ...p,
+    nr: partir(p.n, F_NORMAL + 1, anchos[i] - 22, bold).slice(0, 2),
+    lr: p.l.filter((x): x is string => !!x).flatMap((x) => partir(x, F_CHICO, anchos[i] - 22)),
+  }))
+  const altoPartes = 30 + Math.max(...partes.map((p) => p.nr.length * 12 + p.lr.length * 10)) + 2
+  let xp = M
+  partes.forEach((p, i) => {
+    caja(xp, y, anchos[i], altoPartes, { borde: LINEA, r: 8 })
+    espaciado(p.e, xp + 11, y - 14, F_MINI, GRIS)
+    let yy = y - 27
+    for (const r of p.nr) { texto(r, xp + 11, yy, F_NORMAL + 1, bold, OSCURO); yy -= 12 }
+    yy -= 1
+    for (const r of p.lr) { texto(r, xp + 11, yy, F_CHICO, font, TEXTO); yy -= 10 }
+    xp += anchos[i] + gap
+  })
+  y -= altoPartes + 24
+
+  // ---------- Título y descripción ----------
+  for (const r of partir(d.titulo, F_GRANDE, CW, bold)) { lugar(22); texto(r, M, y, F_GRANDE, bold, OSCURO); y -= 20 }
+  if (d.descripcion) { y += 3; for (const r of partir(d.descripcion, F_NORMAL, CW)) { lugar(13); texto(r, M, y, F_NORMAL, font, GRIS); y -= 12.5 } }
+  y -= 8
+
+  // ---------- Cifras principales ----------
+  const aPagarHoy = estado ? totalAPagarHoy(estado) : 0
+  if (estado) {
+    const pctPagado = estado.totalActualizado > 0 ? Math.round(Math.min(1, estado.cobrado / estado.totalActualizado) * 100) : 0
+    tarjetas([
+      { e: 'TOTAL DE LA OBRA', v: moneda(estado.totalActualizado), s: estado.modificaciones.length ? 'Con modificaciones' : 'Presupuesto aceptado' },
+      { e: 'YA PAGASTE', v: moneda(estado.cobrado), s: `${pctPagado}% del total`, color: estado.cobrado > 0 ? VERDE : OSCURO },
+      aPagarHoy > 0.5
+        ? { e: 'A PAGAR HOY', v: moneda(aPagarHoy), s: estado.gastoExtraPendiente > 0.5 ? 'Obra + gastos a reintegrar' : 'Según el avance de la obra', destacada: 'naranja' }
+        : { e: 'A PAGAR HOY', v: moneda(0), s: 'Estás al día', destacada: 'verde' },
+    ])
+    // Avance de la obra en una línea
+    lugar(20)
+    const ultimo = estado.avances.length ? estado.avances[estado.avances.length - 1] : null
+    const izq = 'Avance de la obra'
+    texto(izq, M, y, F_CHICO, font, TEXTO)
+    const pctTxt = `${estado.avance}%`
+    const xPct = M + ancho(izq, F_CHICO) + 4
+    texto(pctTxt, xPct, y, F_CHICO, bold, OSCURO)
+    const der = ultimo ? `Último informe ${diaMes(ultimo.fecha)} · ${ultimo.titulo}` : 'Sin informes de avance todavía'
+    const derCorto = partir(der, F_CHICO, 170)[0] ?? ''
+    derecha(derCorto, M + CW, y, F_CHICO, font, GRIS)
+    const xb = xPct + ancho(pctTxt, F_CHICO, bold) + 10
+    barra(xb, y + 0.3, M + CW - ancho(derCorto, F_CHICO) - 10 - xb, estado.avance / 100)
+    y -= 26
+  } else {
+    tarjetas([
+      { e: 'TOTAL DEL PRESUPUESTO', v: moneda(d.total), s: 'Precio final', destacada: 'naranja' },
+      { e: `SEÑA PARA CONFIRMAR (${PCT_ANTICIPO}%)`, v: moneda(Math.round(d.total * PCT_ANTICIPO) / 100), s: 'Reserva la fecha y los materiales' },
+      { e: 'VÁLIDO HASTA', v: venceEl, s: `${validez} ${validez === 1 ? 'día' : 'días'} desde la emisión` },
+    ])
+    y -= 14
+  }
+
+  // ---------- Qué vas a disfrutar (soluciones) ----------
   if (soluciones.length) {
-    lugar(70)
-    titulo('Qué vas a disfrutar con este proyecto')
+    lugar(60)
+    titulo('Qué vas a disfrutar')
     for (const sol of soluciones) {
-      const tit = partir(sol.titulo, F_NORMAL, CW - 40, bold)
-      const desc = partir(sol.descripcion, F_CHICO + 1, CW - 40)
-      const alto = tit.length * 12 + desc.length * 11.5 + 16
+      const tit = partir(sol.titulo, F_NORMAL, CW - 46, bold)
+      const desc = partir(sol.descripcion, F_CHICO + 0.5, CW - 46)
+      const alto = tit.length * 11.5 + desc.length * 10.5 + 16
       lugar(alto + 6)
-      rect(M, y - alto + 12, CW, alto, BLANCO, LINEA)
-      rect(M, y - alto + 12, 2.5, alto, NARANJA)
-      tilde(M + 18, y - 1, true)
-      let yy = y - 2
-      for (const r of tit) { texto(r, M + 32, yy, F_NORMAL, bold, OSCURO); yy -= 12 }
-      yy -= 1
-      for (const r of desc) { texto(r, M + 32, yy, F_CHICO + 1, font, TEXTO); yy -= 11.5 }
+      caja(M, y + 8, CW, alto, { borde: LINEA, r: 8 })
+      icono(M + 17, y - 4, 'ok')
+      let yy = y - 6
+      for (const r of tit) { texto(r, M + 32, yy, F_NORMAL, bold, OSCURO); yy -= 11.5 }
+      for (const r of desc) { texto(r, M + 32, yy, F_CHICO + 0.5, font, TEXTO); yy -= 10.5 }
       y -= alto + 6
     }
     y -= 12
   }
 
-  // ---------- Tabla de ítems ----------
-  const hayDescuento = d.items.some((it) => pctItem(it) > 0)
-  const xImp = M + CW - 10
-  const xDesc = xImp - 92
-  const xPU = hayDescuento ? xDesc - 46 : xImp - 92
-  const xCant = xPU - 86
+  // ---------- Detalle de ítems ----------
+  const xImp = M + CW - 4
   const xDescr = M + 30
-  const anchoDescr = xCant - 38 - xDescr
-  const encabezadoTabla = () => encabezadoFila([
-    { t: '#', x: M + 10 }, { t: 'DESCRIPCIÓN', x: xDescr }, { t: 'CANT.', x: xCant, der: true },
-    { t: 'P. UNITARIO', x: xPU, der: true }, ...(hayDescuento ? [{ t: 'DESC.', x: xDesc, der: true }] : []), { t: 'IMPORTE', x: xImp, der: true },
-  ])
-
+  const anchoDescr = CW - 30 - 120
   lugar(60)
   titulo(estado ? 'Presupuesto aceptado' : 'Detalle del presupuesto')
-  encabezadoTabla()
   let numero = 0
   let sumaNeta = 0
+  let sumaBruta = 0
   for (const g of agruparPorTipo(d.items)) {
-    if (lugar(40)) encabezadoTabla()
-    texto(g.titulo.toUpperCase(), M + 10, y, F_CHICO, bold, NARANJA)
-    y -= 16
+    lugar(44)
+    espaciado(g.titulo.toUpperCase(), M + 2, y, F_MINI, NARANJA)
+    y -= 14
     for (const it of g.items) {
       numero++
       const { titulo: tit, detalle } = partirDescripcion(it.descripcion)
       const renglonesTit = partir(tit, F_NORMAL, anchoDescr, bold)
       const renglonesDet = detalle ? partir(detalle, F_CHICO, anchoDescr) : []
-      const alto = renglonesTit.length * 12 + renglonesDet.length * 10 + 10
-      if (lugar(alto)) encabezadoTabla()
+      const alto = renglonesTit.length * 11.5 + renglonesDet.length * 10 + 10 + 12
+      lugar(alto)
       const neto = importeNeto(it)
+      const bruto = importeBruto(it)
+      const pct = pctItem(it)
       sumaNeta += neto
-      texto(String(numero).padStart(2, '0'), M + 10, y, F_NORMAL, font, GRIS)
-      derecha(`${Number(it.cantidad)}`, xCant, y, F_NORMAL, font, TEXTO)
-      derecha(moneda(it.precio_unitario), xPU, y, F_NORMAL, font, TEXTO)
-      if (hayDescuento) derecha(pctItem(it) > 0 ? `${formatoPct(pctItem(it))}%` : '—', xDesc, y, F_NORMAL, font, pctItem(it) > 0 ? NARANJA : GRIS)
-      derecha(moneda(neto), xImp, y, F_NORMAL, bold, OSCURO)
+      sumaBruta += bruto
+      // número en un cuadradito naranja suave
+      caja(M + 2, y + 9, 17, 17, { fondo: NARANJA_SUAVE, r: 4.5 })
+      const nTxt = String(numero).padStart(2, '0')
+      texto(nTxt, M + 2 + (17 - ancho(nTxt, F_CHICO, bold)) / 2, y - 3.5, F_CHICO, bold, NARANJA_OSC)
       let yy = y
-      for (const r of renglonesTit) { texto(r, xDescr, yy, F_NORMAL, bold, OSCURO); yy -= 12 }
-      for (const r of renglonesDet) { texto(r, xDescr, yy + 1, F_CHICO, font, GRIS); yy -= 10 }
+      for (const r of renglonesTit) { texto(r, xDescr, yy, F_NORMAL, bold, OSCURO); yy -= 11.5 }
+      for (const r of renglonesDet) { texto(r, xDescr, yy + 0.5, F_CHICO, font, GRIS); yy -= 10 }
+      const cuenta = `${Number(it.cantidad).toLocaleString('es-AR')} × ${moneda(it.precio_unitario)}`
+      texto(cuenta, xDescr, yy, F_CHICO, font, GRIS)
+      if (pct > 0) {
+        const pTxt = `-${formatoPct(pct)}%`
+        const xPill = xDescr + ancho(cuenta, F_CHICO) + 5
+        const wPill = ancho(pTxt, F_MINI, bold) + 9
+        caja(xPill, yy + 7.3, wPill, 9.6, { fondo: NARANJA_SUAVE, r: 4.8 })
+        texto(pTxt, xPill + 4.5, yy - 0.2, F_MINI, bold, NARANJA_OSC)
+      }
+      derecha(moneda(neto), xImp, y, F_NORMAL + 0.5, bold, OSCURO)
+      if (pct > 0) {
+        const tachado = moneda(bruto)
+        derecha(tachado, xImp, y - 11.5, F_CHICO, font, GRIS)
+        linea(xImp - ancho(tachado, F_CHICO), y - 9, xImp, 0.6, GRIS)
+      }
       y -= alto
-      linea(M, y + 11, M + CW, 0.5)
+      linea(M, y + 11, M + CW, 0.6, LINEA_SUAVE)
     }
+    y -= 4
   }
-  y -= 8
+  y -= 6
 
-  // ---------- Totales ----------
-  const bonificacion = Math.round((sumaNeta - d.total) * 100) / 100
-  const totW = 250, totX = M + CW - totW
-  lugar(80)
-  texto('Subtotal', totX + 12, y, F_NORMAL, font, GRIS); derecha(moneda(sumaNeta), xImp, y, F_NORMAL, font, TEXTO); y -= 15
-  if (bonificacion > 0.5) {
-    texto('Bonificación', totX + 12, y, F_NORMAL, font, NARANJA); derecha(`- ${moneda(bonificacion)}`, xImp, y, F_NORMAL, font, NARANJA); y -= 15
-  }
-  y -= 8
-  cajaTotal(totX, totW, estado ? 'TOTAL ACEPTADO' : 'TOTAL', moneda(d.total))
-  y -= 14
+  // ---------- Totales (caja negra) ----------
+  const ahorro = Math.round((sumaBruta - d.total) * 100) / 100
+  cajaNegra(
+    ahorro > 0.5 ? [{ t: 'Subtotal', v: moneda(sumaBruta) }, { t: 'Te ahorrás (descuentos)', v: `- ${moneda(ahorro)}`, verde: true }]
+      : Math.abs(sumaNeta - d.total) > 0.5 ? [{ t: 'Subtotal', v: moneda(sumaNeta) }, { t: 'Ajuste', v: conSigno(d.total - sumaNeta) }] : [],
+    estado ? 'TOTAL ACEPTADO' : 'TOTAL', moneda(d.total),
+  )
+  y -= 6
 
   if (estado) {
     // ---------- Modificaciones durante la obra ----------
     if (estado.modificaciones.length > 0) {
       lugar(90)
       titulo('Modificaciones durante la obra')
-      for (const r of partir('El presupuesto de arriba se mantiene tal como fue aceptado. Estos son los cambios registrados después:', F_CHICO, CW)) { texto(r, M, y, F_CHICO, font, GRIS); y -= 10 }
-      y -= 8
-      const xFecha = M + 10
-      const xConc = M + 78
-      const anchoConc = xImp - 100 - xConc
-      const encabezadoMods = () => encabezadoFila([{ t: 'FECHA', x: xFecha }, { t: 'CONCEPTO', x: xConc }, { t: 'IMPORTE', x: xImp, der: true }])
-      encabezadoMods()
-      for (const m of estado.modificaciones) {
+      for (const r of partir('El presupuesto de arriba se mantiene tal como fue aceptado. Estos son los cambios registrados después:', F_CHICO + 0.5, CW)) { texto(r, M, y, F_CHICO + 0.5, font, GRIS); y -= 10.5 }
+      y -= 6
+      const anchoConc = CW - 30 - 120
+      estado.modificaciones.forEach((m, iMod) => {
         const { antes, ahora } = antesYAhora(m, moneda)
         const renglones: { t: string; size: number; f: PDFFont; color: RGB }[] = [
-          { t: etiquetaModificacion(m).toUpperCase(), size: F_CHICO, f: bold, color: GRIS },
           ...partir(m.descripcion, F_NORMAL, anchoConc, bold).map((t) => ({ t, size: F_NORMAL, f: bold, color: OSCURO })),
+          { t: `${fechaCorta(m.fecha)} · ${etiquetaModificacion(m)}`, size: F_CHICO, f: font, color: GRIS },
           ...(antes ? partir(`Antes: ${antes}`, F_CHICO, anchoConc).map((t) => ({ t, size: F_CHICO, f: font, color: GRIS })) : []),
           ...(ahora ? partir(`Ahora: ${ahora}`, F_CHICO, anchoConc).map((t) => ({ t, size: F_CHICO, f: font, color: TEXTO })) : []),
           ...(m.motivo ? partir(`Motivo: ${m.motivo}`, F_CHICO, anchoConc).map((t) => ({ t, size: F_CHICO, f: font, color: GRIS })) : []),
         ]
-        const alto = renglones.reduce((s, r) => s + r.size + 3, 0) + 10
-        if (lugar(alto)) encabezadoMods()
-        texto(fechaCorta(m.fecha), xFecha, y, F_NORMAL, font, TEXTO)
-        derecha(m.importe === 0 ? moneda(0) : conSigno(m.importe), xImp, y, F_NORMAL, bold, m.importe < 0 ? VERDE : OSCURO)
+        const alto = renglones.reduce((s, r) => s + r.size + 3, 0) + 12
+        // el último cambio va en la misma página que su caja de total
+        lugar(alto + (iMod === estado.modificaciones.length - 1 ? 92 : 0))
+        caja(M + 2, y + 9, 17, 17, { fondo: m.importe < 0 ? VERDE_SUAVE : NARANJA_SUAVE, r: 4.5 })
+        const signo = m.importe < 0 ? '-' : '+'
+        texto(signo, M + 2 + (17 - ancho(signo, F_NORMAL, bold)) / 2, y - 3.5, F_NORMAL, bold, m.importe < 0 ? VERDE : NARANJA_OSC)
+        derecha(m.importe === 0 ? moneda(0) : conSigno(m.importe), xImp, y, F_NORMAL + 0.5, bold, m.importe < 0 ? VERDE : OSCURO)
         let yy = y
-        for (const r of renglones) { texto(r.t, xConc, yy, r.size, r.f, r.color); yy -= r.size + 3 }
+        for (const r of renglones) { texto(r.t, xDescr, yy, r.size, r.f, r.color); yy -= r.size + 3 }
         y -= alto
-        linea(M, y + 11, M + CW, 0.5)
-      }
+        linea(M, y + 11, M + CW, 0.6, LINEA_SUAVE)
+      })
       y -= 8
-      lugar(80)
-      texto('Total original aceptado', totX + 12, y, F_NORMAL, font, GRIS); derecha(moneda(estado.totalOriginal), xImp, y, F_NORMAL, font, TEXTO); y -= 15
-      texto('Modificaciones', totX + 12, y, F_NORMAL, font, GRIS); derecha(conSigno(estado.totalCambios), xImp, y, F_NORMAL, font, estado.totalCambios < 0 ? VERDE : OSCURO); y -= 23
-      cajaTotal(totX, totW, 'TOTAL ACTUALIZADO', moneda(estado.totalActualizado))
-      y -= 14
+      cajaNegra([
+        { t: 'Total original aceptado', v: moneda(estado.totalOriginal) },
+        { t: 'Modificaciones', v: conSigno(estado.totalCambios), verde: estado.totalCambios < 0 },
+      ], 'TOTAL ACTUALIZADO', moneda(estado.totalActualizado))
+      y -= 6
     }
 
     // ---------- Pagos recibidos ----------
-    lugar(70)
+    lugar(60)
     titulo('Pagos recibidos')
     if (estado.pagos.length === 0) {
-      texto('Todavía no registramos pagos.', M, y, F_NORMAL, font, GRIS); y -= 22
+      texto('Todavía no registramos pagos.', M, y, F_NORMAL, font, GRIS); y -= 24
     } else {
-      encabezadoFila([{ t: 'FECHA', x: M + 10 }, { t: 'MEDIO', x: M + 90 }, { t: 'REFERENCIA', x: M + 200 }, { t: 'MONTO', x: xImp, der: true }])
       for (const p of estado.pagos) {
-        lugar(18)
-        texto(fechaCorta(p.fecha), M + 10, y, F_NORMAL, font, TEXTO)
-        texto((p.medio ?? '—').replace('_', ' ').replace(/^./, (c) => c.toUpperCase()), M + 90, y, F_NORMAL, font, TEXTO)
-        texto(partir(p.referencia || '—', F_NORMAL, xImp - 120 - (M + 200))[0] ?? '', M + 200, y, F_NORMAL, font, GRIS)
-        derecha(moneda(p.monto), xImp, y, F_NORMAL, bold, OSCURO)
-        y -= 18
-        linea(M, y + 11, M + CW, 0.5)
+        lugar(26)
+        icono(M + 10, y + 0.5, 'ok', 6.5)
+        const medio = (p.medio ?? '').replace('_', ' ').replace(/^./, (c) => c.toUpperCase())
+        texto(`Pago recibido${medio ? ` · ${medio}` : ''}`, M + 24, y + 3, F_NORMAL, bold, OSCURO)
+        texto(partir([fechaCorta(p.fecha), p.referencia].filter(Boolean).join(' · '), F_CHICO, CW - 170)[0] ?? '', M + 24, y - 8, F_CHICO, font, GRIS)
+        derecha(moneda(p.monto), xImp, y - 2, F_NORMAL + 0.5, bold, VERDE)
+        y -= 26
+        linea(M, y + 11, M + CW, 0.6, LINEA_SUAVE)
       }
-      y -= 4
-      texto('Total pagado', totX + 12, y, F_NORMAL, bold, OSCURO); derecha(moneda(estado.cobrado), xImp, y, F_NORMAL, bold, VERDE); y -= 22
+      y -= 2
+      derecha(`Total pagado  ${moneda(estado.cobrado)}`, xImp, y, F_NORMAL, bold, VERDE); y -= 26
     }
 
-    // ---------- Estado de tu obra (después de los pagos) ----------
-  if (estado) {
+    // ---------- Estado de cuenta ----------
     const msg = mensajeEstado(estado, moneda)
-    lugar(150)
-    titulo('Estado de tu obra')
-    // Tres cifras
-    const col = CW / 3
-    rect(M, y - 34, CW, 48, GRIS_CLARO)
-    const cifras = [
-      { e: 'TOTAL DE LA OBRA', v: moneda(estado.totalActualizado), c: OSCURO },
-      { e: 'YA PAGASTE', v: moneda(estado.cobrado), c: VERDE },
-      { e: 'PENDIENTE A HOY', v: moneda(estado.pendienteHoy), c: estado.pendienteHoy > 0.5 ? NARANJA : VERDE },
-    ]
-    if (estado.gastoExtraPendiente > 0.5) cifras[2].e = 'PENDIENTE DE LA OBRA'
-    cifras.forEach((c, i) => { texto(c.e, M + 14 + i * col, y - 2, F_CHICO, bold, GRIS); texto(c.v, M + 14 + i * col, y - 22, F_GRANDE, bold, c.c) })
-    y -= 52
-    // Total a pagar hoy = obra + gastos a reintegrar que todavía no se devolvieron.
-    if (estado.gastoExtraPendiente > 0.5) {
-      lugar(44)
-      rect(M, y - 26, CW, 38, NARANJA_SUAVE)
-      rect(M, y - 26, 2.5, 38, NARANJA)
-      texto('TOTAL A PAGAR HOY', M + 14, y - 2, F_CHICO, bold, NARANJA)
-      texto(`Obra ${moneda(Math.max(0, estado.pendienteHoy))} + gastos a reintegrar ${moneda(estado.gastoExtraPendiente)}`, M + 14, y - 16, F_CHICO, font, GRIS)
-      derecha(moneda(totalAPagarHoy(estado)), M + CW - 14, y - 14, F_GRANDE, bold, OSCURO)
-      y -= 46
-    }
-    // ---- Avance de la obra: "Hoy vamos por acá" según el último informe ----
-    const bx = M, bw = CW
-    const total = Math.max(estado.totalActualizado, 1)
-    const ultimo = estado.avances.length ? estado.avances[estado.avances.length - 1] : null
-    const xAv = bx + bw * Math.min(1, estado.avance / 100)
-    lugar(120)
-    texto('AVANCE DE LA OBRA', bx, y, F_CHICO, bold, GRIS)
-    derecha(`${estado.avance}%`, bx + bw, y, F_NORMAL, bold, NARANJA)
-    y -= 26
-    // globito "Hoy vamos por acá"
-    const etHoy = 'Hoy vamos por acá'
-    const anchoEt = bold.widthOfTextAtSize(win(etHoy), F_CHICO) + 12
-    const xEt = Math.min(Math.max(xAv - anchoEt / 2, bx), bx + bw - anchoEt)
-    rect(xEt, y + 2, anchoEt, 13, NARANJA)
-    texto(etHoy, xEt + 6, y + 6, F_CHICO, bold, BLANCO)
-    page.drawSvgPath('M -4 0 L 4 0 L 0 5 Z', { x: xAv, y: y + 2, color: NARANJA })
-    y -= 10
-    rect(bx, y, bw, 8, rgb(0.93, 0.94, 0.95))
-    if (estado.avance > 0) rect(bx, y, bw * Math.min(1, estado.avance / 100), 8, NARANJA)
-    y -= 12
-    texto(ultimo ? `Último informe: ${fechaCorta(ultimo.fecha)} · ${ultimo.titulo}` : 'Todavía no hay informes de avance cargados.', bx, y, F_CHICO, font, GRIS)
-    y -= 22
-
-    // ---- Pagos: pagado vs. lo que corresponde a hoy, con el anticipo marcado ----
-    const pctPag = Math.min(1, estado.cobrado / total)
-    const pctCorr = Math.min(1, estado.corresponde / total)
-    const pctAnt = Math.min(1, estado.anticipo / total)
-    texto('PAGOS', bx, y, F_CHICO, bold, GRIS)
-    derecha(estado.cobrado > total + 0.5 ? `Pagado 100% · saldo a favor ${moneda(estado.cobrado - total)}` : `Pagado ${Math.round(pctPag * 100)}% del total`, bx + bw, y, F_CHICO, bold, VERDE)
-    y -= 14
-    rect(bx, y, bw, 8, rgb(0.93, 0.94, 0.95))
-    if (pctPag > 0) rect(bx, y, bw * pctPag, 8, VERDE)
-    rect(bx + bw * pctAnt - 0.8, y - 3, 1.6, 14, NARANJA)
-    rect(bx + bw * pctCorr - 0.8, y - 3, 1.6, 14, OSCURO)
-    y -= 13
-    rect(bx, y + 1, 6, 6, NARANJA); texto(`Anticipo (${PCT_ANTICIPO}%): ${moneda(estado.anticipo)}`, bx + 10, y + 1, F_CHICO, font, TEXTO)
-    const etCorr = `A pagar a hoy: ${moneda(estado.corresponde)}`
-    const xCorrEt = bx + bw - bold.widthOfTextAtSize(win(etCorr), F_CHICO)
-    rect(xCorrEt - 10, y + 1, 6, 6, OSCURO); texto(etCorr, xCorrEt, y + 1, F_CHICO, bold, OSCURO)
-    y -= 20
-    // Mensaje
-    const rMsg = partir(msg.detalle, F_NORMAL, CW - 36)
-    const altoMsg = 22 + rMsg.length * 12
+    lugar(170)
+    titulo('Estado de cuenta')
+    const nPend = estado.gastosExtra.filter((g) => !g.devuelto).length
+    tarjetas([
+      { e: 'PENDIENTE DE LA OBRA', v: moneda(estado.pendienteHoy), s: `Según el avance (${estado.avance}%)`, color: estado.pendienteHoy > 0.5 ? OSCURO : VERDE },
+      { e: 'GASTOS A REINTEGRAR', v: moneda(estado.gastoExtraPendiente), s: nPend ? `${nPend} ${nPend === 1 ? 'gasto pendiente' : 'gastos pendientes'}` : 'Sin gastos pendientes' },
+      aPagarHoy > 0.5
+        ? { e: 'TOTAL A PAGAR HOY', v: moneda(aPagarHoy), s: estado.gastoExtraPendiente > 0.5 ? 'Obra + gastos' : 'Según el avance', destacada: 'naranja' }
+        : { e: 'TOTAL A PAGAR HOY', v: moneda(0), s: 'Estás al día', destacada: 'verde' },
+    ])
+    // Mensaje (aviso naranja o verde)
+    const ok = msg.tono === 'ok'
+    const rMsg = partir(`${msg.titulo}. ${msg.detalle}`.replace(/\.\.\s/, '. '), F_CHICO + 0.5, CW - 44)
+    const altoMsg = 16 + rMsg.length * 10.5
     lugar(altoMsg + 8)
-    rect(M, y - altoMsg + 12, CW, altoMsg, msg.tono === 'ok' ? VERDE_SUAVE : NARANJA_SUAVE)
-    rect(M, y - altoMsg + 12, 2.5, altoMsg, msg.tono === 'ok' ? VERDE : NARANJA)
-    tilde(M + 16, y + 2, msg.tono === 'ok')
-    texto(msg.titulo, M + 30, y - 1, F_NORMAL, bold, msg.tono === 'ok' ? VERDE : NARANJA)
-    let ym = y - 14
-    for (const r of rMsg) { texto(r, M + 30, ym, F_NORMAL, font, TEXTO); ym -= 12 }
-    y -= altoMsg + 14
+    caja(M, y, CW, altoMsg, { fondo: ok ? VERDE_SUAVE : AVISO_FONDO, borde: ok ? rgb(0.78, 0.89, 0.83) : AVISO_BORDE, r: 8 })
+    icono(M + 17, y - 13, ok ? 'ok' : 'pendiente')
+    let ym = y - 15.5
+    rMsg.forEach((r, i) => {
+      // el título (primera frase) va en negrita
+      if (i === 0 && r.startsWith(win(msg.titulo))) {
+        const t1 = win(msg.titulo) + '.'
+        texto(t1, M + 32, ym, F_CHICO + 0.5, bold, ok ? VERDE : NARANJA_OSC)
+        texto(r.slice(t1.length), M + 32 + ancho(t1, F_CHICO + 0.5, bold), ym, F_CHICO + 0.5, font, ok ? VERDE : NARANJA_OSC)
+      } else texto(r, M + 32, ym, F_CHICO + 0.5, font, ok ? VERDE : NARANJA_OSC)
+      ym -= 10.5
+    })
+    y -= altoMsg + 22
 
-    // Línea de tiempo
+    // ---------- Línea de tiempo de pagos ----------
     lugar(60)
-    titulo('Línea de tiempo de pagos y avances')
-    const xTexto = M + 30
-    const anchoTexto = CW - 200
-    for (let i = 0; i < estado.linea.length; i++) {
-      const p = estado.linea[i]
-      const tit = partir(`${p.fecha && p.tipo !== 'anticipo' ? `${fechaCorta(p.fecha)} · ` : ''}${p.titulo}${p.porcentaje != null && p.tipo === 'avance' ? ` · ${p.porcentaje}%` : ''}`, F_NORMAL, anchoTexto, bold)
-      const det = p.detalle ? partir(p.detalle, F_CHICO + 0.5, anchoTexto) : []
+    titulo('Línea de tiempo de pagos')
+    const anchoTexto = CW - 30 - 140
+    for (const p of estado.linea) {
+      const tit = partir(`${p.fecha && p.tipo !== 'anticipo' ? `${diaMes(p.fecha)} · ` : ''}${p.titulo}${p.porcentaje != null && p.tipo === 'avance' ? ` · ${p.porcentaje}%` : ''}`, F_NORMAL, anchoTexto, bold)
+      const sub = [p.detalle, p.tipo === 'anticipo' ? null : `A pagar hasta acá: ${moneda(p.acumulado)}`].filter((x): x is string => !!x)
+      const det = sub.flatMap((s) => partir(s, F_CHICO, anchoTexto))
       const estadoTxt = p.estado === 'ok' ? (p.tipo === 'anticipo' ? 'Recibido' : 'Al día') : p.estado === 'futuro' ? 'Al finalizar' : `Falta ${moneda(p.falta)}`
-      const resumenTxt = p.tipo === 'anticipo' ? null : `A pagar hasta acá: ${moneda(p.acumulado)}`
-      const alto = Math.max(tit.length * 12 + det.length * 10.5 + (resumenTxt ? 11 : 0), 24) + 12
+      const alto = Math.max(tit.length * 11.5 + det.length * 10, 22) + 12
       lugar(alto)
-      // conector vertical
-      if (i < estado.linea.length - 1) rect(M + 15.4, y - alto + 4, 1.2, alto, LINEA)
-      if (p.estado === 'futuro') { page.drawCircle({ x: M + 16, y: y + 3, size: 6.5, color: BLANCO, borderColor: GRIS, borderWidth: 1 }) }
-      else tilde(M + 16, y + 3, p.estado === 'ok')
-      let yy = y
-      for (const r of tit) { texto(r, xTexto, yy, F_NORMAL, bold, OSCURO); yy -= 12 }
-      for (const r of det) { texto(r, xTexto, yy, F_CHICO + 0.5, font, GRIS); yy -= 10.5 }
-      if (resumenTxt) texto(resumenTxt, xTexto, yy, F_CHICO + 0.5, font, GRIS)
-      derecha(p.tipo === 'anticipo' ? moneda(p.importe) : `+ ${moneda(p.importe)}`, M + CW, y, F_NORMAL, bold, OSCURO)
-      derecha(estadoTxt, M + CW, y - 13, F_CHICO + 0.5, bold, p.estado === 'ok' ? VERDE : p.estado === 'futuro' ? GRIS : NARANJA)
+      icono(M + 10, y + 0.5, p.estado)
+      let yy = y + 3
+      for (const r of tit) { texto(r, M + 24, yy, F_NORMAL, bold, OSCURO); yy -= 11.5 }
+      for (const r of det) { texto(r, M + 24, yy + 0.5, F_CHICO, font, GRIS); yy -= 10 }
+      derecha(p.tipo === 'anticipo' ? moneda(p.importe) : `+ ${moneda(p.importe)}`, xImp, y + 3, F_NORMAL, bold, OSCURO)
+      derecha(estadoTxt, xImp, y - 8.5, F_CHICO, bold, p.estado === 'ok' ? VERDE : p.estado === 'futuro' ? GRIS : NARANJA_OSC)
       y -= alto
+      linea(M, y + 11, M + CW, 0.6, LINEA_SUAVE)
     }
-    y -= 6
+    y -= 14
 
-    // Gastos a reintegrar
+    // ---------- Gastos a reintegrar ----------
     if (estado.gastosExtra.length > 0) {
-      lugar(60)
+      lugar(70)
       titulo('Gastos a reintegrar')
-      for (const r of partir('Materiales y gastos que compramos para tu obra y nos devolvés aparte del presupuesto. Los pendientes se suman al total a pagar; los ya reintegrados, no.', F_CHICO + 0.5, CW)) { texto(r, M, y, F_CHICO + 0.5, font, GRIS); y -= 10.5 }
-      y -= 6
+      for (const r of partir('Materiales que compramos para tu obra y nos devolvés aparte del presupuesto. Los pendientes se suman al total a pagar; los ya reintegrados, no.', F_CHICO + 0.5, CW)) { texto(r, M, y, F_CHICO + 0.5, font, GRIS); y -= 10.5 }
+      y -= 8
+      const anchoG = CW - 30 - 170
       for (const g of estado.gastosExtra) {
-        const rr = partir(`${fechaCorta(g.fecha)} · ${g.descripcion}`, F_NORMAL, CW - 200)
-        const alto = Math.max(rr.length * 12 + (conComprobante.includes(g) ? 10 : 0) + (links[g.id] ? 16 : 0), 20) + 8
-        lugar(alto)
-        tilde(M + 16, y + 3, g.devuelto)
-        let yy = y
-        for (const r of rr) { texto(r, M + 30, yy, F_NORMAL, font, TEXTO); yy -= 12 }
+        const rr = partir(g.descripcion || 'Gasto', F_NORMAL, anchoG, bold)
         const nComp = conComprobante.indexOf(g)
-        if (nComp >= 0) texto(`Comprobante N.º ${nComp + 1}: adjunto al final del documento`, M + 30, yy + 1, F_CHICO, font, NARANJA)
-        if (links[g.id]) boton('Descargar factura', links[g.id], M + 30, yy - 1)
-        derecha(moneda(g.importe), M + CW - 90, y, F_NORMAL, bold, OSCURO)
-        derecha(g.devuelto ? 'Reintegrado' : 'Pendiente', M + CW, y, F_CHICO + 0.5, bold, g.devuelto ? VERDE : NARANJA)
-        derecha(g.devuelto ? 'no suma' : 'suma al total', M + CW, y - 10, F_CHICO, font, GRIS)
+        const extra = links[g.id] ? 17 : nComp >= 0 ? 11 : 0
+        const alto = Math.max(rr.length * 11.5 + 10 + extra, 22) + 12
+        lugar(alto)
+        icono(M + 10, y + 0.5, g.devuelto ? 'ok' : 'pendiente')
+        let yy = y + 3
+        for (const r of rr) { texto(r, M + 24, yy, F_NORMAL, bold, OSCURO); yy -= 11.5 }
+        texto(fechaCorta(g.fecha), M + 24, yy + 0.5, F_CHICO, font, GRIS); yy -= 10
+        if (nComp >= 0) texto(`Comprobante N.º ${nComp + 1}: adjunto al final del documento`, M + 24, yy, F_CHICO, font, NARANJA_OSC)
+        if (links[g.id]) boton('Descargar factura', links[g.id], M + 24, yy - 4)
+        derecha(moneda(g.importe), xImp - 84, y + 3, F_NORMAL + 0.5, bold, OSCURO)
+        derecha(g.devuelto ? 'Reintegrado' : 'Pendiente', xImp, y + 3, F_CHICO, bold, g.devuelto ? VERDE : NARANJA_OSC)
+        derecha(g.devuelto ? 'no suma' : 'suma al total', xImp, y - 7, F_CHICO, font, GRIS)
         y -= alto
+        linea(M, y + 11, M + CW, 0.6, LINEA_SUAVE)
       }
-      if (estado.gastoExtraPendiente > 0.5) { texto(`Pendiente de reintegro: ${moneda(estado.gastoExtraPendiente)} (incluido en el total a pagar)`, M + 30, y, F_NORMAL, bold, NARANJA); y -= 16 }
-      y -= 10
+      if (estado.gastoExtraPendiente > 0.5) { y -= 2; derecha(`Pendiente de reintegro  ${moneda(estado.gastoExtraPendiente)}`, xImp, y, F_NORMAL, bold, NARANJA_OSC); y -= 14 }
+      y -= 14
     }
-  }
 
     // ---------- Formas de uso y garantía (al finalizar) ----------
     if (estado.terminada) {
-      lugar(120)
+      lugar(110)
       titulo('Formas de uso y recomendaciones')
       for (const item of [
         'Control desde el celular con la app correspondiente (Tuya / SmartLife o eWeLink / Sonoff según los equipos).',
@@ -575,42 +626,44 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     }
   }
 
-  // ---------- Notas y vigencia ----------
+  // ---------- Notas ----------
   const notas = d.notas?.trim() ?? ''
-  const vigencia = `Este presupuesto tiene una validez de ${d.validez_dias ?? configActual().presupuestos.validezDias} días corridos desde su emisión.`
-  const cajas = [...(notas ? [{ t: 'NOTAS', texto: notas }] : []), ...(estado ? [] : [{ t: 'VIGENCIA', texto: vigencia }])]
-  if (cajas.length) {
-    const colW = cajas.length === 2 ? (CW - 12) / 2 : CW
-    const renglonesCajas = cajas.map((c) => partir(c.texto, F_NORMAL, colW - 24))
-    const altoCajas = Math.max(...renglonesCajas.map((r) => r.length)) * 12.5 + 32
-    lugar(altoCajas + 10)
-    cajas.forEach((c, i) => {
-      const x = M + i * (colW + 12)
-      rect(x, y - altoCajas + 12, colW, altoCajas, GRIS_CLARO)
-      texto(c.t, x + 12, y - 2, F_CHICO, bold, NARANJA)
-      let yc = y - 18
-      for (const r of renglonesCajas[i]) { texto(r, x + 12, yc, F_NORMAL, font, TEXTO); yc -= 12.5 }
-    })
-    y -= altoCajas + 16
+  if (notas) {
+    const rn = partir(notas, F_NORMAL, CW - 24)
+    const altoN = 26 + rn.length * 12
+    lugar(altoN + 30)
+    titulo('Notas')
+    caja(M, y + 6, CW, altoN, { fondo: GRIS_CLARO, r: 8 })
+    let yn = y - 10
+    for (const r of rn) { texto(r, M + 12, yn, F_NORMAL, font, TEXTO); yn -= 12 }
+    y -= altoN + 14
   }
 
-  // ---------- Condiciones generales ----------
+  // ---------- Condiciones generales (en dos columnas) ----------
   const condiciones = configActual().presupuestos.condiciones.filter((c) => c.titulo.trim() || c.texto.trim())
   if (condiciones.length) {
-    lugar(60)
+    lugar(70)
     titulo('Condiciones generales')
-    for (const cond of condiciones) {
-      const textoCond = textoCondicion(cond, d.validez_dias)
-      const renglones = partir(textoCond, F_CHICO + 0.5, CW)
-      lugar(14 + renglones.length * 10.5)
-      texto(cond.titulo, M, y, F_NORMAL, bold, OSCURO); y -= 12
-      for (const r of renglones) { texto(r, M, y, F_CHICO + 0.5, font, GRIS); y -= 10.5 }
-      y -= 6
+    const colW = (CW - 22) / 2
+    const bloques = condiciones.map((c) => ({ t: partir(c.titulo, F_CHICO + 0.5, colW, bold), r: partir(textoCondicion(c, d.validez_dias), F_CHICO, colW) }))
+    const altoB = (b: { t: string[]; r: string[] }) => b.t.length * 10 + b.r.length * 9.5 + 8
+    for (let i = 0; i < bloques.length; i += 2) {
+      const par = bloques.slice(i, i + 2)
+      const alto = Math.max(...par.map(altoB))
+      lugar(alto)
+      par.forEach((b, k) => {
+        const x = M + k * (colW + 22)
+        let yy = y
+        for (const r of b.t) { texto(r, x, yy, F_CHICO + 0.5, bold, OSCURO); yy -= 10 }
+        for (const r of b.r) { texto(r, x, yy, F_CHICO, font, TEXTO); yy -= 9.5 }
+      })
+      y -= alto
     }
   }
 
   lugar(24)
-  texto(`Documento emitido: ${new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}`, M, y, F_CHICO, font, GRIS)
+  y -= 6
+  texto(`Documento emitido el ${new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' })} a las ${new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit', hour12: false })}`, M, y, F_MINI + 0.4, font, GRIS)
 
   // ---------- Anexo: comprobantes de los gastos a reintegrar ----------
   // Cada comprobante en su página, con encabezado (número, fecha, detalle y
@@ -619,14 +672,16 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     const g = conComprobante[k]
     page = pdf.addPage([W, H]); y = H - M
     if (logo) { const esc = 26 / logo.height; page.drawImage(logo, { x: M, y: y - 22, width: logo.width * esc, height: 26 }) }
-    derecha('ANEXO · COMPROBANTES DE GASTOS', M + CW, y - 6, F_CHICO, bold, NARANJA)
+    espaciadoDer('ANEXO · COMPROBANTES DE GASTOS', M + CW, y - 6, F_MINI, NARANJA)
     derecha(`Presupuesto ${codigo} · ${d.cliente}`, M + CW, y - 18, F_CHICO, font, GRIS)
-    y -= 36; linea(M, y, M + CW); y -= 22
-    texto(`COMPROBANTE ${k + 1} DE ${conComprobante.length}`, M, y, F_CHICO, bold, NARANJA)
+    y -= 36
+    caja(M, y, CW, 2.2, { fondo: LINEA, r: 1.1 }); caja(M, y, CW * 0.18, 2.2, { fondo: NARANJA, r: 1.1 })
+    y -= 22
+    espaciado(`COMPROBANTE ${k + 1} DE ${conComprobante.length}`, M, y, F_MINI, NARANJA)
     derecha(moneda(g.importe), M + CW, y - 6, F_GRANDE, bold, OSCURO)
     y -= 15
     for (const r of partir(g.descripcion || 'Gasto', F_NORMAL + 1, CW - 170, bold).slice(0, 2)) { texto(r, M, y, F_NORMAL + 1, bold, OSCURO); y -= 14 }
-    texto(`${fechaCorta(g.fecha)} · ${g.devuelto ? 'Reintegrado' : 'Pendiente de reintegro'}`, M, y, F_CHICO + 0.5, bold, g.devuelto ? VERDE : NARANJA)
+    texto(`${fechaCorta(g.fecha)} · ${g.devuelto ? 'Reintegrado' : 'Pendiente de reintegro'}`, M, y, F_CHICO + 0.5, bold, g.devuelto ? VERDE : NARANJA_OSC)
     y -= 16
     // Espacio para el comprobante
     const cajaX = M, cajaW = CW, cajaArriba = y, cajaAbajo = PIE + 6
@@ -673,9 +728,9 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
   const paginas = pdf.getPages()
   paginas.forEach((p, i) => {
     p.drawLine({ start: { x: M, y: M + 22 }, end: { x: W - M, y: M + 22 }, thickness: 0.6, color: LINEA })
-    p.drawRectangle({ x: M, y: M + 21.4, width: 40, height: 1.4, color: NARANJA })
+    p.drawRectangle({ x: M, y: M + 21.3, width: 30, height: 1.6, color: NARANJA })
     p.drawText(win(configActual().empresa.nombre), { x: M, y: M + 9, size: F_CHICO, font: bold, color: OSCURO })
-    p.drawText(win(lineaContacto()), { x: M, y: M - 1, size: F_CHICO, font, color: GRIS })
+    p.drawText(win(lineaContacto()), { x: M, y: M - 1, size: F_MINI, font, color: GRIS })
     const pag = win(`Página ${i + 1} de ${paginas.length}`)
     p.drawText(pag, { x: W - M - font.widthOfTextAtSize(pag, F_CHICO), y: M + 9, size: F_CHICO, font, color: GRIS })
   })
