@@ -34,8 +34,8 @@ type Props = {
   onIr: (tab: TabSeguimiento) => void
   // Presupuesto aceptado de la obra (tarjeta con totales y accesos al documento).
   presupuesto?: { id: number; titulo: string } | null
-  onVerDocumento?: () => void
-  onEditarPresupuesto?: () => void
+  // Acciones del presupuesto y del documento del cliente (PanelPresupuestoObra).
+  panelPresupuesto?: ReactNode
 }
 
 // Una persona del equipo, con los mismos números que la sección Personal.
@@ -155,7 +155,7 @@ function Tarjeta({ icono, titulo, onClick, children }: { icono: string; titulo: 
   </button>
 }
 
-export default function ResumenObra({ obraId, estado, avance, avances, cargandoAvances, tienePresupuesto, cuenta, cargandoCuenta, dinero, onIr, presupuesto, onVerDocumento, onEditarPresupuesto }: Props) {
+export default function ResumenObra({ obraId, estado, avance, avances, cargandoAvances, tienePresupuesto, cuenta, cargandoCuenta, dinero, onIr, presupuesto, panelPresupuesto }: Props) {
   const [datos, setDatos] = useState<Datos | null>(null)
 
   useEffect(() => {
@@ -198,10 +198,7 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
         <div className="orPresuFila"><span>Cambios y extras</span><b>{cuenta.totalCambios === 0 ? dinero(0) : `${cuenta.totalCambios > 0 ? '+' : '−'} ${dinero(Math.abs(cuenta.totalCambios))}`}</b></div>
         <div className="orPresuTotal"><span>TOTAL ACTUALIZADO</span><span>{dinero(cuenta.totalActualizado)}</span></div>
       </> : <small>Cargando…</small>}
-      <div className="orPresuBtns">
-        {onVerDocumento && <button type="button" className="editButton" onClick={onVerDocumento}>📄 Documento del cliente</button>}
-        {onEditarPresupuesto && <button type="button" className="editButton" onClick={onEditarPresupuesto}>✏️ Editar presupuesto</button>}
-      </div>
+      {panelPresupuesto}
     </div>}
     <div className={`orPend ${listo && alertas === 0 ? 'ok' : ''}`}>
       <h4>{!listo ? 'Revisando la obra…' : alertas === 0 ? '✓ Todo al día' : `Qué falta (${alertas})`}</h4>
