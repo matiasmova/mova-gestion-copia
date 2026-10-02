@@ -592,8 +592,54 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     y -= altoMsg + 22
 
     // ---------- Línea de tiempo de pagos ----------
-    lugar(60)
+    lugar(190)
     titulo('Línea de tiempo de pagos')
+    // Franja destacada: los pasos de pago unidos de izquierda a derecha.
+    {
+      const todos = estado.linea
+      const pasos = todos.length > 6 ? [todos[0], ...todos.slice(-5)] : todos
+      const n = pasos.length
+      const altoCaja = 128
+      caja(M, y + 4, CW, altoCaja, { fondo: AVISO_FONDO, borde: AVISO_BORDE, r: 10 })
+      const yNodo = y - 26
+      const margen = 46
+      const paso = n > 1 ? (CW - 2 * margen) / (n - 1) : 0
+      const xDe = (i: number) => (n > 1 ? M + margen + i * paso : M + CW / 2)
+      const colorDe = (e: string) => (e === 'ok' ? VERDE : e === 'pendiente' ? NARANJA : GRIS_CAJA)
+      // pista gris y tramos de color hasta cada paso
+      if (n > 1) {
+        page.drawLine({ start: { x: xDe(0), y: yNodo }, end: { x: xDe(n - 1), y: yNodo }, thickness: 3, color: LINEA })
+        for (let i = 1; i < n; i++) {
+          if (pasos[i].estado !== 'futuro') page.drawLine({ start: { x: xDe(i - 1), y: yNodo }, end: { x: xDe(i), y: yNodo }, thickness: 3, color: colorDe(pasos[i].estado) })
+        }
+      }
+      const anchoEt = Math.min(110, n > 1 ? paso - 6 : CW)
+      pasos.forEach((p, i) => {
+        const x = xDe(i)
+        if (p.estado === 'futuro') page.drawCircle({ x, y: yNodo, size: 10, color: BLANCO, borderColor: GRIS_CAJA, borderWidth: 1.6 })
+        else { page.drawCircle({ x, y: yNodo, size: 12.5, color: BLANCO }); icono(x, yNodo, p.estado, 10) }
+        const et = p.tipo === 'anticipo' ? `Anticipo ${PCT_ANTICIPO}%` : p.tipo === 'final' ? (estado.terminada ? 'Obra finalizada' : 'Al finalizar') : `Avance ${p.porcentaje ?? 0}%`
+        const centro = (t: string, yy: number, size: number, f: PDFFont, color: RGB) => texto(t, x - ancho(t, size, f) / 2, yy, size, f, color)
+        let yy = yNodo - 24
+        for (const r of partir(et, F_CHICO, anchoEt, bold).slice(0, 2)) { centro(r, yy, F_CHICO, bold, OSCURO); yy -= 9.5 }
+        const sub = p.tipo === 'avance' && p.fecha ? diaMes(p.fecha) : p.tipo === 'anticipo' ? 'Al confirmar' : estado.terminada ? '' : 'Saldo final'
+        if (sub) { centro(sub, yy, F_MINI, font, GRIS); yy -= 10 }
+        centro(p.tipo === 'anticipo' ? moneda(p.importe) : `+ ${moneda(p.importe)}`, yy - 1, F_CHICO, bold, OSCURO); yy -= 11
+        const est = p.estado === 'ok' ? (p.tipo === 'anticipo' ? 'Pagado' : 'Al día') : p.estado === 'futuro' ? 'Pendiente' : `Falta ${moneda(p.falta)}`
+        centro(est, yy - 1, F_MINI, bold, p.estado === 'ok' ? VERDE : p.estado === 'futuro' ? GRIS : NARANJA_OSC)
+      })
+      // pie: cuánto se pagó del total
+      const yPie = y + 4 - altoCaja + 13
+      const pct = estado.totalActualizado > 0 ? Math.min(1, estado.cobrado / estado.totalActualizado) : 0
+      texto(`Pagado ${moneda(estado.cobrado)} de ${moneda(estado.totalActualizado)}`, M + 14, yPie, F_CHICO, bold, OSCURO)
+      const xb = M + 14 + ancho(`Pagado ${moneda(estado.cobrado)} de ${moneda(estado.totalActualizado)}`, F_CHICO, bold) + 10
+      const derTxt = estado.pendienteHoy > 0.5 ? `A pagar hoy (obra): ${moneda(estado.pendienteHoy)}` : 'Obra al día'
+      derecha(derTxt, M + CW - 14, yPie, F_CHICO, bold, estado.pendienteHoy > 0.5 ? NARANJA_OSC : VERDE)
+      barra(xb, yPie + 0.5, M + CW - 14 - ancho(derTxt, F_CHICO, bold) - 10 - xb, pct, VERDE)
+      if (todos.length > n) derecha(`(se muestran los últimos ${n - 1} avances)`, M + CW - 12, y - 6, F_MINI, font, GRIS)
+      y -= altoCaja + 18
+    }
+    espaciado('DETALLE', M, y, F_MINI, GRIS); y -= 14
     const anchoTexto = CW - 30 - 140
     for (const p of estado.linea) {
       const tit = partir(`${p.fecha && p.tipo !== 'anticipo' ? `${diaMes(p.fecha)} · ` : ''}${p.titulo}${p.porcentaje != null && p.tipo === 'avance' ? ` · ${p.porcentaje}%` : ''}`, F_NORMAL, anchoTexto, bold)
