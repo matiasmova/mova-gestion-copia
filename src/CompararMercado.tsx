@@ -12,6 +12,13 @@ export type ProductoAComparar = {
   precio: number // el que paga el cliente, por unidad
   costo?: number
   cantidad?: number
+  tipo?: string // producto, material, servicio, mano_obra…
+}
+
+const esServicio = (p: ProductoAComparar) => p.tipo === 'servicio' || p.tipo === 'mano_obra'
+type Analisis = { nivel: 'competitivo' | 'caro' | 'barato' | 'mixto'; veredicto: string; resumen: string; fuertes: string[]; riesgos: string[]; recomendaciones: string[] }
+const NIVEL: Record<Analisis['nivel'], { e: string; t: string }> = {
+  competitivo: { e: '🟢', t: 'Competitivo' }, caro: { e: '🔴', t: 'Arriba del mercado' }, barato: { e: '🟡', t: 'Abajo del mercado' }, mixto: { e: '🟡', t: 'Mixto' },
 }
 
 type Oferta = { tienda: string; titulo: string; precio: number; en_dolares: boolean; url: string; equivalente: boolean }
@@ -20,7 +27,7 @@ type Respuesta = { resultados: Resultado[]; fuentes: { titulo: string; url: stri
 
 const CLAVE_CACHE = 'mova_mercado_v1'
 const HORAS_CACHE = 24
-const claveDe = (p: ProductoAComparar) => (p.id ? `id:${p.id}` : `t:${p.nombre.trim().toLowerCase()}`)
+const claveDe = (p: ProductoAComparar) => `${p.tipo === 'servicio' || p.tipo === 'mano_obra' ? 's' : ''}${p.id ? `id:${p.id}` : `t:${p.nombre.trim().toLowerCase()}`}`
 
 // Lo ya buscado se guarda un día en este navegador, para no gastar búsquedas.
 function leerCache(): Record<string, { r: Resultado; f: number }> {
@@ -52,7 +59,10 @@ export function posicionPrecio(precio: number, r: Resultado | undefined): Posici
 
 const EMOJI = { verde: '🟢', amarillo: '🟡', rojo: '🔴', gris: '⚪' }
 
-function CompararMercado({ productos, titulo, onCerrar }: { productos: ProductoAComparar[]; titulo: string; onCerrar: () => void }) {
+function CompararMercado({ productos, titulo, total, onCerrar }: { productos: ProductoAComparar[]; titulo: string; total?: number; onCerrar: () => void }) {
+  const [analisis, setAnalisis] = useState<Analisis | null>(null)
+  const [analizando, setAnalizando] = useState(false)
+  const [errorAnalisis, setErrorAnalisis] = useState('')
   const [resultados, setResultados] = useState<(Resultado | undefined)[]>([])
   const [fuentes, setFuentes] = useState<Respuesta['fuentes']>([])
   const [busquedas, setBusquedas] = useState<string[]>([])
@@ -75,7 +85,7 @@ function CompararMercado({ productos, titulo, onCerrar }: { productos: ProductoA
         const tanda = faltan.slice(i, i + 8)
         const r = await pedirAsistente<Respuesta>({
           accion: 'mercado', cotizacion: leerCotizacion(),
-          productos: tanda.map(({ p }) => (p.id ? { id: p.id } : { descripcion: p.nombre })),
+          productos: tanda.map(({ p }) => ({ ...(p.id ? { id: p.id } : { descripcion: p.nombre }), ...(esServicio(p) ? { servicio: true, descripcion: p.nombre } : {}) })),
         })
         tanda.forEach(({ p, k }, j) => { const x = r.resultados[j]; if (x) { salida[k] = x; nuevos[claveDe(p)] = x } })
         todasFuentes.push(...r.fuentes); todasBusquedas.push(...r.busquedas)
@@ -97,6 +107,18 @@ function CompararMercado({ productos, titulo, onCerrar }: { productos: ProductoA
     if (r && r.mediana > 0 && p.precio > 0) { const c = p.cantidad ?? 1; tuyo += p.precio * c; mercado += r.mediana * c; conDatos++ }
   })
   const difTotal = mercado > 0 ? ((tuyo - mercado) / mercado) * 100 : 0
+
+  async function analizar() {
+    setErrorAnalisis(''); setAnalizando(true)
+    try {
+      const r = await pedirAsistente<Analisis>({
+        accion: 'analisis_mercado', titulo, total: total ?? productos.reduce((t, p) => t + p.precio * (p.cantidad ?? 1), 0), tuyo, mercado,
+        items: productos.map((p, k) => { const x = resultados[k]; return { nombre: p.nombre, tipo: esServicio(p) ? 'servicio' : 'producto', cantidad: p.cantidad ?? 1, precio: p.precio, costo: p.costo ?? 0, minimo: x?.minimo ?? 0, mediana: x?.mediana ?? 0, maximo: x?.maximo ?? 0, ofertas: x?.ofertas.length ?? 0 } }),
+      })
+      setAnalisis(r)
+      setTimeout(() => document.querySelector('.mercadoAnalisis')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+    } catch (e) { setErrorAnalisis((e as Error).message) } finally { setAnalizando(false) }
+  }
   const peso = productos.map((p, k) => ({ p, k, extra: resultados[k] && resultados[k]!.mediana > 0 && p.precio > 0 ? (p.precio - resultados[k]!.mediana) * (p.cantidad ?? 1) : 0 }))
     .filter((x) => x.extra > 0).sort((a, b) => b.extra - a.extra)[0]
 
@@ -111,7 +133,7 @@ function CompararMercado({ productos, titulo, onCerrar }: { productos: ProductoA
         {buscando && !resultados.some(Boolean) && (
           <div className="mercadoCargando" role="status">
             <span className="mercadoSpinner" />
-            <p><strong>Buscando precios en internet…</strong><br /><small>Mercado Libre, tiendas y distribuidores de Argentina. Tarda entre 10 y 40 segundos.</small></p>
+            <p><strong>Buscando precios en internet…</strong><br /><small>Mercado Libre, tiendas, distribuidores e instaladores de Argentina. Tarda entre 10 y 60 segundos.</small></p>
           </div>
         )}
         {error && <p className="loginError">{error}</p>}
@@ -119,7 +141,7 @@ function CompararMercado({ productos, titulo, onCerrar }: { productos: ProductoA
         {productos.length > 1 && conDatos > 0 && (
           <div className={`mercadoResumen ${difTotal > 25 ? 'rojo' : difTotal > 10 || difTotal < -15 ? 'amarillo' : 'verde'}`}>
             <strong>{difTotal > 25 ? '🔴' : difTotal > 10 || difTotal < -15 ? '🟡' : '🟢'} {Math.abs(difTotal) < 1 ? 'Estás en el precio del mercado' : `Estás ${Math.abs(difTotal).toFixed(0)}% ${difTotal > 0 ? 'arriba' : 'abajo'} del mercado`}</strong>
-            <span>En {conDatos} de {productos.length} producto{productos.length === 1 ? '' : 's'}: vos {formatoDinero(tuyo)} · mercado {formatoDinero(mercado)}</span>
+            <span>En {conDatos} de {productos.length} ítem{productos.length === 1 ? '' : 's'}: vos {formatoDinero(tuyo)} · mercado {formatoDinero(mercado)}</span>
             {peso && difTotal > 10 && <span>Lo que más pesa: <b>{peso.p.nombre}</b> (+{formatoDinero(peso.extra)})</span>}
           </div>
         )}
@@ -134,7 +156,7 @@ function CompararMercado({ productos, titulo, onCerrar }: { productos: ProductoA
               <div className={`mercadoItem ${pos.nivel}`} key={k}>
                 <button type="button" className="mercadoItemCab" onClick={() => setAbierto(ab ? null : k)}>
                   <span className="mercadoSemaforo">{r ? EMOJI[pos.nivel] : buscando ? '⏳' : '⚪'}</span>
-                  <span className="mercadoNombre"><b>{p.nombre}</b><small>{r ? pos.texto : buscando ? 'Buscando…' : 'Sin datos'}</small></span>
+                  <span className="mercadoNombre"><b>{esServicio(p) && <span className="mercadoTag">Servicio</span>}{p.nombre}</b><small>{r ? pos.texto : buscando ? 'Buscando…' : 'Sin datos'}</small></span>
                   <span className="mercadoPrecios">
                     <small>Vos</small><b>{p.precio > 0 ? formatoDinero(p.precio) : '—'}</b>
                     {r && r.mediana > 0 && <><small>Mercado</small><b>{formatoDinero(r.mediana)}</b></>}
@@ -173,6 +195,25 @@ function CompararMercado({ productos, titulo, onCerrar }: { productos: ProductoA
             )
           })}
         </div>
+
+        {/* ---------- Análisis completo con IA ---------- */}
+        {!buscando && resultados.some(Boolean) && (
+          <div className="mercadoAnalisis">
+            {!analisis && <>
+              <p><b>✨ Análisis completo</b><br /><small>La IA mira todo el presupuesto (productos, mano de obra y total) contra los precios encontrados y te dice cómo estás posicionado y qué ajustar.</small></p>
+              <button type="button" className="newButton" disabled={analizando} onClick={() => void analizar()}>{analizando ? 'Analizando…' : '✨ Analizar mi posición en el mercado'}</button>
+            </>}
+            {errorAnalisis && <p className="loginError">{errorAnalisis}</p>}
+            {analisis && <>
+              <div className={`mercadoVeredicto ${analisis.nivel}`}><span>{NIVEL[analisis.nivel]?.e} {NIVEL[analisis.nivel]?.t}</span><b>{analisis.veredicto}</b></div>
+              {analisis.resumen && <p>{analisis.resumen}</p>}
+              {analisis.fuertes.length > 0 && <><h4>A tu favor</h4><ul>{analisis.fuertes.map((x, i) => <li key={i}>✅ {x}</li>)}</ul></>}
+              {analisis.riesgos.length > 0 && <><h4>Dónde te pueden comparar</h4><ul>{analisis.riesgos.map((x, i) => <li key={i}>⚠️ {x}</li>)}</ul></>}
+              {analisis.recomendaciones.length > 0 && <><h4>Qué te recomiendo</h4><ul>{analisis.recomendaciones.map((x, i) => <li key={i}>👉 {x}</li>)}</ul></>}
+              <button type="button" className="caLink" disabled={analizando} onClick={() => void analizar()}>{analizando ? 'Analizando…' : '↻ Analizar de nuevo'}</button>
+            </>}
+          </div>
+        )}
 
         {(fuentes.length > 0 || busquedas.length > 0) && (
           <details className="mercadoFuentes">

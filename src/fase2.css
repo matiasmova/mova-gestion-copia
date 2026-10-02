@@ -1608,3 +1608,18 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 .cuentaObraLinea .m{text-align:right;white-space:nowrap}.cuentaObraLinea .m small{font-weight:700;color:#c2410c}
 .cuentaObraLinea li.ok .m small{color:#1f7a4d}.cuentaObraLinea li.futuro .m small{color:var(--mova-muted)}.cuentaObraLinea li.extra .m small{color:#6d4bb8}
 .cuentaObraKpis .hoy{grid-column:1/-1}
+.mercadoTag{display:inline-block;margin-right:6px;padding:1px 7px;border-radius:999px;background:#eef2ff;color:#4338ca;font-size:10.5px;font-weight:700;vertical-align:1px}
+.mercadoAnalisis{margin:14px 0 4px;border:1px solid #f1d6bb;background:#fffaf4;border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.mercadoAnalisis p{margin:0;line-height:1.5}.mercadoAnalisis small{color:var(--mova-muted)}
+.mercadoAnalisis h4{margin:6px 0 0;font-size:13px;letter-spacing:.03em;text-transform:uppercase;color:#6b7280}
+.mercadoAnalisis ul{margin:0;padding-left:2px;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:14px;line-height:1.45}
+.mercadoVeredicto{display:flex;flex-direction:column;gap:2px;border-radius:10px;padding:10px 12px;background:#e8f5ee}
+.mercadoVeredicto span{font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#1f7a4d}
+.mercadoVeredicto b{font-size:15.5px;color:#14181e}
+.mercadoVeredicto.caro{background:#fdecea}.mercadoVeredicto.caro span{color:#b23b32}
+.mercadoVeredicto.barato,.mercadoVeredicto.mixto{background:#fff4e0}.mercadoVeredicto.barato span,.mercadoVeredicto.mixto span{color:#a85008}
+.presuMercadoBtn{display:flex;align-items:center;gap:12px;width:100%;text-align:left;margin:4px 0 12px;padding:12px 14px;border:1px solid #f1d6bb;background:#fffaf4;border-radius:14px;cursor:pointer;font:inherit;color:inherit}
+.presuMercadoBtn>span:first-child{font-size:22px}
+.presuMercadoBtn>span:nth-child(2){flex:1;display:flex;flex-direction:column;gap:2px}
+.presuMercadoBtn small{color:var(--mova-muted);font-size:12.5px}
+.presuMercadoBtn>b{color:#de7015;font-size:20px}

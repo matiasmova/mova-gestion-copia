@@ -158,6 +158,7 @@ Reglas:
 - Hasta 6 ofertas por producto, de tiendas distintas cuando se pueda.
 - url: el link exacto de la publicación que encontraste; vacío si no lo tenés. No inventes links ni precios.
 - comentario: una frase útil (por ejemplo "en Mercado Libre varía mucho según el vendedor" o "no lo encontré, comparé con un modelo parecido").
+- Los renglones marcados SERVICIO son mano de obra o instalación: buscá cuánto cobran instaladores, electricistas o empresas en Mendoza (o en Argentina si no hay) por ese trabajo, en guías de precios, tarifarios publicados, Mercado Libre servicios o sitios de profesionales. precio = lo que se cobra por UNA unidad del trabajo (por punto, por equipo, por metro o por el trabajo completo, según el renglón); en tienda poné el sitio y en titulo qué incluye.
 Respondé SOLO con este JSON, sin texto antes ni después:
 {"productos":[{"n":1,"buscado":"lo que buscaste","ofertas":[{"tienda":"","titulo":"","precio":0,"moneda":"ARS","url":"","equivalente":false}],"comentario":""}]}`
 
@@ -202,6 +203,18 @@ const SISTEMA_RECOMENDACIONES = `Escribís, para MOVA Tecnología Smart (Mendoza
 - Entre 4 y 8 recomendaciones, cada una una oración clara y concreta (máximo 220 caracteres), en español rioplatense con voseo, tono profesional y cercano.
 - No menciones precios ni inventes equipos que no estén en el presupuesto. Sin emojis ni viñetas: solo el texto de cada recomendación.
 - Si te pasan un texto actual, mejoralo manteniendo lo que sirva; si te pasan un pedido, respetalo.`
+
+const SISTEMA_ANALISIS_MERCADO = `Sos asesor comercial de MOVA Tecnología Smart (Mendoza, Argentina): domótica, WiFi, cámaras, alarmas, riego y electricidad.
+Te paso un presupuesto completo: cada renglón con lo que cobra MOVA por unidad, su costo (si lo hay) y los precios del mercado encontrados en internet (mínimo, típico y máximo).
+Analizá cómo está posicionado el presupuesto en el mercado y respondé:
+- nivel: "competitivo" (en línea con el mercado), "caro", "barato" o "mixto" (unos caros y otros baratos).
+- veredicto: una frase corta y clara con la conclusión (por ejemplo "Estás 8% arriba del mercado, razonable por incluir instalación y garantía").
+- resumen: 2 a 4 oraciones con el panorama general: cuánto da el total comparado con el mercado, qué parte pesa más y si el margen es sano.
+- fuertes: 1 a 4 puntos a favor (qué está bien de precio o qué valor agregado justifica el precio: instalación, garantía, configuración, servicio local).
+- riesgos: 0 a 4 puntos donde el cliente podría encontrar más barato o comparar, con el renglón y cuánto.
+- recomendaciones: 2 a 5 acciones concretas (por ejemplo "bajá el router a $X para quedar en el precio típico", "podés subir la mano de obra un 10%", "mostrá en el presupuesto que incluye configuración"). Si sugerís un precio, que sea un monto concreto.
+Tené en cuenta que el precio del mercado de productos suele ser solo el equipo, sin instalación; y que en los servicios los precios publicados son orientativos. Si un renglón no tiene datos del mercado, no lo juzgues: mencionalo solo si pesa mucho en el total.
+Español rioplatense con voseo, claro y directo, sin emojis. No inventes precios del mercado que no estén en los datos.`
 
 const SISTEMA_FACTURA = `Leés fotos de facturas, tickets y remitos de proveedores argentinos (materiales eléctricos, redes, domótica, ferretería).
 Devolvé los datos tal cual figuran:
@@ -336,7 +349,7 @@ Deno.serve(async (req) => {
     }
     if (accion === 'mercado') {
       // productos: [{ id?, descripcion? }] — con id se usan los datos del catálogo.
-      const pedidos = (Array.isArray(cuerpo.productos) ? cuerpo.productos : []).slice(0, 10) as { id?: number; descripcion?: string }[]
+      const pedidos = (Array.isArray(cuerpo.productos) ? cuerpo.productos : []).slice(0, 10) as { id?: number; descripcion?: string; servicio?: boolean }[]
       const cotizacion = Number(cuerpo.cotizacion) || 0
       if (!pedidos.length) return responder({ error: 'No hay productos para comparar.' }, 400)
       const ids = pedidos.map((x) => Number(x.id)).filter(Boolean)
@@ -346,12 +359,13 @@ Deno.serve(async (req) => {
       const porId = new Map(((cat ?? []) as { id: number; nombre: string; codigo: string | null; categoria: string | null; proveedor: string | null }[]).map((p) => [p.id, p]))
       const renglones = pedidos.map((x, k) => {
         const p = porId.get(Number(x.id))
+        if (x.servicio) return `${k + 1}. SERVICIO: ${p ? p.nombre : recorte(x.descripcion, 160)}`
         return p
           ? `${k + 1}. ${p.nombre}${p.codigo ? ` (código ${p.codigo})` : ''}${p.proveedor ? ` · marca/proveedor: ${p.proveedor}` : ''}${p.categoria ? ` · ${p.categoria}` : ''}`
           : `${k + 1}. ${recorte(x.descripcion, 160)}`
       })
       const claveClaude = Deno.env.get('ANTHROPIC_API_KEY')
-      const textoPedido = `Buscá el precio de mercado actual en Argentina de estos productos:\n${renglones.join('\n')}`
+      const textoPedido = `Buscá el precio de mercado actual en Argentina de estos productos y servicios:\n${renglones.join('\n')}`
       let respuesta: Awaited<ReturnType<typeof geminiBuscar>>
       if (claveClaude) respuesta = await claudeBuscar(claveClaude, textoPedido, SISTEMA_MERCADO, Math.min(6, pedidos.length + 2))
       else {
@@ -435,6 +449,17 @@ Deno.serve(async (req) => {
       const texto = `EMPRESA: ${empresa}\nCLIENTE: ${cli ? `${cli.nombre} ${cli.apellido ?? ''}` : ''}\nOBRA: ${obra.nombre_obra}${obra.localidad ? ` (${obra.localidad})` : ''}\nESTADO: ${obra.estado ?? 'en_proceso'} · AVANCE TOTAL: ${Number(obra.porcentaje_avance) || 0}%${obra.fecha_fin_estimada ? ` · fin estimado ${obra.fecha_fin_estimada}` : ''}\nPERÍODO: últimos ${dias} días (desde ${desde})\nTONO: ${tono}\n\nAVANCES DEL PERÍODO:\n${recientes.map(linea).join('\n') || '(ninguno)'}\n\nAVANCES ANTERIORES (contexto):\n${anteriores.map(linea).join('\n') || '(ninguno)'}\n\nADICIONALES Y CAMBIOS DEL PERÍODO:\n${((rAd.data ?? []) as { fecha: string; tipo: string; descripcion: string; estado: string }[]).map((a) => `- ${a.fecha} · ${a.tipo}: ${recorte(a.descripcion, 200)} (${a.estado})`).join('\n') || '(ninguno)'}\n\nFOTOS CARGADAS EN EL PERÍODO: ${rImg.count ?? 0}`
       const r = await gemini(clave, texto, { type: 'OBJECT', properties: { mensaje: { type: 'STRING' } }, required: ['mensaje'] }, SISTEMA_INFORME, 0.6) as { mensaje?: string }
       return responder({ mensaje: recorte(r.mensaje, 3000), telefono: cli?.telefono ?? null, avances_periodo: recientes.length, fotos_periodo: rImg.count ?? 0 })
+    }
+    if (accion === 'analisis_mercado') {
+      const renglones = (Array.isArray(cuerpo.items) ? cuerpo.items : []).slice(0, 40) as { nombre?: string; tipo?: string; cantidad?: number; precio?: number; costo?: number; minimo?: number; mediana?: number; maximo?: number; ofertas?: number }[]
+      if (!renglones.length) return responder({ error: 'No hay ítems para analizar.' }, 400)
+      const $ = (n: unknown) => `$${Math.round(Number(n) || 0).toLocaleString('es-AR')}`
+      const lineas = renglones.map((r, k) => `${k + 1}. ${recorte(r.nombre, 140)} [${r.tipo === 'servicio' || r.tipo === 'mano_obra' ? 'servicio' : 'producto'}] · cantidad ${Number(r.cantidad) || 1} · MOVA cobra ${$(r.precio)} c/u${Number(r.costo) > 0 ? ` (costo ${$(r.costo)})` : ''} · mercado: ${Number(r.mediana) > 0 ? `mínimo ${$(r.minimo)}, típico ${$(r.mediana)}, máximo ${$(r.maximo)} (${Number(r.ofertas) || 0} precios)` : 'sin datos'}`)
+      const texto = `PRESUPUESTO: ${t || 'Presupuesto'}\nTOTAL QUE COBRA MOVA: ${$(cuerpo.total)}\nCOMPARABLE CON EL MERCADO: MOVA ${$(cuerpo.tuyo)} vs mercado ${$(cuerpo.mercado)}\n\nRENGLONES:\n${lineas.join('\n')}`
+      const lista = { type: 'ARRAY', items: { type: 'STRING' } }
+      const r = await gemini(clave, texto, { type: 'OBJECT', properties: { nivel: { type: 'STRING', enum: ['competitivo', 'caro', 'barato', 'mixto'] }, veredicto: { type: 'STRING' }, resumen: { type: 'STRING' }, fuertes: lista, riesgos: lista, recomendaciones: lista }, required: ['nivel', 'veredicto', 'resumen', 'fuertes', 'riesgos', 'recomendaciones'] }, SISTEMA_ANALISIS_MERCADO, 0.4) as { nivel?: string; veredicto?: string; resumen?: string; fuertes?: string[]; riesgos?: string[]; recomendaciones?: string[] }
+      const limpiar = (l?: string[]) => (l ?? []).map((x) => recorte(x, 300)).filter(Boolean).slice(0, 5)
+      return responder({ nivel: r.nivel ?? 'mixto', veredicto: recorte(r.veredicto, 200), resumen: recorte(r.resumen, 900), fuertes: limpiar(r.fuertes), riesgos: limpiar(r.riesgos), recomendaciones: limpiar(r.recomendaciones) })
     }
     if (accion === 'recomendaciones') {
       const items = (Array.isArray(cuerpo.items) ? cuerpo.items : []).map((x) => recorte(x, 200)).filter(Boolean).slice(0, 60)
