@@ -109,8 +109,8 @@ const F_NORMAL = 9
 const F_CHICO = 7.5
 const F_MINI = 6.8
 // Textos (descripciones, notas, condiciones): más grandes para leer cómodo.
-const F_TIT = 10
-const F_TXT = 9
+const F_TIT = 11.5
+const F_TXT = 10.5
 
 // Sanitiza a caracteres que las fuentes estándar (WinAnsi) pueden dibujar.
 function win(s: string): string {
@@ -277,7 +277,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
       let size = F_CIFRA
       while (size > 9 && ancho(c.v, size, bold) > w - 22) size -= 0.5
       texto(c.v, x + 11, y - 33, size, bold, fondo ? BLANCO : (c.color ?? OSCURO))
-      if (c.s) texto(partir(c.s, F_MINI + 0.4, w - 22)[0] ?? '', x + 11, y - 45, F_MINI + 0.4, font, fondo ? BLANCO : GRIS)
+      if (c.s) texto(partir(c.s, F_CHICO + 0.5, w - 22)[0] ?? '', x + 11, y - 45, F_CHICO + 0.5, font, fondo ? BLANCO : GRIS)
     })
     y -= h + 10
   }
@@ -359,7 +359,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     nr: partir(p.n, F_NORMAL + 1, anchos[i] - 22, bold).slice(0, 2),
     lr: p.l.filter((x): x is string => !!x).flatMap((x) => partir(x, F_TXT - 0.5, anchos[i] - 22)),
   }))
-  const altoPartes = 30 + Math.max(...partes.map((p) => p.nr.length * 12 + p.lr.length * 11.5)) + 2
+  const altoPartes = 30 + Math.max(...partes.map((p) => p.nr.length * 12 + p.lr.length * 13.5)) + 2
   let xp = M
   partes.forEach((p, i) => {
     caja(xp, y, anchos[i], altoPartes, { borde: LINEA, r: 8 })
@@ -367,14 +367,14 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     let yy = y - 27
     for (const r of p.nr) { texto(r, xp + 11, yy, F_NORMAL + 1, bold, OSCURO); yy -= 12 }
     yy -= 1
-    for (const r of p.lr) { texto(r, xp + 11, yy, F_TXT - 0.5, font, TEXTO); yy -= 11.5 }
+    for (const r of p.lr) { texto(r, xp + 11, yy, F_TXT - 0.5, font, TEXTO); yy -= 13.5 }
     xp += anchos[i] + gap
   })
   y -= altoPartes + 24
 
   // ---------- Título y descripción ----------
   for (const r of partir(d.titulo, F_GRANDE, CW, bold)) { lugar(22); texto(r, M, y, F_GRANDE, bold, OSCURO); y -= 20 }
-  if (d.descripcion) { y += 3; for (const r of partir(d.descripcion, F_TIT, CW)) { lugar(14); texto(r, M, y, F_TIT, font, GRIS); y -= 14 } }
+  if (d.descripcion) { y += 3; for (const r of partir(d.descripcion, F_TIT, CW)) { lugar(16); texto(r, M, y, F_TIT, font, GRIS); y -= 16 } }
   y -= 8
 
   // ---------- Cifras principales ----------
@@ -404,7 +404,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     lugar(alto + 12)
     caja(M, y, CW, alto, { fondo: OSCURO, r: 10 })
     espaciado('PAGAR AHORA', M + 16, y - 21, F_CHICO + 0.5, BLANCO)
-    texto('Transferencia o efectivo  ·  tocá acá', M + 16 + anchoEsp('PAGAR AHORA', F_CHICO + 0.5) + 12, y - 21, F_CHICO + 0.5, font, GRIS_CAJA)
+    texto('Transferencia o efectivo  ·  tocá acá', M + 16 + anchoEsp('PAGAR AHORA', F_CHICO + 0.5) + 12, y - 21, F_TXT - 1, font, GRIS_CAJA)
     derecha('>', M + CW - 16, y - 22, F_GRANDE - 2, bold, NARANJA)
     const anotacion = pdf.context.register(pdf.context.obj({
       Type: 'Annot', Subtype: 'Link', Rect: [M, y - alto, M + CW, y], Border: [0, 0, 0],
@@ -421,13 +421,13 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     for (const sol of soluciones) {
       const tit = partir(sol.titulo, F_TIT, CW - 46, bold)
       const desc = partir(sol.descripcion, F_TXT, CW - 46)
-      const alto = tit.length * 13 + desc.length * 12 + 16
+      const alto = tit.length * 15 + desc.length * 14 + 16
       lugar(alto + 6)
       caja(M, y + 8, CW, alto, { borde: LINEA, r: 8 })
       icono(M + 17, y - 4, 'ok')
       let yy = y - 6
-      for (const r of tit) { texto(r, M + 32, yy, F_TIT, bold, OSCURO); yy -= 13 }
-      for (const r of desc) { texto(r, M + 32, yy, F_TXT, font, TEXTO); yy -= 12 }
+      for (const r of tit) { texto(r, M + 32, yy, F_TIT, bold, OSCURO); yy -= 15 }
+      for (const r of desc) { texto(r, M + 32, yy, F_TXT, font, TEXTO); yy -= 14 }
       y -= alto + 6
     }
     y -= 12
@@ -451,7 +451,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
       const { titulo: tit, detalle } = partirDescripcion(it.descripcion)
       const renglonesTit = partir(tit, F_TIT, anchoDescr, bold)
       const renglonesDet = detalle ? partir(detalle, F_TXT - 0.5, anchoDescr) : []
-      const alto = renglonesTit.length * 13 + renglonesDet.length * 11.5 + 11 + 12
+      const alto = renglonesTit.length * 15 + renglonesDet.length * 13.5 + 11 + 12
       lugar(alto)
       const neto = importeNeto(it)
       const bruto = importeBruto(it)
@@ -463,8 +463,8 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
       const nTxt = String(numero).padStart(2, '0')
       texto(nTxt, M + 2 + (17 - ancho(nTxt, F_CHICO, bold)) / 2, y - 3.5, F_CHICO, bold, NARANJA_OSC)
       let yy = y
-      for (const r of renglonesTit) { texto(r, xDescr, yy, F_TIT, bold, OSCURO); yy -= 13 }
-      for (const r of renglonesDet) { texto(r, xDescr, yy + 0.5, F_TXT - 0.5, font, GRIS); yy -= 11.5 }
+      for (const r of renglonesTit) { texto(r, xDescr, yy, F_TIT, bold, OSCURO); yy -= 15 }
+      for (const r of renglonesDet) { texto(r, xDescr, yy + 0.5, F_TXT - 0.5, font, GRIS); yy -= 13.5 }
       const cuenta = `${Number(it.cantidad).toLocaleString('es-AR')} × ${moneda(it.precio_unitario)}`
       texto(cuenta, xDescr, yy, F_CHICO, font, GRIS)
       if (pct > 0) {
@@ -477,8 +477,8 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
       derecha(moneda(neto), xImp, y, F_NORMAL + 0.5, bold, OSCURO)
       if (pct > 0) {
         const tachado = moneda(bruto)
-        derecha(tachado, xImp, y - 11.5, F_CHICO, font, GRIS)
-        linea(xImp - ancho(tachado, F_CHICO), y - 9, xImp, 0.6, GRIS)
+        derecha(tachado, xImp, y - 13, F_CHICO, font, GRIS)
+        linea(xImp - ancho(tachado, F_CHICO), y - 10.5, xImp, 0.6, GRIS)
       }
       y -= alto
       linea(M, y + 11, M + CW, 0.6, LINEA_SUAVE)
@@ -499,12 +499,12 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
   if (formas && formas.medios.length) {
     const anchoF = CW - 270 - 18
     const notaF = formas.nota ? partir(formas.nota, F_TXT - 0.5, anchoF - 24) : []
-    const altoF = Math.max(totalCaja.alto, 44 + notaF.length * 11.5)
+    const altoF = Math.max(totalCaja.alto, 44 + notaF.length * 13.5)
     caja(M, totalCaja.arriba, anchoF, altoF, { borde: LINEA, r: 9 })
     espaciado('FORMAS DE PAGO', M + 12, totalCaja.arriba - 15, F_MINI, GRIS)
     let yf = totalCaja.arriba - 30
     for (const r of partir(textoMedios(formas), F_NORMAL, anchoF - 24, bold)) { texto(r, M + 12, yf, F_NORMAL, bold, OSCURO); yf -= 12 }
-    for (const r of notaF) { texto(r, M + 12, yf, F_TXT - 0.5, font, TEXTO); yf -= 11.5 }
+    for (const r of notaF) { texto(r, M + 12, yf, F_TXT - 0.5, font, TEXTO); yf -= 13.5 }
     if (altoF > totalCaja.alto) y -= altoF - totalCaja.alto
   }
   y -= 6
@@ -514,7 +514,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     if (estado.modificaciones.length > 0) {
       lugar(90)
       titulo('Modificaciones durante la obra')
-      for (const r of partir('El presupuesto de arriba se mantiene tal como fue aceptado. Estos son los cambios registrados después:', F_TXT, CW)) { texto(r, M, y, F_TXT, font, GRIS); y -= 12 }
+      for (const r of partir('El presupuesto de arriba se mantiene tal como fue aceptado. Estos son los cambios registrados después:', F_TXT, CW)) { texto(r, M, y, F_TXT, font, GRIS); y -= 14 }
       y -= 6
       const anchoConc = CW - 30 - 120
       estado.modificaciones.forEach((m, iMod) => {
@@ -581,7 +581,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     // Mensaje (aviso naranja o verde)
     const ok = msg.tono === 'ok'
     const rMsg = partir(`${msg.titulo}. ${msg.detalle}`.replace(/\.\.\s/, '. '), F_TXT, CW - 44)
-    const altoMsg = 16 + rMsg.length * 12
+    const altoMsg = 16 + rMsg.length * 14
     lugar(altoMsg + 8)
     caja(M, y, CW, altoMsg, { fondo: ok ? VERDE_SUAVE : AVISO_FONDO, borde: ok ? rgb(0.78, 0.89, 0.83) : AVISO_BORDE, r: 8 })
     icono(M + 17, y - 13, ok ? 'ok' : 'pendiente')
@@ -593,7 +593,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
         texto(t1, M + 32, ym, F_TXT, bold, ok ? VERDE : NARANJA_OSC)
         texto(r.slice(t1.length), M + 32 + ancho(t1, F_TXT, bold), ym, F_TXT, font, ok ? VERDE : NARANJA_OSC)
       } else texto(r, M + 32, ym, F_TXT, font, ok ? VERDE : NARANJA_OSC)
-      ym -= 12
+      ym -= 14
     })
     y -= altoMsg + 22
 
@@ -606,7 +606,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
       const todos = estado.linea.filter((p) => !((p.tipo === 'final' || p.tipo === 'avance') && p.importe <= 0.5 && estado.linea.length > 1))
       const pasos = todos.length > 6 ? [todos[0], ...todos.slice(-5)] : todos
       const n = pasos.length
-      const altoCaja = 128
+      const altoCaja = 140
       caja(M, y + 4, CW, altoCaja, { fondo: AVISO_FONDO, borde: AVISO_BORDE, r: 10 })
       const yNodo = y - 26
       const margen = 46
@@ -628,12 +628,12 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
         const et = p.tipo === 'anticipo' ? `Anticipo ${PCT_ANTICIPO}%` : p.tipo === 'final' ? (estado.terminada ? 'Obra finalizada' : 'Al finalizar') : `Avance ${p.porcentaje ?? 0}%`
         const centro = (t: string, yy: number, size: number, f: PDFFont, color: RGB) => texto(t, x - ancho(t, size, f) / 2, yy, size, f, color)
         let yy = yNodo - 24
-        for (const r of partir(et, F_TXT - 0.5, anchoEt, bold).slice(0, 2)) { centro(r, yy, F_TXT - 0.5, bold, OSCURO); yy -= 10.5 }
+        for (const r of partir(et, F_TXT - 0.5, anchoEt, bold).slice(0, 2)) { centro(r, yy, F_TXT - 0.5, bold, OSCURO); yy -= 12.5 }
         const sub = p.tipo === 'avance' && p.fecha ? diaMes(p.fecha) : p.tipo === 'anticipo' ? 'Al confirmar' : estado.terminada ? '' : 'Saldo final'
-        if (sub) { centro(sub, yy, F_CHICO, font, GRIS); yy -= 10.5 }
+        if (sub) { centro(sub, yy, F_TXT - 1.5, font, GRIS); yy -= 12 }
         centro(p.tipo === 'anticipo' ? moneda(p.importe) : `+ ${moneda(p.importe)}`, yy - 1, F_CHICO, bold, OSCURO); yy -= 11
         const est = p.estado === 'ok' ? (p.tipo === 'anticipo' ? 'Pagado' : 'Al día') : p.estado === 'futuro' ? 'Pendiente' : `Falta ${moneda(p.falta)}`
-        centro(est, yy - 1, F_MINI, bold, p.estado === 'ok' ? VERDE : p.estado === 'futuro' ? GRIS : NARANJA_OSC)
+        centro(est, yy - 1, F_CHICO + 0.5, bold, p.estado === 'ok' ? VERDE : p.estado === 'futuro' ? GRIS : NARANJA_OSC)
       })
       // pie: cuánto se pagó del total
       const yPie = y + 4 - altoCaja + 13
@@ -652,18 +652,18 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     if (estado.gastosExtra.length > 0) {
       lugar(70)
       titulo('Gastos a reintegrar')
-      for (const r of partir('Materiales que compramos para tu obra y nos devolvés aparte del presupuesto. Los pendientes se suman al total a pagar; los ya reintegrados, no.', F_TXT, CW)) { texto(r, M, y, F_TXT, font, GRIS); y -= 12 }
+      for (const r of partir('Materiales que compramos para tu obra y nos devolvés aparte del presupuesto. Los pendientes se suman al total a pagar; los ya reintegrados, no.', F_TXT, CW)) { texto(r, M, y, F_TXT, font, GRIS); y -= 14 }
       y -= 8
       const anchoG = CW - 30 - 170
       for (const g of estado.gastosExtra) {
         const rr = partir(g.descripcion || 'Gasto', F_TIT, anchoG, bold)
         const nComp = conComprobante.indexOf(g)
         const extra = links[g.id] ? 17 : nComp >= 0 ? 11 : 0
-        const alto = Math.max(rr.length * 13 + 11 + extra, 22) + 12
+        const alto = Math.max(rr.length * 15 + 11 + extra, 22) + 12
         lugar(alto)
         icono(M + 10, y + 0.5, g.devuelto ? 'ok' : 'pendiente')
         let yy = y + 3
-        for (const r of rr) { texto(r, M + 24, yy, F_TIT, bold, OSCURO); yy -= 13 }
+        for (const r of rr) { texto(r, M + 24, yy, F_TIT, bold, OSCURO); yy -= 15 }
         texto(fechaCorta(g.fecha), M + 24, yy + 0.5, F_CHICO, font, GRIS); yy -= 10
         if (nComp >= 0) texto(`Comprobante N.º ${nComp + 1}: adjunto al final del documento`, M + 24, yy, F_CHICO, font, NARANJA_OSC)
         if (links[g.id]) boton('Descargar factura', links[g.id], M + 24, yy - 4)
@@ -686,9 +686,9 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     titulo('Formas de uso y recomendaciones')
     for (const item of recos) {
       const rr = partir(item, F_TXT + 0.5, CW - 18)
-      lugar(rr.length * 12.5 + 5)
+      lugar(rr.length * 14.5 + 5)
       page.drawCircle({ x: M + 4, y: y + 2.6, size: 1.9, color: NARANJA })
-      for (const r of rr) { texto(r, M + 14, y, F_TXT + 0.5, font, TEXTO); y -= 12.5 }
+      for (const r of rr) { texto(r, M + 14, y, F_TXT + 0.5, font, TEXTO); y -= 14.5 }
       y -= 4
     }
     y -= 14
@@ -698,12 +698,12 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
   const notas = d.notas?.trim() ?? ''
   if (notas) {
     const rn = partir(notas, F_TIT, CW - 24)
-    const altoN = 26 + rn.length * 13.5
+    const altoN = 26 + rn.length * 15.5
     lugar(altoN + 30)
     titulo('Notas')
     caja(M, y + 6, CW, altoN, { fondo: GRIS_CLARO, r: 8 })
     let yn = y - 10
-    for (const r of rn) { texto(r, M + 12, yn, F_TIT, font, TEXTO); yn -= 13.5 }
+    for (const r of rn) { texto(r, M + 12, yn, F_TIT, font, TEXTO); yn -= 15.5 }
     y -= altoN + 14
   }
 
@@ -714,7 +714,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     titulo('Condiciones generales')
     const colW = (CW - 22) / 2
     const bloques = condiciones.map((c) => ({ t: partir(c.titulo, F_TXT, colW, bold), r: partir(textoCondicion(c, d.validez_dias), F_TXT - 0.5, colW) }))
-    const altoB = (b: { t: string[]; r: string[] }) => b.t.length * 11.5 + b.r.length * 11 + 8
+    const altoB = (b: { t: string[]; r: string[] }) => b.t.length * 13.5 + b.r.length * 13 + 8
     for (let i = 0; i < bloques.length; i += 2) {
       const par = bloques.slice(i, i + 2)
       const alto = Math.max(...par.map(altoB))
@@ -722,8 +722,8 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
       par.forEach((b, k) => {
         const x = M + k * (colW + 22)
         let yy = y
-        for (const r of b.t) { texto(r, x, yy, F_TXT, bold, OSCURO); yy -= 11.5 }
-        for (const r of b.r) { texto(r, x, yy, F_TXT - 0.5, font, TEXTO); yy -= 11 }
+        for (const r of b.t) { texto(r, x, yy, F_TXT, bold, OSCURO); yy -= 13.5 }
+        for (const r of b.r) { texto(r, x, yy, F_TXT - 0.5, font, TEXTO); yy -= 13 }
       })
       y -= alto
     }
