@@ -1679,3 +1679,15 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 .panelPresu .presuRecos{border:1px solid var(--mova-border);border-radius:14px;padding:10px 14px}
 .docBarra span{flex:1;min-width:0}
 .docBarraBtn{white-space:nowrap;flex:none}
+.presuEstadoRapido{display:flex;flex-direction:column;gap:6px;margin:4px 0 12px}
+.presuEstadoRapido>span{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--mova-muted)}
+.presuEstadoRapido>div{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.presuEstadoRapido button{border:1px solid var(--mova-border);background:#fff;border-radius:10px;padding:9px 4px;font:inherit;font-size:13px;font-weight:700;color:#4b5059;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.presuEstadoRapido button.activo{color:#fff}
+.presuEstadoRapido button.activo.et-borrador{background:#6b7280;border-color:#6b7280}
+.presuEstadoRapido button.activo.et-enviado{background:#2563eb;border-color:#2563eb}
+.presuEstadoRapido button.activo.et-aceptado{background:#1f7a4d;border-color:#1f7a4d}
+.presuEstadoRapido button.activo.et-rechazado{background:#b23b32;border-color:#b23b32}
+.presuHerramientas{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+.presuHerramientas>button{flex:1 1 auto;white-space:nowrap}
+.fichaBody>.presuRecos{border:1px solid var(--mova-border);border-radius:14px;padding:10px 14px;margin:0 0 12px}

@@ -116,7 +116,6 @@ export default function PresupuestoFicha({
   onIrObra,
 }: Props) {
   const [pagosSueltos, setPagosSueltos] = useState<Pago[]>([])
-  const [estadoLocal, setEstadoLocal] = useState(presupuesto.estado)
   const [obraForm, setObraForm] = useState<DatosObra>({ nombre: '', direccion: '', localidad: '', fecha_inicio: '', fecha_fin_estimada: '' })
   const [modal, setModal] = useState<'aceptar' | 'rechazar' | null>(null)
   // Los comprobantes de los gastos a reintegrar van como anexo del PDF (se puede sacar).
@@ -157,6 +156,15 @@ export default function PresupuestoFicha({
     setObraForm({ nombre: presupuesto.titulo, direccion: '', localidad: '', fecha_inicio: hoyISO(), fecha_fin_estimada: '' })
     setModal('aceptar')
   }
+  // Estado en un toque. Aceptado pide los datos de la obra y Rechazado el motivo.
+  function cambiarEstadoRapido(v: string) {
+    if (v === presupuesto.estado) return
+    if (v === 'aceptado') { abrirAceptar(); return }
+    if (v === 'rechazado') { setMotivo(''); setNotaRechazo(''); setModal('rechazar'); return }
+    if (presupuesto.estado === 'aceptado' && !window.confirm(`Este presupuesto está aceptado${presupuesto.obra_id != null ? ' y tiene obra' : ''}.\n\n¿Pasarlo a "${ESTADOS.find((e) => e.v === v)?.t}"?`)) return
+    onCambiarEstado(v)
+  }
+
   function confirmarRechazo() {
     // Se guarda sin el emoji: "Precio", "Tiempos"…
     const m = (motivo || 'Otro').replace(/^[^A-Za-zÁ-úñÑ]+/, '')
@@ -182,7 +190,6 @@ export default function PresupuestoFicha({
     ? Math.max(0, Math.floor((Date.now() - new Date((presupuesto.enviado_at || presupuesto.fecha).slice(0, 10) + 'T12:00:00').getTime()) / 86400000))
     : null
   const venceEn = diasEnviado != null && presupuesto.validez_dias ? presupuesto.validez_dias - diasEnviado : null
-  const cambioEstado = estadoLocal !== presupuesto.estado
 
   const base = useMemo<DatosPdf>(() => ({
     id: presupuesto.id,
@@ -204,7 +211,6 @@ export default function PresupuestoFicha({
   const estadoObra = listo?.datos.estado ?? null
   const nombrePdf = nombreArchivoPresupuesto({ id: presupuesto.id, cliente, obra })
 
-  useEffect(() => { setEstadoLocal(presupuesto.estado) }, [presupuesto.id, presupuesto.estado])
   useEffect(() => { setObraForm({ direccion: '', localidad: '', fecha_inicio: '', fecha_fin_estimada: '' }) }, [presupuesto.id])
 
   // Carga el estado completo (obra, pagos, avances) y prepara el PDF para Descargar y Compartir.
@@ -301,6 +307,16 @@ export default function PresupuestoFicha({
           <p className="presuCli">{cliente}{presupuesto.obra_id != null ? ` · ${obra}` : ''}</p>
           <VidaEtapas pasos={pasosPresupuesto(presupuesto.estado, presupuesto.obra_id != null ? obraEtapa ?? { estado: 'en_proceso', porcentaje_avance: 0 } : null, estadoObra ? Math.max(0, estadoObra.saldoTotal) + estadoObra.gastoExtraPendiente : undefined)} />
 
+          {/* ---------- Estado: cambio rápido ---------- */}
+          <div className="presuEstadoRapido" role="group" aria-label="Estado del presupuesto">
+            <span>Estado</span>
+            <div>
+              {ESTADOS.map((e) => (
+                <button type="button" key={e.v} className={`et-${e.v} ${presupuesto.estado === e.v ? 'activo' : ''}`} disabled={convirtiendo} onClick={() => cambiarEstadoRapido(e.v)}>{e.t}</button>
+              ))}
+            </div>
+          </div>
+
           {/* ---------- Editar, siempre a mano ---------- */}
           {presupuesto.estado !== 'rechazado' && (
             <button type="button" className="presuEditarTop" onClick={editar}>
@@ -310,6 +326,15 @@ export default function PresupuestoFicha({
             </button>
           )}
           <FormasPagoEditor presupuestoId={presupuesto.id} onGuardado={() => setReintento((v) => v + 1)} />
+          <RecomendacionesUso presupuestoId={presupuesto.id} titulo={presupuesto.titulo} descripcion={presupuesto.descripcion} items={presupuesto.items} onGuardado={() => setReintento((v) => v + 1)} />
+          <div className="presuHerramientas">
+            {(presupuesto.estado === 'aceptado' || presupuesto.estado === 'rechazado') && <button type="button" className="editButton" onClick={descargarPdf} disabled={!listo}>📄 Descargar PDF</button>}
+            <button type="button" className="editButton" onClick={onDuplicar}>📑 Duplicar</button>
+            {presupuesto.obra_id != null && presupuesto.estado === 'rechazado' && onEliminarObra && (
+              <button type="button" className="deactivateButton" onClick={onEliminarObra}>🗑 Eliminar obra vinculada</button>
+            )}
+            <button type="button" className="deactivateButton" onClick={onEliminar}>🗑 Eliminar</button>
+          </div>
 
           {/* ---------- Siguiente paso, según la etapa ---------- */}
           {presupuesto.estado === 'borrador' && <>
@@ -407,30 +432,6 @@ export default function PresupuestoFicha({
           {listo ? <DocumentoPresupuesto datos={listo.datos} /> : !error && <p role="status" style={{ color: '#64748b', fontSize: '13px' }}>Cargando documento…</p>}
 
 
-          {/* ---------- Formas de uso (opcional, con IA) ---------- */}
-          <RecomendacionesUso presupuestoId={presupuesto.id} titulo={presupuesto.titulo} descripcion={presupuesto.descripcion} items={presupuesto.items} onGuardado={() => setReintento((v) => v + 1)} />
-
-          {/* ---------- Más opciones (lo que se usa poco) ---------- */}
-          <details className="presuMas">
-            <summary>⋯ Más opciones</summary>
-            <div className="presuMasCuerpo">
-              {presupuesto.estado !== 'borrador' && <button type="button" className="editButton" onClick={editar}>✏️ {conObra ? 'Editar el presupuesto original' : 'Editar'}</button>}
-              <button type="button" className="editButton" onClick={descargarPdf} disabled={!listo}>{estadoObra?.enObra ? '📄 Descargar estado de obra' : '📄 Descargar PDF'}</button>
-              {presupuesto.estado !== 'rechazado' && <button type="button" className="editButton" onClick={onDuplicar}>📑 Duplicar</button>}
-              <div className="presuEstadoManual">
-                <label className="fichaEstadoSelect">Cambiar el estado a mano
-                  <select value={estadoLocal} onChange={(e) => setEstadoLocal(e.target.value)}>
-                    {ESTADOS.map((estado) => <option key={estado.v} value={estado.v}>{estado.t}</option>)}
-                  </select>
-                </label>
-                {cambioEstado && <button type="button" className="newButton" onClick={() => onCambiarEstado(estadoLocal)}>Guardar</button>}
-              </div>
-              {presupuesto.obra_id != null && presupuesto.estado === 'rechazado' && onEliminarObra && (
-                <button type="button" className="deactivateButton" onClick={onEliminarObra}>🗑 Eliminar obra vinculada</button>
-              )}
-              <button type="button" className="deactivateButton" onClick={onEliminar}>🗑 Eliminar presupuesto</button>
-            </div>
-          </details>
         </div>
 
         {modal === 'aceptar' && createPortal(
