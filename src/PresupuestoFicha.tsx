@@ -18,6 +18,7 @@ import VidaEtapas, { pasosPresupuesto, type ObraEtapa } from './VidaEtapas'
 import { totalAPagarHoy } from './estadoObra'
 import { createPortal } from 'react-dom'
 import { fechaCorta } from './gestionFormat'
+import RecomendacionesUso from './RecomendacionesUso'
 
 export type PresupuestoFichaData = {
   id: number
@@ -372,6 +373,9 @@ export default function PresupuestoFicha({
           )}
 
           {listo ? <DocumentoPresupuesto datos={listo.datos} /> : !error && <p role="status" style={{ color: '#64748b', fontSize: '13px' }}>Cargando documento…</p>}
+
+          {/* ---------- Formas de uso (opcional, con IA) ---------- */}
+          <RecomendacionesUso presupuestoId={presupuesto.id} titulo={presupuesto.titulo} descripcion={presupuesto.descripcion} items={presupuesto.items} onGuardado={() => setReintento((v) => v + 1)} />
 
           {/* ---------- Más opciones (lo que se usa poco) ---------- */}
           <details className="presuMas">

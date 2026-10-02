@@ -37,6 +37,8 @@ export type DatosPdf = {
   soluciones?: SolucionPresupuesto[]
   estado?: EstadoPresupuesto | null
   contacto?: DatosContacto | null
+  // "Formas de uso y recomendaciones": solo si se eligió incluirlas (null = no van).
+  recomendaciones?: string | null
   // Campo viejo, ya no se usa (se deja para no romper llamadas anteriores).
   resumen?: unknown
 }
@@ -47,12 +49,28 @@ export async function completarDatosDocumento(d: DatosPdf): Promise<DatosPdf> {
   // el estado de obra. Solo se reutiliza si es un estado de obra ya calculado.
   const estadoValido = (x: unknown): x is EstadoPresupuesto | null =>
     x === null || (typeof x === 'object' && x !== null && Array.isArray((x as EstadoPresupuesto).linea))
-  const [estado, soluciones, contacto] = await Promise.all([
+  const [estado, soluciones, contacto, recomendaciones] = await Promise.all([
     estadoValido(d.estado) ? Promise.resolve(d.estado) : cargarEstadoPresupuesto(d.id, Number(d.total) || 0),
     d.soluciones ? Promise.resolve(d.soluciones) : cargarSolucionesPresupuesto(d.id).catch(() => [] as SolucionPresupuesto[]),
     d.contacto !== undefined ? Promise.resolve(d.contacto) : cargarDatosContacto(d.id).catch(() => null),
+    d.recomendaciones !== undefined ? Promise.resolve(d.recomendaciones) : cargarRecomendaciones(d.id),
   ])
-  return { ...d, estado, soluciones, contacto }
+  return { ...d, estado, soluciones, contacto, recomendaciones }
+}
+
+// Recomendaciones guardadas del presupuesto, si se eligió incluirlas.
+export async function cargarRecomendaciones(id: number): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.from('presupuestos').select('recomendaciones, recomendaciones_incluir').eq('id', id).maybeSingle()
+    if (error || !data) return null
+    const texto = String(data.recomendaciones ?? '').trim()
+    return data.recomendaciones_incluir && texto ? texto : null
+  } catch { return null }
+}
+
+// Texto guardado → una recomendación por renglón (sin viñetas escritas a mano).
+export function lineasRecomendaciones(texto: string | null | undefined): string[] {
+  return (texto ?? '').split('\n').map((l) => l.replace(/^[\s•\-*·]+/, '').trim()).filter(Boolean)
 }
 
 // Nombre del archivo: Cliente_Obra_fecha_código.pdf
@@ -605,25 +623,21 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
       y -= 14
     }
 
-    // ---------- Formas de uso y garantía (al finalizar) ----------
-    if (estado.terminada) {
-      lugar(110)
-      titulo('Formas de uso y recomendaciones')
-      for (const item of [
-        'Control desde el celular con la app correspondiente (Tuya / SmartLife o eWeLink / Sonoff según los equipos).',
-        'Creación de escenas y automatizaciones (horarios, sensores, riego programado).',
-        'Control por voz con asistentes compatibles (Alexa / Google / Siri) al vincular la cuenta.',
-        'Ante cortes de energía o internet, los equipos se reconectan solos al volver el servicio.',
-        'Mantené buena señal de WiFi en las zonas con dispositivos smart.',
-      ]) {
-        const rr = partir(item, F_NORMAL, CW - 16)
-        lugar(rr.length * 12 + 4)
-        page.drawCircle({ x: M + 4, y: y + 3, size: 1.8, color: NARANJA })
-        for (const r of rr) { texto(r, M + 14, y, F_NORMAL, font, TEXTO); y -= 12 }
-        y -= 3
-      }
-      y -= 12
+  }
+
+  // ---------- Formas de uso y recomendaciones (opcional, por presupuesto) ----------
+  const recos = lineasRecomendaciones(d.recomendaciones)
+  if (recos.length) {
+    lugar(70)
+    titulo('Formas de uso y recomendaciones')
+    for (const item of recos) {
+      const rr = partir(item, F_CHICO + 0.8, CW - 18)
+      lugar(rr.length * 10.5 + 5)
+      page.drawCircle({ x: M + 4, y: y + 2.6, size: 1.9, color: NARANJA })
+      for (const r of rr) { texto(r, M + 14, y, F_CHICO + 0.8, font, TEXTO); y -= 10.5 }
+      y -= 4
     }
+    y -= 14
   }
 
   // ---------- Notas ----------

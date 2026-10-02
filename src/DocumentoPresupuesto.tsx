@@ -2,7 +2,7 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import logo from './assets/mova-logo.jpg'
 import { moneda, fechaCorta } from './gestionFormat'
 import { configActual, lineaContacto, textoCondicion } from './config'
-import { COLOR_MARCA_HEX, agruparPorTipo, completarDatosDocumento, type DatosPdf } from './pdfPresupuesto'
+import { COLOR_MARCA_HEX, agruparPorTipo, completarDatosDocumento, lineasRecomendaciones, type DatosPdf } from './pdfPresupuesto'
 import { formatoPct, importeNeto, partirDescripcion, pctItem } from './presupuestoCalculos'
 import { antesYAhora, etiquetaModificacion } from './presupuestoModificaciones'
 import { mensajeEstado, PCT_ANTICIPO, totalAPagarHoy, type EstadoPresupuesto } from './estadoObra'
@@ -232,6 +232,7 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
   const codigo = codigoPresupuesto(d.id)
   const grupos = agruparPorTipo(d.items)
   const notas = (d.notas ?? '').trim()
+  const recos = lineasRecomendaciones(d.recomendaciones)
   const hayObra = !!d.obra && d.obra !== 'Sin obra asociada'
   const hayDescuento = d.items.some((it) => pctItem(it) > 0)
   const sumaNeta = d.items.reduce((acc, it) => acc + importeNeto(it), 0)
@@ -455,15 +456,11 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
 
       {e && <div style={{ marginTop: '32px' }}><EstadoObra e={e} /></div>}
 
-      {e?.terminada && (
+      {recos.length > 0 && (
         <section style={{ marginTop: '28px' }}>
           <TituloSeccion texto="Formas de uso y recomendaciones" />
           <ul style={{ margin: 0, paddingLeft: '18px', lineHeight: 1.7 }}>
-            <li>Control desde el celular con la app correspondiente (Tuya / SmartLife o eWeLink / Sonoff según los equipos).</li>
-            <li>Creación de escenas y automatizaciones (horarios, sensores, riego programado).</li>
-            <li>Control por voz con asistentes compatibles (Alexa / Google / Siri) al vincular la cuenta.</li>
-            <li>Ante cortes de energía o internet, los equipos se reconectan solos al volver el servicio.</li>
-            <li>Mantené buena señal de WiFi en las zonas con dispositivos smart.</li>
+            {recos.map((r, i) => <li key={i}>{r}</li>)}
           </ul>
         </section>
       )}
