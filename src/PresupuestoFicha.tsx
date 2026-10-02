@@ -19,6 +19,7 @@ import { totalAPagarHoy } from './estadoObra'
 import { createPortal } from 'react-dom'
 import { fechaCorta } from './gestionFormat'
 import RecomendacionesUso from './RecomendacionesUso'
+import FormasPagoEditor from './FormasPagoEditor'
 import CompararMercado, { type ProductoAComparar } from './CompararMercado'
 import { importeNeto } from './presupuestoCalculos'
 
@@ -300,14 +301,24 @@ export default function PresupuestoFicha({
           <p className="presuCli">{cliente}{presupuesto.obra_id != null ? ` · ${obra}` : ''}</p>
           <VidaEtapas pasos={pasosPresupuesto(presupuesto.estado, presupuesto.obra_id != null ? obraEtapa ?? { estado: 'en_proceso', porcentaje_avance: 0 } : null, estadoObra ? Math.max(0, estadoObra.saldoTotal) + estadoObra.gastoExtraPendiente : undefined)} />
 
+          {/* ---------- Editar, siempre a mano ---------- */}
+          {presupuesto.estado !== 'rechazado' && (
+            <button type="button" className="presuEditarTop" onClick={editar}>
+              <span>✏️</span>
+              <span><b>Editar presupuesto</b><small>{conObra ? 'Ítems, precios y textos del presupuesto original' : presupuesto.estado === 'enviado' ? 'Ítems, precios, formas de pago y textos (el cliente ya lo tiene)' : 'Ítems, precios, formas de pago y textos'}</small></span>
+              <i>›</i>
+            </button>
+          )}
+          <FormasPagoEditor presupuestoId={presupuesto.id} onGuardado={() => setReintento((v) => v + 1)} />
+
           {/* ---------- Siguiente paso, según la etapa ---------- */}
           {presupuesto.estado === 'borrador' && <>
             <button type="button" className="presuPaso wa" onClick={enviarWhatsApp}>
               <small>Siguiente paso</small><b>📤 Enviar por WhatsApp</b><span>Se abre WhatsApp con el mensaje listo y pasa solo a "Enviado". El PDF lo mandás con Compartir PDF.</span>
             </button>
             <div className="presuAccBotones">
-              <button type="button" className="editButton" onClick={editar}>✏️ Editar</button>
               <button type="button" className="editButton" onClick={compartir} disabled={!listo || compartiendo}>{compartiendo ? 'Compartiendo...' : '📲 Compartir PDF'}</button>
+              <button type="button" className="editButton" onClick={descargarPdf} disabled={!listo}>📄 Descargar PDF</button>
             </div>
             <p className="presuNota">📝 <b>Borrador:</b> lo estás armando. Podés cambiar todo; el cliente todavía no lo vio.</p>
           </>}

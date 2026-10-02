@@ -4,6 +4,7 @@ import { completarDatosDocumento, generarPdfPresupuesto, nombreArchivoPresupuest
 import { normalizarSoluciones } from './presupuestoSoluciones'
 import DocumentoPresupuesto from './DocumentoPresupuesto'
 import RecomendacionesUso from './RecomendacionesUso'
+import FormasPagoEditor from './FormasPagoEditor'
 import CompararMercado, { type ProductoAComparar } from './CompararMercado'
 import { importeNeto } from './presupuestoCalculos'
 import type { ItemPresupuesto } from './NuevoPresupuesto'
@@ -103,6 +104,7 @@ export default function EstadoObraPDF({ obra, cliente, onCerrar }: Props) {
               <span>💲</span><span><b>¿Cómo estoy en el mercado?</b><small>La IA busca precios de productos y mano de obra, y analiza todo el presupuesto</small></span><b>›</b>
             </button>
           )}
+          <FormasPagoEditor presupuestoId={listo.datos.id} onGuardado={() => setRevision((v) => v + 1)} />
           <RecomendacionesUso presupuestoId={listo.datos.id} titulo={listo.datos.titulo} descripcion={listo.datos.descripcion ?? null} items={listo.datos.items} onGuardado={() => setRevision((v) => v + 1)} />
         </div>
       )}
