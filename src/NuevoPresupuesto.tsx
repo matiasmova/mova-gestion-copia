@@ -323,13 +323,14 @@ function NuevoPresupuesto({
   function compararMercado() {
     const base = subtotal - descuentoPorItems
     const factorGeneral = base > 0 ? 1 - descuentoGeneral / base : 1
-    const lista = items.filter((it) => it.tipo === 'producto' && it.descripcion.trim() && it.cantidad > 0).slice(0, 24).map((it) => {
+    // Todo el presupuesto: productos, materiales, servicios y mano de obra.
+    const lista = items.filter((it) => it.descripcion.trim() && it.cantidad > 0).slice(0, 24).map((it) => {
       const p = it.catalogo_id ? catalogo.find((x) => Number(x.id) === Number(it.catalogo_id)) : undefined
-      return { id: p?.id ?? null, nombre: p?.nombre ?? it.descripcion, cantidad: it.cantidad, costo: it.costo_unitario, precio: Math.round((importeNeto(it) / it.cantidad) * factorGeneral * 100) / 100 }
+      return { id: p?.id ?? null, nombre: p?.nombre ?? it.descripcion, tipo: it.tipo, cantidad: it.cantidad, costo: it.costo_unitario, precio: Math.round((importeNeto(it) / it.cantidad) * factorGeneral * 100) / 100 }
     })
     setMercado(lista)
   }
-  const hayProductos = items.some((it) => it.tipo === 'producto' && it.descripcion.trim())
+  const hayProductos = items.some((it) => it.descripcion.trim())
 
   // Foto o plano opcional para la IA (plano, croquis, el lugar o un pedido escrito).
   const [iaFoto, setIaFoto] = useState<File | null>(null)
@@ -591,7 +592,7 @@ function NuevoPresupuesto({
           document.body,
         )}
 
-        {mercado && <CompararMercado titulo={titulo.trim() || 'Este presupuesto'} productos={mercado} onCerrar={() => setMercado(null)} />}
+        {mercado && <CompararMercado titulo={titulo.trim() || 'Este presupuesto'} productos={mercado} total={total} onCerrar={() => setMercado(null)} />}
 
         <form className="presupuestoForm" onSubmit={guardar}>
           <div className={`iaArmar ${iaAbierta ? 'abierto' : ''}`}>

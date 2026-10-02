@@ -19,6 +19,8 @@ import { totalAPagarHoy } from './estadoObra'
 import { createPortal } from 'react-dom'
 import { fechaCorta } from './gestionFormat'
 import RecomendacionesUso from './RecomendacionesUso'
+import CompararMercado, { type ProductoAComparar } from './CompararMercado'
+import { importeNeto } from './presupuestoCalculos'
 
 export type PresupuestoFichaData = {
   id: number
@@ -122,6 +124,18 @@ export default function PresupuestoFicha({
   const [motivo, setMotivo] = useState('')
   const [notaRechazo, setNotaRechazo] = useState('')
   const [preparado, setPreparado] = useState<Preparado | null>(null)
+  const [mercado, setMercado] = useState<ProductoAComparar[] | null>(null)
+  // Todo el presupuesto (productos, materiales, servicios y mano de obra) con el
+  // precio por unidad que paga el cliente: con el descuento del ítem y la bonificación general.
+  function compararMercado() {
+    const neto = presupuesto.items.reduce((t, it) => t + importeNeto(it), 0)
+    const factor = neto > 0 ? Number(presupuesto.total) / neto : 1
+    setMercado(presupuesto.items.filter((it) => it.descripcion.trim() && Number(it.cantidad) > 0).slice(0, 24).map((it) => ({
+      id: it.catalogo_id ? Number(it.catalogo_id) : null, nombre: it.descripcion.split('\n')[0].trim(), tipo: it.tipo,
+      cantidad: Number(it.cantidad), costo: Number(it.costo_unitario) || 0,
+      precio: Math.round((importeNeto(it) / Number(it.cantidad)) * factor * 100) / 100,
+    })))
+  }
   const [error, setError] = useState('')
   const [reintento, setReintento] = useState(0)
   const [compartiendo, setCompartiendo] = useState(false)
@@ -373,6 +387,13 @@ export default function PresupuestoFicha({
           )}
 
           {listo ? <DocumentoPresupuesto datos={listo.datos} /> : !error && <p role="status" style={{ color: '#64748b', fontSize: '13px' }}>Cargando documento…</p>}
+
+          {presupuesto.items.length > 0 && (
+            <button type="button" className="presuMercadoBtn" onClick={compararMercado}>
+              <span>💲</span><span><b>¿Cómo estoy en el mercado?</b><small>La IA busca precios de productos y mano de obra, y analiza todo el presupuesto</small></span><b>›</b>
+            </button>
+          )}
+          {mercado && <CompararMercado titulo={presupuesto.titulo} productos={mercado} total={Number(presupuesto.total)} onCerrar={() => setMercado(null)} />}
 
           {/* ---------- Formas de uso (opcional, con IA) ---------- */}
           <RecomendacionesUso presupuestoId={presupuesto.id} titulo={presupuesto.titulo} descripcion={presupuesto.descripcion} items={presupuesto.items} onGuardado={() => setReintento((v) => v + 1)} />
