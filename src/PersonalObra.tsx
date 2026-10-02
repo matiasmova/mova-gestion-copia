@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from './supabase'
+import { avisoGuardado } from './Animados'
 import { moneda, fechaCorta, hoy } from './gestionFormat'
 import { calcularPersona, MODALIDADES_PRINCIPALES, modalidadDePersona } from './personalCalculos'
 import { confirmarEliminacion } from './confirmar'
@@ -402,6 +403,7 @@ function FormAsignar({ obraId, personas, asignacion, nombrePersona, onCancelar, 
       ? await supabase.from('obra_asignaciones').update(datos).eq('id', asignacion!.id)
       : await supabase.from('obra_asignaciones').insert(datos)
     if (fallo) { console.error(fallo); setError('No se pudo guardar.'); setGuardando(false); return }
+    avisoGuardado(editando ? 'Cambios guardados' : 'Persona asignada')
     onGuardado()
   }
   return (
@@ -473,6 +475,7 @@ function FormPago({ obraId, personas, resumen = {}, pago, personaFija, onCancela
           ...datos,
         })
     if (fallo) { console.error(fallo); setError('No se pudo guardar el pago.'); setGuardando(false); return }
+    avisoGuardado('Pago guardado')
     onGuardado()
   }
   return (
@@ -514,6 +517,7 @@ function FormJornal({ obraId, personas, porDia = new Set<number>(), onCancelar, 
       observaciones: f.observaciones.trim() || null,
     })
     if (fallo) { console.error(fallo); setError('No se pudo registrar el jornal.'); setGuardando(false); return }
+    avisoGuardado('Jornal registrado')
     onGuardado()
   }
   return (

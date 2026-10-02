@@ -6,6 +6,7 @@ import { TIPOS_EVENTO } from './Agenda'
 import Tablero, { type Pestana } from './Tablero'
 import { moneda } from './gestionFormat'
 import { calcularPersona } from './personalCalculos'
+import { Cifra } from './Animados'
 import { avanceEfectivo, cuentasPorObra } from './cuentaObra'
 
 // Pantalla de Inicio: resumen rápido de la empresa y, en pestañas, el detalle
@@ -368,7 +369,7 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
           <div className="homeNetoTop">
             <div>
               <span className="homeEtq">Neto de {nombreMes(mesSel)}</span>
-              <strong style={{ color: colorMonto(mes.neto) }}>{moneda(mes.neto)}</strong>
+              <strong style={{ color: colorMonto(mes.neto) }}><Cifra valor={mes.neto} formato={moneda} /></strong>
               <small>
                 {mes.esMesActual && (mes.recurrentesMonto > 0 || mes.personalPendiente > 0)
                   ? <>Si pagás lo previsto: <b style={{ color: colorMonto(mes.netoProyectado) }}>{moneda(mes.netoProyectado)}</b></>
@@ -409,13 +410,13 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
       <section className="homeKpis">
         <button type="button" onClick={() => onNavegar('obras')}>
           <span>Obras activas</span>
-          <strong>{obrasInfo.activas.length}</strong>
+          <strong><Cifra valor={obrasInfo.activas.length} formato={(n) => String(Math.round(n))} dur={600} /></strong>
           <small>{obrasInfo.activas.length ? `${obrasInfo.avancePromedio}% avance prom.` : 'Ninguna en proceso'}</small>
         </button>
         {verFinanzas && (
           <button type="button" onClick={() => setTab('caja')}>
             <span>Te deben</span>
-            <strong style={{ color: obrasInfo.terminadasConSaldo.length ? ROJO : undefined }}>{moneda(obrasInfo.porCobrar)}</strong>
+            <strong style={{ color: obrasInfo.terminadasConSaldo.length ? ROJO : undefined }}><Cifra valor={obrasInfo.porCobrar} formato={moneda} /></strong>
             <small>{obrasInfo.deudas.length} obra{obrasInfo.deudas.length === 1 ? '' : 's'} con saldo</small>
           </button>
         )}

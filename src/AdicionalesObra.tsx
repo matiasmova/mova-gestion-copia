@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { avisoGuardado } from './Animados'
 import { supabase } from './supabase'
 import { moneda, fechaCorta, hoy } from './gestionFormat'
 import { confirmarEliminacion } from './confirmar'
@@ -370,6 +371,7 @@ function AdicionalesObra({ obraId, puedeEditar = true, onCambio, abrir }: Props)
     }
     setForm({ ...formInicial, tipo: form.tipo, fecha: hoy() })
     setMasDetalles(false)
+    avisoGuardado(form.tipo === 'gasto_extra' ? 'Gasto extra guardado' : 'Guardado')
     terminar()
   }
 

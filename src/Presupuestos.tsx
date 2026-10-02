@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { cargarFormasPago, guardarFormasPago } from './formasPago'
 import type { Pedido } from './BuscadorGlobal'
 import { supabase } from './supabase'
+import { avisoGuardado } from './Animados'
 import NuevoPresupuesto, {
   type ClienteOpcion,
   type ItemPresupuesto,
@@ -187,7 +188,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
   function abrirNuevo() { setPresupuestoEditado(null); setMostrarFormulario(true) }
   function editar(p: PresupuestoCompleto) { setPresupuestoEditado(p); setMostrarFormulario(true); setFicha(null) }
   function cerrarFormulario() { setMostrarFormulario(false); setPresupuestoEditado(null) }
-  async function guardado() { cerrarFormulario(); await cargarDatos() }
+  async function guardado() { cerrarFormulario(); avisoGuardado('Presupuesto guardado'); await cargarDatos() }
 
   // Pregunta si se elimina también la obra vinculada (con todo lo cargado en ella).
   async function ofrecerEliminarObra(obraId: number, intro: string): Promise<boolean> {

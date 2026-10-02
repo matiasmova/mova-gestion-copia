@@ -4,6 +4,7 @@ import {
   type FormEvent,
 } from 'react'
 import { supabase } from './supabase'
+import { avisoGuardado } from './Animados'
 import NuevaObra from './NuevaObra'
 import EstadoObraPDF from './EstadoObraPDF'
 import InformeObraIA from './InformeObraIA'
@@ -583,6 +584,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
     }
     setMostrarNuevoAvance(false)
     setEditandoAvanceId(null)
+    avisoGuardado(editandoAvanceId ? 'Avance actualizado' : 'Avance guardado')
     setFotoAvance(null)
     setFormularioAvance({
       ...avanceInicial,
@@ -835,7 +837,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
             {seguTab === 'rentabilidad' && <RentabilidadObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} avance={avanceEfectivo(obraSeguimiento.estado, obraSeguimiento.porcentaje_avance)} estado={obraSeguimiento.estado ?? undefined} />}
 
             {menuRegistrar && <MenuRegistrar onElegir={elegirRegistro} onCerrar={() => setMenuRegistrar(false)} />}
-            {compraRapida && <CompraRapida obraId={obraSeguimiento.id} onCerrar={() => setCompraRapida(false)} onGuardado={() => { setCompraRapida(false); setRefrescoResumen((v) => v + 1); window.alert('✓ Gasto guardado. Lo ves en Rentabilidad y en Compras.') }} />}
+            {compraRapida && <CompraRapida obraId={obraSeguimiento.id} onCerrar={() => setCompraRapida(false)} onGuardado={() => { setCompraRapida(false); setRefrescoResumen((v) => v + 1); avisoGuardado('Gasto guardado') }} />}
 
             {seguTab === 'resumen' && <ResumenObra
               key={`${obraSeguimiento.id}-${refrescoResumen}`}
@@ -1142,7 +1144,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
         <EditarPresupuestoObra
           presupuestoId={editarPresupuestoId}
           onCerrar={() => setEditarPresupuestoId(null)}
-          onGuardado={() => { setEditarPresupuestoId(null); setActualizacion((v) => v + 1); setRefrescoResumen((v) => v + 1); setDocVersion((v) => v + 1) }}
+          onGuardado={() => { avisoGuardado('Presupuesto guardado'); setEditarPresupuestoId(null); setActualizacion((v) => v + 1); setRefrescoResumen((v) => v + 1); setDocVersion((v) => v + 1) }}
         />
       )}
     </div>
@@ -1255,6 +1257,7 @@ function EconomiaObra({ obraId, cuenta, presupuestoId, onGenerarPdf, onCambio, a
     setGuardandoCobro(false)
     if (fallo) { console.error(fallo); window.alert('No se pudo registrar el cobro.'); return }
     setMostrarCobro(false)
+    avisoGuardado('Cobro guardado')
     setCobroForm({ monto: '', fecha: new Date().toISOString().slice(0, 10), medio_pago: 'transferencia', referencia: '' })
     setRevision((v) => v + 1)
     onCambio()
