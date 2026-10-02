@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { avisoGuardado } from './Animados'
 import { MEDIOS_PAGO, cargarFormasPago, guardarFormasPago, textoMedios, type FormasPago } from './formasPago'
 
 // Formas de pago del presupuesto, visibles y editables desde la ficha (sin
@@ -17,7 +18,7 @@ export default function FormasPagoEditor({ presupuestoId, onGuardado }: { presup
     const ok = await guardarFormasPago(presupuestoId, edicion)
     setGuardando(false)
     if (!ok) { setError('No se pudo guardar: falta correr en Supabase el SQL "supabase-formas-pago-fase-22.sql".'); return }
-    setFormas(edicion); setEdicion(null); onGuardado()
+    setFormas(edicion); setEdicion(null); avisoGuardado('Formas de pago guardadas'); onGuardado()
   }
 
   if (!formas) return null

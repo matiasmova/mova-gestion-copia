@@ -20,6 +20,7 @@ import { createPortal } from 'react-dom'
 import { fechaCorta } from './gestionFormat'
 import RecomendacionesUso from './RecomendacionesUso'
 import FormasPagoEditor from './FormasPagoEditor'
+import { Cifra } from './Animados'
 import CompararMercado, { type ProductoAComparar } from './CompararMercado'
 import { importeNeto } from './presupuestoCalculos'
 
@@ -410,14 +411,14 @@ export default function PresupuestoFicha({
 
           {estadoObra && conObra ? (
             <div className="fichaKpis">
-              <div><span>TOTAL DE LA OBRA</span><strong>{moneda(estadoObra.totalActualizado)}</strong></div>
-              <div><span>COBRADO</span><strong>{moneda(estadoObra.cobrado)}</strong></div>
-              <div className="alerta"><span>FALTA COBRAR HOY</span><strong>{moneda(totalAPagarHoy(estadoObra))}</strong>{estadoObra.gastoExtraPendiente > 0.5 && <small className="kpiNota">incluye {moneda(estadoObra.gastoExtraPendiente)} de gastos a reintegrar</small>}</div>
+              <div><span>TOTAL DE LA OBRA</span><strong><Cifra valor={estadoObra.totalActualizado} formato={moneda} /></strong></div>
+              <div><span>COBRADO</span><strong><Cifra valor={estadoObra.cobrado} formato={moneda} /></strong></div>
+              <div className="alerta"><span>FALTA COBRAR HOY</span><strong><Cifra valor={totalAPagarHoy(estadoObra)} formato={moneda} /></strong>{estadoObra.gastoExtraPendiente > 0.5 && <small className="kpiNota">incluye {moneda(estadoObra.gastoExtraPendiente)} de gastos a reintegrar</small>}</div>
               <div><span>SALDO TOTAL</span><strong>{moneda(Math.max(0, estadoObra.saldoTotal) + estadoObra.gastoExtraPendiente)}</strong>{estadoObra.gastoExtraPendiente > 0.5 && <small className="kpiNota">obra + extras a reintegrar</small>}</div>
             </div>
           ) : (
             <div className="fichaKpis">
-              <div><span>TOTAL</span><strong>{moneda(presupuesto.total)}</strong></div>
+              <div><span>TOTAL</span><strong><Cifra valor={presupuesto.total} formato={moneda} /></strong></div>
               <div><span>{pagos.length ? 'COBRADO' : 'ÍTEMS'}</span><strong>{pagos.length ? moneda(pagos.reduce((s, p) => s + p.monto, 0)) : presupuesto.items.length}</strong></div>
             </div>
           )}

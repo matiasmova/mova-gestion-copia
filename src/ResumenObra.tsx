@@ -3,6 +3,7 @@ import { supabase } from './supabase'
 import type { EstadoPresupuesto } from './estadoObra'
 import { calcularPersona, type AsignacionCalc, type JornalCalc } from './personalCalculos'
 import VidaEtapas, { pasosObra } from './VidaEtapas'
+import { Cifra } from './Animados'
 import { codigoPresupuesto } from './codigoPresupuesto'
 
 // Resumen de la obra: la ficha abre acá. Arriba "Qué falta" y abajo seis
@@ -134,7 +135,7 @@ export function DonaAvance({ pct, size = 64, grosor = 7 }: { pct: number; size?:
   const v = Math.max(0, Math.min(100, pct))
   return <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`Avance ${v}%`}>
     <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={GRIS} strokeWidth={grosor} />
-    <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={v >= 100 ? VERDE : NARANJA} strokeWidth={grosor} strokeLinecap="round"
+    <circle className="donaVal" cx={size / 2} cy={size / 2} r={r} fill="none" stroke={v >= 100 ? VERDE : NARANJA} strokeWidth={grosor} strokeLinecap="round"
       strokeDasharray={`${(v / 100) * c} ${c}`} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
     <text x="50%" y="50%" dominantBaseline="central" textAnchor="middle" fontSize={size * 0.24} fontWeight={800} fill="#111827">{v}%</text>
   </svg>
@@ -227,7 +228,7 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
       <Tarjeta icono="💰" titulo="Cuenta" onClick={() => onIr('finanzas')}>
         {!tienePresupuesto ? <><strong className="orValor">Sin presupuesto</strong><small>Vinculá un presupuesto aceptado</small></>
           : cargandoCuenta || !cuenta ? <small>Cargando…</small> : <>
-            <strong className="orValor">{dinero(cuenta.cobrado)} <em>de {dinero(cuenta.totalActualizado)}</em></strong>
+            <strong className="orValor"><Cifra valor={cuenta.cobrado} formato={dinero} /> <em>de {dinero(cuenta.totalActualizado)}</em></strong>
             <Barra partes={[
               { valor: cuenta.cobrado, color: VERDE },
               { valor: cuenta.pendienteHoy, color: NARANJA },
@@ -252,7 +253,7 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
           const max = Math.max(cobrado, datos.gastado, extra, 1)
           const caja = cobrado - datos.gastado - extra
           return <>
-            <strong className="orValor" style={{ color: caja >= 0 ? VERDE : '#b23b32' }}>{caja >= 0 ? '+' : '−'} {dinero(Math.abs(caja))} <em>en caja</em></strong>
+            <strong className="orValor" style={{ color: caja >= 0 ? VERDE : '#b23b32' }}>{caja >= 0 ? '+' : '−'} <Cifra valor={Math.abs(caja)} formato={dinero} /> <em>en caja</em></strong>
             <div className={`orComparar${extra > 0.5 ? ' conExtra' : ''}`}>
               <div><span>Cobrado</span><div className="orBarra"><span style={{ width: `${(cobrado / max) * 100}%`, background: VERDE }} /></div><b>{dinero(cobrado)}</b></div>
               <div><span>Gastado</span><div className="orBarra"><span style={{ width: `${(datos.gastado / max) * 100}%`, background: NARANJA }} /></div><b>{dinero(datos.gastado)}</b></div>
@@ -271,7 +272,7 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
           const falta = datos.equipo.reduce((s, m) => s + m.falta, 0)
           const visibles = datos.equipo.slice(0, 4)
           return <>
-            <strong className="orValor">{dinero(pagado)} <em>pagado · {datos.equipo.length} {datos.equipo.length === 1 ? 'persona' : 'personas'}</em></strong>
+            <strong className="orValor"><Cifra valor={pagado} formato={dinero} /> <em>pagado · {datos.equipo.length} {datos.equipo.length === 1 ? 'persona' : 'personas'}</em></strong>
             <Barra partes={[{ valor: pagado, color: VERDE }, { valor: falta, color: NARANJA }]} />
             <ul className="orEquipo">
               {visibles.map((m) => <li key={m.id}>

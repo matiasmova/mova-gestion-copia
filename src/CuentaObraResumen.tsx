@@ -1,3 +1,4 @@
+import { Cifra } from './Animados'
 import { mensajeEstado, totalAPagarHoy, type EstadoPresupuesto } from './estadoObra'
 
 // Estado de cuenta de la obra, con los mismos números que el documento del
@@ -16,16 +17,16 @@ export default function CuentaObraResumen({ cuenta, dinero, lineaTiempo = false 
   return (
     <div className="cuentaObra">
       <div className="cuentaObraKpis">
-        <div><span>Total de la obra</span><strong>{dinero(cuenta.totalActualizado)}</strong></div>
-        <div><span>Ya pagó</span><strong className="ok">{dinero(cuenta.cobrado)}</strong></div>
+        <div><span>Total de la obra</span><strong><Cifra valor={cuenta.totalActualizado} formato={dinero} /></strong></div>
+        <div><span>Ya pagó</span><strong className="ok"><Cifra valor={cuenta.cobrado} formato={dinero} /></strong></div>
         <div>
           <span>{cuenta.adelanto > 0.5 ? 'Adelanto del cliente' : 'Pendiente de la obra'}</span>
-          <strong className={cuenta.pendienteHoy > 0.5 ? 'pend' : 'ok'}>{dinero(cuenta.adelanto > 0.5 ? cuenta.adelanto : cuenta.pendienteHoy)}</strong>
+          <strong className={cuenta.pendienteHoy > 0.5 ? 'pend' : 'ok'}><Cifra valor={cuenta.adelanto > 0.5 ? cuenta.adelanto : cuenta.pendienteHoy} formato={dinero} /></strong>
           <small>Según el avance ({cuenta.avance}%)</small>
         </div>
-        <div className="extra"><span>Gastos a reintegrar</span><strong>{dinero(extras)}</strong><small>{extras > 0.5 ? 'Extras no pagados' : 'Sin pendientes'}</small></div>
+        <div className="extra"><span>Gastos a reintegrar</span><strong><Cifra valor={extras} formato={dinero} /></strong><small>{extras > 0.5 ? 'Extras no pagados' : 'Sin pendientes'}</small></div>
         <div className={`hoy ${hoy > 0.5 ? '' : 'aldia'}`}>
-          <span>Total a cobrar hoy</span><strong>{dinero(hoy)}</strong>
+          <span>Total a cobrar hoy</span><strong><Cifra valor={hoy} formato={dinero} /></strong>
           <small>{hoy > 0.5 ? (extras > 0.5 && cuenta.pendienteHoy > 0.5 ? 'Obra + extras' : extras > 0.5 ? 'Extras a reintegrar' : 'De la obra') : 'Está al día'}</small>
         </div>
       </div>
