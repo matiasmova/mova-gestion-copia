@@ -18,7 +18,7 @@ import VistaToggle, { useVista } from './VistaToggle'
 import './obrasCard.css'
 import { OBRA_ESTADOS, etiquetaObra, claseObra } from './obraEstado'
 import { leerFinanzasObra } from './finanzasObra'
-import { cargarEstadoPresupuesto, type EstadoPresupuesto } from './estadoObra'
+import { cargarEstadoPresupuesto, PCT_ANTICIPO, type EstadoPresupuesto } from './estadoObra'
 import {
   eliminarObraCompleta,
   mensajeEliminacionObra,
@@ -459,6 +459,16 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
     }))
   }
 
+  // El porcentaje define el estado: 100% = Finalizada; menos = En proceso.
+  function fijarPorcentaje(n: number) {
+    const pct = Math.min(100, Math.max(0, n || 0))
+    setFormularioAvance((anterior) => ({
+      ...anterior,
+      porcentaje: pct,
+      estado: pct >= 100 ? (anterior.estado === 'observacion' ? 'observacion' : 'finalizada') : 'en_proceso',
+    }))
+  }
+
   function cambiarEstadoAvance(estado: EstadoObra) {
     setFormularioAvance((anterior) => ({
       ...anterior,
@@ -489,8 +499,8 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
       titulo: formularioAvance.titulo.trim(),
       descripcion: formularioAvance.descripcion.trim() || null,
       // 100% = terminada; y una obra terminada siempre queda en 100%.
-      estado: Number(formularioAvance.porcentaje) >= 100 && formularioAvance.estado === 'en_proceso' ? 'finalizada' : formularioAvance.estado,
-      porcentaje: formularioAvance.estado === 'en_proceso' ? Number(formularioAvance.porcentaje) : 100,
+      estado: Number(formularioAvance.porcentaje) >= 100 ? (formularioAvance.estado === 'observacion' ? 'observacion' : 'finalizada') : 'en_proceso',
+      porcentaje: Math.min(100, Math.max(0, Number(formularioAvance.porcentaje) || 0)),
     }
 
     let avanceId = editandoAvanceId
@@ -894,21 +904,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                     />
                   </label>
 
-                  <label>
-                    Estado de la obra
-                    <select
-                      value={formularioAvance.estado}
-                      onChange={(evento) =>
-                        cambiarEstadoAvance(
-                          evento.target.value as EstadoObra,
-                        )
-                      }
-                    >
-                      {OBRA_ESTADOS.map((e) => (
-                        <option key={e.v} value={e.v}>{e.t}</option>
-                      ))}
-                    </select>
-                  </label>
+
 
                   <label className="formFull">
                     Título del avance *
@@ -925,21 +921,33 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                     />
                   </label>
 
-                  <label>
-                    Porcentaje completado
-                    <CampoNumero
-                      min="0"
-                      max="100"
-                      value={formularioAvance.porcentaje}
-                      onChange={(evento) =>
-                        actualizarAvance(
-                          'porcentaje',
-                          Number(evento.target.value),
-                        )
-                      }
-                      required
-                    />
-                  </label>
+                  {/* Avance y estado son lo mismo: 100% = obra terminada */}
+                  <div className="formFull avancePct">
+                    <span className="avancePctTit">Avance de la obra</span>
+                    <div className="avancePctFila">
+                      <CampoNumero min="0" max="100" value={formularioAvance.porcentaje} onChange={(evento) => fijarPorcentaje(Number(evento.target.value))} required />
+                      <span>%</span>
+                      <div className="caChips">
+                        {[25, 50, 75, 100].map((n) => <button type="button" key={n} className={Number(formularioAvance.porcentaje) === n ? 'activo' : ''} onClick={() => fijarPorcentaje(n)}>{n === 100 ? '100% · Terminada' : `${n}%`}</button>)}
+                      </div>
+                    </div>
+                    <small className="avancePctEstado">{Number(formularioAvance.porcentaje) >= 100 ? '🏁 La obra queda Finalizada' : '🏗️ La obra sigue En proceso'}</small>
+                    {Number(formularioAvance.porcentaje) >= 100 && (
+                      <label className="caCheck"><input type="checkbox" checked={formularioAvance.estado === 'observacion'} onChange={(e) => cambiarEstadoAvance(e.target.checked ? 'observacion' : 'finalizada')} /> Terminada con observaciones (queda algo para revisar)</label>
+                    )}
+                    {cuenta && (() => {
+                      const pct = Math.min(100, Math.max(0, Number(formularioAvance.porcentaje) || 0))
+                      const correspondeObra = Math.round((cuenta.anticipo + cuenta.resto * pct / 100) * 100) / 100
+                      const falta = Math.max(0, correspondeObra - cuenta.cobrado)
+                      return (
+                        <div className="avanceCobro">
+                          <b>💵 Con este avance, el cliente tiene que haber pagado {dineroFicha(correspondeObra)}</b>
+                          <span>Anticipo {PCT_ANTICIPO}% al aceptar {dineroFicha(cuenta.anticipo)} + {pct}% del {100 - PCT_ANTICIPO}% restante {dineroFicha(correspondeObra - cuenta.anticipo)}</span>
+                          <span>Ya pagó {dineroFicha(cuenta.cobrado)} → {falta > 0.5 ? <strong className="pend">falta cobrar {dineroFicha(falta)}</strong> : <strong className="ok">está al día</strong>}{cuenta.gastoExtraPendiente > 0.5 ? ` (más ${dineroFicha(cuenta.gastoExtraPendiente)} de gastos a reintegrar)` : ''}</span>
+                        </div>
+                      )
+                    })()}
+                  </div>
 
                   <label className="formFull">
                     Detalle del trabajo realizado
@@ -1043,8 +1051,8 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                         </div>
 
                         <div className="timelineAcciones">
-                          <span className={`crmBadge est-${claseEstado(avance.estado)}`}>
-                            {etiquetaEstado(avance.estado)} · {avance.porcentaje}%
+                          <span className={`crmBadge est-${claseEstado(Number(avance.porcentaje) >= 100 ? (avance.estado === 'observacion' ? 'observacion' : 'finalizada') : 'en_proceso')}`}>
+                            {Number(avance.porcentaje) >= 100 ? (avance.estado === 'observacion' ? 'Finalizada en observación' : 'Finalizada') : 'En proceso'} · {avance.porcentaje}%
                           </span>
                           <button type="button" className="editButton" onClick={() => editarAvance(avance)}>Editar</button>
                         </div>
