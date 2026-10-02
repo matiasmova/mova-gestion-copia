@@ -3,6 +3,7 @@ import { supabase } from './supabase'
 import { completarDatosDocumento, generarPdfPresupuesto, nombreArchivoPresupuesto, leerModoComprobantes, guardarModoComprobantes, type DatosPdf, type ModoComprobantes } from './pdfPresupuesto'
 import { normalizarSoluciones } from './presupuestoSoluciones'
 import DocumentoPresupuesto from './DocumentoPresupuesto'
+import RecomendacionesUso from './RecomendacionesUso'
 import type { ItemPresupuesto } from './NuevoPresupuesto'
 
 // Estado de la obra: es el mismo documento del presupuesto aceptado,
@@ -79,6 +80,13 @@ export default function EstadoObraPDF({ obra, cliente, onCerrar }: Props) {
       <button className="pdfBtnPrimary" disabled={!listo} onClick={descargar}>Descargar PDF</button>
       <button className="pdfBtnPrimary" disabled={!listo || compartiendo} onClick={() => void compartir()}>Compartir</button>
     </div></div>
-    <div className="pdfDoc">{error ? <p role="alert">{error}</p> : listo ? <DocumentoPresupuesto datos={listo.datos} embebido /> : <p role="status">Cargando presupuesto, pagos y avances…</p>}</div>
+    <div className="pdfDoc">
+      {listo && (
+        <div className="pdfRecos">
+          <RecomendacionesUso presupuestoId={listo.datos.id} titulo={listo.datos.titulo} descripcion={listo.datos.descripcion ?? null} items={listo.datos.items} onGuardado={() => setRevision((v) => v + 1)} />
+        </div>
+      )}
+      {error ? <p role="alert">{error}</p> : listo ? <DocumentoPresupuesto datos={listo.datos} embebido /> : <p role="status">Cargando presupuesto, pagos y avances…</p>}
+    </div>
   </div>
 }

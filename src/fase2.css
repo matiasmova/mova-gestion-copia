@@ -1584,3 +1584,6 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 .presuRecosIA{display:flex;gap:8px;flex-wrap:wrap}.presuRecosIA input{flex:1 1 220px;min-width:0}
 .presuRecosAcc{display:flex;gap:8px;justify-content:flex-end}
 .presuRecosOk{margin:0;color:#23764e;font-weight:600;font-size:13px}
+.pdfRecos{background:#fafbfc;border:1px solid var(--mova-border);border-radius:12px;padding:4px 14px 10px;margin:0 0 24px}
+.pdfRecos .presuMas{border-top:0}
+@media print{.pdfRecos{display:none !important}}
