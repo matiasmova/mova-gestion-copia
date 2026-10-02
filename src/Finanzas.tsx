@@ -17,8 +17,9 @@ type Categoria = { id: number; nombre: string; deducible: boolean }
 type Costo = { id: number; obra_id: number | null; categoria_id: number | null; personal_id: number | null; tipo: string; descripcion: string | null; monto: number; fecha: string }
 type GastoFijo = { id: number; fecha: string; categoria: string | null; descripcion: string | null; monto: number; recurrente: boolean }
 type Persona = { id: number; nombre: string; apellido: string | null }
+type Compra = { id: number; obra_id: number | null; nombre: string; cantidad: number; precio_unitario: number; fecha: string; proveedor: string | null; numero_comprobante: string | null; pagado: boolean | null }
 
-type TipoMov = 'cobro' | 'personal' | 'obra' | 'fijo'
+type TipoMov = 'cobro' | 'personal' | 'obra' | 'compra' | 'fijo'
 type Movimiento = {
   clave: string
   tipo: TipoMov
@@ -32,15 +33,17 @@ type Movimiento = {
   pago?: Pago
   costo?: Costo
   gasto?: GastoFijo
+  compras?: Compra[]
 }
 
 const TIPOS: Record<TipoMov, { t: string; icono: string }> = {
   cobro: { t: 'Cobro', icono: '🟢' },
   personal: { t: 'Pago a personal', icono: '👷' },
   obra: { t: 'Costo de obra', icono: '🧱' },
+  compra: { t: 'Compra', icono: '🧾' },
   fijo: { t: 'Gasto fijo', icono: '💸' },
 }
-const TIPOS_COSTO: Record<string, string> = { material: 'Material', mano_obra: 'Mano de obra', terciarizado: 'Terciarizado', otro: 'Otro' }
+const TIPOS_COSTO: Record<string, string> = { material: 'Material', mano_obra: 'Mano de obra', terciarizado: 'Terciarizado', otro: 'Otro', gasto_extra: 'Gasto extra (te lo reintegra el cliente)' }
 
 // ---- Período (mismo criterio que el Tablero) ----
 type Periodo = 'mes' | '3' | '6' | 'anio' | 'todo' | 'custom'
@@ -81,6 +84,7 @@ function Finanzas({ onAbrirObra, pedido, onPedidoAtendido }: { onAbrirObra?: (ob
   const [periodo, setPeriodo] = useState<Periodo>('mes')
   const [desdeSel, setDesdeSel] = useState(mesActual())
   const [hastaSel, setHastaSel] = useState(mesActual())
+  const [compras, setCompras] = useState<Compra[]>([])
   const [filtroTipo, setFiltroTipo] = useState<'todos' | 'entra' | 'sale' | TipoMov>('todos')
   const [filtroObra, setFiltroObra] = useState<string>('todas') // 'todas' | 'sin' | id de obra
   const [busqueda, setBusqueda] = useState('')
@@ -89,7 +93,7 @@ function Finanzas({ onAbrirObra, pedido, onPedidoAtendido }: { onAbrirObra?: (ob
     async function cargar() {
       setCargando(true)
       setError('')
-      const [rObras, rPresupuestos, rPagos, rCostos, rCategorias, rGastos, rPersonas] = await Promise.all([
+      const [rObras, rPresupuestos, rPagos, rCostos, rCategorias, rGastos, rPersonas, rCompras] = await Promise.all([
         supabase.from('obras').select('id, nombre_obra, porcentaje_avance').eq('activo', true).order('nombre_obra'),
         supabase.from('presupuestos').select('id, obra_id, titulo, total, total_pagado, saldo, estado, activo').eq('activo', true),
         supabase.from('pagos').select('*').order('fecha', { ascending: false }).order('created_at', { ascending: false }),
@@ -97,6 +101,7 @@ function Finanzas({ onAbrirObra, pedido, onPedidoAtendido }: { onAbrirObra?: (ob
         supabase.from('categorias_gasto').select('*').eq('activo', true).order('nombre'),
         supabase.from('gastos_generales').select('id,fecha,categoria,descripcion,monto,recurrente'),
         supabase.from('personal').select('id,nombre,apellido'),
+        supabase.from('materiales').select('id,obra_id,nombre,cantidad,precio_unitario,fecha,proveedor,numero_comprobante,pagado'),
       ])
 
       const fallo = rObras.error || rPresupuestos.error || rPagos.error || rCostos.error || rCategorias.error
@@ -115,6 +120,7 @@ function Finanzas({ onAbrirObra, pedido, onPedidoAtendido }: { onAbrirObra?: (ob
       // Gastos fijos y personal son opcionales: si fallan, se sigue sin ellos.
       setGastos(rGastos.error ? [] : (rGastos.data ?? []).map((g) => ({ ...g, monto: Number(g.monto) })) as GastoFijo[])
       setPersonas(rPersonas.error ? [] : (rPersonas.data ?? []) as Persona[])
+      setCompras(rCompras.error ? [] : (rCompras.data ?? []).map((c) => ({ ...c, cantidad: Number(c.cantidad) || 0, precio_unitario: Number(c.precio_unitario) || 0 })) as Compra[])
       setCargando(false)
     }
     cargar()
@@ -145,6 +151,21 @@ function Finanzas({ onAbrirObra, pedido, onPedidoAtendido }: { onAbrirObra?: (ob
         detalle: [esPersonal ? c.descripcion : TIPOS_COSTO[c.tipo], nombreCategoria(c.categoria_id)].filter(Boolean).join(' · '),
       })
     })
+    // Compras a proveedores ya pagadas: un movimiento por ticket (mismo día, obra, proveedor y comprobante).
+    const tickets: Record<string, Compra[]> = {}
+    compras.filter((c) => c.pagado !== false).forEach((c) => {
+      const k = `${c.obra_id}|${c.fecha}|${c.proveedor ?? ''}|${c.numero_comprobante ?? ''}`
+      ;(tickets[k] ??= []).push(c)
+    })
+    Object.entries(tickets).forEach(([k, filas]) => {
+      const c = filas[0]
+      lista.push({
+        clave: `m-${k}`, tipo: 'compra', fecha: c.fecha, entra: false, monto: Math.round(filas.reduce((t, f) => t + f.cantidad * f.precio_unitario, 0) * 100) / 100,
+        obraId: c.obra_id ?? null, sinObra: c.obra_id == null, compras: filas,
+        concepto: c.proveedor ? `Compra a ${c.proveedor}` : filas.length === 1 ? c.nombre : 'Compra de materiales',
+        detalle: [filas.length === 1 ? (c.proveedor ? c.nombre : '') : `${filas.length} ítems`, c.numero_comprobante ? `Comp. ${c.numero_comprobante}` : ''].filter(Boolean).join(' · '),
+      })
+    })
     gastos.forEach((g) => {
       lista.push({
         clave: `g-${g.id}`, tipo: 'fijo', fecha: g.fecha, entra: false, monto: g.monto, obraId: null, sinObra: false, gasto: g,
@@ -154,7 +175,7 @@ function Finanzas({ onAbrirObra, pedido, onPedidoAtendido }: { onAbrirObra?: (ob
     })
     return lista.sort((a, b) => (b.fecha ?? '').localeCompare(a.fecha ?? ''))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagos, costos, gastos, presupuestos, obras, personas, categorias])
+  }, [pagos, costos, gastos, compras, presupuestos, obras, personas, categorias])
 
   // ---- Período ----
   const rango = useMemo(() => {
@@ -256,7 +277,7 @@ function Finanzas({ onAbrirObra, pedido, onPedidoAtendido }: { onAbrirObra?: (ob
         {/* ---- Totales ---- */}
         <div className="gestionKpis">
           <div><span>🟢 ENTRÓ</span><strong style={{ color: '#23764e' }}>{moneda(totales.entro)}</strong><small>Cobros</small></div>
-          <div><span>🔴 SALIÓ</span><strong style={{ color: totales.salio > 0 ? '#b23b32' : undefined }}>{moneda(totales.salio)}</strong><small>Personal, costos y gastos fijos</small></div>
+          <div><span>🔴 SALIÓ</span><strong style={{ color: totales.salio > 0 ? '#b23b32' : undefined }}>{moneda(totales.salio)}</strong><small>Personal, costos, compras y gastos fijos</small></div>
           <div className="destacado"><span>QUEDÓ</span><strong style={{ color: colorMonto(totales.quedo) }}>{moneda(totales.quedo)}</strong><small>{hayFiltros ? 'Según los filtros elegidos' : 'Entró − salió'}</small></div>
           <button
             type="button"
@@ -281,6 +302,7 @@ function Finanzas({ onAbrirObra, pedido, onPedidoAtendido }: { onAbrirObra?: (ob
               <option value="cobro">Cobros</option>
               <option value="personal">Pagos a personal</option>
               <option value="obra">Costos de obra</option>
+              <option value="compra">Compras</option>
               <option value="fijo">Gastos fijos</option>
             </select>
             <select value={filtroObra} onChange={(e) => setFiltroObra(e.target.value)} style={estiloFiltro}>
@@ -314,7 +336,7 @@ function Finanzas({ onAbrirObra, pedido, onPedidoAtendido }: { onAbrirObra?: (ob
                   <td>
                     <div className="adicAcciones">
                       {m.pago && <button className="editButton" onClick={() => { setPagoEditar(m.pago ?? null); setFormulario('pago') }}>{m.sinObra ? 'Asignar obra' : 'Editar'}</button>}
-                      <button className="adicNo" onClick={() => void eliminar(m)}>Eliminar</button>
+                      {m.compras ? <span style={{ color: 'var(--mova-muted)', fontSize: 12 }}>Se edita en Compras</span> : <button className="adicNo" onClick={() => void eliminar(m)}>Eliminar</button>}
                     </div>
                   </td>
                 </tr>
@@ -323,7 +345,7 @@ function Finanzas({ onAbrirObra, pedido, onPedidoAtendido }: { onAbrirObra?: (ob
           </table>
         </div>
         <p className="gestionAyuda">
-          Los cobros se editan acá (o desde la ficha de la obra). Los gastos fijos se cargan y editan en <strong>Inicio → Gastos fijos</strong>, y los pagos al personal desde la ficha de cada obra.
+          Los cobros se editan acá (o desde la ficha de la obra). Las compras aparecen cuando están pagadas y se editan en <strong>Compras</strong>. Los gastos fijos se cargan y editan en <strong>Inicio → Gastos fijos</strong>, y los pagos al personal desde la ficha de cada obra.
           Los movimientos <strong>sin obra asociada</strong> no suman a ninguna obra: asignales una para que los números de cobranzas cierren.
         </p>
       </>}

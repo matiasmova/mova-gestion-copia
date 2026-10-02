@@ -27,6 +27,7 @@ import {
 import { confirmarEliminacion } from './confirmar'
 import CampoNumero from './CampoNumero'
 import CuentaObraResumen from './CuentaObraResumen'
+import { avanceEfectivo } from './cuentaObra'
 
 type EstadoObra = 'en_proceso' | 'finalizada' | 'observacion'
 
@@ -808,9 +809,9 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
 
             {seguTab === 'adicionales' && <AdicionalesObra key={obraSeguimiento.id} abrir={abrirAdic} obraId={obraSeguimiento.id} onCambio={() => setActualizacion(v => v + 1)} />}
 
-            {seguTab === 'personal' && <PersonalObra key={obraSeguimiento.id} abrir={abrirPersonal} onCambio={() => setRefrescoResumen((v) => v + 1)} obraId={obraSeguimiento.id} avance={Number(obraSeguimiento.porcentaje_avance || 0)} />}
+            {seguTab === 'personal' && <PersonalObra key={obraSeguimiento.id} abrir={abrirPersonal} onCambio={() => setRefrescoResumen((v) => v + 1)} obraId={obraSeguimiento.id} avance={avanceEfectivo(obraSeguimiento.estado, obraSeguimiento.porcentaje_avance)} />}
 
-            {seguTab === 'rentabilidad' && <RentabilidadObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} avance={Number(obraSeguimiento.porcentaje_avance || 0)} estado={obraSeguimiento.estado ?? undefined} />}
+            {seguTab === 'rentabilidad' && <RentabilidadObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} avance={avanceEfectivo(obraSeguimiento.estado, obraSeguimiento.porcentaje_avance)} estado={obraSeguimiento.estado ?? undefined} />}
 
             {menuRegistrar && <MenuRegistrar onElegir={elegirRegistro} onCerrar={() => setMenuRegistrar(false)} />}
             {compraRapida && <CompraRapida obraId={obraSeguimiento.id} onCerrar={() => setCompraRapida(false)} onGuardado={() => { setCompraRapida(false); setRefrescoResumen((v) => v + 1); window.alert('✓ Gasto guardado. Lo ves en Rentabilidad y en Compras.') }} />}
@@ -819,7 +820,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
               key={`${obraSeguimiento.id}-${refrescoResumen}`}
               obraId={obraSeguimiento.id}
               estado={obraSeguimiento.estado}
-              avance={Number(obraSeguimiento.porcentaje_avance || 0)}
+              avance={avanceEfectivo(obraSeguimiento.estado, obraSeguimiento.porcentaje_avance)}
               avances={avances}
               cargandoAvances={cargandoAvances}
               tienePresupuesto={!!presupuestoAceptado}

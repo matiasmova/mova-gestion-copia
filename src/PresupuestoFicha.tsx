@@ -284,7 +284,7 @@ export default function PresupuestoFicha({
 
         <div className="fichaBody">
           <p className="presuCli">{cliente}{presupuesto.obra_id != null ? ` · ${obra}` : ''}</p>
-          <VidaEtapas pasos={pasosPresupuesto(presupuesto.estado, presupuesto.obra_id != null ? obraEtapa ?? { estado: 'en_proceso', porcentaje_avance: 0 } : null, estadoObra ? estadoObra.saldoTotal : undefined)} />
+          <VidaEtapas pasos={pasosPresupuesto(presupuesto.estado, presupuesto.obra_id != null ? obraEtapa ?? { estado: 'en_proceso', porcentaje_avance: 0 } : null, estadoObra ? Math.max(0, estadoObra.saldoTotal) + estadoObra.gastoExtraPendiente : undefined)} />
 
           {/* ---------- Siguiente paso, según la etapa ---------- */}
           {presupuesto.estado === 'borrador' && <>
@@ -363,7 +363,7 @@ export default function PresupuestoFicha({
               <div><span>TOTAL DE LA OBRA</span><strong>{moneda(estadoObra.totalActualizado)}</strong></div>
               <div><span>COBRADO</span><strong>{moneda(estadoObra.cobrado)}</strong></div>
               <div className="alerta"><span>FALTA COBRAR HOY</span><strong>{moneda(totalAPagarHoy(estadoObra))}</strong>{estadoObra.gastoExtraPendiente > 0.5 && <small className="kpiNota">incluye {moneda(estadoObra.gastoExtraPendiente)} de gastos a reintegrar</small>}</div>
-              <div><span>SALDO PARA TERMINAR</span><strong>{moneda(Math.max(0, estadoObra.saldoTotal))}</strong></div>
+              <div><span>SALDO TOTAL</span><strong>{moneda(Math.max(0, estadoObra.saldoTotal) + estadoObra.gastoExtraPendiente)}</strong>{estadoObra.gastoExtraPendiente > 0.5 && <small className="kpiNota">obra + extras a reintegrar</small>}</div>
             </div>
           ) : (
             <div className="fichaKpis">

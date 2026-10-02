@@ -327,10 +327,10 @@ function RentabilidadObra({ obraId, avance, estado }: { obraId: number; avance: 
             <strong style={{ color: situacion.diferencia > 0 ? '#23764e' : situacion.diferencia < 0 ? '#b23b32' : undefined }}>{moneda(Math.abs(situacion.diferencia))}</strong>
             <small>
               {situacion.diferencia > 0
-                ? 'Adelanto sobre lo exigible por el acuerdo 70/30'
+                ? 'Adelanto sobre lo que corresponde cobrar hoy'
                 : situacion.diferencia < 0
-                  ? 'Pendiente de pago hoy por el acuerdo 70/30'
-                  : 'Cobros al día según el acuerdo 70/30'}
+                  ? 'Pendiente de cobro hoy (70% de anticipo + avance + extras)'
+                  : 'Cobros al día'}
             </small>
           </div>
         </div>
@@ -354,13 +354,13 @@ function RentabilidadObra({ obraId, avance, estado }: { obraId: number; avance: 
             </div>
           </div>
         )}
-        <p className="gestionAyuda">La <strong>ganancia bruta</strong> es lo que te queda en el bolsillo del presupuesto: en los productos, la venta menos su costo; en mano de obra e instalación, la venta menos lo que le pagás al personal asignado a la obra (si nadie está asignado, es 100% ganancia); los adicionales de tipo Producto extra, Servicio extra y Ajuste suman o restan según el importe que cargues, y la Bonificación siempre resta. El <strong>Gasto extra</strong> nunca entra acá (no es plata tuya, es un adelanto que el cliente te devuelve). Los <strong>gastos de la obra</strong> son solo lo que cargues en Compras/gastos (combustible, ferretería, varios) — el personal ya se descontó arriba, así que no se cuenta dos veces. El Gasto extra se muestra aparte, como referencia, mientras esté "Aprobado" (todavía no te lo devolvieron): no resta del <strong>resultado proyectado</strong> (nunca mueve lo que ya sabés que vas a ganar), pero sí forma parte de lo que te debe el cliente hoy (a valor completo, sin depender del avance), porque ya lo adelantaste vos. Cuando marcás un Gasto extra como <strong>Pagado</strong> (pestaña Adicionales), ese movimiento queda cancelado del todo. El resultado proyectado supone cobrar todo y pagar todo lo previsto; el de <strong>caja</strong> es el saldo con el cliente hoy: lo exigible por el acuerdo 70% al confirmar y 30% al finalizar (más el Gasto extra pendiente) menos lo que ya cobraste — te dice si te debe o si te adelantó plata. No depende de los pagos al personal. El costo de los productos ya está en el presupuesto: no lo vuelvas a cargar como gasto.</p>
+        <p className="gestionAyuda">La <strong>ganancia bruta</strong> es lo que te queda en el bolsillo del presupuesto: en los productos, la venta menos su costo; en mano de obra e instalación, la venta menos lo que le pagás al personal asignado a la obra (si nadie está asignado, es 100% ganancia); los adicionales de tipo Producto extra, Servicio extra y Ajuste suman o restan según el importe que cargues, y la Bonificación siempre resta. El <strong>Gasto extra</strong> nunca entra acá (no es plata tuya, es un adelanto que el cliente te devuelve). Los <strong>gastos de la obra</strong> son solo lo que cargues en Compras/gastos (combustible, ferretería, varios) — el personal ya se descontó arriba, así que no se cuenta dos veces. El Gasto extra se muestra aparte, como referencia, mientras esté "Aprobado" (todavía no te lo devolvieron): no resta del <strong>resultado proyectado</strong> (nunca mueve lo que ya sabés que vas a ganar), pero sí forma parte de lo que te debe el cliente hoy (a valor completo, sin depender del avance), porque ya lo adelantaste vos. Cuando marcás un Gasto extra como <strong>Pagado</strong> (pestaña Adicionales), ese movimiento queda cancelado del todo. El resultado proyectado supone cobrar todo y pagar todo lo previsto; el de <strong>caja</strong> es el saldo con el cliente hoy: lo que corresponde cobrar hoy (70% de anticipo + el 30% restante según el avance, completo al finalizar, más el Gasto extra pendiente) menos lo que ya cobraste — te dice si te debe o si te adelantó plata. No depende de los pagos al personal. El costo de los productos ya está en el presupuesto: no lo vuelvas a cargar como gasto.</p>
 
         <h4 style={{ marginTop: '28px' }}>Cobros del cliente</h4>
         <p className="gestionAyuda" style={{ marginTop: 0 }}>Detalle de cómo se arma el "Resultado de caja" de arriba.</p>
         <div className="rentPersonalGrid">
           <div><span>Valor de la obra</span><strong>{moneda(valorTotalObra)}</strong></div>
-          <div><span>Exigible por acuerdo 70/30</span><strong>{moneda(situacion.corresponde)}</strong></div>
+          <div><span>Corresponde cobrar hoy</span><strong>{moneda(situacion.corresponde)}</strong></div>
           <div><span>Cobrado a la fecha</span><strong>{moneda(situacion.cobrado)}</strong></div>
           <div>
             <span>Saldo total de la obra</span>
