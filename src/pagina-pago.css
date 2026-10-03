@@ -7,8 +7,14 @@
 .pp h1{margin:0;font-size:22px;line-height:1.25}
 .ppObra{color:#78818f;font-size:13.5px;margin-top:3px}
 .ppCargando{color:#78818f;text-align:center;margin-top:40vh}
-.ppMonto{margin:18px 0 12px;border-radius:18px;padding:16px 18px;color:#fff;background:linear-gradient(120deg,#de7015,#f08a2c,#c95f0c,#de7015);background-size:300% 300%;animation:ppFluye 6s ease infinite;box-shadow:0 14px 30px -14px rgba(222,112,21,.9)}
+.ppMonto{position:relative;overflow:hidden;isolation:isolate;margin:18px 0 12px;border-radius:18px;padding:16px 18px;color:#fff;background:linear-gradient(115deg,#de7015 0%,#f08a2c 25%,#1f9d5c 50%,#f08a2c 75%,#de7015 100%);background-size:300% 300%;animation:ppFluye 5s ease-in-out infinite,ppBrilla 2.6s ease-in-out infinite;box-shadow:0 14px 30px -14px rgba(222,112,21,.9)}
+.ppMonto::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.45) 50%,transparent 65%);transform:translateX(-120%);animation:ppReflejo 3.2s ease-in-out infinite}
+.ppMonto strong{animation:ppLate 2.6s ease-in-out infinite;transform-origin:left center}
+@keyframes ppBrilla{0%,100%{box-shadow:0 14px 30px -14px rgba(222,112,21,.9),0 0 0 0 rgba(31,157,92,0)}50%{box-shadow:0 18px 40px -12px rgba(31,157,92,.75),0 0 0 6px rgba(31,157,92,.18)}}
+@keyframes ppReflejo{0%,55%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
+@keyframes ppLate{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
 .ppMonto.alDia{background:#1f7a4d;animation:none;box-shadow:none}
+.ppMonto.alDia::after,.ppMonto.alDia strong{animation:none}
 @keyframes ppFluye{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
 .ppMonto small{font-size:11px;font-weight:800;letter-spacing:.1em}
 .ppMonto strong{display:block;font-size:31px;margin:4px 0 2px;font-variant-numeric:tabular-nums}
@@ -36,7 +42,7 @@
 .ppWa{display:block;border-radius:12px;padding:13px;background:#25d366;color:#fff;font-weight:800;font-size:15px;text-align:center;text-decoration:none;margin-top:6px}
 .ppPie{text-align:center;font-size:12px;color:#78818f;margin-top:22px;line-height:1.5}
 .ppPie b{color:#14181e}
-@media (prefers-reduced-motion:reduce){.ppMonto{animation:none}}
+
 .ppComp{margin-top:4px}
 .ppSubir{display:flex;align-items:center;gap:12px;border:2px dashed #f0b27a;background:#fff7ef;border-radius:14px;padding:14px;cursor:pointer;transition:background .15s}
 .ppSubir:active{background:#ffeedd}
@@ -55,3 +61,13 @@
 .ppWa.sec{background:#fff;color:#128c4b;border:1.5px solid #25d366;font-size:14px;padding:11px}
 .ppLink{all:unset;display:block;margin:10px auto 0;color:#78818f;font-size:13px;text-decoration:underline;cursor:pointer}
 @keyframes ppPop{0%{transform:scale(.4)}70%{transform:scale(1.12)}100%{transform:scale(1)}}
+
+.ppPapelitos{position:fixed;inset:0;pointer-events:none;z-index:50;overflow:hidden}
+.ppPapelitos i{position:absolute;top:-20px;width:9px;height:14px;border-radius:2px;opacity:0;animation:ppCae linear forwards}
+@keyframes ppCae{0%{opacity:1;transform:translate(0,0) rotate(0)}100%{opacity:.9;transform:translate(var(--dx),105vh) rotate(var(--rot))}}
+.ppGracias{text-align:center;background:linear-gradient(135deg,#e8f5ee,#fff7ef);border:1px solid #bfe3cd;border-radius:18px;padding:22px 16px 18px;animation:ppAparece .5s cubic-bezier(.2,.9,.25,1.2)}
+.ppGracias .tilde{width:62px;height:62px;margin:0 auto 10px;border-radius:50%;background:#1f9d5c;color:#fff;display:grid;place-items:center;font-size:32px;font-weight:900;animation:ppPop .5s ease;box-shadow:0 0 0 8px rgba(31,157,92,.15)}
+.ppGracias h3{margin:0 0 6px;font-size:21px;color:#1f7a4d}
+.ppGracias p{margin:0;font-size:15px;color:#3d4a43;line-height:1.45}
+@keyframes ppAparece{0%{opacity:0;transform:scale(.92)}100%{opacity:1;transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.ppMonto,.ppMonto::after,.ppMonto strong,.ppGracias,.ppGracias .tilde{animation:none}.ppPapelitos{display:none}}

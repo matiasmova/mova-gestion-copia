@@ -19,6 +19,24 @@ function Copiar({ texto }: { texto: string }) {
   }}>{ok ? '✓ Copiado' : 'Copiar'}</button>
 }
 
+// Festejo: papelitos de colores que caen una vez (se van solos).
+const COLORES = ['#de7015', '#f08a2c', '#1f9d5c', '#25d366', '#ffc93c', '#4f7cff', '#ff5d8f']
+function Papelitos() {
+  const [piezas] = useState(() => Array.from({ length: 90 }, (_, i) => ({
+    left: Math.random() * 100, delay: Math.random() * 0.9, dur: 2.4 + Math.random() * 1.8,
+    dx: (Math.random() - 0.5) * 160, rot: (Math.random() - 0.5) * 1080, color: COLORES[i % COLORES.length],
+    ancho: 6 + Math.random() * 6, redondo: Math.random() < 0.3,
+  })))
+  const [visible, setVisible] = useState(true)
+  useEffect(() => { const t = window.setTimeout(() => setVisible(false), 5000); return () => window.clearTimeout(t) }, [])
+  if (!visible) return null
+  return (
+    <div className="ppPapelitos" aria-hidden="true">
+      {piezas.map((p, i) => <i key={i} style={{ left: `${p.left}%`, background: p.color, width: p.ancho, height: p.redondo ? p.ancho : p.ancho * 1.6, borderRadius: p.redondo ? '50%' : 2, animationDelay: `${p.delay}s`, animationDuration: `${p.dur}s`, ['--dx' as string]: `${p.dx}px`, ['--rot' as string]: `${p.rot}deg` }} />)}
+    </div>
+  )
+}
+
 // Adjuntar el comprobante: el cliente elige la foto o el PDF y nos llega a la app.
 function AdjuntarComprobante({ token, waAviso }: { token: string; waAviso: string | null }) {
   const [archivo, setArchivo] = useState<File | null>(null)
@@ -41,7 +59,12 @@ function AdjuntarComprobante({ token, waAviso }: { token: string; waAviso: strin
 
   if (estado === 'enviado') return (
     <div className="ppComp ok">
-      <div className="ppCompOk"><span>✓</span><div><b>¡Comprobante enviado!</b><small>Lo revisamos y te confirmamos el pago. Gracias.</small></div></div>
+      <Papelitos />
+      <div className="ppGracias">
+        <div className="tilde">✓</div>
+        <h3>¡Muchas gracias!</h3>
+        <p>Fue enviado correctamente. Lo revisamos y te confirmaremos la acreditación.</p>
+      </div>
       {waAviso && <a className="ppWa sec" href={waAviso} target="_blank" rel="noreferrer">💬 Avisar también por WhatsApp</a>}
       <button type="button" className="ppLink" onClick={() => { setArchivo(null); setNota(''); setEstado('listo') }}>Enviar otro comprobante</button>
     </div>

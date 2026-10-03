@@ -20,6 +20,7 @@ import { BuscadorGlobal, BotonMas, type Pedido, type Ir } from './BuscadorGlobal
 
 import { ROLES, ROLES_VALIDOS, NAVEGACION, GRUPOS_MENU, FUERA_DEL_MENU, puedeVer, type Rol, type Vista } from './permisos'
 import Trabajos from './Trabajos'
+import AvisoComprobantes from './AvisoComprobantes'
 
 export default function AppFase2() {
   const [session, setSession] = useState<Session | null>(null)
@@ -222,6 +223,7 @@ export default function AppFase2() {
     <button type="button" className="fase2BuscarMovil" aria-label="Buscar" onClick={() => setBuscadorAbierto(true)}><IconoMenu nombre="buscar" tamano={20} /><span>Buscar</span></button>
     <BuscadorGlobal rol={rol} abierto={buscadorAbierto} onCerrar={() => setBuscadorAbierto(false)} ir={ir} />
     <BotonMas rol={rol} ir={ir} />
+    {(rol === 'admin' || rol === 'contable') && <AvisoComprobantes onAbrirObra={(id) => { if (id) { setObraAbrirId(id); navegar('obras') } else navegar('presupuestos') }} />}
     <main className="fase2Main">
       {vistaSegura === 'dashboard'
         ? <HomeResumen nombre={nombreUsuario} rol={rol} rolEtiqueta={ROLES[rol]} onNavegar={navegar} onSalir={salir} onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} />

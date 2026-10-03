@@ -94,6 +94,7 @@ export async function leerPagoPublico(token: string): Promise<(DatosPago & { act
 export type ComprobantePago = {
   id: number; presupuesto_id: number; obra_id: number | null; cliente: string | null; titulo: string | null
   monto: number | null; archivo: string; nombre_archivo: string | null; nota: string | null; visto: boolean; creado_at: string
+  origen?: string | null
 }
 
 const BUCKET_PAGOS = 'pagos-clientes'
@@ -101,16 +102,53 @@ const TIPOS_OK = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/
 
 // Desde la página pública: sube el archivo a la carpeta del link y lo registra.
 export async function subirComprobantePago(token: string, archivo: File, nota: string): Promise<string | null> {
-  const tipo = archivo.type || (/\.pdf$/i.test(archivo.name) ? 'application/pdf' : '')
-  if (!TIPOS_OK.includes(tipo)) return 'Elegí una foto o un PDF.'
+  const te = tipoYExt(archivo)
+  if (!te) return 'Elegí una foto o un PDF.'
   if (archivo.size > 10 * 1024 * 1024) return 'El archivo es muy grande (máximo 10 MB).'
-  const ext = tipo === 'application/pdf' ? 'pdf' : tipo.split('/')[1].replace('jpeg', 'jpg')
+  const { tipo, ext } = te
   const ruta = `${token}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
   const { error } = await supabase.storage.from(BUCKET_PAGOS).upload(ruta, archivo, { contentType: tipo, upsert: false })
   if (error) return 'No se pudo enviar el comprobante. Probá de nuevo o mandalo por WhatsApp.'
   const { data, error: e2 } = await supabase.rpc('pago_registrar_comprobante', { p_token: token, p_archivo: ruta, p_nombre: archivo.name, p_nota: nota.trim() })
   if (e2 || data !== true) return 'No se pudo registrar el comprobante. Probá de nuevo o mandalo por WhatsApp.'
+  // Aviso al celular de MOVA al instante (si falla, lo manda el envío automático).
+  void supabase.functions.invoke('enviar-recordatorios', { body: { solo: 'comprobantes' } }).catch(() => undefined)
   return null
+}
+
+function tipoYExt(archivo: File): { tipo: string; ext: string } | null {
+  const tipo = archivo.type || (/\.pdf$/i.test(archivo.name) ? 'application/pdf' : '')
+  if (!TIPOS_OK.includes(tipo)) return null
+  return { tipo, ext: tipo === 'application/pdf' ? 'pdf' : tipo.split('/')[1].replace('jpeg', 'jpg') }
+}
+
+// Desde la app: guardar un comprobante que te llegó por otro lado (WhatsApp, mail…).
+export async function guardarComprobanteManual(datos: { presupuestoId: number; obraId: number | null; cliente: string; titulo: string }, archivo: File, nota: string): Promise<string | null> {
+  const te = tipoYExt(archivo)
+  if (!te) return 'Elegí una foto o un PDF.'
+  if (archivo.size > 10 * 1024 * 1024) return 'El archivo es muy grande (máximo 10 MB).'
+  const ruta = `manual/${datos.presupuestoId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${te.ext}`
+  const { error } = await supabase.storage.from(BUCKET_PAGOS).upload(ruta, archivo, { contentType: te.tipo, upsert: false })
+  if (error) return 'No se pudo subir el archivo. ¿Corriste el SQL de la fase 25?'
+  const { error: e2 } = await supabase.from('pago_comprobantes').insert({
+    presupuesto_id: datos.presupuestoId, obra_id: datos.obraId, cliente: datos.cliente, titulo: datos.titulo,
+    archivo: ruta, nombre_archivo: archivo.name, nota: nota.trim() || null, visto: true, origen: 'manual', notificado: true,
+  })
+  if (e2) { await supabase.storage.from(BUCKET_PAGOS).remove([ruta]); return 'No se pudo guardar. ¿Corriste el SQL de la fase 25?' }
+  return null
+}
+
+export async function descargarComprobantePago(c: ComprobantePago) {
+  const nombre = c.nombre_archivo || c.archivo.split('/').pop() || 'comprobante'
+  const { data } = await supabase.storage.from(BUCKET_PAGOS).createSignedUrl(c.archivo, 600, { download: nombre })
+  if (data?.signedUrl) window.location.href = data.signedUrl
+  else window.alert('No se pudo descargar el comprobante.')
+}
+
+export async function eliminarComprobantePago(c: ComprobantePago) {
+  await supabase.storage.from(BUCKET_PAGOS).remove([c.archivo])
+  const { error } = await supabase.from('pago_comprobantes').delete().eq('id', c.id)
+  return !error
 }
 
 // En la app: comprobantes recibidos (de un presupuesto, o todos los no vistos).
