@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import logo from './assets/mova-logo.png'
-import { leerPagoPublico, type DatosPago } from './pagoLink'
+import { leerPagoPublico, subirComprobantePago, type DatosPago } from './pagoLink'
 import { linkWhatsApp } from './whatsapp'
 import './pagina-pago.css'
 
@@ -17,6 +17,49 @@ function Copiar({ texto }: { texto: string }) {
     const listo = () => { setOk(true); window.setTimeout(() => setOk(false), 1800) }
     if (navigator.clipboard) void navigator.clipboard.writeText(texto).then(listo, listo); else listo()
   }}>{ok ? '✓ Copiado' : 'Copiar'}</button>
+}
+
+// Adjuntar el comprobante: el cliente elige la foto o el PDF y nos llega a la app.
+function AdjuntarComprobante({ token, waAviso }: { token: string; waAviso: string | null }) {
+  const [archivo, setArchivo] = useState<File | null>(null)
+  const [nota, setNota] = useState('')
+  const [estado, setEstado] = useState<'listo' | 'enviando' | 'enviado'>('listo')
+  const [error, setError] = useState('')
+  const [vista, setVista] = useState('')
+  useEffect(() => {
+    if (!archivo || !archivo.type.startsWith('image/')) { setVista(''); return }
+    const u = URL.createObjectURL(archivo); setVista(u)
+    return () => URL.revokeObjectURL(u)
+  }, [archivo])
+
+  async function enviar() {
+    if (!archivo) return
+    setEstado('enviando'); setError('')
+    const err = await subirComprobantePago(token, archivo, nota)
+    if (err) { setError(err); setEstado('listo') } else setEstado('enviado')
+  }
+
+  if (estado === 'enviado') return (
+    <div className="ppComp ok">
+      <div className="ppCompOk"><span>✓</span><div><b>¡Comprobante enviado!</b><small>Lo revisamos y te confirmamos el pago. Gracias.</small></div></div>
+      {waAviso && <a className="ppWa sec" href={waAviso} target="_blank" rel="noreferrer">💬 Avisar también por WhatsApp</a>}
+      <button type="button" className="ppLink" onClick={() => { setArchivo(null); setNota(''); setEstado('listo') }}>Enviar otro comprobante</button>
+    </div>
+  )
+  return (
+    <div className="ppComp">
+      <label className={`ppSubir ${archivo ? 'conArchivo' : ''}`}>
+        <input type="file" accept="image/*,application/pdf" onChange={(e) => { setArchivo(e.target.files?.[0] ?? null); setError('') }} />
+        {vista ? <img src={vista} alt="Comprobante" /> : <span className="ppSubirIco">{archivo ? '📄' : '📎'}</span>}
+        <span className="ppSubirTxt"><b>{archivo ? archivo.name : 'Adjuntar comprobante de pago'}</b><small>{archivo ? 'Tocá para cambiarlo' : 'Foto o captura de la transferencia, o el PDF'}</small></span>
+      </label>
+      {archivo && <>
+        <input className="ppInput" placeholder="Comentario (opcional)" maxLength={300} value={nota} onChange={(e) => setNota(e.target.value)} />
+        <button type="button" className="ppEnviar" disabled={estado === 'enviando'} onClick={() => void enviar()}>{estado === 'enviando' ? 'Enviando…' : 'Enviar comprobante'}</button>
+      </>}
+      {error && <p className="ppError">{error}</p>}
+    </div>
+  )
 }
 
 export default function PaginaPago({ token }: { token: string }) {
@@ -76,8 +119,8 @@ export default function PaginaPago({ token }: { token: string }) {
             {d.cbu && <div className="ppDato"><div><small>CBU / CVU</small><b>{d.cbu}</b></div><Copiar texto={d.cbu} /></div>}
             <div className="ppDato"><div><small>Titular</small><b>{d.titular}</b>{d.banco && <span>{d.banco}</span>}</div></div>
             {d.a_pagar > 0.5 && <div className="ppDato"><div><small>Monto</small><b>{montoTxt}</b></div><Copiar texto={d.a_pagar.toFixed(2).replace('.', ',')} /></div>}
-            <p className="ppNota">Copiá el alias, abrí tu banco o MODO y pegalo. Verificá que el titular sea <b>{d.titular}</b>. Cuando transfieras, avisanos así lo registramos:</p>
-            {waTransferi && <a className="ppWa" href={waTransferi} target="_blank" rel="noreferrer">💬 Ya transferí · avisar por WhatsApp</a>}
+            <p className="ppNota"><b>1.</b> Copiá el alias o el CBU, abrí tu banco o MODO y pegalo. Verificá que el titular sea <b>{d.titular}</b>.<br /><b>2.</b> Cuando transfieras, adjuntá acá el comprobante:</p>
+            <AdjuntarComprobante token={token} waAviso={waTransferi} />
           </div>}
         </div>
       )}
@@ -92,6 +135,11 @@ export default function PaginaPago({ token }: { token: string }) {
           </div>}
         </div>
       )}
+
+      {!d.transferencia && <>
+        <div className="ppTitulo">¿Ya pagaste?</div>
+        <div className="ppMedio"><div className="ppCuerpo" style={{ paddingTop: 14 }}><AdjuntarComprobante token={token} waAviso={waTransferi} /></div></div>
+      </>}
 
       <p className="ppPie">¿Dudas? Escribinos al <b>{d.telefono}</b><br />{d.empresa}{d.web ? ` · ${d.web}` : ''}</p>
     </div></div>

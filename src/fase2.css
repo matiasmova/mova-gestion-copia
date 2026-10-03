@@ -1756,3 +1756,12 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 .linkPagoCard b{font-size:13.5px}
 .linkPagoBtns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .linkPagoBtns>*{padding:7px 11px!important;font-size:13px;text-decoration:none}
+.linkPagoFalta{display:block;margin-top:4px;font-weight:600;font-size:12.5px;color:#b45309}
+.compPagoCard{align-items:flex-start;border-color:#f0b27a}
+.compPagoCard>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.compPagoLista{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.compPagoFila{border:1px solid var(--borde,#e6e8ec);border-radius:12px;padding:10px}
+.compPagoFila.nuevo{background:#fff7ef;border-color:#f0b27a}
+.compPagoFila b{font-size:13.5px}.compPagoFila.nuevo b{color:#b45309}
+.compPagoFila span{display:block;font-size:13px;opacity:.8;margin-top:2px}
+.compPagoFila .linkPagoBtns{margin-top:6px}

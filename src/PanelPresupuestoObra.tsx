@@ -8,6 +8,7 @@ import { linkWhatsApp, mensajeEstadoObra } from './whatsapp'
 import { codigoPresupuesto } from './codigoPresupuesto'
 import { asegurarLinkPago, estadoLinkPago, activarLinkPago } from './pagoLink'
 import { configActual } from './config'
+import ComprobantesPago from './ComprobantesPago'
 
 // Todo lo del presupuesto y el documento del cliente, en la pantalla de la obra:
 // enviar (PDF / WhatsApp), ver, editar, formas de pago, comprobantes, formas de
@@ -92,7 +93,7 @@ export default function PanelPresupuestoObra({ obra, cliente, version, onVerDocu
         <span className="formasPagoIcono">💳</span>
         <div>
           <small>Link de pago para el cliente</small>
-          {linkPago ? <b>Activo · también va como botón "Pagar" en el PDF</b>
+          {linkPago ? <b>Activo · también va como botón "Pagar" en el PDF{!(configActual().empresa.alias || configActual().empresa.cbu) && <span className="linkPagoFalta">Falta tu alias o CBU (Configuración → Empresa): sin eso el cliente no ve los datos para transferir.</span>}</b>
             : linkInfo && !linkInfo.activo ? <b>Desactivado</b>
             : <span>{!(configActual().empresa.alias || configActual().empresa.cbu) ? 'Cargá tu alias o CBU en Configuración → Empresa para activarlo.' : 'Corré en Supabase el SQL "supabase-pago-links-fase-23.sql" para activarlo.'}</span>}
           <div className="linkPagoBtns">
@@ -103,6 +104,8 @@ export default function PanelPresupuestoObra({ obra, cliente, version, onVerDocu
           </div>
         </div>
       </div>
+
+      {datos && <ComprobantesPago presupuestoId={datos.id} version={version + revision} onRegistrarCobro={onRegistrarCobro} />}
 
       {datos && onEditarPresupuesto && (
         <button type="button" className="presuMercadoBtn docEditar" onClick={() => onEditarPresupuesto(datos.id)}>

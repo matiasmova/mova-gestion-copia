@@ -23,7 +23,8 @@ export function armarDatosPago(d: DatosPdf): DatosPago | null {
   const e = configActual().empresa
   const alias = (e.alias ?? '').trim(), cbu = (e.cbu ?? '').trim()
   const medios = d.formasPago?.medios ?? ['efectivo', 'transferencia', 'tarjeta']
-  const transferencia = (!!alias || !!cbu) && medios.includes('transferencia')
+  // Con alias o CBU cargado, la transferencia siempre aparece en la página de pago.
+  const transferencia = !!alias || !!cbu
   const efectivo = medios.includes('efectivo') && !!e.telefono
   if (!transferencia && !efectivo) return null
   const est = d.estado ?? null
@@ -86,4 +87,50 @@ export async function leerPagoPublico(token: string): Promise<(DatosPago & { act
   const { data, error } = await supabase.rpc('pago_publico', { p_token: token })
   if (error || !data) return null
   return data as DatosPago & { actualizado_at: string }
+}
+
+// ---------- Comprobantes que adjunta el cliente (fase 24) ----------
+
+export type ComprobantePago = {
+  id: number; presupuesto_id: number; obra_id: number | null; cliente: string | null; titulo: string | null
+  monto: number | null; archivo: string; nombre_archivo: string | null; nota: string | null; visto: boolean; creado_at: string
+}
+
+const BUCKET_PAGOS = 'pagos-clientes'
+const TIPOS_OK = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf']
+
+// Desde la página pública: sube el archivo a la carpeta del link y lo registra.
+export async function subirComprobantePago(token: string, archivo: File, nota: string): Promise<string | null> {
+  const tipo = archivo.type || (/\.pdf$/i.test(archivo.name) ? 'application/pdf' : '')
+  if (!TIPOS_OK.includes(tipo)) return 'Elegí una foto o un PDF.'
+  if (archivo.size > 10 * 1024 * 1024) return 'El archivo es muy grande (máximo 10 MB).'
+  const ext = tipo === 'application/pdf' ? 'pdf' : tipo.split('/')[1].replace('jpeg', 'jpg')
+  const ruta = `${token}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+  const { error } = await supabase.storage.from(BUCKET_PAGOS).upload(ruta, archivo, { contentType: tipo, upsert: false })
+  if (error) return 'No se pudo enviar el comprobante. Probá de nuevo o mandalo por WhatsApp.'
+  const { data, error: e2 } = await supabase.rpc('pago_registrar_comprobante', { p_token: token, p_archivo: ruta, p_nombre: archivo.name, p_nota: nota.trim() })
+  if (e2 || data !== true) return 'No se pudo registrar el comprobante. Probá de nuevo o mandalo por WhatsApp.'
+  return null
+}
+
+// En la app: comprobantes recibidos (de un presupuesto, o todos los no vistos).
+export async function listarComprobantesPago(filtro: { presupuestoId?: number; soloNuevos?: boolean }): Promise<ComprobantePago[]> {
+  let q = supabase.from('pago_comprobantes').select('*').order('creado_at', { ascending: false })
+  if (filtro.presupuestoId != null) q = q.eq('presupuesto_id', filtro.presupuestoId)
+  if (filtro.soloNuevos) q = q.eq('visto', false)
+  const { data, error } = await q
+  if (error || !data) return []
+  return data as ComprobantePago[]
+}
+
+export async function abrirComprobantePago(c: ComprobantePago) {
+  const ventana = window.open('', '_blank')
+  const { data } = await supabase.storage.from(BUCKET_PAGOS).createSignedUrl(c.archivo, 600)
+  if (data?.signedUrl) { if (ventana) ventana.location.href = data.signedUrl; else window.location.href = data.signedUrl }
+  else { ventana?.close(); window.alert('No se pudo abrir el comprobante.') }
+}
+
+export async function marcarComprobanteVisto(id: number, visto = true) {
+  const { error } = await supabase.from('pago_comprobantes').update({ visto }).eq('id', id)
+  return !error
 }

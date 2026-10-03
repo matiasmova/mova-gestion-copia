@@ -1,6 +1,7 @@
 import GraficosInicio from './GraficosInicio'
 import QueMirarHoy, { type DestinoHoy } from './QueMirarHoy'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { listarComprobantesPago, type ComprobantePago } from './pagoLink'
 import { supabase } from './supabase'
 import { TIPOS_EVENTO } from './Agenda'
 import Tablero, { type Pestana } from './Tablero'
@@ -76,6 +77,9 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
     void supabase.from('recordatorios').select('id,titulo,hora,tipo').eq('fecha', hoyLocal).eq('completado', false).order('hora', { ascending: true, nullsFirst: true })
       .then(({ data }) => setAgendaHoy((data ?? []) as typeof agendaHoy))
   }, [])
+  // Comprobantes de pago que mandaron los clientes y todavía no revisaste.
+  const [compNuevos, setCompNuevos] = useState<ComprobantePago[]>([])
+  useEffect(() => { if (verFinanzas) void listarComprobantesPago({ soloNuevos: true }).then(setCompNuevos) }, [verFinanzas])
   const [mesSel, setMesSel] = useState(mesActual())
   const [cargando, setCargando] = useState(true)
   const [obras, setObras] = useState<Obra[]>([])
@@ -278,6 +282,12 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
   }
 
   const alertas: ReactNode[] = [
+    ...compNuevos.map((c) => (
+      <div className="fase2Cuenta" key={`cp-${c.id}`} role="button" tabIndex={0} onClick={() => (c.obra_id ? onAbrirObra(c.obra_id) : onNavegar('presupuestos'))}>
+        <div><strong>🧾 Comprobante de pago recibido</strong><span>{c.cliente ?? 'Cliente'}{c.titulo ? ` · ${c.titulo}` : ''} · para revisar</span></div>
+        <b>Ver →</b>
+      </div>
+    )),
     ...agendaHoy.map((e) => (
       <div className="fase2Cuenta" key={`ag-${e.id}`} role="button" tabIndex={0} onClick={() => onNavegar('agenda')}>
         <div><strong>{(TIPOS_EVENTO[e.tipo ?? ''] ?? TIPOS_EVENTO.recordatorio).icono} {e.titulo}</strong><span>Hoy en la agenda{e.hora ? ` · ${e.hora.slice(0, 5)}` : ''}</span></div>

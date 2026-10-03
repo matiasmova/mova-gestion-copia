@@ -37,3 +37,21 @@
 .ppPie{text-align:center;font-size:12px;color:#78818f;margin-top:22px;line-height:1.5}
 .ppPie b{color:#14181e}
 @media (prefers-reduced-motion:reduce){.ppMonto{animation:none}}
+.ppComp{margin-top:4px}
+.ppSubir{display:flex;align-items:center;gap:12px;border:2px dashed #f0b27a;background:#fff7ef;border-radius:14px;padding:14px;cursor:pointer;transition:background .15s}
+.ppSubir:active{background:#ffeedd}
+.ppSubir.conArchivo{border-style:solid;border-color:#de7015}
+.ppSubir input{display:none}
+.ppSubir img{width:48px;height:48px;object-fit:cover;border-radius:10px;flex:none}
+.ppSubirIco{width:48px;height:48px;border-radius:12px;background:#de7015;color:#fff;display:grid;place-items:center;font-size:22px;flex:none}
+.ppSubirTxt{flex:1;min-width:0}.ppSubirTxt b{display:block;font-size:15px;color:#b45309;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ppSubirTxt small{color:#78818f;font-size:12.5px}
+.ppInput{box-sizing:border-box;width:100%;margin-top:8px;border:1px solid #e6e8ec;border-radius:12px;padding:12px;font:inherit;font-size:15px}
+.ppEnviar{display:block;width:100%;margin-top:8px;border:0;border-radius:12px;padding:14px;background:#de7015;color:#fff;font:inherit;font-weight:800;font-size:15.5px;cursor:pointer}
+.ppEnviar:disabled{opacity:.6}
+.ppError{color:#b42318;font-size:13px;margin:8px 2px 0}
+.ppCompOk{display:flex;gap:12px;align-items:center;background:#e8f5ee;border-radius:14px;padding:14px}
+.ppCompOk>span{width:40px;height:40px;border-radius:50%;background:#1f7a4d;color:#fff;display:grid;place-items:center;font-weight:900;font-size:20px;flex:none;animation:ppPop .4s ease}
+.ppCompOk b{display:block;color:#1f7a4d;font-size:15.5px}.ppCompOk small{color:#3d6b53;font-size:13px}
+.ppWa.sec{background:#fff;color:#128c4b;border:1.5px solid #25d366;font-size:14px;padding:11px}
+.ppLink{all:unset;display:block;margin:10px auto 0;color:#78818f;font-size:13px;text-decoration:underline;cursor:pointer}
+@keyframes ppPop{0%{transform:scale(.4)}70%{transform:scale(1.12)}100%{transform:scale(1)}}
