@@ -1,3 +1,4 @@
+import { cargarExtrasPendientes, repartirMonto, aplicarCobroAExtras, type ExtraPendiente } from './cobroExtras'
 import {
   useEffect,
   useState,
@@ -1237,6 +1238,14 @@ function EconomiaObra({ obraId, cuenta, presupuestoId, onGenerarPdf, onCambio, a
   const [mostrarCobro, setMostrarCobro] = useState(false)
   const [cobroForm, setCobroForm] = useState({ monto: '', fecha: new Date().toISOString().slice(0, 10), medio_pago: 'transferencia', referencia: '' })
   const [guardandoCobro, setGuardandoCobro] = useState(false)
+  // A qué se aplica el cobro: al trabajo o a los gastos extra pendientes.
+  const [destinoCobro, setDestinoCobro] = useState<'obra' | 'extras'>('obra')
+  const [extrasPend, setExtrasPend] = useState<ExtraPendiente[]>([])
+  const [extrasSel, setExtrasSel] = useState<number[]>([])
+  useEffect(() => {
+    if (!mostrarCobro) return
+    void cargarExtrasPendientes(obraId).then((l) => { setExtrasPend(l); setExtrasSel(l.map((g) => g.id)) })
+  }, [mostrarCobro, obraId, revision])
   const [formas, setFormas] = useState<FormasPago | null>(null)
   useEffect(() => { if (presupuestoId) void cargarFormasPago(Number(presupuestoId)).then(setFormas) }, [presupuestoId])
   // Abierto desde "Registrar": muestra el formulario de cobro.
@@ -1246,10 +1255,25 @@ function EconomiaObra({ obraId, cuenta, presupuestoId, onGenerarPdf, onCambio, a
     setTimeout(() => document.querySelector('[data-registrar]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
   }, [abrirCobro])
 
+  const extrasElegidos = extrasPend.filter((g) => extrasSel.includes(g.id))
+  const reparto = destinoCobro === 'extras' ? repartirMonto(Number(cobroForm.monto) || 0, extrasElegidos) : null
+
   async function guardarCobro(e: FormEvent) {
     e.preventDefault()
     const monto = Number(cobroForm.monto)
     if (!(monto > 0)) return
+    if (destinoCobro === 'extras' && extrasElegidos.length) {
+      setGuardandoCobro(true)
+      const r = await aplicarCobroAExtras(obraId, monto, extrasElegidos, cobroForm)
+      setGuardandoCobro(false)
+      if (!r.ok) { window.alert(`No se pudo aplicar el cobro: ${r.error ?? ''}`); setRevision((v) => v + 1); onCambio(); return }
+      setMostrarCobro(false); setDestinoCobro('obra')
+      avisoGuardado(r.sobrante > 0.005 ? 'Gastos reintegrados y sobrante cobrado' : 'Gastos reintegrados')
+      setCobroForm({ monto: '', fecha: new Date().toISOString().slice(0, 10), medio_pago: 'transferencia', referencia: '' })
+      setRevision((v) => v + 1)
+      onCambio()
+      return
+    }
     setGuardandoCobro(true)
     const { error: fallo } = await supabase.from('pagos').insert({
       obra_id: obraId, presupuesto_id: null, monto, fecha: cobroForm.fecha,
@@ -1297,7 +1321,7 @@ function EconomiaObra({ obraId, cuenta, presupuestoId, onGenerarPdf, onCambio, a
 
   return <section className="obraFotosSeccion" aria-label="Finanzas de la obra">
     <div className="seguimientoAcciones">
-      <div><h3>Finanzas de la obra</h3><p>Registrá aquí los pagos de la obra. Los reintegros de gastos se marcan como Pagado en Cambios y adicionales: no los cargues también como un cobro, porque se descontarían dos veces.</p></div>
+      <div><h3>Finanzas de la obra</h3><p>Registrá aquí los pagos del cliente. Si el pago es para devolverte gastos extra, en Registrar cobro elegí “A gastos extra”: quedan pagados (o en parte) sin contarse como ingreso.</p></div>
       <div className="adicAcciones">
         <button type="button" className="newButton" onClick={() => setMostrarCobro((v) => !v)}>{mostrarCobro ? 'Cancelar' : '💵 Registrar cobro'}</button>
         <button type="button" className="editButton" onClick={onGenerarPdf}>📄 Presupuesto y estado de obra</button>
@@ -1313,7 +1337,36 @@ function EconomiaObra({ obraId, cuenta, presupuestoId, onGenerarPdf, onCambio, a
           <label>Medio<select value={cobroForm.medio_pago} onChange={(e) => setCobroForm((f) => ({ ...f, medio_pago: e.target.value }))}><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option><option value="tarjeta">Tarjeta</option><option value="cheque">Cheque</option><option value="otro">Otro</option></select></label>
           <label>Referencia<input value={cobroForm.referencia} onChange={(e) => setCobroForm((f) => ({ ...f, referencia: e.target.value }))} /></label>
         </div>
-        <div className="formActions"><button type="button" className="cancelButton" onClick={() => setMostrarCobro(false)}>Cancelar</button><button className="newButton" disabled={guardandoCobro}>{guardandoCobro ? 'Guardando...' : 'Guardar cobro'}</button></div>
+        {extrasPend.length > 0 && (
+          <div className="cobroDestino">
+            <span className="cobroDestinoTit">¿A qué lo aplicás?</span>
+            <div className="cobroDestinoOps">
+              <button type="button" className={destinoCobro === 'obra' ? 'activo' : ''} onClick={() => setDestinoCobro('obra')}><b>🏗️ Al trabajo</b><small>Los extras siguen pendientes</small></button>
+              <button type="button" className={destinoCobro === 'extras' ? 'activo' : ''} onClick={() => { setDestinoCobro('extras'); if (!cobroForm.monto) setCobroForm((f) => ({ ...f, monto: String(extrasElegidos.reduce((t, g) => t + g.importe, 0)) })) }}><b>🧾 A gastos extra</b><small>{extrasPend.length} pendiente{extrasPend.length === 1 ? '' : 's'} · {dineroFicha(extrasPend.reduce((t, g) => t + g.importe, 0))}</small></button>
+            </div>
+            {destinoCobro === 'extras' && reparto && <>
+              <div className="cobroExtras">
+                {extrasPend.map((g) => {
+                  const parte = reparto.partes.find((x) => x.gasto.id === g.id)
+                  const sel = extrasSel.includes(g.id)
+                  return (
+                    <label key={g.id} className={`cobroExtra ${sel ? 'sel' : ''}`}>
+                      <input type="checkbox" checked={sel} onChange={() => setExtrasSel((l) => (sel ? l.filter((x) => x !== g.id) : [...l, g.id]))} />
+                      <span className="cobroExtraTxt"><b>{g.descripcion}</b><small>{fechaFicha(g.fecha)} · {dineroFicha(g.importe)}</small></span>
+                      <span className="cobroExtraRes">{!sel ? <small>No se toca</small>
+                        : !parte || parte.aplicado <= 0 ? <small className="pend">Sin monto · sigue pendiente</small>
+                        : parte.queda <= 0.005 ? <b className="ok">✓ Queda pagado</b>
+                        : <><b>{dineroFicha(parte.aplicado)}</b><small className="pend">Queda pendiente {dineroFicha(parte.queda)}</small></>}</span>
+                    </label>
+                  )
+                })}
+              </div>
+              {reparto.sobrante > 0.005 && <p className="cobroSobrante">Sobran <b>{dineroFicha(reparto.sobrante)}</b>: se registran como cobro del trabajo.</p>}
+              <p className="cobroNotaExtra">Los reintegros de gastos no cuentan como ingreso del negocio: solo dejan de figurar como gasto pendiente.</p>
+            </>}
+          </div>
+        )}
+        <div className="formActions"><button type="button" className="cancelButton" onClick={() => setMostrarCobro(false)}>Cancelar</button><button className="newButton" disabled={guardandoCobro}>{guardandoCobro ? 'Guardando...' : destinoCobro === 'extras' && extrasElegidos.length ? 'Aplicar a gastos extra' : 'Guardar cobro'}</button></div>
       </form>
     )}
 
