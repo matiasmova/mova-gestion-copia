@@ -295,10 +295,10 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
         )}
       </div>
       {linkPago && (!e || aPagarHoy > 0.5) && (
-        <a href={linkPago} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '12px', padding: '13px 16px', borderRadius: '13px', background: OSCURO, color: '#fff', textDecoration: 'none' }}>
-          <span style={{ fontSize: '11.5px', fontWeight: 800, letterSpacing: '1.6px' }}>PAGAR AHORA</span>
-          <span style={{ flex: 1, fontSize: '12.5px', color: '#C9CED6' }}>Transferencia o efectivo · tocá acá</span>
-          <b style={{ color: NARANJA, fontSize: '18px' }}>›</b>
+        <a href={linkPago} target="_blank" rel="noreferrer" className="docPagarAhora">
+          <span className="ico">$</span>
+          <span className="txt"><b>PAGAR AHORA</b><small>Tocá acá · transferencia o efectivo</small></span>
+          <span className="pill">{moneda(e ? aPagarHoy : Math.round(Number(d.total) * PCT_ANTICIPO) / 100)} ›</span>
         </a>
       )}
 
