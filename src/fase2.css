@@ -1850,3 +1850,41 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 @media (prefers-reduced-motion:reduce){
   .vidaEtapas li i,.vidaEtapas li span,.vidaEtapas li::after,.vidaEtapas .vida-hoy i::after,.obraRegistrarBtn,.presuPaso,.cuentaObraKpis .hoy,.tarjetaViva,.tarjetaViva::after,.newButton::after,.pageHeader .newButton,.bmWrap .bmBoton{animation:none!important}
 }
+
+/* ===== Inicio con movimiento ===== */
+/* Saludo: el nombre con un brillo naranja/verde que recorre el texto. */
+.homeCompacto .fase2Encabezado h2{background:linear-gradient(90deg,#14181e 0%,#14181e 40%,#de7015 50%,#1f9d5c 56%,#14181e 66%,#14181e 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:inicioSaludo 5s ease-in-out 1s infinite}
+@keyframes inicioSaludo{0%{background-position:100% 0}60%,100%{background-position:-50% 0}}
+/* Pestañas: la activa con degradado vivo y reflejo; las demás se levantan al tocarlas. */
+.homeTabs button{position:relative;transition:transform .15s ease,background .2s ease,color .2s ease}
+.homeTabs button:not(.active):active{transform:scale(.95)}
+.fase2Main .homeTabs button.active{background:linear-gradient(115deg,#14181e 0%,#14181e 55%,#3b2412 75%,#123222 100%);background-size:220% 100%;color:#fff;overflow:hidden;box-shadow:0 6px 16px -8px rgba(0,0,0,.6),inset 0 -2px 0 #de7015;animation:inicioTab 4s ease-in-out infinite}
+.fase2Main .homeTabs button.active::after{content:"";position:absolute;top:0;bottom:0;left:-60%;width:40%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.25),transparent);transform:skewX(-20deg);animation:movBotonReflejo 3.5s ease-in-out .8s infinite}
+@keyframes inicioTab{0%,100%{background-position:0 0;box-shadow:0 6px 16px -8px rgba(0,0,0,.6),inset 0 -2px 0 #de7015}50%{background-position:100% 0;box-shadow:0 6px 16px -8px rgba(0,0,0,.6),inset 0 -2px 0 #25b46a}}
+/* "Qué mirar hoy": borde con degradado violeta/naranja/verde que circula. */
+.hoyIA{border:1.5px solid transparent;background:linear-gradient(180deg,#fbf8ff,#fff) padding-box,linear-gradient(120deg,#8b5cf6,#de7015,#1f9d5c,#8b5cf6) border-box;background-size:100% 100%,300% 300%;animation:inicioBorde 6s linear infinite}
+@keyframes inicioBorde{0%{background-position:0 0,0% 50%}100%{background-position:0 0,300% 50%}}
+.hoyIACab span:first-child{display:inline-block}
+.hoyIA li{animation:movEntra .45s cubic-bezier(.2,.8,.2,1) both}
+.hoyIA li:nth-child(2){animation-delay:.08s}.hoyIA li:nth-child(3){animation-delay:.16s}.hoyIA li:nth-child(4){animation-delay:.24s}.hoyIA li:nth-child(5){animation-delay:.32s}.hoyIA li:nth-child(6){animation-delay:.4s}
+.hoyIA li button{transition:transform .15s ease,box-shadow .2s ease,border-color .2s}
+.hoyIA li button:active{transform:scale(.98)}
+.hoyIA li button:hover{box-shadow:0 8px 18px -12px rgba(91,46,154,.5)}
+.hoyIA li span:first-child{animation:inicioIcono 3s ease-in-out infinite;transform-origin:50% 80%}
+.hoyIA li:nth-child(2) span:first-child{animation-delay:.4s}.hoyIA li:nth-child(3) span:first-child{animation-delay:.8s}.hoyIA li:nth-child(4) span:first-child{animation-delay:1.2s}.hoyIA li:nth-child(5) span:first-child{animation-delay:1.6s}
+@keyframes inicioIcono{0%,80%,100%{transform:none}85%{transform:rotate(-12deg) scale(1.15)}92%{transform:rotate(10deg) scale(1.1)}}
+.hoyIA li button b{transition:transform .2s;animation:inicioFlecha 2s ease-in-out infinite}
+@keyframes inicioFlecha{0%,100%{transform:translateX(0)}50%{transform:translateX(3px)}}
+/* Neto del mes: borde que late y barra que se llena. */
+.homeNeto{animation:movEntra .45s cubic-bezier(.2,.8,.2,1) both,inicioNeto 3.2s ease-in-out 1s infinite}
+@keyframes inicioNeto{0%,100%{box-shadow:0 0 0 0 rgba(222,112,21,0)}50%{box-shadow:0 0 0 4px rgba(222,112,21,.12)}}
+/* Avisos ("Para mirar"): entran uno tras otro y se marcan al tocarlos. */
+.homeAlertas .fase2Cuenta{animation:movEntra .4s cubic-bezier(.2,.8,.2,1) both;transition:background .2s,transform .12s}
+.homeAlertas .fase2Cuenta:nth-child(2){animation-delay:.07s}.homeAlertas .fase2Cuenta:nth-child(3){animation-delay:.14s}
+.homeAlertas .fase2Cuenta:active{transform:scale(.985);background:#fff7ef}
+/* Cerrar sesión y + Nuevo */
+.homeCompacto .logoutButton{transition:transform .12s,border-color .2s}.homeCompacto .logoutButton:active{transform:scale(.95)}
+@media (prefers-reduced-motion:reduce){
+  .homeCompacto .fase2Encabezado h2{animation:none;color:#14181e;background:none}
+  .fase2Main .homeTabs button.active,.fase2Main .homeTabs button.active::after,.hoyIA,.hoyIA li,.hoyIA li span:first-child,.hoyIA li button b,.homeNeto,.homeAlertas .fase2Cuenta{animation:none!important}
+}

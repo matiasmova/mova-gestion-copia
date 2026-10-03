@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './AppFase2.tsx'
 import PaginaPago from './PaginaPago'
+import Arranque from './Arranque'
 import './index.css'
 import { vigilarActualizaciones } from './actualizacion'
 
@@ -10,7 +11,7 @@ const tokenPago = new URLSearchParams(window.location.search).get('pagar')
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    {tokenPago ? <PaginaPago token={tokenPago} /> : <App />}
+    {tokenPago ? <PaginaPago token={tokenPago} /> : <><App /><Arranque /></>}
   </React.StrictMode>,
 )
 
