@@ -15,6 +15,7 @@ type Accion = { clave: string; vista: Vista; accion: Pedido['accion']; texto: st
 
 export const ACCIONES: Accion[] = [
   { clave: 'presupuesto', vista: 'presupuestos', accion: 'nuevo', texto: 'Presupuesto', icono: 'presupuestos', buscar: 'nuevo presupuesto cotizar' },
+  { clave: 'relevamiento', vista: 'relevamientos', accion: 'nuevo', texto: 'Relevamiento', icono: 'relevamientos', buscar: 'nuevo relevamiento visita medicion relevar' },
   { clave: 'cobro', vista: 'finanzas', accion: 'cobro', texto: 'Cobro', icono: 'cobro', buscar: 'nuevo cobro pago ingreso cobrar' },
   { clave: 'gasto', vista: 'finanzas', accion: 'gasto', texto: 'Gasto', icono: 'gasto', buscar: 'nuevo gasto costo egreso' },
   { clave: 'compra', vista: 'compras', accion: 'nuevo', texto: 'Compra', icono: 'compras', buscar: 'nueva compra material proveedor' },

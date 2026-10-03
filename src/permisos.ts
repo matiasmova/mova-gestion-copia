@@ -12,6 +12,7 @@ export const NAVEGACION = [
   ['dashboard', 'principal', 'Inicio'],
   ['agenda', 'principal', 'Agenda'],
   ['clientes', 'comercial', 'Clientes'],
+  ['relevamientos', 'comercial', 'Relevamientos'],
   // Presupuestos y Obras se ven juntos en "Trabajos" (un solo ítem del menú).
   ['presupuestos', 'comercial', 'Trabajos · presupuestos'],
   ['obras', 'comercial', 'Trabajos'],
@@ -37,6 +38,7 @@ export type Vista = (typeof NAVEGACION)[number][0]
 // Qué roles ven cada módulo. Si un módulo no figura acá, lo ven todos.
 export const PERMISOS: Partial<Record<Vista, Rol[]>> = {
   clientes: ['admin', 'encargado', 'contable'],
+  relevamientos: ['admin', 'encargado', 'contable'],
   presupuestos: ['admin', 'contable'],
   soluciones: ['admin', 'contable'],
   finanzas: ['admin', 'contable'],
