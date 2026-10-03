@@ -105,7 +105,7 @@ export default function PanelPresupuestoObra({ obra, cliente, version, onVerDocu
         </div>
       </div>
 
-      {datos && <ComprobantesPago presupuestoId={datos.id} version={version + revision} onRegistrarCobro={onRegistrarCobro} />}
+      {datos && <ComprobantesPago presupuestoId={datos.id} obraId={obra.id} cliente={cliente} titulo={datos.titulo} version={version + revision} onRegistrarCobro={onRegistrarCobro} />}
 
       {datos && onEditarPresupuesto && (
         <button type="button" className="presuMercadoBtn docEditar" onClick={() => onEditarPresupuesto(datos.id)}>
