@@ -355,7 +355,7 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
 
   return <div className="fase2Dashboard homeCompacto">
     <header className="fase2Encabezado">
-      <div><p className="subtitle">MOVA GESTIÓN · {rolEtiqueta.toUpperCase()}</p><h2>Hola, {nombre || 'bienvenido'}</h2><p className="welcome">Resumen rápido de tu empresa</p></div>
+      <div><p className="subtitle">MOVA GESTIÓN · {rolEtiqueta.toUpperCase()}</p><h2><span className="saludoTxt">¡Hola{nombre ? `, ${nombre}` : ''}!</span> <span className="saludoMano" aria-hidden="true">👋</span></h2><p className="welcome">Resumen rápido de tu empresa</p></div>
       <div className="headerActions"><button className="logoutButton" onClick={onSalir}>Cerrar sesión</button><button className="newButton" onClick={() => onNavegar('clientes')}>+ Nuevo</button></div>
     </header>
 

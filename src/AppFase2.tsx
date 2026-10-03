@@ -23,6 +23,13 @@ import Trabajos from './Trabajos'
 import AvisoComprobantes from './AvisoComprobantes'
 import Relevamientos from './Relevamientos'
 
+// Nombre corto para mostrar: sin el correo completo y solo el primer nombre
+// ("movaelectronica@gmail.com" → "Movaelectronica", "matías pérez" → "Matías").
+function nombreVisible(texto: string) {
+  const base = texto.split('@')[0].replace(/[._-]+/g, ' ').trim().split(/\s+/)[0] ?? ''
+  return base ? base.charAt(0).toUpperCase() + base.slice(1) : ''
+}
+
 export default function AppFase2() {
   const [session, setSession] = useState<Session | null>(null)
   const [verificando, setVerificando] = useState(true)
@@ -67,7 +74,7 @@ export default function AppFase2() {
   async function cargarPerfil(sesion: Session) {
     // Configuración de la empresa (datos de contacto, condiciones…) para los documentos.
     void cargarConfig()
-    setNombreUsuario(sesion.user.email?.split('@')[0] ?? 'Usuario')
+    setNombreUsuario(nombreVisible(sesion.user.email ?? '') || 'Usuario')
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -81,7 +88,7 @@ export default function AppFase2() {
           setMensajeError('Tu usuario está desactivado. Consultá con el administrador.')
           return
         }
-        if (data.nombre) setNombreUsuario(data.nombre)
+        if (data.nombre) setNombreUsuario(nombreVisible(data.nombre) || nombreVisible(sesion.user.email ?? ''))
         if (data.rol && ROLES_VALIDOS.includes(data.rol as Rol)) setRol(data.rol as Rol)
         else setRol('auxiliar')
       } else {
