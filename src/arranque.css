@@ -1,0 +1,36 @@
+.arranque{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;overflow:hidden;background:radial-gradient(circle at 50% 40%,#18202b 0%,#0b0f15 70%);color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;transition:opacity .55s ease,transform .55s ease;cursor:pointer}
+.arranque.sale{opacity:0;transform:scale(1.06);pointer-events:none}
+.arrGrilla{position:absolute;inset:-60px;background-image:linear-gradient(rgba(37,180,106,.09) 1px,transparent 1px),linear-gradient(90deg,rgba(240,138,44,.08) 1px,transparent 1px);background-size:34px 34px;animation:arrGrilla 6s linear infinite;mask-image:radial-gradient(circle at 50% 45%,#000 0%,transparent 70%);-webkit-mask-image:radial-gradient(circle at 50% 45%,#000 0%,transparent 70%)}
+@keyframes arrGrilla{to{transform:translate(34px,34px)}}
+.arrLuz{position:absolute;width:320px;height:320px;border-radius:50%;filter:blur(70px);opacity:.35}
+.arrLuz.a{background:#de7015;top:12%;left:-80px;animation:arrFlota 4s ease-in-out infinite}
+.arrLuz.b{background:#1f9d5c;bottom:10%;right:-90px;animation:arrFlota 4.6s ease-in-out infinite reverse}
+@keyframes arrFlota{0%,100%{transform:translate(0,0)}50%{transform:translate(30px,-26px)}}
+.arrCentro{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;padding:0 24px}
+.arrChip{width:170px;height:170px;animation:arrAparece .6s cubic-bezier(.2,.9,.25,1.2) both;filter:drop-shadow(0 0 18px rgba(240,138,44,.35))}
+.arrAnillo{transform-origin:100px 100px}
+.arrAnillo.uno{animation:arrGira 3.2s linear infinite}
+.arrAnillo.dos{animation:arrGira 5s linear infinite reverse}
+.arrPunto{transform-origin:100px 100px;animation:arrGira 1.6s linear infinite;filter:drop-shadow(0 0 6px #f08a2c)}
+.arrPatas{animation:arrPatas 1.4s ease-in-out infinite}
+.arrPistas path{stroke-dasharray:40;stroke-dashoffset:40;animation:arrPista 1.4s ease-in-out infinite}
+.arrPistas path:nth-child(2){animation-delay:.25s}.arrPistas path:nth-child(3){animation-delay:.5s}.arrPistas path:nth-child(4){animation-delay:.75s}
+.arrM{font:900 44px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;fill:url(#arrG);animation:arrLatido 1.4s ease-in-out infinite;transform-origin:100px 100px}
+@keyframes arrGira{to{transform:rotate(360deg)}}
+@keyframes arrPatas{0%,100%{opacity:.55}50%{opacity:1}}
+@keyframes arrPista{0%{stroke-dashoffset:40;opacity:.2}50%{stroke-dashoffset:0;opacity:1}100%{stroke-dashoffset:-40;opacity:.2}}
+@keyframes arrLatido{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+@keyframes arrAparece{0%{opacity:0;transform:scale(.6) rotate(-20deg)}100%{opacity:1;transform:none}}
+.arrMarca{margin-top:14px;animation:arrSube .5s ease .2s both}
+.arrMarca b{display:block;font-size:30px;letter-spacing:10px;padding-left:10px;background:linear-gradient(90deg,#fff,#f08a2c,#25b46a,#fff);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:arrBrilloTxt 2.4s linear infinite}
+.arrMarca span{display:block;font-size:12px;letter-spacing:4px;text-transform:uppercase;color:#9aa4b2;margin-top:2px}
+@keyframes arrBrilloTxt{to{background-position:-300% 0}}
+.arrTitulo{margin:22px 0 10px;font-size:15px;font-weight:700;color:#e6e9ee;letter-spacing:.5px;animation:arrSube .5s ease .35s both}
+.arrPuntos i{font-style:normal;animation:arrPunto 1.2s infinite}.arrPuntos i:nth-child(2){animation-delay:.2s}.arrPuntos i:nth-child(3){animation-delay:.4s}
+@keyframes arrPunto{0%,100%{opacity:.2}50%{opacity:1}}
+.arrBarra{width:220px;height:4px;border-radius:999px;background:rgba(255,255,255,.1);overflow:hidden;animation:arrSube .5s ease .45s both}
+.arrBarra i{display:block;height:100%;width:100%;border-radius:999px;background:linear-gradient(90deg,#de7015,#25b46a);transform-origin:left;animation:arrCarga 2.1s cubic-bezier(.4,.1,.2,1) .2s both;box-shadow:0 0 12px rgba(37,180,106,.7)}
+@keyframes arrCarga{0%{transform:scaleX(0)}100%{transform:scaleX(1)}}
+.arrPaso{margin:10px 0 0;font-size:12.5px;color:#8b95a3;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;animation:arrSube .3s ease both;min-height:16px}
+@keyframes arrSube{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.arranque *{animation:none!important}.arrBarra i{transform:none}}
