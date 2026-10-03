@@ -1853,7 +1853,7 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 
 /* ===== Inicio con movimiento ===== */
 /* Saludo: el nombre con un brillo naranja/verde que recorre el texto. */
-.homeCompacto .fase2Encabezado h2{background:linear-gradient(90deg,#14181e 0%,#14181e 40%,#de7015 50%,#1f9d5c 56%,#14181e 66%,#14181e 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:inicioSaludo 5s ease-in-out 1s infinite}
+.homeCompacto .fase2Encabezado .saludoTxt{background:linear-gradient(90deg,#14181e 0%,#14181e 40%,#de7015 50%,#1f9d5c 56%,#14181e 66%,#14181e 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:inicioSaludo 5s ease-in-out 1s infinite}
 @keyframes inicioSaludo{0%{background-position:100% 0}60%,100%{background-position:-50% 0}}
 /* Pestañas: la activa con degradado vivo y reflejo; las demás se levantan al tocarlas. */
 .homeTabs button{position:relative;transition:transform .15s ease,background .2s ease,color .2s ease}
@@ -1885,6 +1885,10 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 /* Cerrar sesión y + Nuevo */
 .homeCompacto .logoutButton{transition:transform .12s,border-color .2s}.homeCompacto .logoutButton:active{transform:scale(.95)}
 @media (prefers-reduced-motion:reduce){
-  .homeCompacto .fase2Encabezado h2{animation:none;color:#14181e;background:none}
+  .homeCompacto .fase2Encabezado .saludoTxt{animation:none;color:#14181e;background:none}
+  .saludoMano{animation:none!important}
   .fase2Main .homeTabs button.active,.fase2Main .homeTabs button.active::after,.hoyIA,.hoyIA li,.hoyIA li span:first-child,.hoyIA li button b,.homeNeto,.homeAlertas .fase2Cuenta{animation:none!important}
 }
+
+.saludoMano{display:inline-block;transform-origin:70% 75%;animation:saludoMano 2.6s ease-in-out .6s 2}
+@keyframes saludoMano{0%,60%,100%{transform:rotate(0)}10%,30%{transform:rotate(16deg)}20%,40%{transform:rotate(-8deg)}50%{transform:rotate(10deg)}}
