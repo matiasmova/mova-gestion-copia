@@ -60,7 +60,7 @@ export default function CuentaObraResumen({ cuenta, dinero, lineaTiempo = false 
               </li>
             ))}
           </ul>
-          <p className="gestionAyuda" style={{ marginTop: 6 }}>Cuando el cliente te devuelva un gasto, marcalo como <b>Pagado</b> en Cambios y adicionales (no lo cargues como cobro).</p>
+          <p className="gestionAyuda" style={{ marginTop: 6 }}>Cuando el cliente te devuelva un gasto, en <b>Registrar cobro</b> elegí <b>“A gastos extra”</b>: el gasto pasa a pagado (o queda pendiente lo que falte).</p>
         </>}
       </>}
     </div>
