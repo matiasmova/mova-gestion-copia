@@ -78,7 +78,7 @@ function Tarjetas({ cifras }: { cifras: { e: string; v: string; s?: string; dest
       {cifras.map((c) => {
         const fondo = c.destacada === 'naranja' ? NARANJA : c.destacada === 'verde' ? VERDE : undefined
         return (
-          <div key={c.e} style={{ ...s.tarjeta, borderRadius: '13px', padding: '12px 14px', ...(fondo ? { background: fondo, borderColor: fondo } : {}) }}>
+          <div key={c.e} className={c.destacada === 'naranja' ? 'tarjetaViva' : undefined} style={{ ...s.tarjeta, borderRadius: '13px', padding: '12px 14px', ...(fondo ? { background: fondo, borderColor: fondo } : {}) }}>
             <div style={{ ...s.et, color: fondo ? '#fff' : GRIS }}>{c.e}</div>
             <strong style={{ display: 'block', fontSize: 'clamp(18px, 5vw, 21px)', color: fondo ? '#fff' : c.color ?? OSCURO, marginTop: '4px', whiteSpace: 'nowrap' }}>{c.v}</strong>
             {c.s && <div style={{ fontSize: '11.5px', color: fondo ? '#fff' : GRIS, opacity: fondo ? 0.92 : 1, marginTop: '2px' }}>{c.s}</div>}

@@ -48,7 +48,7 @@ export default function VidaEtapas({ pasos }: { pasos: Paso[] }) {
   return (
     <ol className="vidaEtapas" aria-label="Etapas">
       {pasos.map((p, i) => (
-        <li key={i} className={`vida-${p.estado}`} aria-current={p.estado === 'hoy' ? 'step' : undefined}>
+        <li key={i} className={`vida-${p.estado}`} style={{ ['--i' as string]: i }} aria-current={p.estado === 'hoy' ? 'step' : undefined}>
           <i>{p.estado === 'ok' ? '✓' : p.estado === 'no' ? '✕' : ''}</i>
           <span>{p.texto}</span>
         </li>
