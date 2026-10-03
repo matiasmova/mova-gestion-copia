@@ -77,7 +77,9 @@ type Props = {
   clientes: ClienteOpcion[]
   obras: ObraOpcion[]
   presupuesto?: PresupuestoEditable | null
-  onGuardado: () => void
+  // Presupuesto nuevo con datos ya cargados (por ejemplo, desde un relevamiento).
+  inicial?: { cliente_id?: number | null; titulo?: string; descripcion?: string; notas?: string; items: ItemPresupuesto[] }
+  onGuardado: (presupuestoId?: number) => void
   onCancelar: () => void
 }
 
@@ -98,11 +100,12 @@ function NuevoPresupuesto({
   clientes,
   obras,
   presupuesto,
+  inicial,
   onGuardado,
   onCancelar,
 }: Props) {
   const [clienteId, setClienteId] = useState(
-    presupuesto?.cliente_id.toString() ?? '',
+    presupuesto?.cliente_id.toString() ?? (inicial?.cliente_id ? String(inicial.cliente_id) : ''),
   )
   const [obraId, setObraId] = useState(
     presupuesto?.obra_id?.toString() ?? '',
@@ -119,11 +122,11 @@ function NuevoPresupuesto({
     setObrasLista((actual) => [...obras, ...actual.filter((o) => !obras.some((x) => x.id === o.id))])
   }, [obras])
   const [creando, setCreando] = useState<'cliente' | 'obra' | null>(null)
-  const [titulo, setTitulo] = useState(presupuesto?.titulo ?? '')
+  const [titulo, setTitulo] = useState(presupuesto?.titulo ?? inicial?.titulo ?? '')
   // Si el título ya existe o se escribe a mano, las soluciones no lo pisan.
-  const [tituloManual, setTituloManual] = useState(!!presupuesto?.titulo)
+  const [tituloManual, setTituloManual] = useState(!!(presupuesto?.titulo ?? inicial?.titulo))
   const [descripcion, setDescripcion] = useState(
-    presupuesto?.descripcion ?? '',
+    presupuesto?.descripcion ?? inicial?.descripcion ?? '',
   )
   const [fecha, setFecha] = useState(
     presupuesto?.fecha ?? new Date().toISOString().slice(0, 10),
@@ -148,14 +151,14 @@ function NuevoPresupuesto({
   )
   const [descuentoTipo, setDescuentoTipo] = useState<'monto' | 'porcentaje'>('monto')
   const totalPagado = presupuesto?.total_pagado ?? 0
-  const [notas, setNotas] = useState(presupuesto?.notas ?? '')
+  const [notas, setNotas] = useState(presupuesto?.notas ?? inicial?.notas ?? '')
   // Formas de pago que acepta (solo informativas). Al editar se leen las guardadas.
   const [formas, setFormas] = useState<FormasPago>(() => normalizarFormas(null))
   useEffect(() => { if (presupuesto?.id) void cargarFormasPago(presupuesto.id).then(setFormas) }, [presupuesto?.id])
   const [items, setItems] = useState<ItemPresupuesto[]>(
     presupuesto?.items.length
       ? presupuesto.items
-      : [{ ...itemVacio }],
+      : inicial?.items.length ? inicial.items : [{ ...itemVacio }],
   )
   const [catalogo, setCatalogo] = useState<ProductoServicio[]>([])
   const [cargandoCatalogo, setCargandoCatalogo] = useState(true)
@@ -323,7 +326,7 @@ function NuevoPresupuesto({
   }
 
   // ---- Armar con IA: a partir de lo que pide el cliente ----
-  const [iaAbierta, setIaAbierta] = useState(!presupuesto)
+  const [iaAbierta, setIaAbierta] = useState(!presupuesto && !inicial)
   const [iaPedido, setIaPedido] = useState('')
   const [iaPensando, setIaPensando] = useState(false)
   const [iaError, setIaError] = useState('')
@@ -545,7 +548,7 @@ function NuevoPresupuesto({
     }
 
     setGuardando(false)
-    onGuardado()
+    onGuardado(presupuestoId)
   }
 
   function formatoDinero(valor: number) {

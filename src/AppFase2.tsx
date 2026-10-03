@@ -21,6 +21,7 @@ import { BuscadorGlobal, BotonMas, type Pedido, type Ir } from './BuscadorGlobal
 import { ROLES, ROLES_VALIDOS, NAVEGACION, GRUPOS_MENU, FUERA_DEL_MENU, puedeVer, type Rol, type Vista } from './permisos'
 import Trabajos from './Trabajos'
 import AvisoComprobantes from './AvisoComprobantes'
+import Relevamientos from './Relevamientos'
 
 export default function AppFase2() {
   const [session, setSession] = useState<Session | null>(null)
@@ -184,6 +185,8 @@ export default function AppFase2() {
   const contenido: Record<Exclude<Vista, 'dashboard'>, React.ReactNode> = {
     clientes: <Clientes pedido={pedidoPara('clientes')} onPedidoAtendido={pedidoAtendido}
       onAbrirObra={puedeVer(rol, 'obras') ? (id) => { setObraAbrirId(id); navegar('obras') } : undefined}
+      onAbrirPresupuesto={puedeVer(rol, 'presupuestos') ? (id) => { setPresupuestoAbrirId(id); navegar('presupuestos') } : undefined} />,
+    relevamientos: <Relevamientos pedido={pedidoPara('relevamientos')} onPedidoAtendido={pedidoAtendido} puedePresupuestar={puedeVer(rol, 'presupuestos')}
       onAbrirPresupuesto={puedeVer(rol, 'presupuestos') ? (id) => { setPresupuestoAbrirId(id); navegar('presupuestos') } : undefined} />,
     obras: trabajos('en_obra'),
     presupuestos: trabajos('por_cerrar'),
