@@ -400,18 +400,31 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
 
   // ---------- Botón "Pagar" (página de pago del cliente) ----------
   if (opciones.linkPago && (!estado || aPagarHoy > 0.5)) {
-    const alto = 34
-    lugar(alto + 12)
-    caja(M, y, CW, alto, { fondo: OSCURO, r: 10 })
-    espaciado('PAGAR AHORA', M + 16, y - 21, F_CHICO + 0.5, BLANCO)
-    texto('Transferencia o efectivo  ·  tocá acá', M + 16 + anchoEsp('PAGAR AHORA', F_CHICO + 0.5) + 12, y - 21, F_TXT - 1, font, GRIS_CAJA)
-    derecha('>', M + CW - 16, y - 22, F_GRANDE - 2, bold, NARANJA)
+    // Botón bien visible: verde con halo, ícono $ y una píldora naranja con el monto.
+    const alto = 52
+    const VERDE_BTN = rgb(0.122, 0.616, 0.361)
+    const montoBtn = estado ? aPagarHoy : Math.round(d.total * PCT_ANTICIPO) / 100
+    lugar(alto + 18)
+    y -= 4
+    caja(M - 4, y + 4, CW + 8, alto + 8, { fondo: VERDE_SUAVE, borde: VERDE_CLARO, r: 16 })
+    caja(M, y, CW, alto, { fondo: VERDE_BTN, r: 13 })
+    // ícono: círculo blanco con $
+    const cx = M + 30, cy = y - alto / 2
+    page.drawCircle({ x: cx, y: cy, size: 15, color: BLANCO })
+    texto('$', cx - ancho('$', 17, bold) / 2, cy - 6, 17, bold, VERDE_BTN)
+    espaciado('PAGAR AHORA', M + 54, y - 22, 14, BLANCO)
+    texto('Tocá acá  ·  transferencia o efectivo', M + 54, y - 37, F_TXT, font, rgb(0.86, 0.96, 0.9))
+    // píldora naranja con el monto y la flecha
+    const txtPill = `${moneda(montoBtn)}  >`
+    const wPill = ancho(txtPill, 13, bold) + 30
+    caja(M + CW - 10 - wPill, y - 10, wPill, alto - 20, { fondo: NARANJA, r: (alto - 20) / 2 })
+    texto(txtPill, M + CW - 10 - wPill + 15, cy - 4.5, 13, bold, BLANCO)
     const anotacion = pdf.context.register(pdf.context.obj({
-      Type: 'Annot', Subtype: 'Link', Rect: [M, y - alto, M + CW, y], Border: [0, 0, 0],
+      Type: 'Annot', Subtype: 'Link', Rect: [M - 4, y - alto - 4, M + CW + 4, y + 4], Border: [0, 0, 0],
       A: { Type: 'Action', S: 'URI', URI: PDFString.of(opciones.linkPago) },
     }))
     page.node.addAnnot(anotacion)
-    y -= alto + 16
+    y -= alto + 22
   }
 
   // ---------- Qué vas a disfrutar (soluciones) ----------
