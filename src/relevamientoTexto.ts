@@ -14,7 +14,12 @@ export type ItemRelev = {
   revisar: boolean
   smart: boolean
   orden?: number
+  // Producto de la lista con el que se relacionó (para el precio del presupuesto).
+  catalogo_id?: number | null
 }
+
+export type ProductoLista = { id: number; nombre: string; nombre_presupuesto?: string | null; categoria?: string | null; tipo: string; precio_venta: number; costo_unitario?: number | null }
+export const nombreProducto = (p: ProductoLista) => (p.nombre_presupuesto?.trim() || p.nombre)
 
 export const TIPOS_RELEV: { id: TipoRelev; texto: string; icono: string }[] = [
   { id: 'dimmer', texto: 'Dimmer', icono: '🎚️' },
@@ -147,4 +152,33 @@ export function descripcionPresupuesto(it: ItemRelev): string {
   if (!titulo) return `${it.detalle || 'Ítem'} · ${it.ambiente}`
   const extra = extraDetalle(it)
   return `${titulo} · ${it.ambiente}${extra ? `\n${extra.charAt(0).toUpperCase()}${extra.slice(1)}` : ''}`
+}
+
+// Relación simple con la lista de productos (cuando la IA no está disponible):
+// tiene que coincidir el tipo y suma puntos por canales/vías, color, terminación y smart.
+const sinAcento = (t: string) => t.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+const PALABRAS_TIPO: Record<TipoRelev, RegExp | null> = {
+  dimmer: /dimm?er|regulador/, tecla: /tecla|interruptor|llave|pulsador|switch/, onoff: /on\s*[/-]?\s*off|interruptor|rele|switch/,
+  lampara: /lampara|foco|bombita|bulbo|luminaria/, otro: null,
+}
+const NUMERO_UNIDAD = /(\d+)\s*(canales|canal|ch|vias|via|puntos|punto|botones|boton|teclas|gang|modulos|modulo|g)\b/g
+export function relacionarLocal(it: ItemRelev, lista: ProductoLista[]): number | null {
+  const re = PALABRAS_TIPO[it.tipo]
+  const palabras = sinAcento(`${it.detalle} ${it.smart ? 'smart wifi' : ''}`).split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !/^(canal|canales|puntos|punto|tecla|dimmer|para|con|cocina|terraza|galeria|frente|entrada|cochera|habitacion|principal)$/.test(w))
+  let mejor: { id: number; puntos: number } | null = null
+  for (const p of lista) {
+    if (p.tipo === 'servicio') continue
+    const txt = sinAcento(`${p.nombre} ${p.nombre_presupuesto ?? ''} ${p.categoria ?? ''}`)
+    if (re && !re.test(txt)) continue
+    let puntos = re ? 2 : 0
+    if (it.canales) {
+      const nums = [...txt.matchAll(NUMERO_UNIDAD)].map((m) => Number(m[1]))
+      if (nums.includes(it.canales)) puntos += 2
+      else if (nums.length) puntos -= 2
+    }
+    for (const w of palabras) if (txt.includes(w)) puntos += 1
+    if (!it.smart && /smart|wifi|zigbee/.test(txt)) puntos -= 0.5
+    if (!mejor || puntos > mejor.puntos) mejor = { id: p.id, puntos }
+  }
+  return mejor && mejor.puntos >= 3 ? mejor.id : null
 }
