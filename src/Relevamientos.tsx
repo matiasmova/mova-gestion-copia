@@ -5,7 +5,9 @@ import NuevoCliente, { type ClienteParaObra } from './NuevoCliente'
 import NuevoPresupuesto, { type ClienteOpcion, type ObraOpcion, type ItemPresupuesto } from './NuevoPresupuesto'
 import type { Pedido } from './BuscadorGlobal'
 import { avisoGuardado } from './Animados'
-import { AMBIENTES_COMUNES, TIPOS_RELEV, ordenarTexto, descripcionPresupuesto, nombreTipo, type ItemRelev, type TipoRelev } from './relevamientoTexto'
+import { AMBIENTES_COMUNES, TIPOS_RELEV, ordenarTexto, descripcionPresupuesto, extraDetalle, nombreTipo, nombreProducto, relacionarLocal, type ItemRelev, type TipoRelev, type ProductoLista } from './relevamientoTexto'
+import { pedirAsistente } from './asistenteIA'
+import { moneda } from './gestionFormat'
 import './relevamientos.css'
 
 // Relevamientos: lo que se anota en la visita al cliente (por ambiente), con fotos
@@ -20,6 +22,7 @@ type Cliente = ClienteParaObra
 
 const BUCKET = 'relevamientos'
 const FALTA_SQL = 'Falta correr en Supabase el SQL "supabase-relevamientos-fase-26.sql".'
+const FALTA_SQL_27 = 'Para guardar el producto relacionado falta correr en Supabase el SQL "supabase-relevamientos-fase-27.sql".'
 const hoy = () => new Date().toISOString().slice(0, 10)
 const nombreCliente = (c?: Cliente | null) => (c ? `${c.nombre} ${c.apellido ?? ''}`.trim() : 'Sin cliente')
 const fechaCorta = (f: string) => new Date(`${f.slice(0, 10)}T12:00:00`).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
@@ -223,6 +226,9 @@ function FichaRelevamiento({ rel, cliente, clientes, puedePresupuestar, onAbrirP
   const [subiendo, setSubiendo] = useState<string | null>(null)
   const [presupuestando, setPresupuestando] = useState<{ clientes: ClienteOpcion[]; obras: ObraOpcion[] } | null>(null)
   const [verFoto, setVerFoto] = useState<Foto | null>(null)
+  const [catalogo, setCatalogo] = useState<ProductoLista[]>([])
+  const [ordenando, setOrdenando] = useState(false)
+  const [avisoIA, setAvisoIA] = useState('')
   const timers = useRef<Record<string, number>>({})
   const reconocedor = useRef<Reconocedor | null>(null)
   const textoBase = useRef('')
@@ -230,6 +236,9 @@ function FichaRelevamiento({ rel, cliente, clientes, puedePresupuestar, onAbrirP
   useEffect(() => {
     let vigente = true
     void (async () => {
+      void supabase.from('productos_servicios').select('*').eq('activo', true).order('nombre').then(({ data }) => {
+        if (vigente) setCatalogo(((data ?? []) as ProductoLista[]).map((p) => ({ ...p, precio_venta: Number(p.precio_venta) || 0, costo_unitario: Number(p.costo_unitario) || 0 })))
+      })
       const [rI, rF] = await Promise.all([
         supabase.from('relevamiento_items').select('*').eq('relevamiento_id', rel.id).order('orden', { ascending: true }).order('id', { ascending: true }),
         supabase.from('relevamiento_fotos').select('id, ambiente, archivo').eq('relevamiento_id', rel.id).order('id', { ascending: true }),
@@ -249,6 +258,11 @@ function FichaRelevamiento({ rel, cliente, clientes, puedePresupuestar, onAbrirP
   const ambientes = [...new Set([...items.map((i) => i.ambiente), ...fotos.map((f) => f.ambiente), ...ambientesExtra])]
   const sugeridos = AMBIENTES_COMUNES.filter((a) => !ambientes.includes(a))
   const totalVer = items.filter((i) => i.revisar).length
+  const prodDe = (id?: number | null) => (id ? catalogo.find((p) => Number(p.id) === Number(id)) : undefined)
+  const conProducto = items.filter((i) => prodDe(i.catalogo_id)).length
+  const sinProducto = items.length - conProducto
+  const totalProductos = items.reduce((t, i) => t + (prodDe(i.catalogo_id)?.precio_venta ?? 0) * i.cantidad, 0)
+  const categorias = [...new Set(catalogo.filter((p) => p.tipo !== 'servicio').map((p) => p.categoria || 'Otros'))].sort()
 
   // ----- guardado -----
   function guardarRel(cambio: Partial<Relevamiento>, demora = 0) {
@@ -267,8 +281,13 @@ function FichaRelevamiento({ rel, cliente, clientes, puedePresupuestar, onAbrirP
   async function agregarItems(nuevos: ItemRelev[]) {
     if (!nuevos.length) return
     const base = items.length
-    const filas = nuevos.map((n, k) => ({ relevamiento_id: rel.id, ambiente: n.ambiente, cantidad: n.cantidad, tipo: n.tipo, canales: n.canales, detalle: n.detalle || null, revisar: n.revisar, smart: n.smart, orden: base + k }))
-    const { data, error } = await supabase.from('relevamiento_items').insert(filas).select('*')
+    const filas = nuevos.map((n, k) => ({ relevamiento_id: rel.id, ambiente: n.ambiente, cantidad: n.cantidad, tipo: n.tipo, canales: n.canales, detalle: n.detalle || null, revisar: n.revisar, smart: n.smart, orden: base + k, catalogo_id: n.catalogo_id ?? null }))
+    let { data, error } = await supabase.from('relevamiento_items').insert(filas).select('*')
+    if (error && /catalogo_id/.test(error.message)) {
+      // Sin la fase 27 todavía: se guarda sin el producto relacionado.
+      setAvisoIA(FALTA_SQL_27)
+      ;({ data, error } = await supabase.from('relevamiento_items').insert(filas.map(({ catalogo_id: _c, ...f }) => f)).select('*'))
+    }
     if (error) { window.alert(FALTA_SQL); return }
     setItems((l) => [...l, ...((data ?? []) as ItemRelev[]).map((x) => ({ ...x, cantidad: Number(x.cantidad) || 1, detalle: x.detalle ?? '' }))])
   }
@@ -280,11 +299,33 @@ function FichaRelevamiento({ rel, cliente, clientes, puedePresupuestar, onAbrirP
 
   // ----- texto / voz -----
   async function ordenar() {
-    const nuevos = ordenarTexto(texto, ambientes.length === 1 ? ambientes[0] : 'General')
+    const porDefecto = ambientes.length === 1 ? ambientes[0] : 'General'
+    setOrdenando(true); setAvisoIA('')
+    let nuevos: ItemRelev[]
+    try {
+      // La IA ordena lo dictado y lo relaciona con los productos de la lista.
+      const r = await pedirAsistente<{ items: ItemRelev[] }>({ accion: 'relevamiento', texto, ambiente: porDefecto })
+      nuevos = (r.items ?? []).map((n) => ({ ...n, detalle: n.detalle ?? '' }))
+      if (!nuevos.length) nuevos = ordenarTexto(texto, porDefecto).map((n) => ({ ...n, catalogo_id: relacionarLocal(n, catalogo) }))
+    } catch {
+      nuevos = ordenarTexto(texto, porDefecto).map((n) => ({ ...n, catalogo_id: relacionarLocal(n, catalogo) }))
+      setAvisoIA('La IA no respondió: lo ordené con el método simple y busqué los productos por nombre. Revisá los que quedaron sin relacionar.')
+    }
+    setOrdenando(false)
     if (!nuevos.length) return
     await agregarItems(nuevos)
     setTexto('')
-    avisoGuardado(`${nuevos.length} ítem${nuevos.length === 1 ? '' : 's'} agregado${nuevos.length === 1 ? '' : 's'}`)
+    const conProd = nuevos.filter((n) => n.catalogo_id).length
+    avisoGuardado(`${nuevos.length} ítem${nuevos.length === 1 ? '' : 's'} · ${conProd} con producto`)
+  }
+  function relacionarTodos() {
+    let n = 0
+    items.forEach((it, idx) => {
+      if (it.catalogo_id) return
+      const id = relacionarLocal(it, catalogo)
+      if (id) { n++; cambiarItem(idx, { catalogo_id: id }, 0) }
+    })
+    avisoGuardado(n ? `${n} ítem${n === 1 ? '' : 's'} relacionado${n === 1 ? '' : 's'}` : 'No encontré productos parecidos')
   }
   function dictar() {
     if (escuchando) { reconocedor.current?.stop(); return }
@@ -354,7 +395,15 @@ function FichaRelevamiento({ rel, cliente, clientes, puedePresupuestar, onAbrirP
     setPresupuestando({ clientes: (rC.data ?? []) as ClienteOpcion[], obras: (rO.data ?? []) as ObraOpcion[] })
   }
   const itemsPresupuesto: ItemPresupuesto[] = [
-    ...items.map((it) => ({ catalogo_id: null, tipo: 'producto' as const, descripcion: descripcionPresupuesto(it), cantidad: it.cantidad, precio_unitario: 0, costo_unitario: 0, descuento_pct: 0 })),
+    ...items.map((it): ItemPresupuesto => {
+      const p = prodDe(it.catalogo_id)
+      if (!p) return { catalogo_id: null, tipo: 'producto', descripcion: descripcionPresupuesto(it), cantidad: it.cantidad, precio_unitario: 0, costo_unitario: 0, descuento_pct: 0 }
+      // Del detalle quedan solo las palabras que no dice ya el nombre del producto.
+      const norm = (t: string) => t.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+      const enNombre = norm(`${p.nombre} ${p.nombre_presupuesto ?? ''}`)
+      const extra = extraDetalle(it).split(/\s+/).filter((w) => w.length > 2 && !enNombre.includes(norm(w)) && !/^(color|en|la|el|de|del|con|para|soft|touch)$/i.test(w)).join(' ')
+      return { catalogo_id: p.id, tipo: p.tipo === 'servicio' ? 'servicio' : 'producto', descripcion: `${nombreProducto(p)}\n${it.ambiente}${extra ? ` · ${extra}` : ''}`, cantidad: it.cantidad, precio_unitario: p.precio_venta, costo_unitario: Number(p.costo_unitario) || 0, descuento_pct: 0 }
+    }),
     ...(items.length ? [{ catalogo_id: null, tipo: 'servicio' as const, descripcion: `Mano de obra: instalación y configuración\n${items.reduce((t, i) => t + i.cantidad, 0)} equipos en ${ambientes.filter((a) => items.some((i) => i.ambiente === a)).length} ambientes`, cantidad: 1, precio_unitario: 0, costo_unitario: 0, descuento_pct: 0 }] : []),
   ]
   const pendientesVer = items.filter((i) => i.revisar)
@@ -390,10 +439,11 @@ function FichaRelevamiento({ rel, cliente, clientes, puedePresupuestar, onAbrirP
         <textarea rows={4} placeholder={'1 dimmer 2 canales terraza\n1 tecla 3 puntos galería + dimmer\n1 lámpara smart jacuzzi'} value={texto} onChange={(e) => setTexto(e.target.value)} />
         <div className="relevAnotarBtns">
           <button type="button" className={`relevMic ${escuchando ? 'activo' : ''}`} onClick={dictar}>{escuchando ? '⏹ Terminar' : '🎤 Dictar'}</button>
-          <button type="button" className="newButton" disabled={!texto.trim()} onClick={() => void ordenar()}>✨ Ordenar y agregar</button>
+          <button type="button" className="newButton" disabled={!texto.trim() || ordenando} onClick={() => void ordenar()}>{ordenando ? '✨ Buscando productos…' : '✨ Ordenar y agregar'}</button>
         </div>
         {escuchando && <small className="relevEscuchando">● Escuchando… hablá tranquilo; tocá Terminar cuando acabes.</small>}
         {avisoVoz && <small className="relevAvisoVoz">{avisoVoz}</small>}
+        {avisoIA && <small className="relevAvisoVoz">{avisoIA}</small>}
       </div>
 
       {/* Resumen */}
@@ -403,6 +453,8 @@ function FichaRelevamiento({ rel, cliente, clientes, puedePresupuestar, onAbrirP
           <span><b>{ambientes.length}</b> ambientes</span>
           {TIPOS_RELEV.filter((t) => items.some((i) => i.tipo === t.id)).map((t) => <span key={t.id}>{t.icono} {items.filter((i) => i.tipo === t.id).reduce((s, i) => s + i.cantidad, 0)} {t.texto}</span>)}
           {totalVer > 0 && <span className="ver">👀 {totalVer} para ver</span>}
+          {conProducto > 0 && <span className="prod">🔗 {conProducto}/{items.length} con producto · {moneda(totalProductos)}</span>}
+          {sinProducto > 0 && catalogo.length > 0 && <button type="button" className="relevRelacionar" onClick={relacionarTodos}>🔗 Relacionar con mis productos</button>}
         </div>
       )}
 
@@ -431,6 +483,23 @@ function FichaRelevamiento({ rel, cliente, clientes, puedePresupuestar, onAbrirP
                   <button type="button" className="relevQuitar" aria-label="Quitar ítem" onClick={() => void quitarItem(idx)}>✕</button>
                 </div>
                 <input className="relevDetalle" value={it.detalle} placeholder="Detalle (ej.: + dimmer, para led 220v)" onChange={(e) => cambiarItem(idx, { detalle: e.target.value })} />
+                {catalogo.length > 0 && (() => {
+                  const prod = prodDe(it.catalogo_id)
+                  return (
+                    <label className={`relevProd ${prod ? 'ok' : ''}`}>
+                      <span>{prod ? '🔗' : '➕'}</span>
+                      <select value={prod ? prod.id : ''} onChange={(e) => cambiarItem(idx, { catalogo_id: e.target.value ? Number(e.target.value) : null }, 0)} aria-label="Producto de tu lista">
+                        <option value="">{prod ? 'Quitar producto' : 'Elegir producto de tu lista…'}</option>
+                        {categorias.map((c) => (
+                          <optgroup key={c} label={c}>
+                            {catalogo.filter((p) => p.tipo !== 'servicio' && (p.categoria || 'Otros') === c).map((p) => <option key={p.id} value={p.id}>{p.nombre} · {moneda(p.precio_venta)}</option>)}
+                          </optgroup>
+                        ))}
+                      </select>
+                      {prod && <b>{moneda(prod.precio_venta * it.cantidad)}</b>}
+                    </label>
+                  )
+                })()}
                 <div className="relevMarcas">
                   <button type="button" className={it.revisar ? 'on ver' : ''} onClick={() => cambiarItem(idx, { revisar: !it.revisar }, 0)}>👀 Ver</button>
                   <button type="button" className={it.smart ? 'on smart' : ''} onClick={() => cambiarItem(idx, { smart: !it.smart }, 0)}>📶 Smart</button>
@@ -471,7 +540,7 @@ function FichaRelevamiento({ rel, cliente, clientes, puedePresupuestar, onAbrirP
           {rel.presupuesto_id && onAbrirPresupuesto && <button type="button" className="editButton" onClick={() => onAbrirPresupuesto(rel.presupuesto_id!)}>📄 Ver el presupuesto creado</button>}
           <button type="button" className="obraRegistrarBtn" disabled={!items.length} onClick={() => void abrirPresupuesto()}>
             <span>📄 {rel.presupuesto_id ? 'Armar otro presupuesto' : 'Pasar a presupuesto'}</span>
-            <small>{items.length ? `${items.length} ítems + mano de obra · solo te falta poner los precios` : 'Agregá ítems para armar el presupuesto'}</small>
+            <small>{!items.length ? 'Agregá ítems para armar el presupuesto' : sinProducto ? `${items.length} ítems + mano de obra · ${conProducto} con precio, ${sinProducto} para completar` : `${items.length} ítems con precio + mano de obra`}</small>
           </button>
         </div>
       )}

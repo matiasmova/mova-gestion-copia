@@ -198,6 +198,19 @@ Te pasan lo que pide un cliente y el CATÁLOGO de la empresa (id | nombre | cate
 - Imagen: si viene una imagen, leela con atención. En un plano o croquis contá ambientes, metros y aberturas para calcular cantidades (por ejemplo nodos WiFi según superficie y paredes, cámaras en accesos y perímetro, puntos de luz y módulos por ambiente). En una foto del lugar, fijate qué se ve (tablero, techo, jardín). Si es un pedido escrito a mano, transcribilo. Explicá en notas lo que viste y los supuestos ("vi 3 dormitorios y living de ~40 m²").
 - Descuentos: si el pedido pide un descuento para un ítem o tipo de ítem (por ejemplo "20% en la mano de obra"), ponelo en descuento_pct de esos ítems. Si pide un descuento general sobre todo el presupuesto (por ejemplo "aplicá un 15% de descuento"), ponelo en descuento_general_pct y dejá descuento_pct en 0. Si no se pide descuento, todo en 0.`
 
+const SISTEMA_RELEVAMIENTO = `Ordenás lo que anota o dicta el instalador de MOVA Tecnología Smart (Mendoza, Argentina) en la visita a un cliente: dispositivos eléctricos y de domótica por ambiente.
+Te pasan el TEXTO (escrito o dictado, con errores de tipeo o de dictado) y el CATÁLOGO de productos (id | nombre | nombre para el cliente | categoría | precio).
+Para cada dispositivo que se menciona devolvé un ítem:
+- ambiente: dónde va (Cocina, Terraza, Habitación principal, Galería, Cochera, Frente, Entrada, Baño, Escalera, Jacuzzi…). Con mayúscula inicial. Si no se dice, el último ambiente nombrado; si no hay ninguno, "General".
+- cantidad: cuántos (por defecto 1). "3 canales" es UN equipo de 3 canales, no 3 equipos.
+- tipo: dimmer | tecla | onoff | lampara | otro.
+- canales: canales, puntos o vías del equipo (0 si no se dice).
+- detalle: lo que el cliente pidió en pocas palabras, conservando lo importante (color, terminación, marca, "+ dimmer", "para led 220v").
+- revisar: true si dice "ver", "a confirmar", "chequear" o hay dudas.
+- smart: true si dice smart, wifi o inteligente.
+- catalogo_id: el id del producto del CATÁLOGO que mejor corresponde a ese dispositivo, teniendo en cuenta tipo, cantidad de canales o vías, color, terminación (soft touch, vidrio, etc.) y si es smart. Si ninguno corresponde razonablemente, 0. No inventes ids.
+No agregues dispositivos que no se mencionan.`
+
 const SISTEMA_RECOMENDACIONES = `Escribís, para MOVA Tecnología Smart (Mendoza, Argentina), la sección "Formas de uso y recomendaciones" que se le entrega al cliente junto con su presupuesto u obra terminada.
 - Basate SOLO en los productos y servicios del presupuesto: cómo se usan en el día a día (apps, escenas, control por voz, horarios), cuidados y mantenimiento, qué hacer ante un corte de luz o de internet, y consejos para aprovecharlos.
 - Entre 4 y 8 recomendaciones, cada una una oración clara y concreta (máximo 220 caracteres), en español rioplatense con voseo, tono profesional y cercano.
@@ -241,7 +254,7 @@ Deno.serve(async (req) => {
   const { data: perfil } = await db.from('profiles').select('rol, activo').eq('id', quien.user.id).maybeSingle()
   const cuerpo = await req.json().catch(() => ({})) as Record<string, unknown>
   const { accion, idea, titulo, descripcion, existentes } = cuerpo
-  const roles = accion === 'factura' ? ['admin', 'contable', 'encargado', 'auxiliar'] : accion === 'informe_obra' || accion === 'recomendaciones' ? ['admin', 'contable', 'encargado'] : ['admin', 'contable']
+  const roles = accion === 'factura' ? ['admin', 'contable', 'encargado', 'auxiliar'] : accion === 'informe_obra' || accion === 'recomendaciones' || accion === 'relevamiento' ? ['admin', 'contable', 'encargado'] : ['admin', 'contable']
   if (!perfil || !roles.includes(perfil.rol) || perfil.activo === false) return responder({ error: 'No tenés permiso para usar el asistente.' }, 403)
 
   const clave = Deno.env.get('GEMINI_API_KEY')
@@ -468,6 +481,36 @@ Deno.serve(async (req) => {
       const texto = `PRESUPUESTO: ${t}\n${d ? `DESCRIPCIÓN: ${d}\n` : ''}\nÍTEMS:\n${items.map((x) => `- ${x}`).join('\n')}${actual ? `\n\nTEXTO ACTUAL:\n${actual}` : ''}${pedido ? `\n\nPEDIDO: ${pedido}` : ''}`
       const r = await gemini(clave, texto, { type: 'OBJECT', properties: { recomendaciones: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['recomendaciones'] }, SISTEMA_RECOMENDACIONES, 0.6) as { recomendaciones?: string[] }
       return responder({ recomendaciones: (r.recomendaciones ?? []).map((x) => recorte(String(x).replace(/^[\s•\-*·]+/, ''), 260)).filter(Boolean).slice(0, 10) })
+    }
+    if (accion === 'relevamiento') {
+      // Ordena lo dictado en la visita y lo relaciona con los productos del catálogo.
+      const texto = recorte(cuerpo.texto, 4000)
+      if (!texto) return responder({ error: 'Escribí o dictá lo que relevaste.' }, 400)
+      const ambiente = recorte(cuerpo.ambiente, 60) || 'General'
+      const rCat = await db.from('productos_servicios').select('*').eq('activo', true).order('nombre').limit(800)
+      const catalogo = ((rCat.data ?? []) as { id: number; nombre: string; nombre_presupuesto?: string | null; categoria?: string | null; tipo: string; precio_venta: number }[]).filter((p) => p.tipo !== 'servicio')
+      const pedido = `AMBIENTE POR DEFECTO: ${ambiente}\n\nTEXTO:\n${texto}\n\nCATÁLOGO:\n${catalogo.map((p) => `${p.id} | ${p.nombre} | ${p.nombre_presupuesto ?? ''} | ${p.categoria ?? ''} | ${Number(p.precio_venta) || 0}`).join('\n') || '(vacío)'}`
+      const esquema = {
+        type: 'OBJECT',
+        properties: { items: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
+          ambiente: { type: 'STRING' }, cantidad: { type: 'NUMBER' }, tipo: { type: 'STRING', enum: ['dimmer', 'tecla', 'onoff', 'lampara', 'otro'] },
+          canales: { type: 'INTEGER' }, detalle: { type: 'STRING' }, revisar: { type: 'BOOLEAN' }, smart: { type: 'BOOLEAN' }, catalogo_id: { type: 'INTEGER' },
+        }, required: ['ambiente', 'cantidad', 'tipo', 'canales', 'detalle', 'revisar', 'smart', 'catalogo_id'] } } },
+        required: ['items'],
+      }
+      const r = await gemini(clave, pedido, esquema, SISTEMA_RELEVAMIENTO, 0.2) as { items?: { ambiente: string; cantidad: number; tipo: string; canales: number; detalle: string; revisar: boolean; smart: boolean; catalogo_id: number }[] }
+      const ids = new Set(catalogo.map((p) => p.id))
+      const tipos = ['dimmer', 'tecla', 'onoff', 'lampara', 'otro']
+      return responder({
+        items: (r.items ?? []).slice(0, 80).map((it) => ({
+          ambiente: recorte(it.ambiente, 60) || ambiente,
+          cantidad: Math.max(1, Math.round(Number(it.cantidad) || 1)),
+          tipo: tipos.includes(it.tipo) ? it.tipo : 'otro',
+          canales: Number(it.canales) > 0 ? Math.round(Number(it.canales)) : null,
+          detalle: recorte(it.detalle, 200), revisar: !!it.revisar, smart: !!it.smart,
+          catalogo_id: ids.has(Number(it.catalogo_id)) ? Number(it.catalogo_id) : null,
+        })),
+      })
     }
     if (accion === 'resumen_dia') {
       const hechos = (Array.isArray(cuerpo.hechos) ? cuerpo.hechos : []).map((x) => recorte(x, 220)).filter(Boolean).slice(0, 60)
