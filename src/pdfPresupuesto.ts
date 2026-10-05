@@ -616,7 +616,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     // Franja destacada: los pasos de pago unidos de izquierda a derecha.
     {
       // Sin el paso final cuando ya no suma nada (el avance llegó al 100%).
-      const todos = estado.linea.filter((p) => !((p.tipo === 'final' || p.tipo === 'avance') && p.importe <= 0.5 && estado.linea.length > 1))
+      const todos = estado.linea.filter((p) => !((p.tipo === 'final' || p.tipo === 'avance') && Math.abs(p.importe) <= 0.5 && estado.linea.length > 1))
       const pasos = todos.length > 6 ? [todos[0], ...todos.slice(-5)] : todos
       const n = pasos.length
       const altoCaja = 140
@@ -644,7 +644,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
         for (const r of partir(et, F_TXT - 0.5, anchoEt, bold).slice(0, 2)) { centro(r, yy, F_TXT - 0.5, bold, OSCURO); yy -= 12.5 }
         const sub = p.tipo === 'avance' && p.fecha ? diaMes(p.fecha) : p.tipo === 'anticipo' ? 'Al confirmar' : estado.terminada ? '' : 'Saldo final'
         if (sub) { centro(sub, yy, F_TXT - 1.5, font, GRIS); yy -= 12 }
-        centro(p.tipo === 'anticipo' ? moneda(p.importe) : `+ ${moneda(p.importe)}`, yy - 1, F_CHICO, bold, OSCURO); yy -= 11
+        centro(p.tipo === 'anticipo' ? moneda(p.importe) : p.importe < -0.5 ? `- ${moneda(-p.importe)}` : `+ ${moneda(p.importe)}`, yy - 1, F_CHICO, bold, OSCURO); yy -= 11
         const est = p.estado === 'ok' ? (p.tipo === 'anticipo' ? 'Pagado' : 'Al día') : p.estado === 'futuro' ? 'Pendiente' : `Falta ${moneda(p.falta)}`
         centro(est, yy - 1, F_CHICO + 0.5, bold, p.estado === 'ok' ? VERDE : p.estado === 'futuro' ? GRIS : NARANJA_OSC)
       })

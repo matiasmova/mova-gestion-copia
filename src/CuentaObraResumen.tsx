@@ -43,7 +43,7 @@ export default function CuentaObraResumen({ cuenta, dinero, lineaTiempo = false 
                 <small>{p.tipo === 'anticipo' ? (p.detalle ?? '') : `A pagar hasta acá: ${dinero(p.acumulado)}`}</small>
               </div>
               <div className="m">
-                <b>{p.tipo === 'anticipo' ? dinero(p.importe) : `+ ${dinero(p.importe)}`}</b>
+                <b>{p.tipo === 'anticipo' ? dinero(p.importe) : p.importe < -0.5 ? `− ${dinero(-p.importe)}` : `+ ${dinero(p.importe)}`}</b>
                 <small>{p.estado === 'ok' ? (p.tipo === 'anticipo' ? 'Recibido' : 'Al día') : p.estado === 'futuro' ? 'Al finalizar' : `Falta ${dinero(p.falta)}`}</small>
               </div>
             </li>

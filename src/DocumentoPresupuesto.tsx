@@ -125,7 +125,7 @@ const diaMes = (f: string) => fechaCorta(f).replace(/\/\d{4}$/, '')
 // Franja destacada: los pasos de pago unidos de izquierda a derecha.
 function FranjaLinea({ e }: { e: EstadoPresupuesto }) {
   // Sin el paso final cuando ya no suma nada (el avance llegó al 100%).
-  const todos = e.linea.filter((p) => !((p.tipo === 'final' || p.tipo === 'avance') && p.importe <= 0.5 && e.linea.length > 1))
+  const todos = e.linea.filter((p) => !((p.tipo === 'final' || p.tipo === 'avance') && Math.abs(p.importe) <= 0.5 && e.linea.length > 1))
   const pasos: PasoLinea[] = todos.length > 6 ? [todos[0], ...todos.slice(-5)] : todos
   const color = (p: PasoLinea) => (p.estado === 'ok' ? VERDE : p.estado === 'pendiente' ? NARANJA : '#DADDE2')
   const pct = e.totalActualizado > 0 ? Math.min(100, (e.cobrado / e.totalActualizado) * 100) : 0
@@ -138,7 +138,7 @@ function FranjaLinea({ e }: { e: EstadoPresupuesto }) {
             <span style={{ background: '#fff', borderRadius: '50%', padding: '2px', position: 'relative', zIndex: 1, margin: '-2px 0 0' }}><Icono estado={p.estado} tam={22} /></span>
             <strong style={{ color: OSCURO, fontSize: '12px', marginTop: '8px', lineHeight: 1.2 }}>{p.tipo === 'anticipo' ? `Anticipo ${PCT_ANTICIPO}%` : p.tipo === 'final' ? (e.terminada ? 'Obra finalizada' : 'Al finalizar') : `Avance ${p.porcentaje ?? 0}%`}</strong>
             <span style={{ fontSize: '10.5px', color: GRIS }}>{p.tipo === 'avance' && p.fecha ? diaMes(p.fecha) : p.tipo === 'anticipo' ? 'Al confirmar' : e.terminada ? '' : 'Saldo final'}</span>
-            <strong style={{ color: OSCURO, fontSize: '11.5px', marginTop: '3px', overflowWrap: 'anywhere' }}>{p.tipo === 'anticipo' ? moneda(p.importe) : `+ ${moneda(p.importe)}`}</strong>
+            <strong style={{ color: OSCURO, fontSize: '11.5px', marginTop: '3px', overflowWrap: 'anywhere' }}>{p.tipo === 'anticipo' ? moneda(p.importe) : p.importe < -0.5 ? `− ${moneda(-p.importe)}` : `+ ${moneda(p.importe)}`}</strong>
             <span style={{ fontSize: '10.5px', fontWeight: 700, color: p.estado === 'ok' ? VERDE : p.estado === 'futuro' ? GRIS : NARANJA_OSC, overflowWrap: 'anywhere' }}>{p.estado === 'ok' ? (p.tipo === 'anticipo' ? 'Pagado' : 'Al día') : p.estado === 'futuro' ? 'Pendiente' : `Falta ${moneda(p.falta)}`}</span>
           </div>
         ))}

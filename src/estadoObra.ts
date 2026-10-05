@@ -147,7 +147,8 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
   }]
   let pctPrevio = 0
   for (const a of avances) {
-    const pct = Math.max(pctPrevio, a.porcentaje)
+    // Cada avance vale lo que dice (puede bajar: por ejemplo, una reforma atrasa la obra).
+    const pct = Math.min(100, Math.max(0, a.porcentaje))
     const acumulado = r2(anticipo + resto * pct / 100)
     const pagado = pagadoHasta(a.fecha)
     // Lo pendiente de un paso se evalúa con lo pagado HOY: si ya se pagó después, queda al día.
