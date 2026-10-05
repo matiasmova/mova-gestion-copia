@@ -17,6 +17,28 @@ const DESCRIPCION_ROL: Record<Rol, string> = {
   auxiliar: 'Obras, productos y compras.',
   contable: 'Clientes, presupuestos, obras, personal, movimientos y balance. No ve compras.',
 }
+// Llama a la función "gestionar-usuarios" y devuelve el error en palabras claras.
+async function usarFuncion(cuerpo: Record<string, unknown>): Promise<{ data: { aviso?: string } | null; error: string }> {
+  const { data, error: fallo } = await supabase.functions.invoke('gestionar-usuarios', { body: cuerpo })
+  if (!fallo) return { data: data as { aviso?: string }, error: '' }
+  let msg = ''
+  const resp = (fallo as { context?: Response }).context
+  try {
+    const j = await resp?.clone().json()
+    msg = j?.error ?? (j?.msg || j?.message ? `Supabase respondió: ${j.msg ?? j.message}` : '')
+  } catch { /* sin detalle */ }
+  if (!msg && resp?.status === 404) msg = 'Falta crear la función "gestionar-usuarios" en Supabase (Edge Functions).'
+  if (!msg && resp?.status === 401) msg = 'Supabase rechazó el pedido: en la función "gestionar-usuarios" apagá "Verify JWT" y volvé a desplegarla.'
+  return { data: null, error: msg || `No se pudo completar${resp?.status ? ` (error ${resp.status})` : ''}. Revisá la función "gestionar-usuarios" en Supabase.` }
+}
+
+// Contraseña fácil de dictar o copiar (sin letras que se confunden).
+function generarClave() {
+  const letras = 'abcdefghjkmnpqrstuvwxyz', nums = '23456789'
+  const al = (t: string, n: number) => Array.from({ length: n }, () => t[Math.floor(Math.random() * t.length)]).join('')
+  return `Mova-${al(letras, 4)}-${al(nums, 4)}`
+}
+
 const fechaHora = (f: string | null) => (f ? new Date(f).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : null)
 
 export default function Usuarios() {
@@ -30,6 +52,7 @@ export default function Usuarios() {
   const [editandoNombre, setEditandoNombre] = useState<{ id: string; nombre: string } | null>(null)
   const [trabajando, setTrabajando] = useState<string | null>(null)
   const [verPermisos, setVerPermisos] = useState(false)
+  const [claveDe, setClaveDe] = useState<Perfil | null>(null)
 
   useEffect(() => { void cargar() }, [])
 
@@ -100,13 +123,23 @@ export default function Usuarios() {
     avisar(`Listo: le llegó a ${email} un link para cambiar la contraseña.`)
   }
 
+  async function eliminar(p: Perfil) {
+    if (!window.confirm(`¿Eliminar a ${nombreDe(p)}?\n\nNo va a poder entrar más y se borra su usuario. Lo que cargó (obras, gastos, etc.) queda guardado. No se puede deshacer.`)) return
+    setTrabajando(p.id); setError('')
+    const r = await usarFuncion({ accion: 'eliminar', id: p.id })
+    setTrabajando(null)
+    if (r.error) { setError(r.error); return }
+    setPerfiles((arr) => arr.filter((x) => x.id !== p.id))
+    avisar(`${nombreDe(p)} fue eliminado.`)
+  }
+
   const secciones = NAVEGACION.filter(([clave]) => clave !== 'dashboard')
 
   return (
     <div className="gestionPage">
       <div className="pageHeader">
         <div><p className="subtitle">SEGURIDAD</p><h2>Usuarios y permisos</h2><p className="welcome">Quién entra a la app y qué puede ver cada uno</p></div>
-        <button className="newButton" onClick={() => setInvitando(true)}>+ Invitar usuario</button>
+        <button className="newButton" onClick={() => setInvitando(true)}>+ Nuevo usuario</button>
       </div>
 
       {error && <p className="loginError">{error}</p>}
@@ -117,7 +150,7 @@ export default function Usuarios() {
 
       {cargando ? <p>Cargando usuarios...</p> : (
         <div className="usLista">
-          {perfiles.length === 0 && <p className="agVacio">Todavía no hay usuarios. Invitá al primero con "+ Invitar usuario".</p>}
+          {perfiles.length === 0 && <p className="agVacio">Todavía no hay usuarios. Creá el primero con "+ Nuevo usuario".</p>}
           {perfiles.map((p) => {
             const d = detalle?.[p.id]
             const esYo = p.id === yo
@@ -154,7 +187,8 @@ export default function Usuarios() {
                   <button type="button" className={`usEstado ${p.activo ? 'ok' : 'off'}`} disabled={esYo || trabajando === p.id} title={esYo ? 'No podés desactivarte a vos mismo' : 'Tocá para cambiar'} onClick={() => void cambiarActivo(p)}>
                     {p.activo ? '● Activo' : '○ Inactivo'}
                   </button>
-                  {d?.email && <button type="button" className="agBtn" title="Enviar link para cambiar la contraseña" disabled={trabajando === p.id} onClick={() => void enviarLinkClave(p)}>🔑</button>}
+                  <button type="button" className="agBtn" title="Contraseña" disabled={trabajando === p.id} onClick={() => setClaveDe(p)}>🔑</button>
+                  {!esYo && <button type="button" className="agBtn usBorrar" title="Eliminar usuario" aria-label="Eliminar usuario" disabled={trabajando === p.id} onClick={() => void eliminar(p)}>🗑</button>}
                 </div>
               </article>
             )
@@ -183,52 +217,126 @@ export default function Usuarios() {
         </>}
       </section>
 
+      {claveDe && <FormClave perfil={claveDe} nombre={nombreDe(claveDe)} email={detalle?.[claveDe.id]?.email ?? null} onCerrar={() => setClaveDe(null)}
+        onLink={() => { const p = claveDe; setClaveDe(null); void enviarLinkClave(p) }} onListo={(msg) => { setClaveDe(null); avisar(msg) }} />}
       {invitando && <FormInvitar onCancelar={() => setInvitando(false)} onInvitado={(msg) => { setInvitando(false); avisar(msg); void cargar() }} />}
     </div>
   )
 }
 
+// Datos para pasarle al usuario (copiar o mandar por WhatsApp).
+function DatosAcceso({ email, clave, nombre }: { email: string; clave: string; nombre: string }) {
+  const [copiado, setCopiado] = useState(false)
+  const texto = `Hola${nombre ? ` ${nombre.split(' ')[0]}` : ''}! Te creé el acceso a MOVA Gestión.\nEntrá en: ${window.location.origin}\nCorreo: ${email}\nContraseña: ${clave}`
+  return (
+    <div className="usAcceso">
+      <b>✓ Listo. Pasale estos datos:</b>
+      <pre>{texto}</pre>
+      <div className="usAccesoBtns">
+        <button type="button" className="editButton" onClick={() => { const ok = () => { setCopiado(true); setTimeout(() => setCopiado(false), 1800) }; if (navigator.clipboard) void navigator.clipboard.writeText(texto).then(ok, ok); else ok() }}>{copiado ? '✓ Copiado' : '📋 Copiar'}</button>
+        <a className="newButton" href={`https://wa.me/?text=${encodeURIComponent(texto)}`} target="_blank" rel="noreferrer">💬 Mandar por WhatsApp</a>
+      </div>
+      <small>Por seguridad, después de mandarlo borrá el mensaje o pedile que cambie la contraseña.</small>
+    </div>
+  )
+}
+
 function FormInvitar({ onCancelar, onInvitado }: { onCancelar: () => void; onInvitado: (msg: string) => void }) {
-  const [f, setF] = useState({ email: '', nombre: '', rol: 'auxiliar' })
+  const [f, setF] = useState({ email: '', nombre: '', rol: 'auxiliar', clave: generarClave() })
+  const [modo, setModo] = useState<'clave' | 'mail'>('clave')
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState('')
+  const [creado, setCreado] = useState<{ email: string; clave: string; nombre: string; aviso?: string } | null>(null)
 
-  async function invitar(e: FormEvent) {
+  async function enviar(e: FormEvent) {
     e.preventDefault(); setError('')
+    if (modo === 'clave' && f.clave.trim().length < 8) { setError('La contraseña tiene que tener al menos 8 caracteres.'); return }
     setEnviando(true)
-    const { data, error: fallo } = await supabase.functions.invoke('gestionar-usuarios', {
-      body: { accion: 'invitar', email: f.email, nombre: f.nombre, rol: f.rol, redirectTo: window.location.origin },
-    })
+    const r = await usarFuncion(modo === 'clave'
+      ? { accion: 'crear', email: f.email, nombre: f.nombre, rol: f.rol, clave: f.clave.trim() }
+      : { accion: 'invitar', email: f.email, nombre: f.nombre, rol: f.rol, redirectTo: window.location.origin })
     setEnviando(false)
-    if (fallo) {
-      // El detalle del error viene en la respuesta de la función.
-      let msg = ''
-      const resp = (fallo as { context?: Response }).context
-      try {
-        const j = await resp?.clone().json()
-        msg = j?.error ?? (j?.msg || j?.message ? `Supabase respondió: ${j.msg ?? j.message}` : '')
-      } catch { /* sin detalle */ }
-      if (!msg && resp?.status === 404) msg = 'Falta crear la función "gestionar-usuarios" en Supabase (Edge Functions).'
-      if (!msg && resp?.status === 401) msg = 'Supabase rechazó el pedido: en la función "gestionar-usuarios" apagá "Verify JWT" y volvé a desplegarla.'
-      setError(msg || `No se pudo invitar${resp?.status ? ` (error ${resp.status})` : ''}. ¿Ya creaste la función "gestionar-usuarios" en Supabase?`)
-      return
-    }
-    onInvitado((data as { aviso?: string })?.aviso ?? `Invitación enviada a ${f.email}. Le llega un correo para crear su contraseña.`)
+    if (r.error) { setError(r.error); return }
+    if (modo === 'clave') setCreado({ email: f.email.trim().toLowerCase(), clave: f.clave.trim(), nombre: f.nombre.trim(), aviso: r.data?.aviso })
+    else onInvitado(r.data?.aviso ?? `Invitación enviada a ${f.email}. Le llega un correo para crear su contraseña.`)
   }
 
   return (
     <div className="modalOverlay"><div className="modalCard">
-      <div className="modalHeader"><div><p className="subtitle">USUARIOS</p><h2>Invitar usuario</h2></div><button type="button" className="closeButton" onClick={onCancelar}>×</button></div>
-      <form className="clienteForm" onSubmit={invitar}>
+      <div className="modalHeader"><div><p className="subtitle">USUARIOS</p><h2>Nuevo usuario</h2></div><button type="button" className="closeButton" onClick={creado ? () => onInvitado(`Usuario creado: ${creado.email}`) : onCancelar}>×</button></div>
+      {creado ? (
+        <div className="clienteForm">
+          {creado.aviso && <p className="gestionAyuda">{creado.aviso}</p>}
+          <DatosAcceso email={creado.email} clave={creado.clave} nombre={creado.nombre} />
+          <div className="formActions"><button type="button" className="newButton" onClick={() => onInvitado(`Usuario creado: ${creado.email}`)}>Listo</button></div>
+        </div>
+      ) : (
+      <form className="clienteForm" onSubmit={enviar}>
+        <div className="usModo">
+          <button type="button" className={modo === 'clave' ? 'activo' : ''} onClick={() => setModo('clave')}><b>🔐 Con contraseña</b><small>Vos la elegís y se la pasás</small></button>
+          <button type="button" className={modo === 'mail' ? 'activo' : ''} onClick={() => setModo('mail')}><b>✉️ Por correo</b><small>Le llega un link para crearla</small></button>
+        </div>
         <div className="formGrid">
           <label className="formFull">Email *<input type="email" required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="nombre@correo.com" /></label>
           <label>Nombre<input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej.: Juan Gómez" /></label>
           <label>Rol<select value={f.rol} onChange={(e) => setF({ ...f, rol: e.target.value })}>{ROLES_VALIDOS.map((r) => <option key={r} value={r}>{ROLES[r]}</option>)}</select></label>
+          {modo === 'clave' && (
+            <label className="formFull">Contraseña *
+              <div className="usClaveFila">
+                <input value={f.clave} onChange={(e) => setF({ ...f, clave: e.target.value })} minLength={8} required autoComplete="off" />
+                <button type="button" className="editButton" onClick={() => setF({ ...f, clave: generarClave() })}>🎲 Otra</button>
+              </div>
+            </label>
+          )}
         </div>
-        <p className="gestionAyuda">{DESCRIPCION_ROL[f.rol as Rol]} Le llega un correo con un link: al abrirlo crea su contraseña y entra.</p>
+        <p className="gestionAyuda">{DESCRIPCION_ROL[f.rol as Rol]} {modo === 'clave' ? 'Entra directo con este correo y contraseña.' : 'Le llega un correo con un link: al abrirlo crea su contraseña y entra.'}</p>
         {error && <p className="loginError">{error}</p>}
-        <div className="formActions"><button type="button" className="cancelButton" onClick={onCancelar}>Cancelar</button><button className="newButton" disabled={enviando}>{enviando ? 'Enviando…' : 'Enviar invitación'}</button></div>
+        <div className="formActions"><button type="button" className="cancelButton" onClick={onCancelar}>Cancelar</button><button className="newButton" disabled={enviando}>{enviando ? 'Guardando…' : modo === 'clave' ? 'Crear usuario' : 'Enviar invitación'}</button></div>
       </form>
+      )}
+    </div></div>
+  )
+}
+
+// Contraseña de un usuario existente: ponerle una nueva o mandarle un link.
+function FormClave({ perfil, nombre, email, onCerrar, onLink, onListo }: { perfil: Perfil; nombre: string; email: string | null; onCerrar: () => void; onLink: () => void; onListo: (msg: string) => void }) {
+  const [clave, setClave] = useState(generarClave())
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState('')
+  const [hecho, setHecho] = useState(false)
+  async function guardar(e: FormEvent) {
+    e.preventDefault(); setError('')
+    if (clave.trim().length < 8) { setError('Usá al menos 8 caracteres.'); return }
+    setGuardando(true)
+    const r = await usarFuncion({ accion: 'clave', id: perfil.id, clave: clave.trim() })
+    setGuardando(false)
+    if (r.error) { setError(r.error); return }
+    setHecho(true)
+  }
+  return (
+    <div className="modalOverlay"><div className="modalCard">
+      <div className="modalHeader"><div><p className="subtitle">CONTRASEÑA</p><h2>{nombre}</h2></div><button type="button" className="closeButton" onClick={hecho ? () => onListo(`Contraseña nueva para ${nombre}.`) : onCerrar}>×</button></div>
+      {hecho && email ? (
+        <div className="clienteForm">
+          <DatosAcceso email={email} clave={clave.trim()} nombre={nombre} />
+          <div className="formActions"><button type="button" className="newButton" onClick={() => onListo(`Contraseña nueva para ${nombre}.`)}>Listo</button></div>
+        </div>
+      ) : (
+        <form className="clienteForm" onSubmit={guardar}>
+          <label>Contraseña nueva
+            <div className="usClaveFila">
+              <input value={clave} onChange={(e) => setClave(e.target.value)} minLength={8} required autoComplete="off" />
+              <button type="button" className="editButton" onClick={() => setClave(generarClave())}>🎲 Otra</button>
+            </div>
+          </label>
+          <p className="gestionAyuda">Se cambia al instante; después le pasás la contraseña.</p>
+          {error && <p className="loginError">{error}</p>}
+          <div className="formActions">
+            {email && <button type="button" className="cancelButton" onClick={onLink}>✉️ Mejor mandarle un link</button>}
+            <button className="newButton" disabled={guardando}>{guardando ? 'Guardando…' : 'Poner contraseña'}</button>
+          </div>
+        </form>
+      )}
     </div></div>
   )
 }
