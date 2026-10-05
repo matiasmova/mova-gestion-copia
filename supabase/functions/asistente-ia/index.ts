@@ -36,12 +36,62 @@ const recorte = (s: unknown, n: number) => String(s ?? '').trim().slice(0, n)
 
 type Parte = { text: string } | { inlineData: { mimeType: string; data: string } }
 
+// Esquema de Gemini (tipos en mayúsculas) → JSON Schema estándar (para Claude).
+function esquemaJson(e: unknown): unknown {
+  if (Array.isArray(e)) return e.map(esquemaJson)
+  if (!e || typeof e !== 'object') return e
+  const salida: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(e as Record<string, unknown>)) salida[k] = k === 'type' && typeof v === 'string' ? v.toLowerCase() : esquemaJson(v)
+  return salida
+}
+
+// Respaldo: si Gemini está caído o saturado, se le pide lo mismo a Claude
+// (secret ANTHROPIC_API_KEY), forzando la respuesta con el mismo esquema.
+async function claudeJson(clave: string, pedido: string | Parte[], esquema: unknown, sistema: string, temperatura: number): Promise<unknown> {
+  const partes = typeof pedido === 'string' ? [{ text: pedido } as Parte] : pedido
+  const contenido = partes.map((p) => 'text' in p
+    ? { type: 'text', text: p.text }
+    : p.inlineData.mimeType === 'application/pdf'
+      ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: p.inlineData.data } }
+      : { type: 'image', source: { type: 'base64', media_type: /^image\/(jpeg|png|webp|gif)$/.test(p.inlineData.mimeType) ? p.inlineData.mimeType : 'image/jpeg', data: p.inlineData.data } })
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': clave, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({
+      model: Deno.env.get('CLAUDE_MODEL') || 'claude-haiku-4-5-20251001',
+      max_tokens: 8000, temperature: Math.min(1, temperatura), system: sistema,
+      messages: [{ role: 'user', content: contenido }],
+      tools: [{ name: 'responder', description: 'Devolvé la respuesta con este formato.', input_schema: esquemaJson(esquema) }],
+      tool_choice: { type: 'tool', name: 'responder' },
+    }),
+  })
+  const cuerpo = await r.json().catch(() => ({})) as { error?: { message?: string }; content?: { type: string; input?: unknown }[] }
+  if (!r.ok) throw new Error(`Claude ${r.status}: ${String(cuerpo.error?.message ?? '').slice(0, 200)}`)
+  const uso = (cuerpo.content ?? []).find((b) => b.type === 'tool_use')
+  if (!uso?.input) throw new Error('Claude: respuesta sin formato')
+  return uso.input
+}
+
 async function gemini(clave: string, pedido: string | Parte[], esquema: unknown, sistema = ESTILO, temperatura = 0.9): Promise<unknown> {
-  // Google retira modelos seguido: se prueba el del secret GEMINI_MODEL y después estos.
-  const modelos = Array.from(new Set([Deno.env.get('GEMINI_MODEL'), 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3-flash-preview', 'gemini-2.5-flash'].filter(Boolean) as string[]))
+  try {
+    return await geminiSolo(clave, pedido, esquema, sistema, temperatura)
+  } catch (e) {
+    const msg = String((e as Error).message)
+    const claveClaude = Deno.env.get('ANTHROPIC_API_KEY')
+    // Una clave de Gemini mal cargada se avisa tal cual; si Google está saturado o sin cupo, responde Claude.
+    if (!claveClaude || msg.startsWith('clave|')) throw e
+    try { return await claudeJson(claveClaude, pedido, esquema, sistema, temperatura) }
+    catch (e2) { throw new Error(`${msg} | Respaldo con ${(e2 as Error).message}`) }
+  }
+}
+
+async function geminiSolo(clave: string, pedido: string | Parte[], esquema: unknown, sistema = ESTILO, temperatura = 0.9): Promise<unknown> {
+  // Google retira modelos seguido: se prueba el del secret GEMINI_MODEL y después estos
+  // (los "lite" suelen tener menos demanda cuando los otros están saturados).
+  const modelos = Array.from(new Set([Deno.env.get('GEMINI_MODEL'), 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3-flash-preview', 'gemini-flash-lite-latest', 'gemini-3.8-flash-lite', 'gemini-2.5-flash'].filter(Boolean) as string[]))
   const errores: string[] = [], limites: string[] = []
   // Cada modelo tiene su propio cupo gratis: si uno se agotó, se prueba el siguiente.
-  for (const modelo of modelos) {
+  for (const modelo of modelos) for (let intento = 0; intento < 2; intento++) {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': clave },
@@ -53,13 +103,15 @@ async function gemini(clave: string, pedido: string | Parte[], esquema: unknown,
     })
     const cuerpo = await r.json().catch(() => ({}))
     const mensaje = String((cuerpo as { error?: { message?: string } }).error?.message ?? '').slice(0, 300)
-    if (r.status === 404) { errores.push(`${modelo}: ${mensaje || 'no disponible'}`); continue }
+    // Saturado (503/500): se espera un momento y se reintenta una vez el mismo modelo.
+    if ((r.status === 503 || r.status === 500) && intento === 0) { await new Promise((ok) => setTimeout(ok, 1500)); continue }
+    if (r.status === 404 || (r.status === 400 && /no longer available|not found/i.test(mensaje))) { errores.push(`${modelo}: ${mensaje || 'no disponible'}`); break }
     if ((r.status === 400 || r.status === 403) && /API key|API_KEY|permission|PERMISSION/i.test(JSON.stringify(cuerpo))) throw new Error(`clave|${mensaje}`)
-    if (r.status === 429) { limites.push(`${modelo}: ${mensaje}`); continue }
-    if (!r.ok) { errores.push(`${modelo}: ${r.status} ${mensaje}`); continue }
+    if (r.status === 429) { limites.push(`${modelo}: ${mensaje}`); break }
+    if (!r.ok) { errores.push(`${modelo}: ${r.status} ${mensaje}`); break }
     let texto = (cuerpo as { candidates?: { content?: { parts?: { text?: string }[] } }[] }).candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? ''
     texto = texto.replace(/^```(?:json)?\s*|\s*```$/g, '').trim()
-    try { return JSON.parse(texto) } catch { errores.push(`${modelo}: respuesta sin formato`); continue }
+    try { return JSON.parse(texto) } catch { errores.push(`${modelo}: respuesta sin formato`); break }
   }
   if (limites.length) throw new Error(`límite|${limites.join(' | ')}`)
   throw new Error(errores.join(' | ') || 'sin respuesta')
@@ -531,6 +583,7 @@ Deno.serve(async (req) => {
       const diario = /per ?day|PerDay|daily/i.test(m)
       return responder({ error: `${diario ? 'Se agotó el cupo gratuito de Gemini de hoy' : 'Se alcanzó el límite gratuito de Gemini por un rato: probá en un minuto'}. Detalle de Google: ${m.slice(7, 600)}` }, 429)
     }
-    return responder({ error: `No se pudo generar el texto. Detalle de Google: ${m}` }, 502)
+    if (/high demand|overloaded|UNAVAILABLE| 503 /i.test(m)) return responder({ error: `La IA de Google está saturada en este momento (es temporal). Probá de nuevo en unos minutos.${Deno.env.get('ANTHROPIC_API_KEY') ? '' : ' Si cargás el secret ANTHROPIC_API_KEY, cuando Google esté saturado responde Claude.'}` }, 503)
+    return responder({ error: `No se pudo generar el texto. Detalle de Google: ${m.slice(0, 600)}` }, 502)
   }
 })
