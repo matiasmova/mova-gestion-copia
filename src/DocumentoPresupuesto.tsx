@@ -427,8 +427,8 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '10px 26px' }}>
             {condiciones.map((c, i) => (
               <div key={`${i}-${c.titulo}`}>
-                <strong style={{ color: OSCURO, fontSize: '12.5px' }}>{c.titulo}</strong>
-                <p style={{ margin: '2px 0 0', fontSize: '11.5px', lineHeight: 1.5 }}>{textoCondicion(c, d.validez_dias)}</p>
+                <strong style={{ color: OSCURO, fontSize: '11.5px' }}>{c.titulo}</strong>
+                <p style={{ margin: '2px 0 0', fontSize: '10.5px', lineHeight: 1.45 }}>{textoCondicion(c, d.validez_dias)}</p>
               </div>
             ))}
           </div>
