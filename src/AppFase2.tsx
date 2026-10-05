@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { supabase, TIPO_LINK_AUTH } from './supabase'
+import { supabase, TIPO_LINK_AUTH, ERROR_LINK_AUTH } from './supabase'
 import Clientes from './Clientes'
 import Soluciones from './Soluciones'
 import ProductosServicios from './ProductosServicios'
@@ -38,7 +38,9 @@ export default function AppFase2() {
   const [password, setPassword] = useState('')
   const [mensajeError, setMensajeError] = useState('')
   const [ingresando, setIngresando] = useState(false)
-  const [modoAuth, setModoAuth] = useState<'login' | 'reset'>('login')
+  // Link del correo vencido: se abre directo "pedir un link nuevo" con el aviso.
+  const [modoAuth, setModoAuth] = useState<'login' | 'reset'>(ERROR_LINK_AUTH ? 'reset' : 'login')
+  const [avisoLink] = useState(ERROR_LINK_AUTH)
   const [avisoReset, setAvisoReset] = useState('')
   // Entró con un link de invitación o de recuperar contraseña: primero crea su contraseña.
   const [crearClave, setCrearClave] = useState<'invite' | 'recovery' | null>(TIPO_LINK_AUTH)
@@ -159,8 +161,9 @@ export default function AppFase2() {
           </>
         ) : (
           <>
-            <h2>Recuperar contraseña</h2>
-            <p className="fase2LoginSub">Te enviamos un enlace para restablecerla</p>
+            <h2>{avisoLink ? 'Crear o recuperar contraseña' : 'Recuperar contraseña'}</h2>
+            <p className="fase2LoginSub">Te enviamos un enlace para crearla o restablecerla</p>
+            {avisoLink && !avisoReset && <p className="loginError">{avisoLink}</p>}
             <label>Correo electrónico
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tu@correo.com" required />
             </label>
