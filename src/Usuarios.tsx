@@ -203,8 +203,14 @@ function FormInvitar({ onCancelar, onInvitado }: { onCancelar: () => void; onInv
     if (fallo) {
       // El detalle del error viene en la respuesta de la función.
       let msg = ''
-      try { msg = (await (fallo as { context?: Response }).context?.json())?.error ?? '' } catch { /* sin detalle */ }
-      setError(msg || 'No se pudo invitar. ¿Ya creaste la función "gestionar-usuarios" en Supabase?')
+      const resp = (fallo as { context?: Response }).context
+      try {
+        const j = await resp?.clone().json()
+        msg = j?.error ?? (j?.msg || j?.message ? `Supabase respondió: ${j.msg ?? j.message}` : '')
+      } catch { /* sin detalle */ }
+      if (!msg && resp?.status === 404) msg = 'Falta crear la función "gestionar-usuarios" en Supabase (Edge Functions).'
+      if (!msg && resp?.status === 401) msg = 'Supabase rechazó el pedido: en la función "gestionar-usuarios" apagá "Verify JWT" y volvé a desplegarla.'
+      setError(msg || `No se pudo invitar${resp?.status ? ` (error ${resp.status})` : ''}. ¿Ya creaste la función "gestionar-usuarios" en Supabase?`)
       return
     }
     onInvitado((data as { aviso?: string })?.aviso ?? `Invitación enviada a ${f.email}. Le llega un correo para crear su contraseña.`)
