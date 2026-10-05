@@ -25,4 +25,17 @@ export const TIPO_LINK_AUTH: 'invite' | 'recovery' | null = (() => {
   } catch { return null }
 })()
 
+// Si el link del correo venció o ya se usó, Supabase vuelve con un error en la
+// dirección: se anota para explicarlo y ofrecer un link nuevo.
+export const ERROR_LINK_AUTH: string | null = (() => {
+  try {
+    const p = new URLSearchParams(`${window.location.hash.replace(/^#/, '')}&${window.location.search.replace(/^\?/, '')}`)
+    const codigo = p.get('error_code') || p.get('error')
+    if (!codigo) return null
+    return /expired|otp/i.test(`${codigo} ${p.get('error_description') ?? ''}`)
+      ? 'El link del correo venció o ya se usó. Escribí tu correo abajo y te mandamos uno nuevo para crear tu contraseña.'
+      : 'No se pudo abrir el link del correo. Escribí tu correo abajo y te mandamos uno nuevo.'
+  } catch { return null }
+})()
+
 export const supabase = createClient(supabaseUrl, supabaseKey)
