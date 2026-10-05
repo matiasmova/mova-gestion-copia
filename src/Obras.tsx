@@ -564,25 +564,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
       }
     }
 
-    // El estado y % de la obra siempre reflejan el avance MÁS RECIENTE (crear o editar).
-    const { data: ultimo } = await supabase
-      .from('obra_avances')
-      .select('estado,porcentaje')
-      .eq('obra_id', obraSeguimiento.id)
-      .order('fecha', { ascending: false })
-      .order('id', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (ultimo) {
-      await supabase.from('obras')
-        .update({ estado: ultimo.estado, porcentaje_avance: Number(ultimo.porcentaje) })
-        .eq('id', obraSeguimiento.id)
-      setObraSeguimiento({
-        ...obraSeguimiento,
-        estado: ultimo.estado as EstadoObra,
-        porcentaje_avance: Number(ultimo.porcentaje),
-      })
-    }
+    await sincronizarObra(obraSeguimiento)
     setMostrarNuevoAvance(false)
     setEditandoAvanceId(null)
     avisoGuardado(editandoAvanceId ? 'Avance actualizado' : 'Avance guardado')
@@ -594,6 +576,40 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
       porcentaje: Number(formularioAvance.porcentaje),
     })
     setGuardandoAvance(false)
+    setActualizacion((valor) => valor + 1)
+    cargarAvances(obraSeguimiento.id)
+    cargarImagenes(obraSeguimiento.id)
+  }
+
+  // El estado y % de la obra siempre reflejan el avance MÁS RECIENTE (al crear,
+  // editar o eliminar). Sin avances, la obra vuelve a 0% en proceso.
+  async function sincronizarObra(obra: NonNullable<typeof obraSeguimiento>) {
+    const { data: ultimo } = await supabase
+      .from('obra_avances')
+      .select('estado,porcentaje')
+      .eq('obra_id', obra.id)
+      .order('fecha', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const estado = (ultimo?.estado ?? 'en_proceso') as EstadoObra
+    const porcentaje = ultimo ? Number(ultimo.porcentaje) : 0
+    await supabase.from('obras').update({ estado, porcentaje_avance: porcentaje }).eq('id', obra.id)
+    setObraSeguimiento({ ...obra, estado, porcentaje_avance: porcentaje })
+  }
+
+  async function eliminarAvance(avance: AvanceObra) {
+    if (!obraSeguimiento) return
+    if (!window.confirm(`¿Eliminar el avance "${avance.titulo}" (${avance.porcentaje}%)? Si tiene fotos, también se borran. No se puede deshacer.`)) return
+    const { data: fotos } = await supabase.from('obra_imagenes').select('id,storage_path').eq('avance_id', avance.id)
+    const rutas = ((fotos ?? []) as { storage_path: string | null }[]).map((f) => f.storage_path).filter((x): x is string => !!x)
+    if (rutas.length) await supabase.storage.from('obras').remove(rutas)
+    if (fotos?.length) await supabase.from('obra_imagenes').delete().eq('avance_id', avance.id)
+    const { error: fallo } = await supabase.from('obra_avances').delete().eq('id', avance.id)
+    if (fallo) { console.error(fallo); window.alert('No se pudo eliminar el avance.'); return }
+    if (editandoAvanceId === avance.id) { setEditandoAvanceId(null); setMostrarNuevoAvance(false) }
+    await sincronizarObra(obraSeguimiento)
+    avisoGuardado('Avance eliminado')
     setActualizacion((valor) => valor + 1)
     cargarAvances(obraSeguimiento.id)
     cargarImagenes(obraSeguimiento.id)
@@ -1073,6 +1089,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                             {Number(avance.porcentaje) >= 100 ? (avance.estado === 'observacion' ? 'Finalizada en observación' : 'Finalizada') : 'En proceso'} · {avance.porcentaje}%
                           </span>
                           <button type="button" className="editButton" onClick={() => editarAvance(avance)}>Editar</button>
+                          <button type="button" className="adicNo avanceBorrar" aria-label="Eliminar avance" title="Eliminar avance" onClick={() => void eliminarAvance(avance)}>🗑</button>
                         </div>
                       </div>
 
@@ -1108,7 +1125,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
 
                       {paso && (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 18px', marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed #e2e5e9', fontSize: '13px', color: '#64748b' }}>
-                          <span>Este avance suma <strong style={{ color: '#101318' }}>{dineroFicha(paso.importe)}</strong></span>
+                          <span>{paso.importe < -0.5 ? 'Este avance resta' : 'Este avance suma'} <strong style={{ color: paso.importe < -0.5 ? '#b42318' : '#101318' }}>{dineroFicha(Math.abs(paso.importe))}</strong></span>
                           <span>A pagar hasta acá <strong style={{ color: '#101318' }}>{dineroFicha(paso.acumulado)}</strong></span>
                           <strong style={{ color: paso.estado === 'ok' ? '#1f7a4d' : '#c2410c' }}>{paso.estado === 'ok' ? '✓ Al día' : `⚠ Falta ${dineroFicha(paso.falta)}`}</strong>
                         </div>
