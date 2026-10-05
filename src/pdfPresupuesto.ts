@@ -111,6 +111,8 @@ const F_MINI = 6.8
 // Textos (descripciones, notas, condiciones): más grandes para leer cómodo.
 const F_TIT = 11.5
 const F_TXT = 10.5
+// Condiciones generales: letra chica (es texto legal, va al final).
+const F_COND = 7.6
 
 // Sanitiza a caracteres que las fuentes estándar (WinAnsi) pueden dibujar.
 function win(s: string): string {
@@ -726,8 +728,8 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     lugar(70)
     titulo('Condiciones generales')
     const colW = (CW - 22) / 2
-    const bloques = condiciones.map((c) => ({ t: partir(c.titulo, F_TXT, colW, bold), r: partir(textoCondicion(c, d.validez_dias), F_TXT - 0.5, colW) }))
-    const altoB = (b: { t: string[]; r: string[] }) => b.t.length * 13.5 + b.r.length * 13 + 8
+    const bloques = condiciones.map((c) => ({ t: partir(c.titulo, F_COND + 0.8, colW, bold), r: partir(textoCondicion(c, d.validez_dias), F_COND, colW) }))
+    const altoB = (b: { t: string[]; r: string[] }) => b.t.length * 11 + b.r.length * 10 + 7
     for (let i = 0; i < bloques.length; i += 2) {
       const par = bloques.slice(i, i + 2)
       const alto = Math.max(...par.map(altoB))
@@ -735,8 +737,8 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
       par.forEach((b, k) => {
         const x = M + k * (colW + 22)
         let yy = y
-        for (const r of b.t) { texto(r, x, yy, F_TXT, bold, OSCURO); yy -= 13.5 }
-        for (const r of b.r) { texto(r, x, yy, F_TXT - 0.5, font, TEXTO); yy -= 13 }
+        for (const r of b.t) { texto(r, x, yy, F_COND + 0.8, bold, OSCURO); yy -= 11 }
+        for (const r of b.r) { texto(r, x, yy, F_COND, font, TEXTO); yy -= 10 }
       })
       y -= alto
     }
