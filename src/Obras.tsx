@@ -31,7 +31,7 @@ import CampoNumero from './CampoNumero'
 import CuentaObraResumen from './CuentaObraResumen'
 import EditarPresupuestoObra from './EditarPresupuestoObra'
 import PanelPresupuestoObra from './PanelPresupuestoObra'
-import { avanceEfectivo } from './cuentaObra'
+import { avanceEfectivo, correspondePorAvance } from './cuentaObra'
 import { cargarFormasPago, cobradoPorMedio, textoMedios, type FormasPago } from './formasPago'
 
 type EstadoObra = 'en_proceso' | 'finalizada' | 'observacion'
@@ -971,12 +971,14 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                     )}
                     {cuenta && (() => {
                       const pct = Math.min(100, Math.max(0, Number(formularioAvance.porcentaje) || 0))
-                      const correspondeObra = Math.round((cuenta.anticipo + cuenta.resto * pct / 100) * 100) / 100
+                      const correspondeObra = correspondePorAvance(cuenta.anticipo, cuenta.totalActualizado, pct)
                       const falta = Math.max(0, correspondeObra - cuenta.cobrado)
                       return (
                         <div className="avanceCobro">
                           <b>💵 Con este avance, el cliente tiene que haber pagado {dineroFicha(correspondeObra)}</b>
-                          <span>Anticipo {PCT_ANTICIPO}% al aceptar {dineroFicha(cuenta.anticipo)} + {pct}% del {100 - PCT_ANTICIPO}% restante {dineroFicha(correspondeObra - cuenta.anticipo)}</span>
+                          <span>{pct <= PCT_ANTICIPO
+                            ? <>El anticipo del {PCT_ANTICIPO}% ({dineroFicha(cuenta.anticipo)}) cubre el avance hasta el {PCT_ANTICIPO}%.</>
+                            : <>Anticipo {PCT_ANTICIPO}% {dineroFicha(cuenta.anticipo)} + avance del {PCT_ANTICIPO}% al {pct}% {dineroFicha(correspondeObra - cuenta.anticipo)} = {pct}% del total</>}</span>
                           <span>Ya pagó {dineroFicha(cuenta.cobrado)} → {falta > 0.5 ? <strong className="pend">falta cobrar {dineroFicha(falta)}</strong> : <strong className="ok">está al día</strong>}{cuenta.gastoExtraPendiente > 0.5 ? ` (más ${dineroFicha(cuenta.gastoExtraPendiente)} de gastos a reintegrar)` : ''}</span>
                         </div>
                       )
