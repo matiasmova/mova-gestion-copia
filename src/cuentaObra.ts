@@ -1,9 +1,13 @@
 // Regla única del acuerdo comercial, la misma del documento del cliente
-// (estadoObra.ts): 70% de anticipo al confirmar y el 30% restante a medida
-// que avanza la obra (completo al finalizar). Los gastos extra a reintegrar
+// (estadoObra.ts): 70% de anticipo al confirmar, que cubre el avance de 0 a 70%.
+// Desde ahí corresponde el % de avance sobre el total: 80% → 80%, 100% → todo.
+// Fórmula: anticipo + resto × (avance − 70) / 30. Los gastos extra a reintegrar
 // se cobran completos, aparte, y no generan un segundo cobro al marcarlos Pagados.
 export const ANTICIPO_PCT = 70
 export const redondearCuenta = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
+// Lo que corresponde haber pagado de la obra con un % de avance.
+export const correspondePorAvance = (anticipo: number, total: number, pct: number) =>
+  redondearCuenta(anticipo + Math.max(0, total - anticipo) * Math.max(0, Math.min(100, pct) - ANTICIPO_PCT) / (100 - ANTICIPO_PCT))
 export type MovimientoCuenta = { importe: number | string; tipo: string; estado: string }
 
 export const obraTerminada = (estado: string | null | undefined) => estado === 'finalizada' || estado === 'observacion'
@@ -25,7 +29,7 @@ export function cuentaObra(valor: number, extras: number, cobrado: number, porce
   const base = Math.max(0, valor)
   // El anticipo se pacta sobre lo aceptado (si el alcance se redujo, sobre el valor nuevo).
   const anticipo = redondearCuenta(Math.min(base, Math.max(0, baseAnticipo)) * ANTICIPO_PCT / 100)
-  const correspondeObra = redondearCuenta(anticipo + (base - anticipo) * pct / 100)
+  const correspondeObra = correspondePorAvance(anticipo, base, pct)
   const pendienteObra = redondearCuenta(Math.max(0, correspondeObra - cobrado))
   const corresponde = redondearCuenta(correspondeObra + Math.max(0, extras))
   return { pct, anticipo, correspondeObra, corresponde, cobrado: redondearCuenta(cobrado),

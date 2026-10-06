@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { correspondePorAvance } from './cuentaObra'
 import type { antesYAhora } from './presupuestoModificaciones'
 
 // =====================================================================
@@ -125,7 +126,8 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
   const resto = r2(Math.max(0, totalActualizado - anticipo))
   const cobrado = r2(pagos.reduce((s, p) => s + p.monto, 0))
   const gastoExtraPendiente = r2(gastosExtra.filter((g) => !g.devuelto).reduce((s, g) => s + g.importe, 0))
-  const corresponde = r2(anticipo + resto * avance / 100)
+  // El anticipo cubre el avance hasta el 70%; desde ahí suma lo que avanza la obra.
+  const corresponde = correspondePorAvance(anticipo, totalActualizado, avance)
   const pendienteHoy = r2(Math.max(0, corresponde - cobrado))
   const adelanto = r2(Math.max(0, cobrado - corresponde))
   const saldoTotal = r2(totalActualizado - cobrado)
@@ -149,13 +151,13 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
   for (const a of avances) {
     // Cada avance vale lo que dice (puede bajar: por ejemplo, una reforma atrasa la obra).
     const pct = Math.min(100, Math.max(0, a.porcentaje))
-    const acumulado = r2(anticipo + resto * pct / 100)
+    const acumulado = correspondePorAvance(anticipo, totalActualizado, pct)
     const pagado = pagadoHasta(a.fecha)
     // Lo pendiente de un paso se evalúa con lo pagado HOY: si ya se pagó después, queda al día.
     const falta = r2(Math.max(0, acumulado - cobrado))
     linea.push({
       tipo: 'avance', avanceId: a.id, fecha: a.fecha, titulo: a.titulo, detalle: a.descripcion, porcentaje: pct,
-      importe: r2(resto * (pct - pctPrevio) / 100), acumulado, pagadoALaFecha: pagado,
+      importe: r2(acumulado - correspondePorAvance(anticipo, totalActualizado, pctPrevio)), acumulado, pagadoALaFecha: pagado,
       estado: falta > 0.5 ? 'pendiente' : 'ok', falta,
     })
     pctPrevio = pct
@@ -165,7 +167,7 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
     linea.push({
       tipo: 'final', fecha: null, titulo: terminada ? 'Obra finalizada' : 'Al finalizar la obra (100%)',
       detalle: terminada ? null : 'Saldo final a abonar al terminar los trabajos.',
-      porcentaje: 100, importe: r2(resto * (100 - pctFinal) / 100), acumulado: totalActualizado, pagadoALaFecha: cobrado,
+      porcentaje: 100, importe: r2(totalActualizado - correspondePorAvance(anticipo, totalActualizado, pctFinal)), acumulado: totalActualizado, pagadoALaFecha: cobrado,
       estado: terminada ? (cobrado >= totalActualizado - 0.5 ? 'ok' : 'pendiente') : 'futuro',
       falta: r2(Math.max(0, totalActualizado - cobrado)),
     })
