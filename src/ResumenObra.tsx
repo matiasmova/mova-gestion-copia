@@ -190,6 +190,30 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
 
   return <section className="orResumen" aria-label="Resumen de la obra">
     <div className="orVida"><VidaEtapas pasos={pasosObra({ estado, porcentaje_avance: avance }, cuenta ? Math.max(0, cuenta.saldoTotal) + cuenta.gastoExtraPendiente : undefined)} /></div>
+    {cuenta && cuenta.totalActualizado > 0 && (() => {
+      // Chequeo rápido: lo pagado, lo que corresponde pagar hoy y lo que resta según avance la obra.
+      const hoy = Math.max(0, cuenta.pendienteHoy) + cuenta.gastoExtraPendiente
+      const resta = Math.max(0, cuenta.totalActualizado - Math.max(cuenta.corresponde, cuenta.cobrado))
+      const total = Math.max(1, cuenta.cobrado + hoy + resta)
+      const pct = (n: number) => `${Math.max(0, Math.min(100, (n / total) * 100))}%`
+      return (
+        <div className="orVidaCuenta">
+          <div className="orVidaBarra" aria-hidden="true">
+            <i className="pago" style={{ width: pct(cuenta.cobrado) }} />
+            <i className="hoy" style={{ width: pct(hoy) }} />
+            <i className="resta" style={{ width: pct(resta) }} />
+          </div>
+          <div className="orVidaDatos">
+            <div className="pago"><small>Ya pagó</small><b><Cifra valor={cuenta.cobrado} formato={dinero} /></b></div>
+            <div className={`hoy ${hoy > 0.5 ? 'debe' : 'aldia'}`}>
+              <small>{hoy > 0.5 ? 'A pagar hoy' : 'Hoy'}</small>
+              <b>{hoy > 0.5 ? <Cifra valor={hoy} formato={dinero} /> : '✓ Al día'}</b>
+            </div>
+            <div className="resta"><small title="Lo que falta pagar a medida que avance la obra">Restante</small><b><Cifra valor={resta} formato={dinero} /></b></div>
+          </div>
+        </div>
+      )
+    })()}
 
     {presupuesto && <div className="orPresu">
       <div className="orPresuTit"><span>📄 PRESUPUESTO {codigoPresupuesto(presupuesto.id)}</span><span className="presuEtapa et-aceptado">Aceptado</span></div>

@@ -1904,3 +1904,23 @@ body:has(.modalOverlay) .fase2App .fase2MenuButton{display:none}
 .usAccesoBtns{display:flex;gap:8px;flex-wrap:wrap}.usAccesoBtns a{text-decoration:none}
 .usAcceso small{opacity:.75;font-size:12px}
 .usBorrar{color:#b42318}
+/* Chequeo rápido de pagos debajo de la línea de etapas */
+.orVidaCuenta{margin:4px 0 12px;padding:10px 12px;border:1px solid var(--mova-border,#e6e8ec);border-radius:14px;background:#fff;animation:movEntra .45s cubic-bezier(.2,.8,.2,1) .35s both}
+.orVidaBarra{display:flex;height:8px;border-radius:999px;overflow:hidden;background:#eef0f3}
+.orVidaBarra i{display:block;height:100%;transform-origin:left;animation:orVidaLlena .9s cubic-bezier(.2,.8,.2,1) .5s both}
+.orVidaBarra .pago{background:linear-gradient(90deg,#1f7a4d,#2fb36f)}
+.orVidaBarra .hoy{background:linear-gradient(90deg,#de7015,#f08a2c,#de7015);background-size:200% 100%;animation:orVidaLlena .9s cubic-bezier(.2,.8,.2,1) .5s both,vidaFluye 1.6s linear 1.4s infinite}
+.orVidaBarra .resta{background:transparent}
+@keyframes orVidaLlena{0%{transform:scaleX(0)}100%{transform:scaleX(1)}}
+.orVidaDatos{display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:8px;margin-top:8px}
+.orVidaDatos>div{display:flex;flex-direction:column;gap:1px;min-width:0;border-radius:10px;padding:6px 8px}
+.orVidaDatos small{font-size:11px;font-weight:700;letter-spacing:.3px;color:#78818f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.orVidaDatos b{font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.orVidaDatos .pago b{color:#1f7a4d}
+.orVidaDatos .resta b{color:#4b5563}
+.orVidaDatos .hoy.debe{background:#fff3e6;animation:orVidaLate 2s ease-in-out 1.2s infinite}
+.orVidaDatos .hoy.debe small{color:#b45309}.orVidaDatos .hoy.debe b{color:#c2410c}
+.orVidaDatos .hoy.aldia{background:#effaf3}.orVidaDatos .hoy.aldia b{color:#1f7a4d}
+@keyframes orVidaLate{0%,100%{box-shadow:0 0 0 0 rgba(222,112,21,0)}50%{box-shadow:0 0 0 4px rgba(222,112,21,.22)}}
+@media (max-width:420px){.orVidaDatos b{font-size:13.5px}.orVidaDatos small{font-size:10.5px}}
+@media (prefers-reduced-motion:reduce){.orVidaCuenta,.orVidaBarra i,.orVidaDatos .hoy.debe{animation:none!important}}
