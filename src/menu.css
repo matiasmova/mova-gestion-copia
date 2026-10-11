@@ -127,13 +127,20 @@
   transform: scale(1.06);
 }
 
-/* Seleccionada: píldora con el degradé de la marca */
+/* Seleccionada: píldora verde en movimiento, con un halo que late */
 .fase2App .fase2Sidebar nav button.menuItem.active {
-  background: linear-gradient(135deg, #fd403e 0%, #e47b00 100%);
+  background: linear-gradient(120deg, #15803d 0%, #1f9d5c 35%, #34c47a 55%, #1f9d5c 75%, #15803d 100%);
+  background-size: 250% 100%;
   color: #fff;
   font-weight: 600;
-  box-shadow: 0 12px 26px -12px rgba(253, 64, 62, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  box-shadow: 0 12px 26px -12px rgba(31, 157, 92, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.25);
   transform: none;
+  animation: menuVerdeFluye 4s ease-in-out infinite, menuVerdeLate 2.2s ease-in-out infinite;
+}
+@keyframes menuVerdeFluye { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+@keyframes menuVerdeLate {
+  0%, 100% { box-shadow: 0 12px 26px -12px rgba(31, 157, 92, 0.8), 0 0 0 0 rgba(52, 196, 122, 0), inset 0 1px 0 rgba(255, 255, 255, 0.25); }
+  50% { box-shadow: 0 14px 30px -10px rgba(31, 157, 92, 0.95), 0 0 0 5px rgba(52, 196, 122, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.25); }
 }
 .fase2App .fase2Sidebar nav button.menuItem.active .menuIcono {
   background: rgba(255, 255, 255, 0.22);
@@ -150,10 +157,16 @@
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 0 8px rgba(255, 255, 255, 0.9);
+  animation: menuPuntoLate 1.4s ease-in-out infinite;
+}
+@keyframes menuPuntoLate { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .55; transform: scale(1.35); } }
+@media (prefers-reduced-motion: reduce) {
+  .fase2App .fase2Sidebar nav button.menuItem.active,
+  .fase2App .fase2Sidebar nav button.menuItem.active::after { animation: none; }
 }
 .fase2App .fase2Sidebar nav button.menuItem:focus { outline: none; }
 .fase2App .fase2Sidebar nav button.menuItem:focus-visible {
-  outline: 2px solid rgba(228, 123, 0, 0.6);
+  outline: 2px solid rgba(31, 157, 92, 0.6);
   outline-offset: 2px;
 }
 
