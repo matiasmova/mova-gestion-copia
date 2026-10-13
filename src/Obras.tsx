@@ -10,7 +10,6 @@ import NuevaObra from './NuevaObra'
 import EstadoObraPDF from './EstadoObraPDF'
 import InformeObraIA from './InformeObraIA'
 import { CompraRapida, MenuRegistrar, type OpcionRegistrar } from './RegistrarObra'
-import { etiquetaEtapa } from './VidaEtapas'
 import AdicionalesObra from './AdicionalesObra'
 import PersonalObra from './PersonalObra'
 import RentabilidadObra from './RentabilidadObra'
@@ -32,6 +31,8 @@ import CuentaObraResumen from './CuentaObraResumen'
 import EditarPresupuestoObra from './EditarPresupuestoObra'
 import PanelPresupuestoObra from './PanelPresupuestoObra'
 import { avanceEfectivo, correspondePorAvance, cuentasPorObra } from './cuentaObra'
+import { estadoTrabajo } from './estadoTrabajo'
+import { PillTrabajo, VidaTrabajo } from './VidaTrabajo'
 import { cargarFormasPago, cobradoPorMedio, textoMedios, type FormasPago } from './formasPago'
 
 type EstadoObra = 'en_proceso' | 'finalizada' | 'observacion'
@@ -758,7 +759,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
         )
       })()}
 
-      {(busquedaExterna == null || !esMovil) && <div className="crmToolbar">
+      {!embebido && <div className="crmToolbar">
         {busquedaExterna == null && <div className="crmFiltros">
           <input
             type="search"
@@ -778,11 +779,11 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
       </div>}
 
       {cargando && <p>Cargando obras...</p>}
-      {!cargando && !error && obrasEsperandoPresupuesto > 0 && (
+      {!cargando && !error && obrasEsperandoPresupuesto > 0 && grupo !== 'terminadas' && (
         <p className="gestionAyuda">
           {obrasEsperandoPresupuesto === 1
-            ? 'Hay 1 obra cargada que todavía no tiene presupuesto aceptado: aparece acá cuando lo aceptes.'
-            : `Hay ${obrasEsperandoPresupuesto} obras cargadas que todavía no tienen presupuesto aceptado: aparecen acá cuando los aceptes.`}
+            ? 'Hay 1 obra que todavía no tiene presupuesto aceptado: está en ✏️ Armando (o en 📤 Enviados) hasta que el cliente lo acepte.'
+            : `Hay ${obrasEsperandoPresupuesto} obras que todavía no tienen presupuesto aceptado: están en ✏️ Armando (o en 📤 Enviados) hasta que el cliente los acepte.`}
         </p>
       )}
       {error && <p className="loginError">{error}</p>}
@@ -802,27 +803,27 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
       )}
 
       {/* En el celular: lista hacia abajo con la etapa de cada obra */}
-      {!cargando && !error && obrasFiltradas.length > 0 && esMovil && (
+      {!cargando && !error && obrasFiltradas.length > 0 && (esMovil || embebido) && (
         <div className="trbLista">
           {obrasFiltradas.map((obra) => {
             const eco = economia[obra.id]
-            const et = etiquetaEtapa({ estado: 'aceptado', fecha: '' }, { estado: obra.estado, porcentaje_avance: Number(obra.porcentaje_avance || 0) }, eco?.pendiente ?? 0)
             const avisos = avisosDe(obra)
             const aCobrar = cuentas[obra.id]?.pendienteHoy ?? 0
             const saldo = cuentas[obra.id]?.saldo ?? eco?.pendiente ?? 0
+            const est = estadoTrabajo('aceptado', obra, saldo)
             return (
               <div role="button" tabIndex={0} className="trbCard" key={obra.id} onClick={() => abrirSeguimiento(obra)} onKeyDown={(e) => { if (e.key === 'Enter') abrirSeguimiento(obra) }}>
                 <div className="trbFila1">
                   <div><b>{obra.nombre_obra}</b><small>{obtenerCliente(obra.cliente_id)}{obra.localidad ? ` · ${obra.localidad}` : ''}</small></div>
                   <span className="trbMonto">{dineroFicha(eco?.valor ?? 0)}</span>
                 </div>
-                {et.avance != null && <div className="trbBarra"><i style={{ width: `${et.avance}%` }} /></div>}
+                <VidaTrabajo estado={est} />
                 {aCobrar > 0.5
                   ? <span className="trbCobrar">A cobrar hoy {dineroFicha(aCobrar)}</span>
                   : grupo === 'terminadas' && saldo > 0.5 && <span className="trbCobrar">Falta cobrar {dineroFicha(saldo)}</span>}
                 {avisos.length > 0 && <small className="presuAvisos">⚠ {avisos.join(' · ')}</small>}
                 <div className="trbFila2">
-                  <span className={`presuEtapa ${et.clase}`}>{et.texto}</span>
+                  <PillTrabajo estado={est} extra={est === 'obra' ? `${Math.round(Number(obra.porcentaje_avance) || 0)}%` : est === 'terminado' ? 'falta cobrar' : undefined} />
                   {aCobrar > 0.5 || (grupo === 'terminadas' && saldo > 0.5)
                     ? <button type="button" className="trbMini osc" onClick={(e) => { e.stopPropagation(); cobrarObra(obra) }}>💵 Cobrar</button>
                     : <button type="button" className="trbMini cl" onClick={(e) => { e.stopPropagation(); abrirSeguimiento(obra) }}>Abrir</button>}
@@ -833,7 +834,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
         </div>
       )}
 
-      {!cargando && !error && obrasFiltradas.length > 0 && !esMovil && vista === 'kanban' && (
+      {!cargando && !error && obrasFiltradas.length > 0 && !esMovil && !embebido && vista === 'kanban' && (
         <div className="crmKanban">
           {OBRA_ESTADOS.map((s) => {
             const cols = obrasFiltradas.filter((o) => (o.estado ?? 'en_proceso') === s.v)
@@ -869,7 +870,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
         </div>
       )}
 
-      {!cargando && !error && obrasFiltradas.length > 0 && !esMovil && vista === 'lista' && (
+      {!cargando && !error && obrasFiltradas.length > 0 && !esMovil && !embebido && vista === 'lista' && (
         <div className="crmListaWrap">
           <table className="crmLista">
             <thead><tr><th>Obra</th><th>Cliente</th><th>Avance</th><th>Valor</th><th>Cobrado</th><th>Saldo</th><th>Estado</th></tr></thead>

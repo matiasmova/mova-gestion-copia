@@ -2123,3 +2123,43 @@ button.orFaltaItem:focus-visible{outline:2px solid #1f9d5c;outline-offset:1px}
 .bcNuevoNota{margin:0;font-size:12.5px;color:#6b7380}
 .bcNuevoAcc{display:flex;justify-content:flex-end;gap:8px;margin-top:auto}
 .bcNuevoAcc button{padding:11px 16px}
+
+/* ===== Estado único del trabajo (Armando → Enviado → En obra → Terminado → Cobrado) ===== */
+.pillTrab{display:inline-block;font-size:12px;font-weight:800;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.etArmando{background:#f1edff;color:#6d4ed6}
+.etEnviado{background:#e8f0ff;color:#2f5fb3}
+.etObra{background:#fff3e6;color:#c25e0c}
+.etListo{background:#e9f7ef;color:#15803d}
+.etNo{background:#fde8e8;color:#b42318}
+.vidaTrab{display:grid;grid-template-columns:repeat(5,1fr);gap:3px}
+.vidaTrab i{height:5px;border-radius:999px;background:#e3e6ea}
+.vidaTrab i.ok{background:#1f9d5c}
+.vidaTrab i.hoy{background:#de7015;animation:vidaTrabLate 1.6s ease-in-out infinite}
+.vidaTrab.no i.hoy{background:#b42318;animation:none}
+@keyframes vidaTrabLate{50%{opacity:.4}}
+@media (prefers-reduced-motion:reduce){.vidaTrab i.hoy{animation:none}}
+.trbAyuda{margin:-4px 2px 12px;font-size:13px;color:#6b7380}
+.trbVerNo{display:block;margin:16px auto 8px;background:none;border:0;color:#6b7380;font:inherit;font-size:14px;font-weight:700;text-decoration:underline;cursor:pointer;padding:8px}
+.trbVerNo:hover{color:#14181e}
+/* En la compu, las tarjetas de Trabajos van en columnas */
+@media (min-width:900px){.trabajosPage .trbLista{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));align-items:start}}
+
+/* Ficha del cliente: lista única de Trabajos */
+.fichaRelaciones .fichaTrabajos{grid-column:span 2}
+@media (max-width:900px){.fichaRelaciones .fichaTrabajos{grid-column:auto}}
+.fichaTrabResumen{display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px 0}
+.fichaTrab{display:flex;flex-direction:column;gap:7px;padding:12px 14px;border-bottom:1px solid #f0f2f5}
+.fichaTrab:last-child{border-bottom:0}
+.fichaTrabCab{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:8px;cursor:pointer;min-width:0}
+.fichaTrabCab:disabled{cursor:default}
+.fichaTrabCab span{flex:1;min-width:0;display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.fichaTrabCab strong{font-size:14px;line-height:1.3;color:#14181e}
+.fichaTrabCab small{font-weight:800;font-size:13px;white-space:nowrap;font-variant-numeric:tabular-nums;color:#14181e}
+.fichaTrabCab:focus-visible{outline:2px solid var(--mova-orange,#de7015);outline-offset:3px;border-radius:6px}
+.fichaTrabPie{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fichaHistBtn{margin-left:auto;border:1px solid var(--mova-border,#e5e7eb);background:#fff;border-radius:999px;padding:4px 10px;font:inherit;font-size:12px;font-weight:700;color:#4b5563;cursor:pointer}
+.fichaHistBtn[aria-expanded="true"]{background:#14181e;color:#fff;border-color:#14181e}
+.fichaHist{list-style:none;margin:0;padding:8px 0 0;border-top:1px dashed #e3e6ea;display:flex;flex-direction:column;gap:5px;animation:movEntra .2s ease both}
+.fichaHist li{display:flex;gap:8px;font-size:12.5px;color:#14181e}
+.fichaHist em{font-style:normal;color:#6b7380;font-variant-numeric:tabular-nums;width:74px;flex:none}
+@media (prefers-reduced-motion:reduce){.fichaHist{animation:none}}

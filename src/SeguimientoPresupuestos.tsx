@@ -26,6 +26,8 @@ type Props = {
   onAbrir: (id: number) => void
   onSeguido: (id: number) => void
   onRechazar: (id: number) => void
+  // Dentro de una pestaña: solo los pendientes de ese estado (borradores o enviados).
+  soloEstado?: 'borrador' | 'enviado'
 }
 
 const DIA = 86400000
@@ -55,14 +57,15 @@ export function motivoSeguimiento(p: PresupuestoSeguimiento, diasSeguir: number)
   return null
 }
 
-export default function SeguimientoPresupuestos({ presupuestos, nombreCliente, telefonoCliente, onAbrir, onSeguido, onRechazar }: Props) {
+export default function SeguimientoPresupuestos({ presupuestos, nombreCliente, telefonoCliente, onAbrir, onSeguido, onRechazar, soloEstado }: Props) {
   const [dias, setDias] = useState(leerDias)
   const [abierto, setAbierto] = useState(false)
 
   const pendientes = useMemo(() => presupuestos
+    .filter((p) => !soloEstado || p.estado === soloEstado)
     .map((p) => ({ p, m: motivoSeguimiento(p, dias) }))
     .filter((x): x is { p: PresupuestoSeguimiento; m: Motivo } => !!x.m)
-    .sort((a, b) => a.m.orden - b.m.orden || b.p.total - a.p.total), [presupuestos, dias])
+    .sort((a, b) => a.m.orden - b.m.orden || b.p.total - a.p.total), [presupuestos, dias, soloEstado])
 
   // Tasa de cierre de los últimos 6 meses (sin contar borradores).
   const cierre = useMemo(() => {

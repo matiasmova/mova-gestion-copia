@@ -26,9 +26,9 @@ type Cliente = {
 
 type FiltroEstado = 'todos' | 'activos' | 'inactivos'
 
-type Props = { onAbrirObra?: (id: number) => void; onAbrirPresupuesto?: (id: number) => void; pedido?: Pedido | null; onPedidoAtendido?: () => void }
+type Props = { onAbrirObra?: (id: number) => void; onAbrirPresupuesto?: (id: number) => void; onNuevoPresupuesto?: (clienteId: number) => void; pedido?: Pedido | null; onPedidoAtendido?: () => void }
 
-function Clientes({ onAbrirObra, onAbrirPresupuesto, pedido, onPedidoAtendido }: Props = {}) {
+function Clientes({ onAbrirObra, onAbrirPresupuesto, onNuevoPresupuesto, pedido, onPedidoAtendido }: Props = {}) {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -305,6 +305,7 @@ function Clientes({ onAbrirObra, onAbrirPresupuesto, pedido, onPedidoAtendido }:
           onCerrar={() => setFichaCliente(null)}
           onAbrirObra={onAbrirObra}
           onAbrirPresupuesto={onAbrirPresupuesto}
+          onNuevoTrabajo={onNuevoPresupuesto ? () => { const id = fichaCliente.id; setFichaCliente(null); onNuevoPresupuesto(id) } : undefined}
           onEditar={() => {
             setClienteEditando(fichaCliente)
             setMostrarFormulario(true)

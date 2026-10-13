@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase'
 import { moneda, fechaCorta } from './gestionFormat'
-import { etiquetaObra } from './obraEstado'
+import { ESTADOS_TRABAJO, ORDEN_TRABAJO, estadoTrabajo, type EstadoTrabajo } from './estadoTrabajo'
+import { PillTrabajo, VidaTrabajo } from './VidaTrabajo'
 import { numeroWhatsApp } from './whatsapp'
 
 export type ClienteFichaData = {
@@ -19,8 +20,10 @@ export type ClienteFichaData = {
   activo: boolean
 }
 
-type Obra = { id: number; nombre_obra: string; estado: string | null; porcentaje_avance: number | null }
-type Presupuesto = { id: number; titulo: string; estado: string; total: number; total_pagado: number; saldo: number; fecha: string }
+type Obra = { id: number; nombre_obra: string; estado: string | null; porcentaje_avance: number | null; activo?: boolean | null; created_at?: string | null }
+type Presupuesto = { id: number; titulo: string; estado: string; total: number; total_pagado: number; saldo: number; fecha: string; obra_id: number | null; activo?: boolean | null; created_at?: string | null; enviado_at?: string | null; motivo_rechazo?: string | null }
+// Un trabajo: el presupuesto y su obra juntos (o una obra que todavía no tiene presupuesto).
+type Trabajo = { clave: string; titulo: string; estado: EstadoTrabajo; extra?: string; monto: number | null; abrir: (() => void) | null; hist: { fecha: string | null; texto: string }[] }
 type Pago = { id: number; monto: number; fecha: string; medio_pago: string | null; obra_id: number | null; presupuesto_id: number | null }
 
 type Props = {
@@ -28,17 +31,16 @@ type Props = {
   onCerrar: () => void
   onEditar: () => void
   onNuevaObra: () => void
+  // Presupuesto nuevo para este cliente (si el usuario puede hacer presupuestos).
+  onNuevoTrabajo?: () => void
   // Si no se pasan (el usuario no tiene acceso), las filas no son clickeables.
   onAbrirObra?: (id: number) => void
   onAbrirPresupuesto?: (id: number) => void
 }
 
-const claseEstadoObra = (e: string | null) =>
-  e === 'finalizada' ? 'fin' : e === 'observacion' ? 'pausa' : 'ejecucion'
-
-export default function ClienteFicha({ cliente, onCerrar, onEditar, onNuevaObra, onAbrirObra, onAbrirPresupuesto }: Props) {
-  const refObras = useRef<HTMLDivElement>(null)
-  const refPres = useRef<HTMLDivElement>(null)
+export default function ClienteFicha({ cliente, onCerrar, onEditar, onNuevaObra, onNuevoTrabajo, onAbrirObra, onAbrirPresupuesto }: Props) {
+  const refTrabajos = useRef<HTMLDivElement>(null)
+  const [historial, setHistorial] = useState<string | null>(null)
   const refCobros = useRef<HTMLDivElement>(null)
   const irA = (r: React.RefObject<HTMLDivElement | null>) => r.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   // Un cobro lleva a su obra (ahí están los cobros) o, si no tiene, a su presupuesto.
@@ -56,11 +58,14 @@ export default function ClienteFicha({ cliente, onCerrar, onEditar, onNuevaObra,
     async function cargar() {
       setCargando(true)
       const [o, p] = await Promise.all([
-        supabase.from('obras').select('id,nombre_obra,estado,porcentaje_avance').eq('cliente_id', cliente.id).order('created_at', { ascending: false }),
-        supabase.from('presupuestos').select('id,titulo,estado,total,total_pagado,saldo,fecha').eq('cliente_id', cliente.id).order('created_at', { ascending: false }),
+        supabase.from('obras').select('id,nombre_obra,estado,porcentaje_avance,activo,created_at').eq('cliente_id', cliente.id).order('created_at', { ascending: false }),
+        supabase.from('presupuestos').select('id,titulo,estado,total,total_pagado,saldo,fecha,obra_id,activo,created_at').eq('cliente_id', cliente.id).order('created_at', { ascending: false }),
       ])
+      // Fechas de envío y motivo de rechazo (si el SQL de esas fases no se corrió, se sigue sin eso).
+      const extra = await supabase.from('presupuestos').select('id,enviado_at,motivo_rechazo').eq('cliente_id', cliente.id)
+      const extras = new Map(((extra.error ? [] : extra.data ?? []) as { id: number; enviado_at: string | null; motivo_rechazo: string | null }[]).map((x) => [x.id, x]))
       const obrasData = (o.data ?? []) as Obra[]
-      const presData = ((p.data ?? []) as any[]).map((x) => ({ ...x, total: Number(x.total), total_pagado: Number(x.total_pagado), saldo: Number(x.saldo) })) as Presupuesto[]
+      const presData = ((p.data ?? []) as any[]).filter((x) => x.activo !== false).map((x) => ({ ...x, total: Number(x.total), total_pagado: Number(x.total_pagado), saldo: Number(x.saldo), enviado_at: extras.get(x.id)?.enviado_at ?? null, motivo_rechazo: extras.get(x.id)?.motivo_rechazo ?? null })) as Presupuesto[]
       setObras(obrasData)
       setPresupuestos(presData)
 
@@ -84,6 +89,39 @@ export default function ClienteFicha({ cliente, onCerrar, onEditar, onNuevaObra,
   const contratado = aceptados.reduce((s, p) => s + p.total, 0)
   const cobrado = pagos.reduce((s, p) => s + p.monto, 0)
   const saldo = Math.max(0, contratado - cobrado)
+
+  // ---------- Trabajos: presupuesto + obra, con un solo estado ----------
+  const trabajos: Trabajo[] = []
+  for (const p of presupuestos) {
+    const obra = p.obra_id != null ? obras.find((o) => o.id === p.obra_id) ?? null : null
+    const suyos = pagos.filter((pg) => pg.presupuesto_id === p.id || (p.estado === 'aceptado' && obra != null && pg.obra_id === obra.id && pg.presupuesto_id == null))
+    const cobradoP = suyos.reduce((sum, pg) => sum + pg.monto, 0)
+    const est = estadoTrabajo(p.estado, obra, Math.max(0, p.total - cobradoP))
+    const hist: Trabajo['hist'] = [{ fecha: p.created_at ?? p.fecha, texto: 'Armaste el presupuesto' }]
+    if (p.enviado_at) hist.push({ fecha: p.enviado_at, texto: 'Lo enviaste al cliente' })
+    if (p.estado === 'aceptado') hist.push({ fecha: null, texto: obra ? 'El cliente aceptó y se creó la obra' : 'El cliente aceptó (falta crear la obra)' })
+    if (p.estado === 'rechazado') hist.push({ fecha: null, texto: `No salió${p.motivo_rechazo ? `: ${p.motivo_rechazo}` : ''}` })
+    for (const pg of [...suyos].sort((a, b) => a.fecha.localeCompare(b.fecha))) hist.push({ fecha: pg.fecha, texto: `Cobro de ${moneda(pg.monto)}` })
+    if (obra && p.estado === 'aceptado') hist.push({ fecha: null, texto: est === 'obra' ? `Avance ${Number(obra.porcentaje_avance || 0)}%` : est === 'cobrado' ? 'Obra terminada y cobrada' : 'Obra terminada · falta cobrar' })
+    trabajos.push({
+      clave: `p-${p.id}`, titulo: p.titulo, estado: est, monto: p.total, hist,
+      extra: est === 'obra' && obra ? `${Number(obra.porcentaje_avance || 0)}%` : est === 'terminado' ? 'falta cobrar' : undefined,
+      abrir: p.estado === 'aceptado' && obra && onAbrirObra ? () => onAbrirObra(obra.id) : onAbrirPresupuesto ? () => onAbrirPresupuesto(p.id) : null,
+    })
+  }
+  // Obras que todavía no tienen ningún presupuesto: se están armando.
+  for (const o of obras) {
+    if (o.activo === false || presupuestos.some((p) => p.obra_id === o.id)) continue
+    const terminada = o.estado === 'finalizada' || o.estado === 'observacion' || Number(o.porcentaje_avance) >= 100
+    trabajos.push({
+      clave: `o-${o.id}`, titulo: o.nombre_obra, estado: terminada ? 'terminado' : 'armando', monto: null,
+      extra: terminada ? 'sin presupuesto' : 'falta el presupuesto',
+      hist: [{ fecha: o.created_at ?? null, texto: 'Creaste la obra' }],
+      abrir: onAbrirObra ? () => onAbrirObra(o.id) : null,
+    })
+  }
+  trabajos.sort((a, b) => ORDEN_TRABAJO.indexOf(a.estado) - ORDEN_TRABAJO.indexOf(b.estado))
+  const porEstado = ORDEN_TRABAJO.map((e) => [e, trabajos.filter((t) => t.estado === e).length] as const).filter(([, n]) => n > 0)
 
   const waNumero = numeroWhatsApp(cliente.telefono)
   const waLink = waNumero ? `https://wa.me/${waNumero}` : ''
@@ -118,40 +156,44 @@ export default function ClienteFicha({ cliente, onCerrar, onEditar, onNuevaObra,
           </div>
 
           <div className="fichaAcciones">
-            <button className="newButton" onClick={onNuevaObra} disabled={!cliente.activo}>+ Nueva obra</button>
+            {onNuevoTrabajo && <button className="newButton" onClick={onNuevoTrabajo} disabled={!cliente.activo}>＋ Nuevo trabajo</button>}
+            <button className={onNuevoTrabajo ? 'editButton' : 'newButton'} onClick={onNuevaObra} disabled={!cliente.activo}>+ Nueva obra</button>
             <button className="editButton" onClick={onEditar}>Editar cliente</button>
             {waLink && <a className="editButton" href={waLink} target="_blank" rel="noreferrer">WhatsApp</a>}
             {cliente.email && <a className="editButton" href={`mailto:${cliente.email}`}>Enviar email</a>}
           </div>
 
           <div className="fichaKpis">
-            <button type="button" onClick={() => irA(refObras)}><span>OBRAS</span><strong>{obras.length}</strong></button>
-            <button type="button" onClick={() => irA(refPres)}><span>CONTRATADO</span><strong>{moneda(contratado)}</strong></button>
+            <button type="button" onClick={() => irA(refTrabajos)}><span>TRABAJOS</span><strong>{trabajos.length}</strong></button>
+            <button type="button" onClick={() => irA(refTrabajos)}><span>CONTRATADO</span><strong>{moneda(contratado)}</strong></button>
             <button type="button" onClick={() => irA(refCobros)}><span>COBRADO</span><strong>{moneda(cobrado)}</strong></button>
-            <button type="button" className="alerta" onClick={() => irA(refPres)}><span>SALDO</span><strong>{moneda(saldo)}</strong></button>
+            <button type="button" className="alerta" onClick={() => irA(refTrabajos)}><span>SALDO</span><strong>{moneda(saldo)}</strong></button>
           </div>
 
           {cargando ? <p style={{ color: 'var(--mova-muted)' }}>Cargando información del cliente...</p> : (
             <div className="fichaRelaciones">
-              <div className="fichaRel" ref={refObras}>
-                <div className="fichaRelHead"><h3>Obras</h3><span>{obras.length}</span></div>
-                {obras.length === 0 ? <p className="fichaVacio">Sin obras.</p> : obras.map((o) => (
-                  <button type="button" className="fichaRow" key={o.id} disabled={!onAbrirObra} onClick={() => onAbrirObra?.(o.id)}>
-                    <div><strong>{o.nombre_obra}</strong><small>{Number(o.porcentaje_avance || 0)}% de avance</small></div>
-                    <em className={`fichaEstado ${claseEstadoObra(o.estado)}`}>{etiquetaObra(o.estado)}</em>
-                    {onAbrirObra && <b className="fichaIr" aria-hidden>›</b>}
-                  </button>
-                ))}
-              </div>
-
-              <div className="fichaRel" ref={refPres}>
-                <div className="fichaRelHead"><h3>Presupuestos</h3><span>{presupuestos.length}</span></div>
-                {presupuestos.length === 0 ? <p className="fichaVacio">Sin presupuestos.</p> : presupuestos.map((p) => (
-                  <button type="button" className="fichaRow" key={p.id} disabled={!onAbrirPresupuesto} onClick={() => onAbrirPresupuesto?.(p.id)}>
-                    <div><strong>{p.titulo}</strong><small>{fechaCorta(p.fecha)} · saldo {moneda(p.saldo)}</small></div>
-                    <em className={`fichaEstado ${p.estado === 'aceptado' ? 'fin' : p.estado === 'rechazado' ? 'pausa' : 'pendiente'}`}>{p.estado}</em>
-                    {onAbrirPresupuesto && <b className="fichaIr" aria-hidden>›</b>}
-                  </button>
+              <div className="fichaRel fichaTrabajos" ref={refTrabajos}>
+                <div className="fichaRelHead"><h3>Trabajos</h3><span>{trabajos.length}</span></div>
+                {porEstado.length > 0 && (
+                  <div className="fichaTrabResumen">{porEstado.map(([e, n]) => <span key={e} className={`pillTrab ${ESTADOS_TRABAJO[e].clase}`}>{n} {ESTADOS_TRABAJO[e].corto}</span>)}</div>
+                )}
+                {trabajos.length === 0 ? <p className="fichaVacio">Sin trabajos todavía.</p> : trabajos.map((t) => (
+                  <div className="fichaTrab" key={t.clave}>
+                    <button type="button" className="fichaTrabCab" disabled={!t.abrir} onClick={() => t.abrir?.()}>
+                      <span><strong>{t.titulo}</strong>{t.monto != null && <small>{moneda(t.monto)}</small>}</span>
+                      {t.abrir && <b className="fichaIr" aria-hidden>›</b>}
+                    </button>
+                    <VidaTrabajo estado={t.estado} />
+                    <div className="fichaTrabPie">
+                      <PillTrabajo estado={t.estado} extra={t.extra} />
+                      <button type="button" className="fichaHistBtn" aria-expanded={historial === t.clave} onClick={() => setHistorial((h) => (h === t.clave ? null : t.clave))}>🕑 Historial</button>
+                    </div>
+                    {historial === t.clave && (
+                      <ol className="fichaHist">
+                        {t.hist.map((h, i) => <li key={i}><em>{h.fecha ? fechaCorta(h.fecha.slice(0, 10)) : '·'}</em><span>{h.texto}</span></li>)}
+                      </ol>
+                    )}
+                  </div>
                 ))}
               </div>
 
