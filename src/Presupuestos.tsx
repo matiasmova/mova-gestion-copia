@@ -95,7 +95,8 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
   // Pedido del buscador general o del botón "+".
   useEffect(() => {
     if (!pedido) return
-    if (pedido.accion === 'nuevo') { abrirNuevo(); onPedidoAtendido?.() }
+    // Con obra (desde una obra sin presupuesto): el presupuesto nuevo ya viene con el cliente y la obra.
+    if (pedido.accion === 'nuevo') { abrirNuevo(pedido.id != null ? { cliente_id: pedido.clienteId ?? null, obra_id: pedido.id, items: [] } : null); onPedidoAtendido?.() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pedido])
 
@@ -188,7 +189,8 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
   }
   const nombreObra = (id: number | null) => (!id ? 'Sin obra asociada' : obras.find((o) => o.id === id)?.nombre_obra ?? 'Obra no encontrada')
 
-  function abrirNuevo() { setPresupuestoEditado(null); setMostrarFormulario(true) }
+  const [inicialNuevo, setInicialNuevo] = useState<{ cliente_id: number | null; obra_id: number; items: [] } | null>(null)
+  function abrirNuevo(inicial: { cliente_id: number | null; obra_id: number; items: [] } | null = null) { setInicialNuevo(inicial); setPresupuestoEditado(null); setMostrarFormulario(true) }
   function editar(p: PresupuestoCompleto) { setPresupuestoEditado(p); setMostrarFormulario(true); setFicha(null) }
   function cerrarFormulario() { setMostrarFormulario(false); setPresupuestoEditado(null) }
   async function guardado() { cerrarFormulario(); avisoGuardado('Presupuesto guardado'); await cargarDatos() }
@@ -349,7 +351,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
           <h2>Presupuestos</h2>
           <p className="welcome">Propuestas, trabajos y seguimiento de pagos</p>
         </div>
-        <button className="newButton" onClick={abrirNuevo}>+ Nuevo presupuesto</button>
+        <button className="newButton" onClick={() => abrirNuevo()}>+ Nuevo presupuesto</button>
       </div>}
 
       {!cargando && !error && grupo !== 'rechazados' && (
@@ -453,7 +455,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
       )}
 
       {mostrarFormulario && (
-        <NuevoPresupuesto clientes={clientes} obras={obras} presupuesto={presupuestoEditado} onCancelar={cerrarFormulario} onGuardado={guardado} />
+        <NuevoPresupuesto clientes={clientes} obras={obras} presupuesto={presupuestoEditado} inicial={presupuestoEditado ? undefined : inicialNuevo ?? undefined} onCancelar={cerrarFormulario} onGuardado={guardado} />
       )}
       {pdfPresupuesto && (
         <PresupuestoPDF presupuesto={pdfPresupuesto} cliente={nombreCliente(pdfPresupuesto.cliente_id)} obra={nombreObra(pdfPresupuesto.obra_id)} onCerrar={() => setPdfPresupuesto(null)} />

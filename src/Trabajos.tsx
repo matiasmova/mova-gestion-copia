@@ -117,6 +117,7 @@ export default function Trabajos({ tabInicial, verPresupuestos, conIA, obraAbrir
           obraAbrirId={obraPedida ?? obraAbrirId}
           onObraAbierta={() => { setObraPedida(null); onObraAbierta() }}
           onVerPresupuesto={verPresupuestos ? (id) => { setPresupuestoPedido(id); setTab('por_cerrar') } : undefined}
+          onNuevoPresupuesto={verPresupuestos ? (o) => { setTab('por_cerrar'); setNuevo({ accion: 'nuevo', id: o.id, clienteId: o.cliente_id, n: Date.now() }) } : undefined}
         />
       )}
     </div>

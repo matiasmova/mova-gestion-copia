@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from './supabase'
 import {
@@ -81,7 +81,7 @@ type Props = {
   obras: ObraOpcion[]
   presupuesto?: PresupuestoEditable | null
   // Presupuesto nuevo con datos ya cargados (por ejemplo, desde un relevamiento).
-  inicial?: { cliente_id?: number | null; titulo?: string; descripcion?: string; notas?: string; items: ItemPresupuesto[] }
+  inicial?: { cliente_id?: number | null; obra_id?: number | null; titulo?: string; descripcion?: string; notas?: string; items: ItemPresupuesto[] }
   onGuardado: (presupuestoId?: number) => void
   onCancelar: () => void
 }
@@ -94,6 +94,17 @@ const itemVacio: ItemPresupuesto = {
   precio_unitario: 0,
   costo_unitario: 0,
   descuento_pct: 0,
+}
+
+type BorradorLocal = {
+  clienteId: string; obraId: string; titulo: string; descripcion: string; fecha: string; validezDias: number; estado: string
+  descuento: number; descuentoTipo: 'monto' | 'porcentaje'; notas: string; items: ItemPresupuesto[]; at: string
+}
+function leerBorrador(clave: string): BorradorLocal | null {
+  try {
+    const b = JSON.parse(localStorage.getItem(clave) ?? 'null') as BorradorLocal | null
+    return b && Array.isArray(b.items) ? b : null
+  } catch { return null }
 }
 
 // Título automático a partir de las soluciones elegidas.
@@ -111,7 +122,7 @@ function NuevoPresupuesto({
     presupuesto?.cliente_id.toString() ?? (inicial?.cliente_id ? String(inicial.cliente_id) : ''),
   )
   const [obraId, setObraId] = useState(
-    presupuesto?.obra_id?.toString() ?? '',
+    presupuesto?.obra_id?.toString() ?? (inicial?.obra_id ? String(inicial.obra_id) : ''),
   )
   // Clientes y obras creados desde acá se suman a la lista sin salir del presupuesto.
   const [clientesLista, setClientesLista] = useState<ClienteOpcion[]>(clientes)
@@ -163,6 +174,45 @@ function NuevoPresupuesto({
       ? presupuesto.items
       : inicial?.items.length ? inicial.items : [{ ...itemVacio }],
   )
+
+  // ---- Borrador automático en este equipo ----
+  // Lo que se va cargando se guarda solo; si se cierra sin guardar (o se corta),
+  // al volver a abrir se ofrece recuperarlo.
+  const claveBorrador = `mova_borrador_presupuesto_${presupuesto?.id ?? 'nuevo'}`
+  const [borradorLocal] = useState<BorradorLocal | null>(() => leerBorrador(claveBorrador))
+  const [ofrecerBorrador, setOfrecerBorrador] = useState(() => !!borradorLocal)
+  const [tocado, setTocado] = useState(false)
+  const primeraVez = useRef(true)
+  const hayContenido = !!titulo.trim() || items.some((it) => it.descripcion.trim())
+  useEffect(() => {
+    if (primeraVez.current) { primeraVez.current = false; return }
+    setTocado(true)
+    // Mientras se ofrece el borrador anterior, no se lo pisa.
+    if (ofrecerBorrador || !hayContenido) return
+    const t = setTimeout(() => {
+      const b: BorradorLocal = { clienteId, obraId, titulo, descripcion, fecha, validezDias, estado, descuento, descuentoTipo, notas, items, at: new Date().toISOString() }
+      try { localStorage.setItem(claveBorrador, JSON.stringify(b)) } catch { /* sin almacenamiento */ }
+    }, 500)
+    return () => clearTimeout(t)
+  }, [clienteId, obraId, titulo, descripcion, fecha, validezDias, estado, descuento, descuentoTipo, notas, items]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function recuperarBorrador() {
+    const b = borradorLocal
+    if (!b) return
+    setClienteId(b.clienteId); setObraId(b.obraId); setTitulo(b.titulo); setTituloManual(true)
+    setDescripcion(b.descripcion); setFecha(b.fecha); setValidezDias(b.validezDias); setEstado(b.estado)
+    setDescuento(b.descuento); setDescuentoTipo(b.descuentoTipo); setNotas(b.notas)
+    setItems(b.items.length ? b.items : [{ ...itemVacio }])
+    setOfrecerBorrador(false)
+  }
+  function descartarBorrador() {
+    try { localStorage.removeItem(claveBorrador) } catch { /* sin almacenamiento */ }
+    setOfrecerBorrador(false)
+  }
+  function cancelar() {
+    if (tocado && hayContenido && !window.confirm('Todavía no guardaste este presupuesto.\n\n¿Cerrar igual? Lo cargado queda guardado en este equipo y te lo ofrezco la próxima vez que abras un presupuesto.')) return
+    onCancelar()
+  }
   const [catalogo, setCatalogo] = useState<ProductoServicio[]>([])
   const [cargandoCatalogo, setCargandoCatalogo] = useState(true)
   const [guardando, setGuardando] = useState(false)
@@ -556,6 +606,7 @@ function NuevoPresupuesto({
     }
 
     setGuardando(false)
+    try { localStorage.removeItem(claveBorrador) } catch { /* sin almacenamiento */ }
     onGuardado(presupuestoId)
   }
 
@@ -584,7 +635,7 @@ function NuevoPresupuesto({
           <button
             type="button"
             className="modalClose"
-            onClick={onCancelar}
+            onClick={cancelar}
           >
             ×
           </button>
@@ -622,6 +673,15 @@ function NuevoPresupuesto({
         {mercado && <CompararMercado titulo={titulo.trim() || 'Este presupuesto'} productos={mercado} total={total} onCerrar={() => setMercado(null)} />}
 
         <form className="presupuestoForm" onSubmit={guardar}>
+          {ofrecerBorrador && borradorLocal && (
+            <div className="borradorAviso" role="status">
+              <span>💾 Tenés un presupuesto sin guardar{borradorLocal.titulo.trim() ? <> (<b>{borradorLocal.titulo.trim()}</b>)</> : ''}, del {new Date(borradorLocal.at).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+              <div>
+                <button type="button" className="newButton" onClick={recuperarBorrador}>Recuperarlo</button>
+                <button type="button" className="cancelButton" onClick={descartarBorrador}>Descartar</button>
+              </div>
+            </div>
+          )}
           <div className={`iaArmar ${iaAbierta ? 'abierto' : ''}`}>
             <button type="button" className="iaArmarTit" onClick={() => setIaAbierta((v) => !v)}>
               <span>✨ Armar con IA</span><small>{iaAbierta ? 'Contá lo que pide el cliente (o sumá una foto o plano) y la IA arma los ítems' : 'Tocá para armar ítems desde una descripción'}</small><b>{iaAbierta ? '▲' : '▼'}</b>
@@ -1014,7 +1074,7 @@ function NuevoPresupuesto({
             <button
               type="button"
               className="cancelButton"
-              onClick={onCancelar}
+              onClick={cancelar}
             >
               Cancelar
             </button>
