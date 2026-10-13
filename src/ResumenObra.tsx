@@ -34,6 +34,8 @@ type Props = {
   cargandoCuenta: boolean
   dinero: (n: number) => string
   onIr: (tab: TabSeguimiento) => void
+  // Sin presupuesto aceptado: seguir el que está en borrador o armar uno nuevo.
+  presupuestoSinAceptar?: { texto: string; abrir: () => void } | null
   // Presupuesto aceptado de la obra (tarjeta con totales y accesos al documento).
   presupuesto?: { id: number; titulo: string } | null
   // Botón del cuadro "A pagar hoy".
@@ -54,7 +56,7 @@ type Datos = {
   extraNoPagado: number // gastos extra que adelantaste y el cliente todavía no devolvió
 }
 
-type Pendiente = { tono: 'alerta' | 'info'; texto: string; tab?: TabSeguimiento }
+type Pendiente = { tono: 'alerta' | 'info'; texto: string; tab?: TabSeguimiento; accion?: () => void }
 
 const VERDE = '#1f7a4d'
 const NARANJA = '#e47b00'
@@ -165,7 +167,7 @@ function Cuadro({ icono, titulo, estado, alerta, ancho, onClick }: { icono: stri
   </button>
 }
 
-export default function ResumenObra({ obraId, estado, avance, avances, cargandoAvances, tienePresupuesto, cuenta, cargandoCuenta, dinero, onIr, presupuesto, onRegistrarCobro }: Props) {
+export default function ResumenObra({ obraId, estado, avance, avances, cargandoAvances, tienePresupuesto, cuenta, cargandoCuenta, dinero, onIr, presupuesto, onRegistrarCobro, presupuestoSinAceptar }: Props) {
   const [datos, setDatos] = useState<Datos | null>(null)
 
   useEffect(() => {
@@ -181,7 +183,7 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
 
   // ---------- Qué falta ----------
   const pendientes: Pendiente[] = []
-  if (!tienePresupuesto) pendientes.push({ tono: 'alerta', texto: 'La obra no tiene un presupuesto aceptado vinculado.' })
+  if (!tienePresupuesto) pendientes.push({ tono: 'alerta', texto: presupuestoSinAceptar?.texto ?? 'La obra no tiene un presupuesto aceptado vinculado.', accion: presupuestoSinAceptar?.abrir })
   // A hoy: lo de la obra según el avance + los gastos a reintegrar sin devolver.
   const aCobrarHoy = cuenta ? Math.max(0, cuenta.pendienteHoy) + Math.max(0, cuenta.gastoExtraPendiente) : 0
   if (cuenta && aCobrarHoy > 0.5) pendientes.push({ tono: 'alerta', texto: cuenta.gastoExtraPendiente > 0.5 && cuenta.pendienteHoy > 0.5 ? `Falta cobrar ${dinero(aCobrarHoy)} a hoy (obra ${dinero(cuenta.pendienteHoy)} + gastos a reintegrar ${dinero(cuenta.gastoExtraPendiente)}).` : `Falta cobrar ${dinero(aCobrarHoy)} a hoy.`, tab: 'finanzas' })
@@ -230,9 +232,9 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
         <div className="orFaltaCab"><b>Qué falta</b>{nAvisos.length > 0 && <span>{nAvisos.length}</span>}</div>
         {pendientes.map((p, i) => {
           const urgente = p.tab === 'finanzas' && p.tono === 'alerta'
-          const contenido = <><i className={urgente ? 'urg' : p.tono} aria-hidden /><span>{p.texto}</span>{p.tab && <em aria-hidden>›</em>}</>
-          return p.tab
-            ? <button key={i} type="button" className="orFaltaItem" onClick={() => onIr(p.tab!)}>{contenido}</button>
+          const contenido = <><i className={urgente ? 'urg' : p.tono} aria-hidden /><span>{p.texto}</span>{(p.tab || p.accion) && <em aria-hidden>›</em>}</>
+          return p.accion || p.tab
+            ? <button key={i} type="button" className="orFaltaItem" onClick={() => (p.accion ? p.accion() : onIr(p.tab!))}>{contenido}</button>
             : <div key={i} className="orFaltaItem">{contenido}</div>
         })}
       </div>

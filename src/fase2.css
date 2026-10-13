@@ -2104,3 +2104,10 @@ button.orFaltaItem:focus-visible{outline:2px solid #1f9d5c;outline-offset:1px}
 .agregarItemAbajo:hover{border-color:var(--mova-orange,#de7015);background:#fff8f0}
 .agregarItemAbajo:active{transform:scale(.99)}
 .agregarItemAbajo:focus-visible{outline:2px solid var(--mova-orange,#de7015);outline-offset:2px}
+
+/* Aviso "Tenés un presupuesto sin guardar" */
+.borradorAviso{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:0 0 14px;padding:12px 14px;border-radius:14px;background:#fff3e6;border:1px solid #f3d3b4;font-size:14px;color:#14181e;animation:movEntra .25s ease both}
+.borradorAviso span{flex:1 1 240px;min-width:0;line-height:1.4}
+.borradorAviso>div{display:flex;gap:8px}
+.borradorAviso button{padding:9px 14px}
+@media (prefers-reduced-motion:reduce){.borradorAviso{animation:none}}
