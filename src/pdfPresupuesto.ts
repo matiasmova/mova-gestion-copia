@@ -492,50 +492,48 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
   const xImp = M + CW - 4
   const xDescr = M + 30
   const anchoDescr = CW - 30 - 120
-  lugar(60)
+  const resumido = d.resumenDoc?.modo === 'resumido' ? d.resumenDoc : null
+  // El título va con el comienzo del detalle (en el resumido, con su primer texto).
+  lugar(resumido ? 170 : 60)
   titulo(estado ? 'Presupuesto aceptado' : 'Detalle del presupuesto')
   let numero = 0
   let sumaNeta = 0
   let sumaBruta = 0
-  const resumido = d.resumenDoc?.modo === 'resumido' ? d.resumenDoc : null
   for (const g of agruparPorTipo(d.items)) {
     lugar(44)
     if (resumido) {
       // Resumido: un texto por parte, sin precio por ítem; el total de la sección si se eligió.
       for (const it of g.items) { sumaNeta += importeNeto(it); sumaBruta += importeBruto(it) }
+      const partes = partesConItems(resumido, g.clave, g.items, d.items).filter((p) => p.items.length)
+      const armar = (p: (typeof partes)[number]) => ({
+        tit: partes.length > 1 && p.nombre.trim() ? partir(p.nombre.trim(), F_TIT, CW - 8, bold) : [],
+        parrafos: p.texto.trim() ? p.texto.trim().split(/\n+/).flatMap((par) => partir(par, F_TXT, CW - 8)) : [],
+        incluye: incluyeDe(p, resumido).map((t) => partir(t, F_TXT - 0.5, CW - 30)),
+      })
+      // El título de la sección no queda solo al pie de la hoja: va con el comienzo de su texto.
+      const primera = partes[0] ? armar(partes[0]) : null
+      lugar(30 + (primera ? primera.tit.length * 15 + Math.min(primera.parrafos.length, 3) * 14 + (primera.incluye.length ? 30 : 0) : 0))
       espaciado(g.titulo.toUpperCase(), M + 2, y, F_MINI, NARANJA)
       if (resumido.subtotales) derecha(moneda(totalItems(g.items)), xImp, y - 1, F_NORMAL + 0.5, bold, OSCURO)
       y -= 8
       linea(M, y, M + CW, 0.6, LINEA_SUAVE)
       y -= 16
-      const partes = partesConItems(resumido, g.clave, g.items, d.items).filter((p) => p.items.length)
       for (const p of partes) {
-        const tit = partes.length > 1 && p.nombre.trim() ? partir(p.nombre.trim(), F_TIT, CW - 8, bold) : []
-        const parrafos = p.texto.trim() ? p.texto.trim().split(/\n+/).flatMap((par) => partir(par, F_TXT, CW - 8)) : []
-        const incluye = incluyeDe(p, resumido)
-        // Chips de "Incluye", acomodados en renglones.
-        const filas: { t: string; w: number }[][] = [[]]
-        let anchoFila = 0
-        for (const t of incluye) {
-          const w = ancho(t, F_CHICO) + 14
-          if (anchoFila + w > CW - 8 && filas[filas.length - 1].length) { filas.push([]); anchoFila = 0 }
-          filas[filas.length - 1].push({ t, w }); anchoFila += w + 5
-        }
-        const altoChips = incluye.length ? filas.length * 15 + 4 : 0
-        lugar(tit.length * 15 + Math.min(parrafos.length, 4) * 14 + altoChips + 10)
+        const { tit, parrafos, incluye } = armar(p)
+        lugar(tit.length * 15 + Math.min(parrafos.length, 3) * 14 + 10)
         for (const r of tit) { texto(r, M + 2, y, F_TIT, bold, OSCURO); y -= 15 }
         for (const r of parrafos) { lugar(14); texto(r, M + 2, y, F_TXT, font, TEXTO); y -= 14 }
+        // "Incluye": uno abajo del otro, con un tilde verde.
         if (incluye.length) {
-          y -= 2
-          for (const fila of filas) {
-            lugar(15)
-            let x = M + 2
-            for (const c of fila) {
-              caja(x, y + 8.5, c.w, 12, { fondo: LINEA_SUAVE, r: 6 })
-              texto(c.t, x + 7, y, F_CHICO, font, OSCURO)
-              x += c.w + 5
-            }
-            y -= 15
+          y -= 4
+          lugar(14 + incluye[0].length * 13)
+          espaciado('INCLUYE', M + 2, y, F_MINI, GRIS)
+          y -= 15
+          for (const renglones of incluye) {
+            lugar(renglones.length * 13 + 4)
+            icono(M + 8, y + 3, 'ok', 5)
+            renglones.forEach((r) => { texto(r, M + 20, y, F_TXT - 0.5, font, OSCURO); y -= 13 })
+            y -= 3
           }
         }
         y -= 10

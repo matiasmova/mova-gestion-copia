@@ -367,8 +367,11 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
                   {partes.length > 1 && p.nombre.trim() && <strong style={{ display: 'block', color: OSCURO }}>{p.nombre}</strong>}
                   {p.texto.trim() && <div style={{ whiteSpace: 'pre-line', lineHeight: 1.55 }}>{p.texto.trim()}</div>}
                   {incluyeDe(p, resumido).length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '6px' }}>
-                      {incluyeDe(p, resumido).map((t, i) => <span key={i} style={{ background: LINEA_SUAVE, color: OSCURO, borderRadius: '999px', padding: '2px 9px', fontSize: '11.5px' }}>{t}</span>)}
+                    <div style={{ marginTop: '8px' }}>
+                      <div style={s.et}>Incluye</div>
+                      <ul style={{ listStyle: 'none', margin: '4px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {incluyeDe(p, resumido).map((t, i) => <li key={i} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', color: OSCURO, fontSize: '13px' }}><Icono estado="ok" tam={14} /><span>{t}</span></li>)}
+                      </ul>
                     </div>
                   )}
                 </div>
