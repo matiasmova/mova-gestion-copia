@@ -17,6 +17,7 @@ import NuevoCliente from './NuevoCliente'
 import { configActual } from './config'
 import NuevaObra from './NuevaObra'
 import CampoNumero from './CampoNumero'
+import BuscadorCatalogo from './BuscadorCatalogo'
 import { MEDIOS_PAGO, cargarFormasPago, guardarFormasPago, normalizarFormas, type FormasPago } from './formasPago'
 
 export type ClienteOpcion = {
@@ -813,28 +814,15 @@ function NuevoPresupuesto({
                   <strong>{formatoDinero(pctItem(item) > 0 ? importeNeto(item) : importeBruto(item))}</strong>
                   <button type="button" onClick={() => eliminarItem(indice)} aria-label={`Eliminar ítem ${indice + 1}`}>Quitar</button>
                 </div>
-                <label className="itemCampo itemCatalogo">
+                <div className="itemCampo itemCatalogo">
                   <span>Producto o servicio</span>
-                  <select
-                    value={item.catalogo_id ?? ''}
-                    onChange={(evento) =>
-                      seleccionarDelCatalogo(indice, evento.target.value)
-                    }
-                    disabled={cargandoCatalogo}
-                  >
-                    <option value="">
-                      {cargandoCatalogo
-                        ? 'Cargando lista...'
-                        : 'Carga manual'}
-                    </option>
-
-                    {catalogo.map((producto) => (
-                      <option key={producto.id} value={producto.id}>
-                        {producto.nombre}{producto.nombre_presupuesto ? ` → "${producto.nombre_presupuesto}"` : ''} ({producto.unidad})
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  <BuscadorCatalogo
+                    catalogo={catalogo}
+                    valor={item.catalogo_id}
+                    cargando={cargandoCatalogo}
+                    onElegir={(id) => seleccionarDelCatalogo(indice, id)}
+                  />
+                </div>
 
                 <label className="itemCampo itemTipo">
                   <span>Tipo</span>
