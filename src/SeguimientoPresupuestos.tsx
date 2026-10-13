@@ -57,7 +57,7 @@ export function motivoSeguimiento(p: PresupuestoSeguimiento, diasSeguir: number)
 
 export default function SeguimientoPresupuestos({ presupuestos, nombreCliente, telefonoCliente, onAbrir, onSeguido, onRechazar }: Props) {
   const [dias, setDias] = useState(leerDias)
-  const [abierto, setAbierto] = useState(true)
+  const [abierto, setAbierto] = useState(false)
 
   const pendientes = useMemo(() => presupuestos
     .map((p) => ({ p, m: motivoSeguimiento(p, dias) }))
@@ -88,45 +88,49 @@ export default function SeguimientoPresupuestos({ presupuestos, nombreCliente, t
     onSeguido(p.id)
   }
 
+  const borradores = presupuestos.filter((p) => p.estado === 'borrador').length
+
   return (
     <section className="sgWrap">
-      <div className="sgKpis">
-        <div><span>Tasa de cierre</span><strong>{cierre.pct == null ? '—' : `${cierre.pct}%`}</strong><small>{cierre.aceptados} aceptado{cierre.aceptados === 1 ? '' : 's'} de {cierre.total} enviados (6 meses)</small></div>
-        <div><span>Vendido</span><strong>{moneda(cierre.montoAcept)}</strong><small>de {moneda(cierre.montoTotal)} presupuestado</small></div>
-        <div><span>En juego</span><strong>{moneda(cierre.enJuego)}</strong><small>{cierre.cantJuego} enviado{cierre.cantJuego === 1 ? '' : 's'} esperando respuesta</small></div>
-        <button type="button" className={pendientes.length ? 'alerta' : ''} onClick={() => setAbierto((v) => !v)}>
-          <span>Para seguir</span><strong>{pendientes.length}</strong><small>{abierto ? 'Ocultar lista ▲' : 'Ver lista ▼'}</small>
-        </button>
-      </div>
-
+      {/* Una sola línea de resumen; al tocarla se ven los números. */}
+      <button type="button" className={`trbResumen${abierto ? ' abierto' : ''}`} aria-expanded={abierto} onClick={() => setAbierto((v) => !v)}>
+        <span>📊 <b>{cierre.pct == null ? '—' : `${cierre.pct}%`}</b> cerrados · vendido <b>{moneda(cierre.montoAcept)}</b></span>
+        <i className="trbFlecha">›</i>
+      </button>
       {abierto && (
-        <div className="sgLista">
-          <div className="sgHead">
-            <h3>📞 Seguimiento</h3>
-            <label>Avisar después de
-              <select value={dias} onChange={(e) => cambiarDias(Number(e.target.value))}>
-                {[3, 5, 7, 10, 15].map((d) => <option key={d} value={d}>{d} días</option>)}
-              </select>
-              sin respuesta
-            </label>
-          </div>
-          {pendientes.length === 0
-            ? <p className="sgVacio">✓ Todo al día: no hay presupuestos esperando seguimiento.</p>
-            : pendientes.map(({ p, m }) => (
-              <div className="sgFila" key={p.id}>
-                <span className={`sgMotivo ${m.tipo}`}>{m.texto}</span>
-                <button type="button" className="sgInfo" onClick={() => onAbrir(p.id)}>
-                  <strong>{p.titulo}</strong>
-                  <small>{nombreCliente(p.cliente_id)} · {moneda(p.total)}{p.seguimiento_at ? ` · último contacto ${fechaCorta(p.seguimiento_at)}` : ''}</small>
-                </button>
-                <div className="sgAcciones">
-                  {p.estado === 'enviado' && <button type="button" className="sgWa" onClick={() => whatsapp(p, m)} title={telefonoCliente(p.cliente_id) ? 'Escribirle por WhatsApp' : 'El cliente no tiene teléfono: elegís el contacto en WhatsApp'}>💬 WhatsApp</button>}
-                  {p.estado === 'enviado' && <button type="button" className="editButton" onClick={() => onSeguido(p.id)} title="Ya lo contacté por otro medio">✓ Ya lo seguí</button>}
-                  {m.tipo === 'vencido' && <button type="button" className="deactivateButton" onClick={() => onRechazar(p.id)} title="Pasarlo a Rechazado">✕ No va</button>}
-                  {p.estado === 'borrador' && <button type="button" className="editButton" onClick={() => onAbrir(p.id)}>Abrir</button>}
-                </div>
-              </div>
-            ))}
+        <div className="trbNumeros">
+          <div><small>TASA DE CIERRE</small><b>{cierre.pct == null ? '—' : `${cierre.pct}%`}</b><span>{cierre.aceptados} de {cierre.total} enviados (6 meses)</span></div>
+          <div><small>VENDIDO</small><b>{moneda(cierre.montoAcept)}</b><span>de {moneda(cierre.montoTotal)} presupuestado</span></div>
+          <div><small>EN JUEGO</small><b>{moneda(cierre.enJuego)}</b><span>{cierre.cantJuego} esperando respuesta</span></div>
+          <div><small>BORRADORES</small><b>{borradores}</b><span>sin enviar</span></div>
+          <label className="trbDias">Avisar después de
+            <select value={dias} onChange={(e) => cambiarDias(Number(e.target.value))}>
+              {[3, 5, 7, 10, 15].map((d) => <option key={d} value={d}>{d} días</option>)}
+            </select>
+            sin respuesta
+          </label>
+        </div>
+      )}
+
+      {/* Para hacer hoy: lo que necesita una acción, con un botón cada uno. */}
+      {pendientes.length > 0 && (
+        <div className="trbHacer">
+          <h3>🔥 Para hacer hoy <span>{pendientes.length}</span></h3>
+          {pendientes.map(({ p, m }) => (
+            <div className="trbTarea" key={p.id}>
+              <i aria-hidden="true" />
+              <button type="button" className="trbTareaInfo" onClick={() => onAbrir(p.id)}>
+                <b>{p.titulo}</b>
+                <small>{m.texto} · {nombreCliente(p.cliente_id)} · {moneda(p.total)}</small>
+              </button>
+              {p.estado === 'enviado'
+                ? <>
+                  <button type="button" className="trbMini wa" onClick={() => whatsapp(p, m)} title={telefonoCliente(p.cliente_id) ? 'Escribirle por WhatsApp' : 'El cliente no tiene teléfono: elegís el contacto en WhatsApp'}>💬 Seguir</button>
+                  <button type="button" className="trbMini cl" onClick={() => (m.tipo === 'vencido' ? onRechazar(p.id) : onSeguido(p.id))} title={m.tipo === 'vencido' ? 'Pasarlo a Rechazado' : 'Ya lo contacté por otro medio'}>{m.tipo === 'vencido' ? '✕' : '✓'}</button>
+                </>
+                : <button type="button" className="trbMini osc" onClick={() => onAbrir(p.id)}>📤 Enviar</button>}
+            </div>
+          ))}
         </div>
       )}
     </section>

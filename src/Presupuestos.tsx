@@ -22,6 +22,7 @@ import { confirmarEliminacion } from './confirmar'
 import SeguimientoPresupuestos from './SeguimientoPresupuestos'
 import { etiquetaEtapa, type ObraEtapa } from './VidaEtapas'
 import { codigoPresupuesto } from './codigoPresupuesto'
+import { linkWhatsApp, mensajeSeguimientoPresupuesto } from './whatsapp'
 
 type PresupuestoCompleto = PresupuestoEditable & {
   created_at: string
@@ -52,7 +53,7 @@ export type GrupoPresupuestos = 'por_cerrar' | 'rechazados'
 const enGrupo = (p: { estado: string; obra_id: number | null }, g?: GrupoPresupuestos) =>
   !g ? true : g === 'rechazados' ? p.estado === 'rechazado' : p.estado === 'borrador' || p.estado === 'enviado' || (p.estado === 'aceptado' && p.obra_id == null)
 
-function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedidoAtendido, onAbrirObra, grupo, embebido = false }: { presupuestoAbrirId?: number | null; onPresupuestoAbierto?: () => void; pedido?: Pedido | null; onPedidoAtendido?: () => void; onAbrirObra?: (obraId: number) => void; grupo?: GrupoPresupuestos; embebido?: boolean } = {}) {
+function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedidoAtendido, onAbrirObra, grupo, embebido = false, busquedaExterna }: { busquedaExterna?: string; presupuestoAbrirId?: number | null; onPresupuestoAbierto?: () => void; pedido?: Pedido | null; onPedidoAtendido?: () => void; onAbrirObra?: (obraId: number) => void; grupo?: GrupoPresupuestos; embebido?: boolean } = {}) {
   const [presupuestos, setPresupuestos] = useState<PresupuestoCompleto[]>([])
   const [clientes, setClientes] = useState<ClienteOpcion[]>([])
   const [obras, setObras] = useState<ObraOpcion[]>([])
@@ -167,8 +168,10 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
     return cargados
   }
 
+  // Dentro de Trabajos, la búsqueda viene de la lupa de arriba.
+  const textoBuscado = busquedaExterna ?? busqueda
   const filtrados = useMemo(() => {
-    const texto = busqueda.trim().toLowerCase()
+    const texto = textoBuscado.trim().toLowerCase()
     return presupuestos.filter((p) => {
       const cli = clientes.find((c) => c.id === p.cliente_id)
       const ob = obras.find((o) => o.id === p.obra_id)
@@ -177,7 +180,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
       const coincideEstado = estadoFiltro === 'todos' || p.estado === estadoFiltro
       return coincide && coincideEstado && enGrupo(p, grupo)
     })
-  }, [presupuestos, clientes, obras, busqueda, estadoFiltro, grupo])
+  }, [presupuestos, clientes, obras, textoBuscado, estadoFiltro, grupo])
 
   const nombreCliente = (id: number) => {
     const c = clientes.find((x) => x.id === id)
@@ -319,6 +322,16 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
     await cargarDatos()
   }
 
+  // "💬 Seguir" de la tarjeta: WhatsApp con el mensaje de seguimiento y queda anotado.
+  function seguirPorWhatsApp(p: PresupuestoCompleto) {
+    const validez = Number(p.validez_dias) || 0
+    const vencido = validez > 0 && Date.now() - new Date(`${p.fecha.slice(0, 10)}T00:00:00`).getTime() > validez * 86400000
+    const texto = mensajeSeguimientoPresupuesto({ cliente: nombreCliente(p.cliente_id), titulo: p.titulo, codigo: codigoPresupuesto(p.id), fecha: fechaCorta(p.enviado_at || p.fecha), vencido })
+    const url = linkWhatsApp(telefonos[p.cliente_id] ?? null, texto)
+    if (url) window.open(url, '_blank', 'noopener')
+    void marcarSeguido(p.id)
+  }
+
   // Un presupuesto aceptado con obra se maneja desde la obra (un solo lugar).
   const abrirFicha = (p: PresupuestoCompleto) => {
     if (p.estado === 'aceptado' && p.obra_id != null && onAbrirObra) onAbrirObra(p.obra_id)
@@ -348,12 +361,12 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
       )}
       {faltaSqlSeguimiento && !cargando && <p className="gestionAyuda">Para recordar cuándo se envió y cuándo hiciste el último seguimiento, corré el SQL de Seguimiento (fase 17) en Supabase.</p>}
 
-      <div className="crmToolbar">
-        <div className="crmFiltros">
+      {(busquedaExterna == null || !esMovil) && <div className="crmToolbar">
+        {busquedaExterna == null && <div className="crmFiltros">
           <input type="search" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar por título, cliente u obra..." />
-        </div>
+        </div>}
         {!esMovil && <VistaToggle vista={vista} onCambio={setVista} />}
-      </div>
+      </div>}
       {grupo !== 'rechazados' && <div className="presuChips" role="tablist" aria-label="Etapas">
         {(grupo === 'por_cerrar'
           ? [['todos', 'Todos'], ['borrador', '📝 Borradores'], ['enviado', '📤 Enviados']]
@@ -373,16 +386,24 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
       )}
 
       {!cargando && !error && filtrados.length > 0 && esMovil && (
-        <div className="presuListaMovil">
+        <div className="trbLista">
           {filtrados.map((p) => {
             const et = etiquetaEtapa(p, p.obra_id != null ? obrasEtapa[p.obra_id] : null, p.saldo)
+            // Una sola acción por tarjeta: enviar el borrador o seguir al cliente.
+            const accion = p.estado === 'borrador'
+              ? <button type="button" className="trbMini osc" onClick={(e) => { e.stopPropagation(); abrirFicha(p) }}>📤 Enviar</button>
+              : p.estado === 'enviado'
+                ? <button type="button" className="trbMini wa" onClick={(e) => { e.stopPropagation(); seguirPorWhatsApp(p) }}>💬 Seguir</button>
+                : <button type="button" className="trbMini cl" onClick={(e) => { e.stopPropagation(); abrirFicha(p) }}>Abrir</button>
             return (
-              <button type="button" className="presuItem" key={p.id} onClick={() => abrirFicha(p)}>
-                <div className="presuItemTop"><span>{codigoPresupuesto(p.id)}{(p.version ?? 1) > 1 ? ` · v${p.version}` : ''} · {fechaCorta(p.fecha)}</span><span className={`presuEtapa ${et.clase}`}>{et.texto}</span></div>
-                <strong>{p.titulo}</strong>
-                {et.avance != null && <div className={`presuEtapaBarra ${et.clase.includes('et-encurso') ? 'encurso' : ''}`}><i style={{ width: `${et.avance}%` }} /></div>}
-                <div className="presuItemBot"><span>{nombreCliente(p.cliente_id)}</span><b>{moneda(p.total + p.ajustes)}</b></div>
-              </button>
+              <div role="button" tabIndex={0} className="trbCard" key={p.id} onClick={() => abrirFicha(p)} onKeyDown={(e) => { if (e.key === 'Enter') abrirFicha(p) }}>
+                <div className="trbFila1">
+                  <div><b>{p.titulo}</b><small>{nombreCliente(p.cliente_id)} · {codigoPresupuesto(p.id)}{(p.version ?? 1) > 1 ? ` · v${p.version}` : ''}</small></div>
+                  <span className="trbMonto">{moneda(p.total + p.ajustes)}</span>
+                </div>
+                {et.avance != null && <div className="trbBarra"><i style={{ width: `${et.avance}%` }} /></div>}
+                <div className="trbFila2"><span className={`presuEtapa ${et.clase}`}>{et.texto}</span>{accion}</div>
+              </div>
             )
           })}
         </div>

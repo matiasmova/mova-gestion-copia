@@ -31,7 +31,7 @@ import CampoNumero from './CampoNumero'
 import CuentaObraResumen from './CuentaObraResumen'
 import EditarPresupuestoObra from './EditarPresupuestoObra'
 import PanelPresupuestoObra from './PanelPresupuestoObra'
-import { avanceEfectivo, correspondePorAvance } from './cuentaObra'
+import { avanceEfectivo, correspondePorAvance, cuentasPorObra } from './cuentaObra'
 import { cargarFormasPago, cobradoPorMedio, textoMedios, type FormasPago } from './formasPago'
 
 type EstadoObra = 'en_proceso' | 'finalizada' | 'observacion'
@@ -103,7 +103,7 @@ export type GrupoObras = 'en_obra' | 'terminadas'
 const estadoMostrado = (o: { estado: string | null; porcentaje_avance?: number | string | null }) => (Number(o.porcentaje_avance) >= 100 && (o.estado ?? 'en_proceso') === 'en_proceso' ? 'finalizada' : o.estado) as EstadoObra | null
 const obraTerminada = (o: { estado: string | null; porcentaje_avance?: number | string | null }) => o.estado === 'finalizada' || o.estado === 'observacion' || Number(o.porcentaje_avance) >= 100
 
-function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, grupo, embebido = false }: { obraAbrirId?: number | null; onObraAbierta?: () => void; onVerPresupuesto?: (presupuestoId: number) => void; conIA?: boolean; grupo?: GrupoObras; embebido?: boolean } = {}) {
+function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, grupo, embebido = false, busquedaExterna }: { busquedaExterna?: string; obraAbrirId?: number | null; onObraAbierta?: () => void; onVerPresupuesto?: (presupuestoId: number) => void; conIA?: boolean; grupo?: GrupoObras; embebido?: boolean } = {}) {
   const puedeInformeIA = conIA
   const [obras, setObras] = useState<Obra[]>([])
   const [presupuestosObra, setPresupuestosObra] = useState<{ id: number; obra_id: number | null; total: number | string; estado: string; activo: boolean; titulo: string }[]>([])
@@ -127,6 +127,9 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [busqueda, setBusqueda] = useState('')
+  // Lo que corresponde cobrar hoy de cada obra (según el avance) y si el resumen está abierto.
+  const [cuentas, setCuentas] = useState<ReturnType<typeof cuentasPorObra>>({})
+  const [verNumeros, setVerNumeros] = useState(false)
   const [filtroEstado, setFiltroEstado] =
     useState<FiltroEstado>('todos')
   const [mostrarFormulario, setMostrarFormulario] =
@@ -220,6 +223,12 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
         if (rPresupuestos.error) console.error('No se pudieron cargar los presupuestos de las obras:', rPresupuestos.error)
         setPresupuestosObra(rPresupuestos.error ? [] : (rPresupuestos.data ?? []) as typeof presupuestosObra)
         setPresupuestosOk(!rPresupuestos.error)
+        setCuentas(cuentasPorObra(
+          (resultadoObras.data ?? []) as Obra[],
+          rPresupuestos.error ? [] : rPresupuestos.data ?? [],
+          rAdicionales.error ? [] : rAdicionales.data ?? [],
+          rPagos.error ? [] : rPagos.data ?? [],
+        ))
         setEconomia(calcularEconomia(
           rPresupuestos.error ? [] : rPresupuestos.data ?? [],
           rAdicionales.error ? [] : rAdicionales.data ?? [],
@@ -374,6 +383,12 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
       porcentaje: Number(obraSeguimiento?.porcentaje_avance || 0),
     })
     setMostrarNuevoAvance(true)
+  }
+
+  // "💵 Cobrar" de la lista: abre la obra directo en el formulario de cobro.
+  function cobrarObra(obra: Obra) {
+    abrirSeguimiento(obra)
+    elegirRegistro('cobro')
   }
 
   function elegirRegistro(o: OpcionRegistrar) {
@@ -653,7 +668,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
     `.toLowerCase()
 
     const coincideBusqueda = texto.includes(
-      busqueda.toLowerCase().trim(),
+      (busquedaExterna ?? busqueda).toLowerCase().trim(),
     )
 
     const coincideEstado =
@@ -688,8 +703,63 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
         </div>
       </div>}
 
-      <div className="crmToolbar">
-        <div className="crmFiltros">
+      {grupo && !cargando && !error && (() => {
+        const delGrupo = obrasVisibles.filter((o) => (grupo === 'terminadas' ? obraTerminada(o) : !obraTerminada(o)))
+        const hoy = delGrupo.reduce((s, o) => s + (cuentas[o.id]?.pendienteHoy ?? 0), 0)
+        const saldo = delGrupo.reduce((s, o) => s + (cuentas[o.id]?.saldo ?? 0), 0)
+        const valor = delGrupo.reduce((s, o) => s + (economia[o.id]?.valor ?? 0), 0)
+        const cobrado = delGrupo.reduce((s, o) => s + (economia[o.id]?.cobrado ?? 0), 0)
+        const conSaldo = delGrupo.filter((o) => (cuentas[o.id]?.saldo ?? 0) > 0.5).length
+        // Para hacer hoy: obras con plata a cobrar ya, o con cambios esperando aprobación.
+        const tareas = delGrupo
+          .map((o) => {
+            const aCobrar = cuentas[o.id]?.pendienteHoy ?? 0
+            const porAprobar = avisosBase.datos[o.id]?.adicPendientes ?? 0
+            if (aCobrar > 0.5) return { o, texto: `A cobrar hoy ${dineroFicha(aCobrar)}`, cobrar: true, orden: -aCobrar }
+            if (porAprobar > 0) return { o, texto: `${porAprobar} cambio${porAprobar === 1 ? '' : 's'} por aprobar`, cobrar: false, orden: 0 }
+            return null
+          })
+          .filter((t): t is { o: Obra; texto: string; cobrar: boolean; orden: number } => !!t)
+          .sort((a, b) => a.orden - b.orden)
+        return (
+          <section className="sgWrap">
+            <button type="button" className={`trbResumen${verNumeros ? ' abierto' : ''}`} aria-expanded={verNumeros} onClick={() => setVerNumeros((v) => !v)}>
+              <span>📊 {grupo === 'terminadas'
+                ? <>Falta cobrar <b>{dineroFicha(saldo)}</b> en {conSaldo} obra{conSaldo === 1 ? '' : 's'}</>
+                : <>A cobrar hoy <b>{dineroFicha(hoy)}</b> · {delGrupo.length} obra{delGrupo.length === 1 ? '' : 's'} en curso</>}</span>
+              <i className="trbFlecha">›</i>
+            </button>
+            {verNumeros && (
+              <div className="trbNumeros">
+                <div><small>VALOR DE LAS OBRAS</small><b>{dineroFicha(valor)}</b><span>{delGrupo.length} obra{delGrupo.length === 1 ? '' : 's'}</span></div>
+                <div><small>COBRADO</small><b>{dineroFicha(cobrado)}</b><span>hasta hoy</span></div>
+                <div><small>A COBRAR HOY</small><b>{dineroFicha(hoy)}</b><span>según el avance</span></div>
+                <div><small>SALDO TOTAL</small><b>{dineroFicha(saldo)}</b><span>{conSaldo} con saldo</span></div>
+              </div>
+            )}
+            {grupo === 'en_obra' && tareas.length > 0 && (
+              <div className="trbHacer">
+                <h3>🔥 Para hacer hoy <span>{tareas.length}</span></h3>
+                {tareas.map(({ o, texto, cobrar }) => (
+                  <div className="trbTarea" key={o.id}>
+                    <i aria-hidden="true" />
+                    <button type="button" className="trbTareaInfo" onClick={() => abrirSeguimiento(o)}>
+                      <b>{o.nombre_obra}</b>
+                      <small>{texto} · {obtenerCliente(o.cliente_id)}</small>
+                    </button>
+                    {cobrar
+                      ? <button type="button" className="trbMini osc" onClick={() => cobrarObra(o)}>💵 Cobrar</button>
+                      : <button type="button" className="trbMini cl" onClick={() => { abrirSeguimiento(o); setSeguTab('adicionales') }}>Ver</button>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )
+      })()}
+
+      {(busquedaExterna == null || !esMovil) && <div className="crmToolbar">
+        {busquedaExterna == null && <div className="crmFiltros">
           <input
             type="search"
             placeholder="Buscar obra, cliente o localidad..."
@@ -703,9 +773,9 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
             <option value="todos">Todos los estados</option>
             {OBRA_ESTADOS.map((e) => <option key={e.v} value={e.v}>{e.t}</option>)}
           </select>}
-        </div>
+        </div>}
         {!esMovil && <VistaToggle vista={vista} onCambio={setVista} />}
-      </div>
+      </div>}
 
       {cargando && <p>Cargando obras...</p>}
       {!cargando && !error && obrasEsperandoPresupuesto > 0 && (
@@ -733,20 +803,31 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
 
       {/* En el celular: lista hacia abajo con la etapa de cada obra */}
       {!cargando && !error && obrasFiltradas.length > 0 && esMovil && (
-        <div className="presuListaMovil">
+        <div className="trbLista">
           {obrasFiltradas.map((obra) => {
             const eco = economia[obra.id]
             const et = etiquetaEtapa({ estado: 'aceptado', fecha: '' }, { estado: obra.estado, porcentaje_avance: Number(obra.porcentaje_avance || 0) }, eco?.pendiente ?? 0)
             const avisos = avisosDe(obra)
+            const aCobrar = cuentas[obra.id]?.pendienteHoy ?? 0
+            const saldo = cuentas[obra.id]?.saldo ?? eco?.pendiente ?? 0
             return (
-              <button type="button" className="presuItem" key={obra.id} onClick={() => abrirSeguimiento(obra)}>
-                <div className="presuItemTop"><span>{obra.localidad || 'Sin localidad'}</span><span className={`presuEtapa ${et.clase}`}>{et.texto}</span></div>
-                <strong>{obra.nombre_obra}</strong>
-                {et.avance != null && <div className={`presuEtapaBarra ${et.clase.includes('et-encurso') ? 'encurso' : ''}`}><i style={{ width: `${et.avance}%` }} /></div>}
-                <div className="presuItemBot"><span>{obtenerCliente(obra.cliente_id)}</span>{eco && eco.pendiente > 0.5 ? <b className="presuFalta">Saldo {dineroFicha(eco.pendiente)}</b> : <b>{dineroFicha(eco?.valor ?? 0)}</b>}</div>
-                {eco && eco.extras > 0.5 && <small className="presuDesglose">Obra {dineroFicha(eco.obra)} + extras a reintegrar {dineroFicha(eco.extras)}</small>}
+              <div role="button" tabIndex={0} className="trbCard" key={obra.id} onClick={() => abrirSeguimiento(obra)} onKeyDown={(e) => { if (e.key === 'Enter') abrirSeguimiento(obra) }}>
+                <div className="trbFila1">
+                  <div><b>{obra.nombre_obra}</b><small>{obtenerCliente(obra.cliente_id)}{obra.localidad ? ` · ${obra.localidad}` : ''}</small></div>
+                  <span className="trbMonto">{dineroFicha(eco?.valor ?? 0)}</span>
+                </div>
+                {et.avance != null && <div className="trbBarra"><i style={{ width: `${et.avance}%` }} /></div>}
+                {aCobrar > 0.5
+                  ? <span className="trbCobrar">A cobrar hoy {dineroFicha(aCobrar)}</span>
+                  : grupo === 'terminadas' && saldo > 0.5 && <span className="trbCobrar">Falta cobrar {dineroFicha(saldo)}</span>}
                 {avisos.length > 0 && <small className="presuAvisos">⚠ {avisos.join(' · ')}</small>}
-              </button>
+                <div className="trbFila2">
+                  <span className={`presuEtapa ${et.clase}`}>{et.texto}</span>
+                  {aCobrar > 0.5 || (grupo === 'terminadas' && saldo > 0.5)
+                    ? <button type="button" className="trbMini osc" onClick={(e) => { e.stopPropagation(); cobrarObra(obra) }}>💵 Cobrar</button>
+                    : <button type="button" className="trbMini cl" onClick={(e) => { e.stopPropagation(); abrirSeguimiento(obra) }}>Abrir</button>}
+                </div>
+              </div>
             )
           })}
         </div>
