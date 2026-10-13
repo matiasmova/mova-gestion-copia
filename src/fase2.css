@@ -1977,3 +1977,54 @@ button.orFaltaItem:focus-visible{outline:2px solid #1f9d5c;outline-offset:1px}
 .obraBarraAbajo .enviar{background:#25d366;color:#fff}
 .obraBarraAbajo .registrar{background:#14181e;color:#fff}
 @media (prefers-reduced-motion:reduce){.orHoy,.orHoyBarra i,.orFaltaItem i.urg,.orCuadro,.orCuadroPunto{animation:none!important}}
+
+/* ===== Trabajos simple: título + lupa, pestañas con cantidad, una línea de resumen,
+   "Para hacer hoy" y tarjetas con una sola acción ===== */
+.trbCab{display:flex;align-items:center;gap:10px;margin:0 0 12px}
+.trbCab h2{margin:0;flex:1;font-size:26px}
+.trbIcono{border:1px solid var(--mova-border,#e5e7eb);background:#fff;border-radius:12px;width:42px;height:42px;font-size:18px;cursor:pointer;flex:none}
+.trbIcono.activo{border-color:#14181e}
+.trbNuevo{border:0;background:#14181e;color:#fff;border-radius:12px;padding:11px 14px;font:inherit;font-weight:800;font-size:14px;cursor:pointer;white-space:nowrap}
+.trbBuscar{width:100%;margin:0 0 12px;border:1px solid var(--mova-border,#e5e7eb);border-radius:12px;padding:11px 12px;font:inherit;font-size:15px;background:#fff;animation:movEntra .2s ease both}
+.trbTabs button{display:flex;flex-direction:column;align-items:center;gap:1px}
+.trbTabs button small{font-size:11px;font-weight:800;color:#9aa1ab}
+.trbTabs button.activo small{color:var(--mova-orange,#de7015)}
+.trbResumen{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:8px;width:100%;padding:10px 12px;border-radius:14px;background:#fff;border:1px solid var(--mova-border,#e5e7eb);font-size:13.5px;color:#374151}
+.trbResumen b{color:#14181e}
+.trbFlecha{margin-left:auto;font-style:normal;color:#9aa1ab;font-size:18px;transition:transform .2s}
+.trbResumen.abierto .trbFlecha{transform:rotate(90deg)}
+.trbNumeros{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;animation:movEntra .25s ease both}
+.trbNumeros>div{background:#fff;border:1px solid var(--mova-border,#e5e7eb);border-radius:12px;padding:10px 12px;min-width:0}
+.trbNumeros small{display:block;font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#6b7380}
+.trbNumeros b{font-size:18px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.trbNumeros span{display:block;font-size:12px;color:#6b7380}
+.trbDias{grid-column:1/-1;display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-size:12.5px;color:#697382}
+.trbDias select{width:auto;padding:4px 6px}
+.trbHacer{border-radius:16px;padding:12px;background:#fff3e6;border:1px solid #f3d3b4}
+.trbHacer h3{margin:0 0 6px;font-size:14px;display:flex;align-items:center;gap:6px}
+.trbHacer h3 span{background:var(--mova-orange,#de7015);color:#fff;border-radius:999px;font-size:11px;padding:1px 7px}
+.trbTarea{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #f6e2cf}
+.trbTarea>i{width:8px;height:8px;border-radius:50%;background:#c2410c;flex:none;animation:trbLate 1.6s ease-in-out infinite}
+.trbTareaInfo{all:unset;box-sizing:border-box;cursor:pointer;flex:1;min-width:0;font-size:13.5px;line-height:1.35}
+.trbTareaInfo b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trbTareaInfo small{display:block;color:#6b7380;font-size:12px}
+.trbMini{border:0;border-radius:10px;padding:8px 11px;font:inherit;font-weight:800;font-size:13px;cursor:pointer;white-space:nowrap;flex:none}
+.trbMini.wa{background:#25d366;color:#fff}
+.trbMini.osc{background:#14181e;color:#fff}
+.trbMini.cl{background:#fff;color:#14181e;border:1px solid var(--mova-border,#e5e7eb)}
+.trbLista{display:flex;flex-direction:column;gap:10px}
+.trbCard{background:#fff;border:1px solid var(--mova-border,#e5e7eb);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:8px;cursor:pointer;transition:transform .12s ease;animation:movEntra .25s ease both}
+.trbCard:active{transform:scale(.99)}
+.trbFila1{display:flex;align-items:flex-start;gap:10px}
+.trbFila1>div{flex:1;min-width:0}
+.trbFila1 b{display:block;font-size:15.5px;color:#14181e}
+.trbFila1 small{color:#6b7380;font-size:13px}
+.trbMonto{font-weight:800;font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.trbFila2{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.trbFila2 .trbMini{margin-left:auto}
+.trbBarra{height:6px;border-radius:999px;background:#eef0f3;overflow:hidden}
+.trbBarra i{display:block;height:100%;background:linear-gradient(90deg,#de7015,#f08a2c)}
+.trbCobrar{font-size:12.5px;color:#c2410c;font-weight:800}
+@keyframes trbLate{0%,100%{opacity:1}50%{opacity:.35}}
+@media (max-width:760px){.trbNumeros{grid-template-columns:1fr 1fr}}
+@media (prefers-reduced-motion:reduce){.trbTarea>i,.trbCard,.trbNumeros,.trbBuscar{animation:none}}
