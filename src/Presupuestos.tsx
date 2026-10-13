@@ -22,6 +22,8 @@ import { confirmarEliminacion } from './confirmar'
 import SeguimientoPresupuestos from './SeguimientoPresupuestos'
 import { etiquetaEtapa, type ObraEtapa } from './VidaEtapas'
 import { codigoPresupuesto } from './codigoPresupuesto'
+import { estadoTrabajo, obrasSinPresupuesto } from './estadoTrabajo'
+import { PillTrabajo, VidaTrabajo } from './VidaTrabajo'
 import { linkWhatsApp, mensajeSeguimientoPresupuesto } from './whatsapp'
 
 type PresupuestoCompleto = PresupuestoEditable & {
@@ -49,9 +51,9 @@ const ESTADOS = [
 ]
 
 // Dentro de "Trabajos": grupo = qué presupuestos mostrar y sin encabezado propio.
-export type GrupoPresupuestos = 'por_cerrar' | 'rechazados'
+export type GrupoPresupuestos = 'armando' | 'enviados' | 'rechazados'
 const enGrupo = (p: { estado: string; obra_id: number | null }, g?: GrupoPresupuestos) =>
-  !g ? true : g === 'rechazados' ? p.estado === 'rechazado' : p.estado === 'borrador' || p.estado === 'enviado' || (p.estado === 'aceptado' && p.obra_id == null)
+  !g ? true : g === 'rechazados' ? p.estado === 'rechazado' : g === 'enviados' ? p.estado === 'enviado' : p.estado === 'borrador' || (p.estado === 'aceptado' && p.obra_id == null)
 
 function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedidoAtendido, onAbrirObra, grupo, embebido = false, busquedaExterna }: { busquedaExterna?: string; presupuestoAbrirId?: number | null; onPresupuestoAbierto?: () => void; pedido?: Pedido | null; onPedidoAtendido?: () => void; onAbrirObra?: (obraId: number) => void; grupo?: GrupoPresupuestos; embebido?: boolean } = {}) {
   const [presupuestos, setPresupuestos] = useState<PresupuestoCompleto[]>([])
@@ -81,6 +83,8 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
   }, [])
   // Estado y avance de cada obra (para la etapa "En obra · 30%").
   const [obrasEtapa, setObrasEtapa] = useState<Record<number, ObraEtapa>>({})
+  // Obras dadas de baja (no se ofrecen para armar presupuesto).
+  const [obrasInactivas, setObrasInactivas] = useState<Set<number>>(new Set())
 
   useEffect(() => { cargarDatos() }, [])
 
@@ -96,7 +100,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
   useEffect(() => {
     if (!pedido) return
     // Con obra (desde una obra sin presupuesto): el presupuesto nuevo ya viene con el cliente y la obra.
-    if (pedido.accion === 'nuevo') { abrirNuevo(pedido.id != null ? { cliente_id: pedido.clienteId ?? null, obra_id: pedido.id, items: [] } : null); onPedidoAtendido?.() }
+    if (pedido.accion === 'nuevo') { abrirNuevo(pedido.id != null || pedido.clienteId != null ? { cliente_id: pedido.clienteId ?? null, obra_id: pedido.id ?? null, items: [] } : null); onPedidoAtendido?.() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pedido])
 
@@ -116,10 +120,11 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
       supabase.from('Clientes').select('id, telefono'),
       supabase.from('presupuestos').select('id, enviado_at, seguimiento_at').eq('activo', true),
       supabase.from('presupuestos').select('id, motivo_rechazo, version').eq('activo', true),
-      supabase.from('obras').select('id, estado, porcentaje_avance'),
+      supabase.from('obras').select('id, estado, porcentaje_avance, activo'),
     ])
     setFaltaSqlEtapas(!!rEtapas.error)
     const etapas = new Map(((rEtapas.data ?? []) as { id: number; motivo_rechazo: string | null; version: number | null }[]).map((x) => [x.id, x]))
+    setObrasInactivas(new Set(((rObrasEt.data ?? []) as { id: number; activo?: boolean | null }[]).filter((o) => o.activo === false).map((o) => o.id)))
     setObrasEtapa(Object.fromEntries(((rObrasEt.data ?? []) as { id: number; estado: string | null; porcentaje_avance: number | null }[]).map((o) => [o.id, { estado: o.estado, porcentaje_avance: Number(o.porcentaje_avance) || 0 }])))
     setTelefonos(Object.fromEntries(((rTel.data ?? []) as { id: number; telefono: string | null }[]).map((c) => [c.id, c.telefono])))
     setFaltaSqlSeguimiento(!!rSeg.error)
@@ -183,14 +188,26 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
     })
   }, [presupuestos, clientes, obras, textoBuscado, estadoFiltro, grupo])
 
+  // En "Armando" también aparecen las obras activas que todavía no tienen presupuesto.
+  const obrasArmar = useMemo(() => {
+    if (grupo !== 'armando' || cargando) return []
+    const texto = textoBuscado.trim().toLowerCase()
+    const conEstado = obras.filter((o) => !obrasInactivas.has(o.id)).map((o) => ({ ...o, estado: obrasEtapa[o.id]?.estado ?? 'en_proceso', porcentaje_avance: obrasEtapa[o.id]?.porcentaje_avance ?? 0 }))
+    return obrasSinPresupuesto(conEstado, presupuestos).filter((o) => {
+      if (!texto) return true
+      const c = clientes.find((x) => x.id === o.cliente_id)
+      return `${o.nombre_obra} ${c?.nombre ?? ''} ${c?.apellido ?? ''}`.toLowerCase().includes(texto)
+    })
+  }, [grupo, cargando, obras, obrasInactivas, obrasEtapa, presupuestos, clientes, textoBuscado])
+
   const nombreCliente = (id: number) => {
     const c = clientes.find((x) => x.id === id)
     return c ? `${c.nombre} ${c.apellido ?? ''}`.trim() : 'Cliente no encontrado'
   }
   const nombreObra = (id: number | null) => (!id ? 'Sin obra asociada' : obras.find((o) => o.id === id)?.nombre_obra ?? 'Obra no encontrada')
 
-  const [inicialNuevo, setInicialNuevo] = useState<{ cliente_id: number | null; obra_id: number; items: [] } | null>(null)
-  function abrirNuevo(inicial: { cliente_id: number | null; obra_id: number; items: [] } | null = null) { setInicialNuevo(inicial); setPresupuestoEditado(null); setMostrarFormulario(true) }
+  const [inicialNuevo, setInicialNuevo] = useState<{ cliente_id: number | null; obra_id: number | null; items: [] } | null>(null)
+  function abrirNuevo(inicial: { cliente_id: number | null; obra_id: number | null; items: [] } | null = null) { setInicialNuevo(inicial); setPresupuestoEditado(null); setMostrarFormulario(true) }
   function editar(p: PresupuestoCompleto) { setPresupuestoEditado(p); setMostrarFormulario(true); setFicha(null) }
   function cerrarFormulario() { setMostrarFormulario(false); setPresupuestoEditado(null) }
   async function guardado() { cerrarFormulario(); avisoGuardado('Presupuesto guardado'); await cargarDatos() }
@@ -357,6 +374,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
       {!cargando && !error && grupo !== 'rechazados' && (
         <SeguimientoPresupuestos
           presupuestos={presupuestos}
+          soloEstado={grupo === 'armando' ? 'borrador' : grupo === 'enviados' ? 'enviado' : undefined}
           nombreCliente={nombreCliente}
           telefonoCliente={(id) => telefonos[id] ?? null}
           onAbrir={(id) => { const p = presupuestos.find((x) => x.id === id); if (p) abrirFicha(p) }}
@@ -366,16 +384,14 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
       )}
       {faltaSqlSeguimiento && !cargando && <p className="gestionAyuda">Para recordar cuándo se envió y cuándo hiciste el último seguimiento, corré el SQL de Seguimiento (fase 17) en Supabase.</p>}
 
-      {(busquedaExterna == null || !esMovil) && <div className="crmToolbar">
+      {!embebido && <div className="crmToolbar">
         {busquedaExterna == null && <div className="crmFiltros">
           <input type="search" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar por título, cliente u obra..." />
         </div>}
         {!esMovil && <VistaToggle vista={vista} onCambio={setVista} />}
       </div>}
-      {grupo !== 'rechazados' && <div className="presuChips" role="tablist" aria-label="Etapas">
-        {(grupo === 'por_cerrar'
-          ? [['todos', 'Todos'], ['borrador', '📝 Borradores'], ['enviado', '📤 Enviados']]
-          : [['todos', 'Todos'], ['borrador', '📝 Borradores'], ['enviado', '📤 Enviados'], ['aceptado', '✅ Aceptados'], ['rechazado', '❌ Rechazados']]).map(([v, t]) => (
+      {!embebido && <div className="presuChips" role="tablist" aria-label="Etapas">
+        {([['todos', 'Todos'], ['borrador', '📝 Borradores'], ['enviado', '📤 Enviados'], ['aceptado', '✅ Aceptados'], ['rechazado', '❌ Rechazados']]).map(([v, t]) => (
           <button type="button" key={v} className={estadoFiltro === v ? 'activo' : ''} onClick={() => setEstadoFiltro(v)}>
             {t} <b>{presupuestos.filter((p) => enGrupo(p, grupo) && (v === 'todos' || p.estado === v)).length}</b>
           </button>
@@ -386,35 +402,49 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
       {cargando && <div className="presupuestosPanel"><p>Cargando presupuestos...</p></div>}
       {error && <div className="presupuestosPanel"><p className="loginError">{error}</p></div>}
 
-      {!cargando && !error && filtrados.length === 0 && (
-        <div className="presupuestosPanel"><div className="empty"><span>📄</span><h3>{grupo === 'rechazados' ? 'No hay presupuestos rechazados' : grupo === 'por_cerrar' ? 'No hay presupuestos por cerrar' : 'No hay presupuestos'}</h3><p>{grupo === 'rechazados' ? 'Acá quedan los que el cliente no aceptó, con su motivo.' : grupo === 'por_cerrar' ? 'Los aceptados ya están en la pestaña En obra. Para uno nuevo, tocá "+ Nuevo presupuesto".' : 'Los presupuestos que agregues aparecerán acá.'}</p></div></div>
+      {!cargando && !error && filtrados.length === 0 && obrasArmar.length === 0 && (
+        <div className="presupuestosPanel"><div className="empty"><span>{grupo === 'enviados' ? '📤' : grupo === 'rechazados' ? '❌' : '✏️'}</span><h3>{grupo === 'rechazados' ? 'No hay trabajos que no salieron' : grupo === 'enviados' ? 'No hay presupuestos esperando respuesta' : grupo === 'armando' ? 'No hay nada a medio armar' : 'No hay presupuestos'}</h3><p>{grupo === 'rechazados' ? 'Acá quedan los que el cliente no aceptó, con su motivo.' : grupo === 'enviados' ? 'Cuando envíes un presupuesto aparece acá hasta que el cliente responda.' : grupo === 'armando' ? 'Para empezar uno nuevo, tocá "＋ Nuevo".' : 'Los presupuestos que agregues aparecerán acá.'}</p></div></div>
       )}
 
-      {!cargando && !error && filtrados.length > 0 && esMovil && (
+      {!cargando && !error && (filtrados.length > 0 || obrasArmar.length > 0) && (esMovil || embebido) && (
         <div className="trbLista">
           {filtrados.map((p) => {
-            const et = etiquetaEtapa(p, p.obra_id != null ? obrasEtapa[p.obra_id] : null, p.saldo)
+            const obraEt = p.obra_id != null ? obrasEtapa[p.obra_id] ?? null : null
+            const est = estadoTrabajo(p.estado, obraEt, p.saldo)
+            // Detalle corto del estado: días desde el envío, motivo, avance…
+            const detalle = etiquetaEtapa(p, obraEt, p.saldo).texto.split(' · ').slice(1).join(' · ')
             // Una sola acción por tarjeta: enviar el borrador o seguir al cliente.
             const accion = p.estado === 'borrador'
               ? <button type="button" className="trbMini osc" onClick={(e) => { e.stopPropagation(); abrirFicha(p) }}>📤 Enviar</button>
               : p.estado === 'enviado'
                 ? <button type="button" className="trbMini wa" onClick={(e) => { e.stopPropagation(); seguirPorWhatsApp(p) }}>💬 Seguir</button>
-                : <button type="button" className="trbMini cl" onClick={(e) => { e.stopPropagation(); abrirFicha(p) }}>Abrir</button>
+                : p.estado === 'aceptado' && p.obra_id == null
+                  ? <button type="button" className="trbMini osc" onClick={(e) => { e.stopPropagation(); abrirFicha(p) }}>🏗️ Crear obra</button>
+                  : <button type="button" className="trbMini cl" onClick={(e) => { e.stopPropagation(); abrirFicha(p) }}>Abrir</button>
             return (
               <div role="button" tabIndex={0} className="trbCard" key={p.id} onClick={() => abrirFicha(p)} onKeyDown={(e) => { if (e.key === 'Enter') abrirFicha(p) }}>
                 <div className="trbFila1">
                   <div><b>{p.titulo}</b><small>{nombreCliente(p.cliente_id)} · {codigoPresupuesto(p.id)}{(p.version ?? 1) > 1 ? ` · v${p.version}` : ''}</small></div>
                   <span className="trbMonto">{moneda(p.total + p.ajustes)}</span>
                 </div>
-                {et.avance != null && <div className="trbBarra"><i style={{ width: `${et.avance}%` }} /></div>}
-                <div className="trbFila2"><span className={`presuEtapa ${et.clase}`}>{et.texto}</span>{accion}</div>
+                <VidaTrabajo estado={est} />
+                <div className="trbFila2"><PillTrabajo estado={est} extra={p.estado === 'aceptado' && p.obra_id == null ? 'falta crear la obra' : detalle || undefined} />{accion}</div>
               </div>
             )
           })}
+          {obrasArmar.map((o) => (
+            <div role="button" tabIndex={0} className="trbCard" key={`obra-${o.id}`} onClick={() => abrirNuevo({ cliente_id: o.cliente_id, obra_id: o.id, items: [] })} onKeyDown={(e) => { if (e.key === 'Enter') abrirNuevo({ cliente_id: o.cliente_id, obra_id: o.id, items: [] }) }}>
+              <div className="trbFila1">
+                <div><b>{o.nombre_obra}</b><small>{nombreCliente(o.cliente_id)} · obra sin presupuesto todavía</small></div>
+              </div>
+              <VidaTrabajo estado="armando" />
+              <div className="trbFila2"><PillTrabajo estado="armando" extra="falta el presupuesto" /><button type="button" className="trbMini osc" onClick={(e) => { e.stopPropagation(); abrirNuevo({ cliente_id: o.cliente_id, obra_id: o.id, items: [] }) }}>✏️ Armar presupuesto</button></div>
+            </div>
+          ))}
         </div>
       )}
 
-      {!cargando && !error && filtrados.length > 0 && !esMovil && vista === 'kanban' && (
+      {!cargando && !error && filtrados.length > 0 && !esMovil && !embebido && vista === 'kanban' && (
         <div className="crmKanban">
           {ESTADOS.filter((s) => !grupo || (grupo === 'rechazados' ? s.v === 'rechazado' : s.v !== 'rechazado')).map((s) => {
             const cols = filtrados.filter((p) => p.estado === s.v)
@@ -432,7 +462,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
         </div>
       )}
 
-      {!cargando && !error && filtrados.length > 0 && !esMovil && vista === 'lista' && (
+      {!cargando && !error && filtrados.length > 0 && !esMovil && !embebido && vista === 'lista' && (
         <div className="crmListaWrap">
           <table className="crmLista">
             <thead><tr><th>Código</th><th>Título</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Cobrado</th><th>Saldo</th><th>Estado</th></tr></thead>

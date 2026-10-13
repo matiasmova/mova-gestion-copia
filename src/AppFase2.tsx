@@ -182,24 +182,25 @@ export default function AppFase2() {
   const vistaSegura: Vista = puedeVer(rol, vista) ? vista : 'dashboard'
   const modulos = NAVEGACION.filter(([clave]) => puedeVer(rol, clave) && !FUERA_DEL_MENU.includes(clave))
   const verPresupuestos = puedeVer(rol, 'presupuestos')
-  // "Trabajos" del menú abre en Por cerrar para quien ve presupuestos; si no, en En obra.
+  // "Trabajos" del menú abre en Armando para quien ve presupuestos; si no, en En obra.
   const destinoMenu = (clave: Vista): Vista => (clave === 'obras' && verPresupuestos ? 'presupuestos' : clave)
   const activo = (clave: Vista) => vistaSegura === clave || (clave === 'obras' && vistaSegura === 'presupuestos')
-  const trabajos = (tab: 'por_cerrar' | 'en_obra') => (
+  const trabajos = (tab: 'armando' | 'en_obra') => (
     <Trabajos tabInicial={tab} verPresupuestos={verPresupuestos} conIA={rol === 'admin' || rol === 'contable' || rol === 'encargado'}
       obraAbrirId={obraAbrirId} onObraAbierta={() => setObraAbrirId(null)}
       presupuestoAbrirId={presupuestoAbrirId} onPresupuestoAbierto={() => setPresupuestoAbrirId(null)}
-      pedido={pedidoPara(tab === 'por_cerrar' ? 'presupuestos' : 'obras')} onPedidoAtendido={pedidoAtendido} />
+      pedido={pedidoPara(tab === 'armando' ? 'presupuestos' : 'obras')} onPedidoAtendido={pedidoAtendido} />
   )
 
   const contenido: Record<Exclude<Vista, 'dashboard'>, React.ReactNode> = {
     clientes: <Clientes pedido={pedidoPara('clientes')} onPedidoAtendido={pedidoAtendido}
       onAbrirObra={puedeVer(rol, 'obras') ? (id) => { setObraAbrirId(id); navegar('obras') } : undefined}
-      onAbrirPresupuesto={puedeVer(rol, 'presupuestos') ? (id) => { setPresupuestoAbrirId(id); navegar('presupuestos') } : undefined} />,
+      onAbrirPresupuesto={puedeVer(rol, 'presupuestos') ? (id) => { setPresupuestoAbrirId(id); navegar('presupuestos') } : undefined}
+      onNuevoPresupuesto={puedeVer(rol, 'presupuestos') ? (clienteId) => ir('presupuestos', { accion: 'nuevo', clienteId }) : undefined} />,
     relevamientos: <Relevamientos pedido={pedidoPara('relevamientos')} onPedidoAtendido={pedidoAtendido} puedePresupuestar={puedeVer(rol, 'presupuestos')}
       onAbrirPresupuesto={puedeVer(rol, 'presupuestos') ? (id) => { setPresupuestoAbrirId(id); navegar('presupuestos') } : undefined} />,
     obras: trabajos('en_obra'),
-    presupuestos: trabajos('por_cerrar'),
+    presupuestos: trabajos('armando'),
     catalogo: <ProductosServicios pedido={pedidoPara('catalogo')} onPedidoAtendido={pedidoAtendido} />,
     soluciones: <Soluciones />,
     finanzas: <Finanzas pedido={pedidoPara('finanzas')} onPedidoAtendido={pedidoAtendido} onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} />,
