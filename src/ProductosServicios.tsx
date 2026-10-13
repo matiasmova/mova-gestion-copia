@@ -81,7 +81,10 @@ async function comprimirImagen(file: File): Promise<Blob> {
     if (!ctx) return file
     ctx.drawImage(img, 0, 0, w, h)
     URL.revokeObjectURL(url)
-    const blob = await new Promise<Blob | null>((res) => canvas.toBlob((b) => res(b), 'image/webp', 0.8))
+    const armar = (tipo: string, calidad: number) => new Promise<Blob | null>((res) => canvas.toBlob((b) => res(b), tipo, calidad))
+    // Safari (iPhone) no arma WebP y devuelve PNG pesado: en ese caso se usa JPEG.
+    let blob = await armar('image/webp', 0.8)
+    if (!blob || blob.type !== 'image/webp') blob = await armar('image/jpeg', 0.85)
     return blob && blob.size < file.size ? blob : file
   } catch {
     return file
@@ -389,10 +392,21 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
     const file = evento.target.files?.[0]
     if (!file) return
     setSubiendoFoto(true); setErrorFormulario('')
+    evento.target.value = ''
     const comprimida = await comprimirImagen(file)
-    const path = `p-${Date.now()}.webp`
-    const subida = await supabase.storage.from(BUCKET).upload(path, comprimida, { upsert: true, contentType: 'image/webp' })
-    if (subida.error) { console.error(subida.error); setErrorFormulario('No se pudo subir la foto.'); setSubiendoFoto(false); return }
+    // El iPhone no siempre arma WebP: se usa el tipo real de la imagen para el nombre y el formato.
+    const tipo = comprimida.type || file.type || 'image/jpeg'
+    const ext = tipo.includes('png') ? 'png' : tipo.includes('webp') ? 'webp' : tipo.includes('hei') ? 'heic' : 'jpg'
+    const path = `p-${Date.now()}.${ext}`
+    const subida = await supabase.storage.from(BUCKET).upload(path, comprimida, { upsert: true, contentType: tipo })
+    if (subida.error) {
+      console.error(subida.error)
+      const msg = subida.error.message ?? ''
+      setErrorFormulario(/row-level|policy|unauthorized|not found|bucket/i.test(msg)
+        ? 'No se pudo subir la foto: falta correr en Supabase el SQL "supabase-fotos-productos-fase-29.sql".'
+        : /size|large/i.test(msg) ? 'No se pudo subir la foto: es muy pesada (máximo 10 MB).' : `No se pudo subir la foto. ${msg}`)
+      setSubiendoFoto(false); return
+    }
     setFotoUrl(path)
     const { data } = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600)
     setFotoPreview(data?.signedUrl ?? ''); setSubiendoFoto(false)
