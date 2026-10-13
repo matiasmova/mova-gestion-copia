@@ -291,6 +291,9 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
     if (err || !nuevo) { console.error(err); window.alert('No se pudo copiar el presupuesto.'); return }
     // Las formas de pago también se copian (si la columna existe).
     await cargarFormasPago(p.id).then((f) => guardarFormasPago(Number(nuevo.id), f))
+    // Y cómo lo ve el cliente (detallado o resumido, con sus textos), si existe.
+    const { data: rd } = await supabase.from('presupuestos').select('resumen_doc').eq('id', p.id).maybeSingle()
+    if (rd?.resumen_doc) await supabase.from('presupuestos').update({ resumen_doc: rd.resumen_doc }).eq('id', nuevo.id)
     if (p.items.length) {
       const { error: errItems } = await supabase.from('presupuesto_items').insert(p.items.map((it, i) => ({
         presupuesto_id: nuevo.id, catalogo_id: it.catalogo_id ?? null, tipo: it.tipo, descripcion: it.descripcion,

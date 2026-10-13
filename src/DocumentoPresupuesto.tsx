@@ -8,6 +8,7 @@ import { formatoPct, importeBruto, importeNeto, partirDescripcion, pctItem } fro
 import { antesYAhora, etiquetaModificacion } from './presupuestoModificaciones'
 import { mensajeEstado, PCT_ANTICIPO, totalAPagarHoy, type EstadoPresupuesto, type PasoLinea } from './estadoObra'
 import { codigoPresupuesto } from './codigoPresupuesto'
+import { incluyeDe, partesConItems, totalItems } from './resumenDocumento'
 import { supabase } from './supabase'
 import { estadoLinkPago, urlPago } from './pagoLink'
 
@@ -230,6 +231,7 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
   const soluciones = d.soluciones ?? []
   const codigo = codigoPresupuesto(d.id)
   const grupos = agruparPorTipo(d.items)
+  const resumido = d.resumenDoc?.modo === 'resumido' ? d.resumenDoc : null
   const notas = (d.notas ?? '').trim()
   const recos = lineasRecomendaciones(d.recomendaciones)
   const hayObra = !!d.obra && d.obra !== 'Sin obra asociada'
@@ -316,7 +318,30 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
 
       {/* Ítems */}
       <Seccion texto={e ? 'Presupuesto aceptado' : 'Detalle del presupuesto'}>
-        {grupos.length === 0 ? <p style={{ color: GRIS }}>Sin ítems.</p> : grupos.map((g) => (
+        {grupos.length > 0 && resumido && grupos.map((g) => {
+          // Resumido: un texto por parte y el total de la sección, sin precio por ítem.
+          const partes = partesConItems(resumido, g.clave, g.items, d.items).filter((p) => p.items.length)
+          return (
+            <div key={`r-${g.clave}`} style={{ padding: '8px 2px 12px', borderBottom: `1px solid ${LINEA_SUAVE}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px' }}>
+                <span style={{ color: NARANJA, fontWeight: 700, fontSize: '10px', letterSpacing: '1.4px', textTransform: 'uppercase' }}>{g.titulo}</span>
+                {resumido.subtotales && <strong style={{ color: OSCURO, fontSize: '14px', whiteSpace: 'nowrap' }}>{moneda(totalItems(g.items))}</strong>}
+              </div>
+              {partes.map((p) => (
+                <div key={p.id} style={{ marginTop: '8px' }}>
+                  {partes.length > 1 && p.nombre.trim() && <strong style={{ display: 'block', color: OSCURO }}>{p.nombre}</strong>}
+                  {p.texto.trim() && <div style={{ whiteSpace: 'pre-line', lineHeight: 1.55 }}>{p.texto.trim()}</div>}
+                  {incluyeDe(p, resumido).length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '6px' }}>
+                      {incluyeDe(p, resumido).map((t, i) => <span key={i} style={{ background: LINEA_SUAVE, color: OSCURO, borderRadius: '999px', padding: '2px 9px', fontSize: '11.5px' }}>{t}</span>)}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
+        })}
+        {grupos.length === 0 ? <p style={{ color: GRIS }}>Sin ítems.</p> : !resumido && grupos.map((g) => (
           <div key={`g-${g.clave}`}>
             <div style={{ color: NARANJA, fontWeight: 700, fontSize: '10px', letterSpacing: '1.4px', textTransform: 'uppercase', padding: '8px 2px 0' }}>{g.titulo}</div>
             {g.items.map((it) => {

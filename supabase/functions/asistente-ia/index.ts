@@ -269,6 +269,14 @@ const SISTEMA_RECOMENDACIONES = `Escribís, para MOVA Tecnología Smart (Mendoza
 - No menciones precios ni inventes equipos que no estén en el presupuesto. Sin emojis ni viñetas: solo el texto de cada recomendación.
 - Si te pasan un texto actual, mejoralo manteniendo lo que sirva; si te pasan un pedido, respetalo.`
 
+const SISTEMA_RESUMEN_DOCUMENTO = `Escribís, para MOVA Tecnología Smart (Mendoza, Argentina: domótica, WiFi, cámaras, alarmas, riego y electricidad), el texto de UNA sección de un presupuesto que se le entrega al cliente en versión resumida (sin el detalle ítem por ítem).
+- texto: 2 a 4 oraciones (máximo 650 caracteres) en español rioplatense con voseo, tono profesional, moderno y cercano. Contá qué se va a usar o hacer y qué le permite al cliente en el día a día (beneficios concretos: comodidad, control desde el celular o por voz, escenas, seguridad, ahorro). En Mano de obra o Servicios, contá qué trabajos incluye y cómo se entrega (instalado, probado, configurado).
+- incluye: lista corta (máximo 8) de lo que incluye, cada elemento de pocas palabras, agrupando lo parecido (ej.: "13 teclas smart táctiles", "Central de control", "Configuración de la app y escenas").
+- Si CANTIDADES es "sí", mencioná las cantidades sumando las parecidas; si es "no", no pongas números de unidades.
+- Si MARCA es "no", NO menciones marcas, modelos, protocolos ni códigos (nada de Tuya, Zigbee, Sonoff, Hikvision, etc.): usá nombres genéricos y claros. Si es "sí", podés mencionarlos.
+- Nunca menciones precios. No inventes equipos ni trabajos que no estén en la lista. Sin emojis.
+- Si te pasan un texto actual, mejoralo manteniendo lo que sirva; si te pasan un pedido, respetalo.`
+
 const SISTEMA_ANALISIS_MERCADO = `Sos asesor comercial de MOVA Tecnología Smart (Mendoza, Argentina): domótica, WiFi, cámaras, alarmas, riego y electricidad.
 Te paso un presupuesto completo: cada renglón con lo que cobra MOVA por unidad, su costo (si lo hay) y los precios del mercado encontrados en internet (mínimo, típico y máximo).
 Analizá cómo está posicionado el presupuesto en el mercado y respondé:
@@ -306,7 +314,7 @@ Deno.serve(async (req) => {
   const { data: perfil } = await db.from('profiles').select('rol, activo').eq('id', quien.user.id).maybeSingle()
   const cuerpo = await req.json().catch(() => ({})) as Record<string, unknown>
   const { accion, idea, titulo, descripcion, existentes } = cuerpo
-  const roles = accion === 'factura' ? ['admin', 'contable', 'encargado', 'auxiliar'] : accion === 'informe_obra' || accion === 'recomendaciones' || accion === 'relevamiento' ? ['admin', 'contable', 'encargado'] : ['admin', 'contable']
+  const roles = accion === 'factura' ? ['admin', 'contable', 'encargado', 'auxiliar'] : accion === 'informe_obra' || accion === 'recomendaciones' || accion === 'relevamiento' || accion === 'resumen_documento' ? ['admin', 'contable', 'encargado'] : ['admin', 'contable']
   if (!perfil || !roles.includes(perfil.rol) || perfil.activo === false) return responder({ error: 'No tenés permiso para usar el asistente.' }, 403)
 
   const clave = Deno.env.get('GEMINI_API_KEY')
@@ -533,6 +541,15 @@ Deno.serve(async (req) => {
       const texto = `PRESUPUESTO: ${t}\n${d ? `DESCRIPCIÓN: ${d}\n` : ''}\nÍTEMS:\n${items.map((x) => `- ${x}`).join('\n')}${actual ? `\n\nTEXTO ACTUAL:\n${actual}` : ''}${pedido ? `\n\nPEDIDO: ${pedido}` : ''}`
       const r = await gemini(clave, texto, { type: 'OBJECT', properties: { recomendaciones: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['recomendaciones'] }, SISTEMA_RECOMENDACIONES, 0.6) as { recomendaciones?: string[] }
       return responder({ recomendaciones: (r.recomendaciones ?? []).map((x) => recorte(String(x).replace(/^[\s•\-*·]+/, ''), 260)).filter(Boolean).slice(0, 10) })
+    }
+    if (accion === 'resumen_documento') {
+      // Texto de una sección del presupuesto resumido (Materiales, Mano de obra…).
+      const items = (Array.isArray(cuerpo.items) ? cuerpo.items : []).map((x) => recorte(x, 200)).filter(Boolean).slice(0, 80)
+      if (!items.length) return responder({ error: 'Esta parte no tiene ítems.' }, 400)
+      const actual = recorte(cuerpo.actual, 1500), pedido = recorte(cuerpo.pedido, 400)
+      const texto = `PRESUPUESTO: ${t}\nSECCIÓN: ${recorte(cuerpo.seccion, 80)}${cuerpo.parte ? `\nPARTE: ${recorte(cuerpo.parte, 80)}` : ''}\nCANTIDADES: ${cuerpo.cantidades === false ? 'no' : 'sí'}\nMARCA: ${cuerpo.marca === true ? 'sí' : 'no'}\n\nÍTEMS (cantidad × descripción):\n${items.map((x) => `- ${x}`).join('\n')}${actual ? `\n\nTEXTO ACTUAL:\n${actual}` : ''}${pedido ? `\n\nPEDIDO: ${pedido}` : ''}`
+      const r = await gemini(clave, texto, { type: 'OBJECT', properties: { texto: { type: 'STRING' }, incluye: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['texto', 'incluye'] }, SISTEMA_RESUMEN_DOCUMENTO, 0.6) as { texto?: string; incluye?: string[] }
+      return responder({ texto: recorte(r.texto, 900), incluye: (r.incluye ?? []).map((x) => recorte(String(x).replace(/^[\s•\-*·]+/, ''), 60)).filter(Boolean).slice(0, 10) })
     }
     if (accion === 'relevamiento') {
       // Ordena lo dictado en la visita y lo relaciona con los productos del catálogo.
