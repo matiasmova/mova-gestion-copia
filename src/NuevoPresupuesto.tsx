@@ -294,6 +294,11 @@ function NuevoPresupuesto({
 
   function agregarItem() {
     setItems((actuales) => [...actuales, { ...itemVacio }])
+    // Se muestra el ítem nuevo en pantalla.
+    setTimeout(() => {
+      const todos = document.querySelectorAll('.presupuestoItems .presupuestoItem')
+      todos[todos.length - 1]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 60)
   }
 
   function seleccionarDelCatalogo(indice: number, valor: string) {
@@ -797,14 +802,6 @@ function NuevoPresupuesto({
               <h3>Productos y servicios</h3>
               <p>Agregá todos los conceptos del presupuesto.</p>
             </div>
-
-            <button
-              type="button"
-              className="secondaryButton"
-              onClick={agregarItem}
-            >
-              + Agregar ítem
-            </button>
           </div>
 
           <div className="presupuestoItems">
@@ -953,6 +950,8 @@ function NuevoPresupuesto({
               </div>
             ))}
           </div>
+          {/* Debajo del último ítem, para no tener que volver a subir. */}
+          <button type="button" className="agregarItemAbajo" onClick={agregarItem}>＋ Agregar ítem</button>
 
           <div className="presupuestoEconomia">
             <label>

@@ -2098,3 +2098,9 @@ button.orFaltaItem:focus-visible{outline:2px solid #1f9d5c;outline-offset:1px}
   .bcFoto{width:56px;height:56px}
 }
 @media (prefers-reduced-motion:reduce){.bcFondo{animation:none}}
+
+/* "＋ Agregar ítem" debajo del último ítem del presupuesto */
+.agregarItemAbajo{width:100%;margin:12px 0 4px;padding:14px;border:2px dashed #c9ced6;border-radius:14px;background:#fff;color:#14181e;font:inherit;font-weight:800;font-size:15px;cursor:pointer;transition:border-color .15s ease,background .15s ease,transform .12s ease}
+.agregarItemAbajo:hover{border-color:var(--mova-orange,#de7015);background:#fff8f0}
+.agregarItemAbajo:active{transform:scale(.99)}
+.agregarItemAbajo:focus-visible{outline:2px solid var(--mova-orange,#de7015);outline-offset:2px}
