@@ -9,9 +9,10 @@ import { codigoPresupuesto } from './codigoPresupuesto'
 // Resumen de la obra: la ficha abre acá. Arriba "Qué falta" y abajo seis
 // tarjetas con mini gráficos; cada una abre el detalle completo de su sección.
 
-export type TabSeguimiento = 'resumen' | 'timeline' | 'personal' | 'rentabilidad' | 'finanzas' | 'adicionales' | 'accesos'
+export type TabSeguimiento = 'resumen' | 'documento' | 'timeline' | 'personal' | 'rentabilidad' | 'finanzas' | 'adicionales' | 'accesos'
 
 export const TITULO_SECCION: Record<Exclude<TabSeguimiento, 'resumen'>, string> = {
+  documento: '📄 Presupuesto y documento',
   timeline: '🕐 Avances y estados',
   finanzas: '💰 Cuenta y cobros',
   rentabilidad: '📊 Rentabilidad',
@@ -35,8 +36,8 @@ type Props = {
   onIr: (tab: TabSeguimiento) => void
   // Presupuesto aceptado de la obra (tarjeta con totales y accesos al documento).
   presupuesto?: { id: number; titulo: string } | null
-  // Acciones del presupuesto y del documento del cliente (PanelPresupuestoObra).
-  panelPresupuesto?: ReactNode
+  // Botón del cuadro "A pagar hoy".
+  onRegistrarCobro?: () => void
 }
 
 // Una persona del equipo, con los mismos números que la sección Personal.
@@ -58,7 +59,6 @@ type Pendiente = { tono: 'alerta' | 'info'; texto: string; tab?: TabSeguimiento 
 const VERDE = '#1f7a4d'
 const NARANJA = '#e47b00'
 const GRIS = '#e6e9ee'
-const VIOLETA = '#7c5cc4'
 
 const diasDesde = (fecha: string) =>
   Math.floor((Date.now() - new Date(`${fecha.slice(0, 10)}T00:00:00`).getTime()) / 86400000)
@@ -141,22 +141,31 @@ export function DonaAvance({ pct, size = 64, grosor = 7 }: { pct: number; size?:
   </svg>
 }
 
-// Barra apilada: segmentos con color y valor.
-function Barra({ partes }: { partes: { valor: number; color: string }[] }) {
-  const total = partes.reduce((s, p) => s + Math.max(0, p.valor), 0)
-  return <div className="orBarra">
-    {total > 0 && partes.map((p, i) => p.valor > 0 && <span key={i} style={{ width: `${(p.valor / total) * 100}%`, background: p.color }} />)}
+// Sección "Presupuesto y documento": totales del presupuesto y todas sus acciones.
+export function PresupuestoDocumento({ presupuesto, cuenta, dinero, children }: { presupuesto: { id: number; titulo: string }; cuenta: EstadoPresupuesto | null; dinero: (n: number) => string; children?: ReactNode }) {
+  return <div className="orPresu">
+    <div className="orPresuTit"><span>📄 PRESUPUESTO {codigoPresupuesto(presupuesto.id)}</span><span className="presuEtapa et-aceptado">Aceptado</span></div>
+    <strong>{presupuesto.titulo}</strong>
+    {cuenta ? <>
+      <div className="orPresuFila"><span>Original</span><b>{dinero(cuenta.totalOriginal)}</b></div>
+      <div className="orPresuFila"><span>Cambios y extras</span><b>{cuenta.totalCambios === 0 ? dinero(0) : `${cuenta.totalCambios > 0 ? '+' : '−'} ${dinero(Math.abs(cuenta.totalCambios))}`}</b></div>
+      <div className="orPresuTotal"><span>TOTAL ACTUALIZADO</span><span>{dinero(cuenta.totalActualizado)}</span></div>
+    </> : <small>Cargando…</small>}
+    {children}
   </div>
 }
 
-function Tarjeta({ icono, titulo, onClick, children }: { icono: string; titulo: string; onClick: () => void; children: ReactNode }) {
-  return <button type="button" className="orCard" onClick={onClick}>
-    <div className="orCardHead"><span>{icono} {titulo}</span><span className="orVer">Ver ›</span></div>
-    {children}
+// Cuadro de una sección: ícono, nombre y una línea de estado (con punto si hay algo pendiente).
+function Cuadro({ icono, titulo, estado, alerta, ancho, onClick }: { icono: string; titulo: string; estado: ReactNode; alerta?: boolean; ancho?: boolean; onClick: () => void }) {
+  return <button type="button" className={`orCuadro${alerta ? ' alerta' : ''}${ancho ? ' ancho' : ''}`} onClick={onClick}>
+    {alerta && <span className="orCuadroPunto" aria-label="Tiene algo pendiente" />}
+    <span className="orCuadroIco" aria-hidden>{icono}</span>
+    <span className="orCuadroTxt"><b>{titulo}</b><small>{estado}</small></span>
+    {ancho && <span className="orCuadroIr" aria-hidden>›</span>}
   </button>
 }
 
-export default function ResumenObra({ obraId, estado, avance, avances, cargandoAvances, tienePresupuesto, cuenta, cargandoCuenta, dinero, onIr, presupuesto, panelPresupuesto }: Props) {
+export default function ResumenObra({ obraId, estado, avance, avances, cargandoAvances, tienePresupuesto, cuenta, cargandoCuenta, dinero, onIr, presupuesto, onRegistrarCobro }: Props) {
   const [datos, setDatos] = useState<Datos | null>(null)
 
   useEffect(() => {
@@ -182,162 +191,69 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
   if (!cargandoAvances && avances.length === 0) pendientes.push({ tono: 'alerta', texto: 'Todavía no cargaste ningún avance.', tab: 'timeline' })
   else if (ultimo && !terminada && diasDesde(ultimo.fecha) > 14) pendientes.push({ tono: 'info', texto: `El último avance es de hace ${diasDesde(ultimo.fecha)} días.`, tab: 'timeline' })
   if (datos && datos.accesos === 0 && cerca) pendientes.push({ tono: 'alerta', texto: 'Faltan cargar los accesos y claves para entregar al cliente.', tab: 'accesos' })
-  const alertas = pendientes.filter((p) => p.tono === 'alerta').length
   const listo = !!datos && !cargandoAvances && !(tienePresupuesto && cargandoCuenta)
 
-  // Avances en orden cronológico para el gráfico (últimos 8).
-  const serie = [...avances].reverse().slice(-8)
+  // Cuadro "A pagar hoy": lo pagado, lo de hoy y lo que resta según avance la obra.
+  const hoy = cuenta ? Math.max(0, cuenta.pendienteHoy) + cuenta.gastoExtraPendiente : 0
+  const resta = cuenta ? Math.max(0, cuenta.totalActualizado - Math.max(cuenta.corresponde, cuenta.cobrado)) : 0
+  const totalBarra = cuenta ? Math.max(1, cuenta.cobrado + hoy + resta) : 1
+  const pctBarra = (n: number) => `${Math.max(0, Math.min(100, (n / totalBarra) * 100))}%`
+  const nAvisos = pendientes.filter((p) => p.tono === 'alerta')
+  const avisoDe = (tab: TabSeguimiento) => pendientes.some((p) => p.tono === 'alerta' && p.tab === tab)
+  const adic = datos?.adic
+  const totalAdic = adic ? adic.aprobados + adic.pendientes + adic.rechazados : 0
+  const cajaObra = datos ? (cuenta?.cobrado ?? 0) - datos.gastado - datos.extraNoPagado : 0
 
   return <section className="orResumen" aria-label="Resumen de la obra">
-    <div className="orVida"><VidaEtapas pasos={pasosObra({ estado, porcentaje_avance: avance }, cuenta ? Math.max(0, cuenta.saldoTotal) + cuenta.gastoExtraPendiente : undefined)} /></div>
-    {cuenta && cuenta.totalActualizado > 0 && (() => {
-      // Chequeo rápido: lo pagado, lo que corresponde pagar hoy y lo que resta según avance la obra.
-      const hoy = Math.max(0, cuenta.pendienteHoy) + cuenta.gastoExtraPendiente
-      const resta = Math.max(0, cuenta.totalActualizado - Math.max(cuenta.corresponde, cuenta.cobrado))
-      const total = Math.max(1, cuenta.cobrado + hoy + resta)
-      const pct = (n: number) => `${Math.max(0, Math.min(100, (n / total) * 100))}%`
-      return (
-        <div className="orVidaCuenta">
-          <div className="orVidaBarra" aria-hidden="true">
-            <i className="pago" style={{ width: pct(cuenta.cobrado) }} />
-            <i className="hoy" style={{ width: pct(hoy) }} />
-            <i className="resta" style={{ width: pct(resta) }} />
-          </div>
-          <div className="orVidaDatos">
-            <div className="pago"><small>Ya pagó</small><b><Cifra valor={cuenta.cobrado} formato={dinero} /></b></div>
-            <div className={`hoy ${hoy > 0.5 ? 'debe' : 'aldia'}`}>
-              <small>{hoy > 0.5 ? 'A pagar hoy' : 'Hoy'}</small>
-              <b>{hoy > 0.5 ? <Cifra valor={hoy} formato={dinero} /> : '✓ Al día'}</b>
-            </div>
-            <div className="resta"><small title="Lo que falta pagar a medida que avance la obra">Restante</small><b><Cifra valor={resta} formato={dinero} /></b></div>
-          </div>
+    {tienePresupuesto && (cargandoCuenta || !cuenta ? <div className="orHoy cargando"><small>A PAGAR HOY</small><strong>…</strong></div> : cuenta.totalActualizado > 0 && (
+      <div className={`orHoy${hoy > 0.5 ? '' : ' aldia'}`}>
+        <small>{hoy > 0.5 ? 'A PAGAR HOY' : 'CLIENTE AL DÍA'}</small>
+        <strong>{hoy > 0.5 ? <Cifra valor={hoy} formato={dinero} /> : '✓ Al día'}</strong>
+        {cuenta.gastoExtraPendiente > 0.5 && hoy > 0.5 && <em>Obra {dinero(Math.max(0, cuenta.pendienteHoy))} + gastos a reintegrar {dinero(cuenta.gastoExtraPendiente)}</em>}
+        <div className="orHoyBarra" aria-hidden="true">
+          <i className="pago" style={{ width: pctBarra(cuenta.cobrado) }} />
+          <i className="hoy" style={{ width: pctBarra(hoy) }} />
         </div>
-      )
-    })()}
+        <div className="orHoyCifras">
+          <span>Pagó <b>{dinero(cuenta.cobrado)}</b></span>
+          <span>Resta <b>{dinero(resta)}</b></span>
+          <span>Total <b>{dinero(cuenta.totalActualizado)}</b></span>
+        </div>
+        {onRegistrarCobro && <button type="button" className="orHoyBtn" onClick={onRegistrarCobro}>💵 Registrar cobro</button>}
+      </div>
+    ))}
 
-    {presupuesto && <div className="orPresu">
-      <div className="orPresuTit"><span>📄 PRESUPUESTO {codigoPresupuesto(presupuesto.id)}</span><span className="presuEtapa et-aceptado">Aceptado</span></div>
-      <strong>{presupuesto.titulo}</strong>
-      {cuenta ? <>
-        <div className="orPresuFila"><span>Original</span><b>{dinero(cuenta.totalOriginal)}</b></div>
-        <div className="orPresuFila"><span>Cambios y extras</span><b>{cuenta.totalCambios === 0 ? dinero(0) : `${cuenta.totalCambios > 0 ? '+' : '−'} ${dinero(Math.abs(cuenta.totalCambios))}`}</b></div>
-        <div className="orPresuTotal"><span>TOTAL ACTUALIZADO</span><span>{dinero(cuenta.totalActualizado)}</span></div>
-      </> : <small>Cargando…</small>}
-      {panelPresupuesto}
-    </div>}
-    <div className={`orPend ${listo && alertas === 0 ? 'ok' : ''}`}>
-      <h4>{!listo ? 'Revisando la obra…' : alertas === 0 ? '✓ Todo al día' : `Qué falta (${alertas})`}</h4>
-      {listo && pendientes.length > 0 && <ul>
-        {pendientes.map((p, i) => <li key={i} className={p.tono}>
-          <span aria-hidden>{p.tono === 'alerta' ? '⚠' : 'ℹ'}</span>
-          <p>{p.texto}</p>
-          {p.tab && <button type="button" onClick={() => onIr(p.tab!)}>Ver ›</button>}
-        </li>)}
-      </ul>}
-    </div>
+    <div className="orVida"><VidaEtapas pasos={pasosObra({ estado, porcentaje_avance: avance }, cuenta ? Math.max(0, cuenta.saldoTotal) + cuenta.gastoExtraPendiente : undefined)} /></div>
 
-    <div className="orGrid">
-      {/* Avances */}
-      <Tarjeta icono="🕐" titulo="Avances" onClick={() => onIr('timeline')}>
-        {cargandoAvances ? <small>Cargando…</small> : ultimo ? <>
-          <strong className="orValor">{ultimo.titulo || 'Avance'}</strong>
-          <div className="orSpark" aria-hidden>
-            {serie.map((a, i) => <span key={i} title={`${fecha(a.fecha)} · ${a.porcentaje}%`}><i style={{ height: `${Math.max(4, Math.min(100, a.porcentaje))}%` }} /></span>)}
-          </div>
-          <small>{fecha(ultimo.fecha)} · {ultimo.porcentaje}% · {avances.length} {avances.length === 1 ? 'registro' : 'registros'}{datos ? ` · ${datos.fotos} ${datos.fotos === 1 ? 'foto' : 'fotos'}` : ''}</small>
-        </> : <><strong className="orValor">Sin avances</strong><small>Tocá para cargar el primero</small></>}
-      </Tarjeta>
+    {listo && (pendientes.length > 0 ? (
+      <div className="orFalta">
+        <div className="orFaltaCab"><b>Qué falta</b>{nAvisos.length > 0 && <span>{nAvisos.length}</span>}</div>
+        {pendientes.map((p, i) => {
+          const urgente = p.tab === 'finanzas' && p.tono === 'alerta'
+          const contenido = <><i className={urgente ? 'urg' : p.tono} aria-hidden /><span>{p.texto}</span>{p.tab && <em aria-hidden>›</em>}</>
+          return p.tab
+            ? <button key={i} type="button" className="orFaltaItem" onClick={() => onIr(p.tab!)}>{contenido}</button>
+            : <div key={i} className="orFaltaItem">{contenido}</div>
+        })}
+      </div>
+    ) : <p className="orTodoOk">✓ Todo al día en esta obra</p>)}
 
-      {/* Cuenta */}
-      <Tarjeta icono="💰" titulo="Cuenta" onClick={() => onIr('finanzas')}>
-        {!tienePresupuesto ? <><strong className="orValor">Sin presupuesto</strong><small>Vinculá un presupuesto aceptado</small></>
-          : cargandoCuenta || !cuenta ? <small>Cargando…</small> : <>
-            <strong className="orValor"><Cifra valor={cuenta.cobrado} formato={dinero} /> <em>de {dinero(cuenta.totalActualizado)}</em></strong>
-            <Barra partes={[
-              { valor: cuenta.cobrado, color: VERDE },
-              { valor: cuenta.pendienteHoy, color: NARANJA },
-              { valor: Math.max(0, cuenta.gastoExtraPendiente), color: VIOLETA },
-              { valor: Math.max(0, cuenta.totalActualizado - cuenta.cobrado - cuenta.pendienteHoy), color: GRIS },
-            ]} />
-            <div className="orLeyenda">
-              <span><i style={{ background: VERDE }} />Cobrado</span>
-              {cuenta.pendienteHoy > 0.5 && <span className="pend"><i style={{ background: NARANJA }} />Obra hoy {dinero(cuenta.pendienteHoy)}</span>}
-              {cuenta.gastoExtraPendiente > 0.5 && <span className="pend"><i style={{ background: VIOLETA }} />Gastos a reintegrar {dinero(cuenta.gastoExtraPendiente)}</span>}
-              <span><i style={{ background: GRIS }} />Saldo {dinero(Math.max(0, cuenta.saldoTotal))}</span>
-            </div>
-            {aCobrarHoy > 0.5 && <small className="orTotalHoy">A cobrar hoy: <b>{dinero(aCobrarHoy)}</b>{cuenta.gastoExtraPendiente > 0.5 && cuenta.pendienteHoy > 0.5 ? ' (obra + gastos)' : ''}</small>}
-          </>}
-      </Tarjeta>
-
-      {/* Rentabilidad: caja de la obra (cobrado vs gastado) */}
-      <Tarjeta icono="📊" titulo="Rentabilidad" onClick={() => onIr('rentabilidad')}>
-        {!datos || (tienePresupuesto && !cuenta) ? <small>Cargando…</small> : (() => {
-          const cobrado = cuenta?.cobrado ?? 0
-          const extra = datos.extraNoPagado
-          const max = Math.max(cobrado, datos.gastado, extra, 1)
-          const caja = cobrado - datos.gastado - extra
-          return <>
-            <strong className="orValor" style={{ color: caja >= 0 ? VERDE : '#b23b32' }}>{caja >= 0 ? '+' : '−'} <Cifra valor={Math.abs(caja)} formato={dinero} /> <em>en caja</em></strong>
-            <div className={`orComparar${extra > 0.5 ? ' conExtra' : ''}`}>
-              <div><span>Cobrado</span><div className="orBarra"><span style={{ width: `${(cobrado / max) * 100}%`, background: VERDE }} /></div><b>{dinero(cobrado)}</b></div>
-              <div><span>Gastado</span><div className="orBarra"><span style={{ width: `${(datos.gastado / max) * 100}%`, background: NARANJA }} /></div><b>{dinero(datos.gastado)}</b></div>
-              {extra > 0.5 && <div className="orExtra"><span>Extra no pagado</span><div className="orBarra"><span style={{ width: `${(extra / max) * 100}%`, background: VIOLETA }} /></div><b>− {dinero(extra)}</b></div>}
-            </div>
-            {extra > 0.5 && <small className="orExtraNota">El extra no pagado es un gasto extra que adelantaste y el cliente todavía no te devolvió. Resta en la caja mientras está pendiente, pero no es gasto tuyo: no cuenta en la ganancia ni en la rentabilidad del negocio.</small>}
-            <small>Tocá para ver la ganancia proyectada</small>
-          </>
-        })()}
-      </Tarjeta>
-
-      {/* Equipo: cada persona con lo pagado y lo que falta */}
-      <Tarjeta icono="👷" titulo="Equipo" onClick={() => onIr('personal')}>
-        {!datos ? <small>Cargando…</small> : datos.equipo.length === 0 ? <><strong className="orValor">Sin asignar</strong><small>Tocá para asignar personal</small></> : (() => {
-          const pagado = datos.equipo.reduce((s, m) => s + m.pagado, 0)
-          const falta = datos.equipo.reduce((s, m) => s + m.falta, 0)
-          const visibles = datos.equipo.slice(0, 4)
-          return <>
-            <strong className="orValor"><Cifra valor={pagado} formato={dinero} /> <em>pagado · {datos.equipo.length} {datos.equipo.length === 1 ? 'persona' : 'personas'}</em></strong>
-            <Barra partes={[{ valor: pagado, color: VERDE }, { valor: falta, color: NARANJA }]} />
-            <ul className="orEquipo">
-              {visibles.map((m) => <li key={m.id}>
-                <span className="orEquipoNom">{m.nombre}{m.rol && <em>{m.rol}</em>}</span>
-                <span className={`orEquipoSaldo ${m.falta > 0.5 ? 'pend' : 'ok'}`}>
-                  {m.faltaValor ? 'Falta cargar valor' : m.falta > 0.5 ? `Falta ${dinero(m.falta)}` : m.adelanto > 0.5 ? `Adelantado ${dinero(m.adelanto)}` : 'Al día'}
-                </span>
-              </li>)}
-            </ul>
-            <small>
-              {datos.equipo.length > visibles.length ? `y ${datos.equipo.length - visibles.length} más · ` : ''}
-              {datos.jornales.toLocaleString('es-AR')} {datos.jornales === 1 ? 'jornal cargado' : 'jornales cargados'}
-            </small>
-          </>
-        })()}
-      </Tarjeta>
-
-      {/* Cambios y adicionales */}
-      <Tarjeta icono="🔁" titulo="Cambios y adicionales" onClick={() => onIr('adicionales')}>
-        {!datos ? <small>Cargando…</small> : (() => {
-          const { aprobados, pendientes: pend, rechazados } = datos.adic
-          const total = aprobados + pend + rechazados
-          return total === 0 ? <><strong className="orValor">Sin cambios</strong><small>El presupuesto sigue como se aceptó</small></> : <>
-            <strong className="orValor">{pend > 0 ? `${pend} por aprobar` : `${total} ${total === 1 ? 'cambio' : 'cambios'}`}</strong>
-            <Barra partes={[{ valor: aprobados, color: VERDE }, { valor: pend, color: NARANJA }, { valor: rechazados, color: '#cbd2da' }]} />
-            <div className="orLeyenda">
-              <span><i style={{ background: VERDE }} />{aprobados} {aprobados === 1 ? 'aprobado' : 'aprobados'}</span>
-              {pend > 0 && <span className="pend"><i style={{ background: NARANJA }} />{pend} {pend === 1 ? 'pendiente' : 'pendientes'}</span>}
-              {rechazados > 0 && <span><i style={{ background: '#cbd2da' }} />{rechazados} {rechazados === 1 ? 'rechazado' : 'rechazados'}</span>}
-            </div>
-          </>
-        })()}
-      </Tarjeta>
-
-      {/* Accesos */}
-      <Tarjeta icono="🔐" titulo="Accesos y claves" onClick={() => onIr('accesos')}>
-        {!datos ? <small>Cargando…</small> : datos.accesos === null ? <><strong className="orValor">—</strong><small>Falta crear la tabla en Supabase</small></> : <>
-          <strong className="orValor">{datos.accesos === 0 ? 'Sin cargar' : `${datos.accesos} ${datos.accesos === 1 ? 'acceso' : 'accesos'}`}</strong>
-          <small>{datos.accesos === 0 ? (cerca ? 'Cargalos para entregar el PDF al cliente' : 'Se cargan al terminar la instalación') : '✓ Listo para entregar en PDF'}</small>
-        </>}
-      </Tarjeta>
+    <div className="orTit">Obra</div>
+    <div className="orCuadros">
+      {presupuesto && <Cuadro ancho icono="📄" titulo="Presupuesto y documento" estado="Enviar PDF, link de pago, editar, formas de pago" onClick={() => onIr('documento')} />}
+      <Cuadro icono="🏗️" titulo="Avances" onClick={() => onIr('timeline')}
+        estado={cargandoAvances ? 'Cargando…' : ultimo ? `${ultimo.porcentaje}% · último ${fecha(ultimo.fecha)}` : 'Sin avances'} alerta={!cargandoAvances && avances.length === 0} />
+      <Cuadro icono="💰" titulo="Cuenta" onClick={() => onIr('finanzas')}
+        estado={!tienePresupuesto ? 'Sin presupuesto' : !cuenta ? 'Cargando…' : `Cobrado ${dinero(cuenta.cobrado)}`} alerta={avisoDe('finanzas')} />
+      <Cuadro icono="👷" titulo="Equipo" onClick={() => onIr('personal')}
+        estado={!datos ? 'Cargando…' : datos.equipo.length === 0 ? 'Sin asignar' : `${datos.equipo.length} ${datos.equipo.length === 1 ? 'persona' : 'personas'}${datos.equipo.some((m) => m.falta > 0.5) ? ' · hay pagos pendientes' : ''}`}
+        alerta={avisoDe('personal') || !!datos?.equipo.some((m) => m.falta > 0.5)} />
+      <Cuadro icono="🔁" titulo="Cambios y extras" onClick={() => onIr('adicionales')}
+        estado={!adic ? 'Cargando…' : totalAdic === 0 ? 'Sin cambios' : adic.pendientes > 0 ? `${adic.pendientes} por aprobar` : `${totalAdic} ${totalAdic === 1 ? 'cambio' : 'cambios'}`} alerta={avisoDe('adicionales')} />
+      <Cuadro icono="🔐" titulo="Accesos" onClick={() => onIr('accesos')}
+        estado={!datos ? 'Cargando…' : datos.accesos === null ? '—' : datos.accesos === 0 ? 'Sin cargar' : `${datos.accesos} cargados`} alerta={avisoDe('accesos')} />
+      <Cuadro icono="📊" titulo="Rentabilidad" onClick={() => onIr('rentabilidad')}
+        estado={!datos || (tienePresupuesto && !cuenta) ? 'Cargando…' : `${cajaObra >= 0 ? '+' : '−'} ${dinero(Math.abs(cajaObra))} en caja`} />
     </div>
   </section>
 }

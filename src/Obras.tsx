@@ -15,7 +15,7 @@ import AdicionalesObra from './AdicionalesObra'
 import PersonalObra from './PersonalObra'
 import RentabilidadObra from './RentabilidadObra'
 import AccesosObra from './AccesosObra'
-import ResumenObra, { DonaAvance, TITULO_SECCION, type TabSeguimiento } from './ResumenObra'
+import ResumenObra, { DonaAvance, PresupuestoDocumento, TITULO_SECCION, type TabSeguimiento } from './ResumenObra'
 import VistaToggle, { useVista } from './VistaToggle'
 import './obrasCard.css'
 import { OBRA_ESTADOS, etiquetaObra, claseObra } from './obraEstado'
@@ -113,6 +113,8 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
   const [docVersion, setDocVersion] = useState(0)
   const [informeIA, setInformeIA] = useState<Obra | null>(null)
   const [seguTab, setSeguTab] = useState<TabSeguimiento>('resumen')
+  // Al entrar o salir de una sección, la ficha vuelve arriba.
+  useEffect(() => { document.querySelector('.obraSeguimientoModal')?.scrollTo({ top: 0 }) }, [seguTab])
   // "➕ Registrar": menú único para cargar cosas en la obra.
   const [menuRegistrar, setMenuRegistrar] = useState(false)
   const [compraRapida, setCompraRapida] = useState(false)
@@ -834,13 +836,9 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
               </div>
             </div>
 
-            <button type="button" className="obraRegistrarBtn" onClick={() => setMenuRegistrar(true)}>
-              <span>➕ Registrar</span><small>Cobro, pago a empleado, jornal, compra, gasto, extra, avance…</small>
-            </button>
-
             {seguTab !== 'resumen' && (
               <div className="fichaVolver">
-                <button type="button" onClick={() => setSeguTab('resumen')}>← Volver al resumen</button>
+                <button type="button" onClick={() => setSeguTab('resumen')}>‹ Volver a la obra</button>
                 <span>{TITULO_SECCION[seguTab]}</span>
               </div>
             )}
@@ -869,7 +867,12 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
               dinero={dineroFicha}
               onIr={setSeguTab}
               presupuesto={presupuestoAceptado ? { id: presupuestoAceptado.id, titulo: presupuestoAceptado.titulo } : null}
-              panelPresupuesto={presupuestoAceptado ? (
+              onRegistrarCobro={() => elegirRegistro('cobro')}
+            />}
+
+            {/* Presupuesto y documento: enviar, link de pago, comprobantes, editar, formas de pago… */}
+            {seguTab === 'documento' && presupuestoAceptado && (
+              <PresupuestoDocumento presupuesto={{ id: presupuestoAceptado.id, titulo: presupuestoAceptado.titulo }} cuenta={cuenta} dinero={dineroFicha}>
                 <PanelPresupuestoObra
                   obra={obraSeguimiento}
                   cliente={obtenerCliente(obraSeguimiento.cliente_id)}
@@ -878,8 +881,8 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                   onEditarPresupuesto={onVerPresupuesto ? (id) => setEditarPresupuestoId(id) : undefined}
                   onRegistrarCobro={() => elegirRegistro('cobro')}
                 />
-              ) : undefined}
-            />}
+              </PresupuestoDocumento>
+            )}
 
             {seguTab === 'accesos' && <AccesosObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} cliente={obtenerCliente(obraSeguimiento.cliente_id)} obra={obraSeguimiento.nombre_obra} ubicacion={[obraSeguimiento.direccion, obraSeguimiento.localidad].filter(Boolean).join(', ') || null} />}
 
@@ -1139,6 +1142,11 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
             </div>
             </>)}
 
+            {/* Siempre a mano: enviar al cliente y registrar */}
+            <div className="obraBarraAbajo">
+              {presupuestoAceptado && <button type="button" className="enviar" onClick={() => setSeguTab('documento')}>📤 Enviar al cliente</button>}
+              <button type="button" className="registrar" onClick={() => setMenuRegistrar(true)}>＋ Registrar</button>
+            </div>
           </div>
         </div>
       )}
