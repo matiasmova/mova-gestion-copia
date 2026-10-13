@@ -11,6 +11,7 @@ import { cargarDatosContacto, type DatosContacto } from './presupuestoContacto'
 import { codigoPresupuesto, nombreArchivo } from './codigoPresupuesto'
 import { supabase } from './supabase'
 import { cargarFormasPago, textoMedios, type FormasPago } from './formasPago'
+import { cargarResumenDoc, incluyeDe, partesConItems, totalItems, type ResumenDoc } from './resumenDocumento'
 
 export const GRUPOS_DOCUMENTO: Record<string, string> = {
   producto: 'Productos y equipos', servicio: 'Servicios', material: 'Materiales',
@@ -42,6 +43,8 @@ export type DatosPdf = {
   recomendaciones?: string | null
   // Formas de pago que acepta (solo informativas).
   formasPago?: FormasPago
+  // Cómo lo ve el cliente: detallado o resumido por secciones (null = detallado).
+  resumenDoc?: ResumenDoc | null
   // Campo viejo, ya no se usa (se deja para no romper llamadas anteriores).
   resumen?: unknown
 }
@@ -52,14 +55,15 @@ export async function completarDatosDocumento(d: DatosPdf): Promise<DatosPdf> {
   // el estado de obra. Solo se reutiliza si es un estado de obra ya calculado.
   const estadoValido = (x: unknown): x is EstadoPresupuesto | null =>
     x === null || (typeof x === 'object' && x !== null && Array.isArray((x as EstadoPresupuesto).linea))
-  const [estado, soluciones, contacto, recomendaciones, formasPago] = await Promise.all([
+  const [estado, soluciones, contacto, recomendaciones, formasPago, resumenDoc] = await Promise.all([
     estadoValido(d.estado) ? Promise.resolve(d.estado) : cargarEstadoPresupuesto(d.id, Number(d.total) || 0),
     d.soluciones ? Promise.resolve(d.soluciones) : cargarSolucionesPresupuesto(d.id).catch(() => [] as SolucionPresupuesto[]),
     d.contacto !== undefined ? Promise.resolve(d.contacto) : cargarDatosContacto(d.id).catch(() => null),
     d.recomendaciones !== undefined ? Promise.resolve(d.recomendaciones) : cargarRecomendaciones(d.id),
     d.formasPago !== undefined ? Promise.resolve(d.formasPago) : cargarFormasPago(d.id),
+    d.resumenDoc !== undefined ? Promise.resolve(d.resumenDoc) : cargarResumenDoc(d.id),
   ])
-  return { ...d, estado, soluciones, contacto, recomendaciones, formasPago }
+  return { ...d, estado, soluciones, contacto, recomendaciones, formasPago, resumenDoc }
 }
 
 // Recomendaciones guardadas del presupuesto, si se eligió incluirlas.
@@ -457,8 +461,51 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
   let numero = 0
   let sumaNeta = 0
   let sumaBruta = 0
+  const resumido = d.resumenDoc?.modo === 'resumido' ? d.resumenDoc : null
   for (const g of agruparPorTipo(d.items)) {
     lugar(44)
+    if (resumido) {
+      // Resumido: un texto por parte, sin precio por ítem; el total de la sección si se eligió.
+      for (const it of g.items) { sumaNeta += importeNeto(it); sumaBruta += importeBruto(it) }
+      espaciado(g.titulo.toUpperCase(), M + 2, y, F_MINI, NARANJA)
+      if (resumido.subtotales) derecha(moneda(totalItems(g.items)), xImp, y - 1, F_NORMAL + 0.5, bold, OSCURO)
+      y -= 8
+      linea(M, y, M + CW, 0.6, LINEA_SUAVE)
+      y -= 16
+      const partes = partesConItems(resumido, g.clave, g.items, d.items).filter((p) => p.items.length)
+      for (const p of partes) {
+        const tit = partes.length > 1 && p.nombre.trim() ? partir(p.nombre.trim(), F_TIT, CW - 8, bold) : []
+        const parrafos = p.texto.trim() ? p.texto.trim().split(/\n+/).flatMap((par) => partir(par, F_TXT, CW - 8)) : []
+        const incluye = incluyeDe(p, resumido)
+        // Chips de "Incluye", acomodados en renglones.
+        const filas: { t: string; w: number }[][] = [[]]
+        let anchoFila = 0
+        for (const t of incluye) {
+          const w = ancho(t, F_CHICO) + 14
+          if (anchoFila + w > CW - 8 && filas[filas.length - 1].length) { filas.push([]); anchoFila = 0 }
+          filas[filas.length - 1].push({ t, w }); anchoFila += w + 5
+        }
+        const altoChips = incluye.length ? filas.length * 15 + 4 : 0
+        lugar(tit.length * 15 + Math.min(parrafos.length, 4) * 14 + altoChips + 10)
+        for (const r of tit) { texto(r, M + 2, y, F_TIT, bold, OSCURO); y -= 15 }
+        for (const r of parrafos) { lugar(14); texto(r, M + 2, y, F_TXT, font, TEXTO); y -= 14 }
+        if (incluye.length) {
+          y -= 2
+          for (const fila of filas) {
+            lugar(15)
+            let x = M + 2
+            for (const c of fila) {
+              caja(x, y + 8.5, c.w, 12, { fondo: LINEA_SUAVE, r: 6 })
+              texto(c.t, x + 7, y, F_CHICO, font, OSCURO)
+              x += c.w + 5
+            }
+            y -= 15
+          }
+        }
+        y -= 10
+      }
+      continue
+    }
     espaciado(g.titulo.toUpperCase(), M + 2, y, F_MINI, NARANJA)
     y -= 14
     for (const it of g.items) {

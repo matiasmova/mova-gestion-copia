@@ -2028,3 +2028,29 @@ button.orFaltaItem:focus-visible{outline:2px solid #1f9d5c;outline-offset:1px}
 @keyframes trbLate{0%,100%{opacity:1}50%{opacity:.35}}
 @media (max-width:760px){.trbNumeros{grid-template-columns:1fr 1fr}}
 @media (prefers-reduced-motion:reduce){.trbTarea>i,.trbCard,.trbNumeros,.trbBuscar{animation:none}}
+
+/* ===== Cómo lo ve el cliente (detallado / resumido) ===== */
+.lvcModo{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border-radius:12px;background:#eceef1}
+.lvcModo button{border:0;border-radius:9px;padding:9px 6px;background:transparent;font:inherit;font-weight:700;font-size:14px;color:#4b5563;cursor:pointer}
+.lvcModo button.activo{background:#fff;color:#14181e;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+.lvcOpciones{display:flex;flex-direction:column;gap:6px}
+.lvcSeccion{border:1px solid var(--mova-border,#e5e7eb);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px;animation:movEntra .25s ease both}
+.lvcSeccionCab{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.lvcSeccionCab h4{margin:0;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--mova-orange,#de7015)}
+.lvcSeccionCab b{font-variant-numeric:tabular-nums;white-space:nowrap}
+.lvcParte{background:#f6f7f9;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.lvcParteCab{display:flex;gap:6px;align-items:center}
+.lvcParteCab input{flex:1;min-width:0;font-weight:700}
+.lvcQuitar{border:0;background:transparent;color:#6b7380;font-size:20px;line-height:1;cursor:pointer;padding:2px 8px}
+.lvcItems{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.lvcItems li{display:flex;align-items:center;gap:8px;font-size:12.5px;color:#14181e}
+.lvcItems li span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lvcItems li em{font-style:normal;color:#6b7380;font-variant-numeric:tabular-nums}
+.lvcItems li select{width:auto;max-width:130px;padding:3px 4px;font-size:12px}
+.lvcVacio{color:#6b7380!important}
+.lvcParte textarea{width:100%;box-sizing:border-box;font:inherit;font-size:14px;line-height:1.5;padding:9px 11px;border:1px solid var(--mova-border);border-radius:10px;resize:vertical;background:#fff}
+.lvcParte>input{width:100%;box-sizing:border-box;font-size:13px}
+.lvcIA{align-self:flex-start;border:0;border-radius:10px;padding:8px 12px;font:inherit;font-weight:800;font-size:13px;cursor:pointer;color:#fff;background:linear-gradient(135deg,#6d4ed6,#9b6cf0)}
+.lvcIA[disabled]{opacity:.6;cursor:default}
+.lvcMas{border:1px dashed var(--mova-border,#d5d9df);background:transparent;border-radius:10px;padding:8px;font:inherit;font-weight:700;font-size:13px;cursor:pointer;color:#14181e}
+@media (prefers-reduced-motion:reduce){.lvcSeccion{animation:none}}

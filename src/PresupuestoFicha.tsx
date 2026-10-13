@@ -19,6 +19,7 @@ import { totalAPagarHoy } from './estadoObra'
 import { createPortal } from 'react-dom'
 import { fechaCorta } from './gestionFormat'
 import RecomendacionesUso from './RecomendacionesUso'
+import ComoLoVeCliente from './ComoLoVeCliente'
 import FormasPagoEditor from './FormasPagoEditor'
 import { Cifra } from './Animados'
 import { asegurarLinkPago } from './pagoLink'
@@ -333,6 +334,7 @@ export default function PresupuestoFicha({
             </button>
           )}
           <FormasPagoEditor presupuestoId={presupuesto.id} onGuardado={() => setReintento((v) => v + 1)} />
+          <ComoLoVeCliente presupuestoId={presupuesto.id} titulo={presupuesto.titulo} items={presupuesto.items} onGuardado={() => setReintento((v) => v + 1)} />
           <RecomendacionesUso presupuestoId={presupuesto.id} titulo={presupuesto.titulo} descripcion={presupuesto.descripcion} items={presupuesto.items} onGuardado={() => setReintento((v) => v + 1)} />
           <div className="presuHerramientas">
             {(presupuesto.estado === 'aceptado' || presupuesto.estado === 'rechazado') && <button type="button" className="editButton" onClick={descargarPdf} disabled={!listo}>📄 Descargar PDF</button>}

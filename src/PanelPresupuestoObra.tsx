@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { generarPdfPresupuesto, nombreArchivoPresupuesto, leerModoComprobantes, guardarModoComprobantes, type DatosPdf, type ModoComprobantes } from './pdfPresupuesto'
 import { cargarDocumentoObra, itemsParaMercado } from './documentoObra'
 import RecomendacionesUso from './RecomendacionesUso'
+import ComoLoVeCliente from './ComoLoVeCliente'
 import FormasPagoEditor from './FormasPagoEditor'
 import CompararMercado, { type ProductoAComparar } from './CompararMercado'
 import { linkWhatsApp, mensajeEstadoObra } from './whatsapp'
@@ -123,6 +124,7 @@ export default function PanelPresupuestoObra({ obra, cliente, version, onVerDocu
           </select>{avisoComp && <span>{avisoComp}</span>}</div>
         </label>
       )}
+      {datos && <ComoLoVeCliente presupuestoId={datos.id} titulo={datos.titulo} items={datos.items} onGuardado={refrescar} />}
       {datos && <RecomendacionesUso presupuestoId={datos.id} titulo={datos.titulo} descripcion={datos.descripcion ?? null} items={datos.items} onGuardado={refrescar} />}
       {datos && datos.items.length > 0 && (
         <button type="button" className="presuMercadoBtn" onClick={() => setMercado(itemsParaMercado(datos))}>
