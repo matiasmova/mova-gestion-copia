@@ -359,7 +359,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
       hayObra ? (contacto?.direccionObra || contacto?.direccionCliente || null) : null,
       etapa ?? `Válido hasta el ${venceEl}`,
     ] },
-    { e: 'CONDICIONES', n: `Seña ${PCT_ANTICIPO}%`, l: ['Saldo al finalizar', `Validez ${validez} ${validez === 1 ? 'día' : 'días'}`] },
+    { e: 'CONDICIONES', n: `Seña ${PCT_ANTICIPO}%`, l: ['Resto según avance', `Validez ${validez} ${validez === 1 ? 'día' : 'días'}`] },
   ].map((p, i) => ({
     ...p,
     nr: partir(p.n, F_NORMAL + 1, anchos[i] - 22, bold).slice(0, 2),
@@ -418,8 +418,8 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     const cx = M + 30, cy = y - alto / 2
     page.drawCircle({ x: cx, y: cy, size: 15, color: BLANCO })
     texto('$', cx - ancho('$', 17, bold) / 2, cy - 6, 17, bold, VERDE_BTN)
-    espaciado('PAGAR AHORA', M + 54, y - 22, 14, BLANCO)
-    texto('Tocá acá  ·  transferencia o efectivo', M + 54, y - 37, F_TXT, font, rgb(0.86, 0.96, 0.9))
+    espaciado(estado ? 'PAGAR AHORA' : `PAGAR LA SEÑA (${PCT_ANTICIPO}%)`, M + 54, y - 22, 14, BLANCO)
+    texto(estado ? 'Tocá acá  ·  transferencia o efectivo' : 'Para aceptar el presupuesto  ·  transferencia o efectivo', M + 54, y - 37, F_TXT, font, rgb(0.86, 0.96, 0.9))
     // píldora naranja con el monto y la flecha
     const txtPill = `${moneda(montoBtn)}  >`
     const wPill = ancho(txtPill, 13, bold) + 30
@@ -431,6 +431,42 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     }))
     page.node.addAnnot(anotacion)
     y -= alto + 22
+  }
+
+  // ---------- Cómo se paga (antes de aceptar) ----------
+  // Explica por qué el botón pide menos que el total: la seña hoy y el resto según avance.
+  if (!estado && d.total > 0) {
+    const sena = Math.round(d.total * PCT_ANTICIPO) / 100
+    const resto = Math.max(0, Math.round((d.total - sena) * 100) / 100)
+    const nota = partir(`Hoy pagás la seña del ${PCT_ANTICIPO}% (${moneda(sena)}) para aceptar el presupuesto y reservar la fecha y los materiales. El ${100 - PCT_ANTICIPO}% restante (${moneda(resto)}) se paga a medida que avanza la obra, hasta completar el total.`, F_TXT - 0.5, CW - 28)
+    const altoCaja = 112 + nota.length * 13
+    lugar(altoCaja + 40)
+    titulo('Cómo se paga')
+    caja(M, y + 4, CW, altoCaja, { fondo: AVISO_FONDO, borde: AVISO_BORDE, r: 10 })
+    const yNodo = y - 26
+    const margen = 70
+    const pasoX = (CW - 2 * margen) / 2
+    const xDe = (i: number) => M + margen + i * pasoX
+    page.drawLine({ start: { x: xDe(0), y: yNodo }, end: { x: xDe(2), y: yNodo }, thickness: 3, color: LINEA })
+    const pasos: { estado: 'pendiente' | 'futuro'; t: string; sub: string; monto: string; est: string }[] = [
+      { estado: 'pendiente', t: `Seña ${PCT_ANTICIPO}%`, sub: 'Hoy, para aceptar', monto: moneda(sena), est: 'Pagás ahora' },
+      { estado: 'futuro', t: 'Durante la obra', sub: 'Según el avance', monto: `+ hasta ${moneda(resto)}`, est: 'Más adelante' },
+      { estado: 'futuro', t: 'Al finalizar', sub: 'Se completa el 100%', monto: `Total ${moneda(d.total)}`, est: 'Más adelante' },
+    ]
+    pasos.forEach((p, i) => {
+      const x = xDe(i)
+      if (p.estado === 'futuro') page.drawCircle({ x, y: yNodo, size: 10, color: BLANCO, borderColor: GRIS_CAJA, borderWidth: 1.6 })
+      else { page.drawCircle({ x, y: yNodo, size: 12.5, color: BLANCO }); icono(x, yNodo, 'pendiente', 10) }
+      const centro = (t: string, yy: number, size: number, f: PDFFont, color: RGB) => texto(t, x - ancho(t, size, f) / 2, yy, size, f, color)
+      let yy = yNodo - 24
+      centro(p.t, yy, F_TXT - 0.5, bold, OSCURO); yy -= 12.5
+      centro(p.sub, yy, F_TXT - 1.5, font, GRIS); yy -= 12
+      centro(p.monto, yy - 1, F_CHICO, bold, OSCURO); yy -= 11
+      centro(p.est, yy - 1, F_CHICO + 0.5, bold, p.estado === 'pendiente' ? NARANJA_OSC : GRIS)
+    })
+    let yn = yNodo - 86
+    for (const r of nota) { texto(r, M + 14, yn, F_TXT - 0.5, font, rgb(0.48, 0.29, 0.03)); yn -= 13 }
+    y -= altoCaja + 18
   }
 
   // ---------- Qué vas a disfrutar (soluciones) ----------

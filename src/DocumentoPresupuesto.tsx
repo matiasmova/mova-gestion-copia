@@ -154,6 +154,36 @@ function FranjaLinea({ e }: { e: EstadoPresupuesto }) {
   )
 }
 
+// Antes de aceptar: cómo se va a pagar (seña hoy, el resto según avance, el final).
+function PlanPagos({ total }: { total: number }) {
+  const sena = Math.round(total * PCT_ANTICIPO) / 100
+  const resto = Math.max(0, Math.round((total - sena) * 100) / 100)
+  const pasos: { estado: 'pendiente' | 'futuro'; t: string; sub: string; monto: string; est: string }[] = [
+    { estado: 'pendiente', t: `Seña ${PCT_ANTICIPO}%`, sub: 'Hoy, para aceptar', monto: moneda(sena), est: 'Pagás ahora' },
+    { estado: 'futuro', t: 'Durante la obra', sub: 'Según el avance', monto: `+ hasta ${moneda(resto)}`, est: 'Más adelante' },
+    { estado: 'futuro', t: 'Al finalizar', sub: 'Se completa el 100%', monto: `Total ${moneda(total)}`, est: 'Más adelante' },
+  ]
+  return (
+    <div style={{ background: AVISO_FONDO, border: `1px solid ${AVISO_BORDE}`, borderRadius: '14px', padding: '16px 10px 12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
+        {pasos.map((p, i) => (
+          <div key={i} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '0 3px' }}>
+            {i > 0 && <span style={{ position: 'absolute', top: '11px', right: '50%', width: '100%', height: '3px', background: '#DADDE2' }} />}
+            <span style={{ background: '#fff', borderRadius: '50%', padding: '2px', position: 'relative', zIndex: 1, margin: '-2px 0 0' }}><Icono estado={p.estado} tam={22} /></span>
+            <strong style={{ color: OSCURO, fontSize: '12px', marginTop: '8px', lineHeight: 1.2 }}>{p.t}</strong>
+            <span style={{ fontSize: '10.5px', color: GRIS }}>{p.sub}</span>
+            <strong style={{ color: OSCURO, fontSize: '11.5px', marginTop: '3px', overflowWrap: 'anywhere' }}>{p.monto}</strong>
+            <span style={{ fontSize: '10.5px', fontWeight: 700, color: p.estado === 'pendiente' ? NARANJA_OSC : GRIS }}>{p.est}</span>
+          </div>
+        ))}
+      </div>
+      <p style={{ margin: '12px 4px 0', fontSize: '12.5px', lineHeight: 1.5, color: '#7A4A07' }}>
+        <strong>Hoy pagás la seña del {PCT_ANTICIPO}% ({moneda(sena)})</strong> para aceptar el presupuesto y reservar la fecha y los materiales. El {100 - PCT_ANTICIPO}% restante ({moneda(resto)}) se paga a medida que avanza la obra, hasta completar el total.
+      </p>
+    </div>
+  )
+}
+
 function EstadoCuenta({ e }: { e: EstadoPresupuesto }) {
   const msg = mensajeEstado(e, moneda)
   const hoy = totalAPagarHoy(e)
@@ -247,7 +277,7 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
   const partes = [
     { e: 'Cliente', n: d.cliente, l: [contacto?.telefono ? `Tel. ${contacto.telefono}` : null, contacto?.email ?? null, contacto?.documento ? `${contacto.documento.etiqueta}: ${contacto.documento.valor}` : null, contacto?.direccionCliente ?? null] },
     { e: hayObra ? 'Obra' : 'Presupuesto', n: hayObra ? d.obra : codigo, l: [hayObra ? (contacto?.direccionObra || contacto?.direccionCliente || null) : null, e ? (e.terminada ? 'Obra finalizada' : e.enObra ? `En obra · avance ${e.avance}%` : 'Presupuesto aceptado') : `Válido hasta el ${venceEl}`] },
-    { e: 'Condiciones', n: `Seña ${PCT_ANTICIPO}%`, l: ['Saldo al finalizar', `Validez ${validez} ${validez === 1 ? 'día' : 'días'}`] },
+    { e: 'Condiciones', n: `Seña ${PCT_ANTICIPO}%`, l: ['Resto según avance', `Validez ${validez} ${validez === 1 ? 'día' : 'días'}`] },
   ]
 
   return (
@@ -299,9 +329,14 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
       {linkPago && (!e || aPagarHoy > 0.5) && (
         <a href={linkPago} target="_blank" rel="noreferrer" className="docPagarAhora">
           <span className="ico">$</span>
-          <span className="txt"><b>PAGAR AHORA</b><small>Tocá acá · transferencia o efectivo</small></span>
+          <span className="txt"><b>{e ? 'PAGAR AHORA' : `PAGAR LA SEÑA (${PCT_ANTICIPO}%)`}</b><small>{e ? 'Tocá acá · transferencia o efectivo' : 'Para aceptar el presupuesto · transferencia o efectivo'}</small></span>
           <span className="pill">{moneda(e ? aPagarHoy : Math.round(Number(d.total) * PCT_ANTICIPO) / 100)} ›</span>
         </a>
+      )}
+      {!e && Number(d.total) > 0 && (
+        <Seccion texto="Cómo se paga">
+          <PlanPagos total={Number(d.total)} />
+        </Seccion>
       )}
 
       {/* Qué vas a disfrutar */}
