@@ -2055,23 +2055,46 @@ button.orFaltaItem:focus-visible{outline:2px solid #1f9d5c;outline-offset:1px}
 .lvcMas{border:1px dashed var(--mova-border,#d5d9df);background:transparent;border-radius:10px;padding:8px;font:inherit;font-weight:700;font-size:13px;cursor:pointer;color:#14181e}
 @media (prefers-reduced-motion:reduce){.lvcSeccion{animation:none}}
 
-/* ===== Buscador del catálogo en el ítem del presupuesto ===== */
-.bcWrap{position:relative;min-width:0}
-.bcBoton{width:100%;display:flex;align-items:center;gap:8px;text-align:left;font:inherit;font-size:15px;color:#14181e;background:#fff;border:1px solid var(--mova-border,#d5d9df);border-radius:12px;padding:11px 12px;cursor:pointer;min-height:44px}
-.bcBoton span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bcBoton.manual span{color:#4b5563}
+/* ===== Buscador del catálogo en el ítem del presupuesto (ventana con fotos) ===== */
+.bcBoton{width:100%;display:flex;align-items:center;gap:8px;text-align:left;font:inherit;font-size:15px;color:#14181e;background:#fff;border:1px solid var(--mova-border,#d5d9df);border-radius:12px;padding:6px 12px;cursor:pointer;min-height:44px;min-width:0}
+.bcBoton .bcNombre{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bcBoton.manual .bcNombre{color:#4b5563}
 .bcBoton i{font-style:normal;font-size:15px;flex:none}
 .bcBoton:focus-visible{outline:2px solid var(--mova-orange,#de7015);outline-offset:2px}
-.bcPanel{margin-top:6px;background:#fff;border:1px solid var(--mova-border,#d5d9df);border-radius:14px;box-shadow:0 18px 40px -16px rgba(20,24,30,.35);padding:8px;display:flex;flex-direction:column;gap:6px;animation:movEntra .18s ease both}
-.bcPanel input{width:100%;box-sizing:border-box;font:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--mova-border,#d5d9df);border-radius:10px}
-.bcLista{list-style:none;margin:0;padding:0;max-height:min(55vh,380px);overflow-y:auto;display:flex;flex-direction:column;gap:2px}
-.bcOpcion{width:100%;display:flex;align-items:center;gap:10px;text-align:left;font:inherit;background:transparent;border:0;border-radius:10px;padding:9px 10px;cursor:pointer;color:#14181e}
-.bcOpcion:hover,.bcOpcion.marcado{background:#f3f4f6}
-.bcOpcion.activo{background:#fff3e6}
-.bcOpcion span{flex:1;min-width:0;display:flex;flex-direction:column}
-.bcOpcion b{font-weight:600;font-size:14px;line-height:1.3}
-.bcOpcion small{color:#6b7380;font-size:12px}
-.bcOpcion em{font-style:normal;font-weight:700;font-size:13px;text-align:right;white-space:nowrap;display:flex;flex-direction:column;font-variant-numeric:tabular-nums}
-.bcManual{font-weight:700;font-size:14px;color:#4b5563}
-.bcVacio{padding:10px;color:#6b7380;font-size:13px}
-@media (prefers-reduced-motion:reduce){.bcPanel{animation:none}}
+.bcMini{width:30px;height:30px;border-radius:8px;background:#f3f4f6;display:grid;place-items:center;overflow:hidden;flex:none;font-size:15px}
+.bcMini img{width:100%;height:100%;object-fit:cover}
+.bcFondo{position:fixed;inset:0;z-index:5000;background:rgba(15,18,22,.55);display:flex;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom));animation:movEntra .15s ease both}
+.bcVentana{background:#fff;color:#14181e;width:min(760px,100%);height:min(86vh,820px);border-radius:20px;box-shadow:0 30px 70px -20px rgba(0,0,0,.5);display:flex;flex-direction:column;gap:10px;padding:16px;min-height:0}
+.bcCab{display:flex;align-items:center;gap:10px}
+.bcCab h3{margin:0;flex:1;font-size:18px}
+.bcCerrar{border:0;background:#f1f2f4;border-radius:10px;width:38px;height:38px;font-size:16px;cursor:pointer;color:#14181e}
+.bcBuscar{width:100%;box-sizing:border-box;font:inherit;font-size:16px;padding:12px 14px;border:1.5px solid #14181e;border-radius:12px;background:#fff;color:#14181e}
+.bcChips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.bcChips button{border:1px solid var(--mova-border,#d5d9df);background:#fff;border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;font-weight:700;color:#4b5563;cursor:pointer}
+.bcChips button.activo{background:#14181e;border-color:#14181e;color:#fff}
+.bcChips select{width:auto;max-width:220px;border-radius:999px;padding:6px 10px;font-size:13px}
+.bcLista{flex:1;min-height:0;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px;align-content:start;padding:2px}
+.bcOpcion,.bcManual{display:flex;align-items:center;gap:12px;text-align:left;font:inherit;background:#fff;border:1px solid var(--mova-border,#e5e7eb);border-radius:14px;padding:8px 10px;cursor:pointer;color:#14181e;min-width:0;transition:transform .12s ease,border-color .15s ease}
+.bcOpcion:hover,.bcOpcion.marcado{border-color:#14181e}
+.bcOpcion:active,.bcManual:active{transform:scale(.98)}
+.bcOpcion.activo,.bcManual.activo{border-color:var(--mova-orange,#de7015);background:#fff8f0}
+.bcManual{grid-column:1/-1;background:#f8f9fa}
+.bcFoto{width:64px;height:64px;border-radius:10px;background:#f3f4f6;display:grid;place-items:center;overflow:hidden;flex:none;font-size:24px}
+.bcFoto img{width:100%;height:100%;object-fit:cover}
+.bcManual .bcFoto{width:44px;height:44px;font-size:20px}
+.bcTexto,.bcManual>span:last-child{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.bcTexto b,.bcManual b{font-weight:700;font-size:14px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.bcTexto small,.bcManual small{color:#6b7380;font-size:12px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bcCat{color:#a85008!important;font-weight:700}
+.bcPrecio{display:flex;flex-direction:column;align-items:flex-end;font-weight:800;font-size:14px;white-space:nowrap;font-variant-numeric:tabular-nums;flex:none}
+.bcPrecio small{color:#6b7380;font-weight:600;font-size:11px}
+.bcPrecio em{font-style:normal;font-size:11.5px;font-weight:700;color:#b42318;background:#fde8e8;border-radius:999px;padding:2px 8px}
+.bcVacio{grid-column:1/-1;margin:0;padding:12px;color:#6b7380;font-size:13.5px;text-align:center}
+.bcPie{margin:0;font-size:12px;color:#6b7380;text-align:right}
+@media (max-width:640px){
+  .bcFondo{align-items:flex-end;padding:0}
+  .bcVentana{height:92vh;border-radius:20px 20px 0 0;padding:14px 14px max(14px,env(safe-area-inset-bottom))}
+  .bcLista{grid-template-columns:1fr}
+  .bcFoto{width:56px;height:56px}
+}
+@media (prefers-reduced-motion:reduce){.bcFondo{animation:none}}

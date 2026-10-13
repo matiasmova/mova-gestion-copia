@@ -55,6 +55,8 @@ type ProductoServicio = {
   precio_venta: number
   costo_unitario: number
   nombre_presupuesto?: string | null
+  categoria?: string | null
+  foto_url?: string | null
 }
 
 export type PresupuestoEditable = {
@@ -173,7 +175,7 @@ function NuevoPresupuesto({
 
   useEffect(() => {
     async function cargarCatalogo() {
-      const columnas = 'id, tipo, nombre, descripcion, unidad, precio_venta, costo_unitario'
+      const columnas = 'id, tipo, nombre, descripcion, unidad, precio_venta, costo_unitario, categoria, foto_url'
       let consulta = await supabase.from('productos_servicios').select(`${columnas}, nombre_presupuesto`).eq('activo', true).order('tipo').order('nombre')
       // Sin el SQL de Productos todavía no existe nombre_presupuesto: se lee como antes.
       if (consulta.error) consulta = await supabase.from('productos_servicios').select(columnas).eq('activo', true).order('tipo').order('nombre') as typeof consulta
