@@ -351,13 +351,13 @@ function NuevoPresupuesto({
     }, 60)
   }
 
-  function seleccionarDelCatalogo(indice: number, valor: string) {
+  function seleccionarDelCatalogo(indice: number, valor: string, nuevo?: ProductoServicio) {
     if (!valor) {
       actualizarItem(indice, 'catalogo_id', null)
       return
     }
 
-    const seleccionado = catalogo.find(
+    const seleccionado = nuevo ?? catalogo.find(
       (producto) => producto.id === Number(valor),
     )
 
@@ -880,6 +880,11 @@ function NuevoPresupuesto({
                     valor={item.catalogo_id}
                     cargando={cargandoCatalogo}
                     onElegir={(id) => seleccionarDelCatalogo(indice, id)}
+                    onCreado={(p) => {
+                      const prod = { ...p, tipo: p.tipo as ProductoServicio['tipo'] }
+                      setCatalogo((lista) => [...lista, prod].sort((a, b) => a.nombre.localeCompare(b.nombre)))
+                      seleccionarDelCatalogo(indice, String(p.id), prod)
+                    }}
                   />
                 </div>
 
