@@ -21,6 +21,7 @@ export const NAVEGACION = [
   ['compras', 'operacion', 'Compras'],
   ['personal', 'operacion', 'Personal'],
   ['finanzas', 'operacion', 'Movimientos'],
+  ['gastos', 'operacion', 'Gastos'],
   ['usuarios', 'sistema', 'Usuarios'],
   ['configuracion', 'sistema', 'Configuración'],
 ] as const
@@ -42,6 +43,8 @@ export const PERMISOS: Partial<Record<Vista, Rol[]>> = {
   presupuestos: ['admin', 'contable'],
   soluciones: ['admin', 'contable'],
   finanzas: ['admin', 'contable'],
+  // Gastos de la empresa y personales: solo el administrador (los personales, además, solo los ve quien los carga).
+  gastos: ['admin'],
   compras: ['admin', 'encargado', 'auxiliar'],
   personal: ['admin', 'encargado', 'contable'],
   usuarios: ['admin'],

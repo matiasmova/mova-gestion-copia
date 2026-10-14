@@ -2163,3 +2163,60 @@ button.orFaltaItem:focus-visible{outline:2px solid #1f9d5c;outline-offset:1px}
 .fichaHist li{display:flex;gap:8px;font-size:12.5px;color:#14181e}
 .fichaHist em{font-style:normal;color:#6b7380;font-variant-numeric:tabular-nums;width:74px;flex:none}
 @media (prefers-reduced-motion:reduce){.fichaHist{animation:none}}
+
+/* ===== Gastos (empresa y personales) ===== */
+.gtsCab{display:flex;align-items:center;gap:10px;margin:0 0 12px}
+.gtsCab h2{margin:0;flex:1;font-size:26px}
+.gtsMes{display:flex;align-items:center;justify-content:center;gap:14px;margin:0 0 12px}
+.gtsMes b{font-size:16px;min-width:150px;text-align:center}
+.gtsMes button{border:1px solid var(--mova-border,#e5e7eb);background:#fff;border-radius:10px;width:38px;height:38px;font-size:20px;cursor:pointer;color:#14181e}
+.gtsMes button:disabled{opacity:.35;cursor:default}
+.gtsResumen{background:#fff;border:1px solid var(--mova-border,#e5e7eb);border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;margin:0 0 14px;animation:movEntra .25s ease both}
+.gtsFila{display:flex;justify-content:space-between;gap:10px;font-size:14px;color:#4b5563}
+.gtsFila b{color:#14181e;font-variant-numeric:tabular-nums;white-space:nowrap}
+.gtsFila.fuerte{border-top:1px dashed #e3e6ea;padding-top:6px;font-weight:700;color:#14181e}
+.gtsFila b.pos{color:#15803d}.gtsFila b.neg{color:#b42318}
+.gtsQueda{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:4px;padding:10px 12px;border-radius:12px;font-weight:800}
+.gtsQueda b{font-size:20px;font-variant-numeric:tabular-nums}
+.gtsQueda.pos{background:#e9f7ef;color:#15803d}
+.gtsQueda.neg{background:#fde8e8;color:#b42318}
+.gtsTabs button{display:flex;flex-direction:column;align-items:center;gap:1px}
+.gtsTabs button small{font-size:11px;font-weight:600;color:#9aa1ab}
+.gtsCats{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin:0 0 12px}
+.gtsCat{display:flex;align-items:stretch;background:#fff;border:1px solid var(--mova-border,#e5e7eb);border-radius:14px;overflow:hidden;transition:border-color .15s ease}
+.gtsCat.activo{border-color:#14181e;box-shadow:0 0 0 1px #14181e}
+.gtsCatInfo{all:unset;box-sizing:border-box;flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer}
+.gtsCatInfo strong{font-variant-numeric:tabular-nums;white-space:nowrap;font-size:15px}
+.gtsCatTxt{flex:1;min-width:0;display:flex;flex-direction:column}
+.gtsCatTxt b{font-size:14px}
+.gtsCatTxt small{font-size:11.5px;color:#6b7380;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gtsIco{width:38px;height:38px;border-radius:10px;background:#f3f4f6;display:grid;place-items:center;font-size:19px;flex:none}
+.gtsIco.chico{width:32px;height:32px;font-size:16px}
+.gtsMas{border:0;border-left:1px solid var(--mova-border,#e5e7eb);background:#fafbfc;width:46px;font-size:20px;font-weight:700;cursor:pointer;color:#14181e}
+.gtsMas:hover{background:#fff3e6}
+.gtsFijos{display:flex;flex-wrap:wrap;align-items:center;gap:10px;justify-content:space-between;background:#fff3e6;border:1px solid #f3d3b4;border-radius:14px;padding:10px 12px;margin:0 0 12px;font-size:13.5px}
+.gtsFijos span{flex:1 1 220px}
+.gtsListaCab{display:flex;align-items:baseline;gap:10px;margin:4px 2px 8px}
+.gtsListaCab b{flex:1;font-size:15px}
+.gtsListaCab span{font-weight:800;font-variant-numeric:tabular-nums}
+.gtsQuitarFiltro{border:0;background:#f1f2f4;border-radius:999px;padding:4px 10px;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.gtsVacio{color:#6b7380;font-size:14px;text-align:center;padding:16px}
+.gtsLista{display:flex;flex-direction:column;gap:6px}
+.gtsItem{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--mova-border,#e5e7eb);border-radius:12px;padding:8px 10px}
+.gtsItemInfo{all:unset;box-sizing:border-box;flex:1;min-width:0;display:flex;flex-direction:column;cursor:pointer}
+.gtsItemInfo b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gtsItemInfo small{font-size:12px;color:#6b7380}
+.gtsItem strong{font-variant-numeric:tabular-nums;white-space:nowrap}
+.gtsBorrar{border:0;background:transparent;font-size:16px;cursor:pointer;opacity:.6;padding:4px}
+.gtsBorrar:hover{opacity:1}
+.gtsForm{display:flex;flex-direction:column;gap:12px;max-width:520px}
+.gtsAmbito{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:#eceef1;border-radius:12px;padding:4px}
+.gtsAmbito button{border:0;border-radius:9px;padding:10px;background:transparent;font:inherit;font-weight:800;font-size:14px;color:#4b5563;cursor:pointer}
+.gtsAmbito button.activo{background:#fff;color:#14181e;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+.gtsChips{display:flex;flex-wrap:wrap;gap:6px}
+.gtsChips button{border:1px solid var(--mova-border,#d5d9df);background:#fff;border-radius:999px;padding:8px 12px;font:inherit;font-size:13.5px;font-weight:700;color:#4b5563;cursor:pointer}
+.gtsChips button.activo{background:#14181e;border-color:#14181e;color:#fff}
+.gtsCampo{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:700;color:#4b5563}
+.gtsCampo input{font:inherit;font-size:16px;font-weight:400;padding:10px 12px;border:1px solid var(--mova-border,#d5d9df);border-radius:10px}
+.gtsAcc{display:flex;justify-content:flex-end;gap:8px}
+@media (prefers-reduced-motion:reduce){.gtsResumen{animation:none}}

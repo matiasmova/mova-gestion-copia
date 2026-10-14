@@ -5,6 +5,7 @@ import Clientes from './Clientes'
 import Soluciones from './Soluciones'
 import ProductosServicios from './ProductosServicios'
 import Finanzas from './Finanzas'
+import Gastos from './Gastos'
 import Compras from './Compras'
 import Personal from './Personal.tsx'
 import Agenda from './Agenda'
@@ -203,6 +204,7 @@ export default function AppFase2() {
     presupuestos: trabajos('armando'),
     catalogo: <ProductosServicios pedido={pedidoPara('catalogo')} onPedidoAtendido={pedidoAtendido} />,
     soluciones: <Soluciones />,
+    gastos: <Gastos />,
     finanzas: <Finanzas pedido={pedidoPara('finanzas')} onPedidoAtendido={pedidoAtendido} onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} />,
     compras: <Compras pedido={pedidoPara('compras')} onPedidoAtendido={pedidoAtendido} />,
     personal: <Personal pedido={pedidoPara('personal')} onPedidoAtendido={pedidoAtendido} />, agenda: <Agenda pedido={pedidoPara('agenda')} onPedidoAtendido={pedidoAtendido} />, usuarios: <Usuarios />, configuracion: <Configuracion />,
