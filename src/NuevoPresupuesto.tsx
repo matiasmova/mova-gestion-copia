@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from './supabase'
 import {
@@ -84,6 +84,22 @@ type Props = {
   inicial?: { cliente_id?: number | null; obra_id?: number | null; titulo?: string; descripcion?: string; notas?: string; items: ItemPresupuesto[] }
   onGuardado: (presupuestoId?: number) => void
   onCancelar: () => void
+}
+
+// Cuadro de texto que crece con lo escrito (también si el texto cambia solo,
+// por ejemplo al elegir un producto, o si cambia el ancho de la pantalla).
+function TextoQueCrece({ value, onChange, className, placeholder }: { value: string; onChange: (v: string) => void; className?: string; placeholder?: string }) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const ajustar = () => { el.style.height = 'auto'; el.style.height = `${el.scrollHeight + 2}px` }
+    ajustar()
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(ajustar) : null
+    ro?.observe(el)
+    return () => ro?.disconnect()
+  }, [value])
+  return <textarea ref={ref} rows={1} className={className} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
 }
 
 const itemVacio: ItemPresupuesto = {
@@ -909,16 +925,11 @@ function NuevoPresupuesto({
 
                 <label className="itemCampo itemDescripcionCampo">
                   <span>Descripción</span>
-                  <input
+                  {/* Crece con el texto: se ve la descripción completa. */}
+                  <TextoQueCrece
                     className="itemDescripcion"
                     value={item.descripcion}
-                    onChange={(evento) =>
-                      actualizarItem(
-                        indice,
-                        'descripcion',
-                        evento.target.value,
-                      )
-                    }
+                    onChange={(valor) => actualizarItem(indice, 'descripcion', valor)}
                     placeholder="Descripción"
                   />
                 </label>

@@ -2220,3 +2220,12 @@ button.orFaltaItem:focus-visible{outline:2px solid #1f9d5c;outline-offset:1px}
 .gtsCampo input{font:inherit;font-size:16px;font-weight:400;padding:10px 12px;border:1px solid var(--mova-border,#d5d9df);border-radius:10px}
 .gtsAcc{display:flex;justify-content:flex-end;gap:8px}
 @media (prefers-reduced-motion:reduce){.gtsResumen{animation:none}}
+
+/* Descripción del ítem: crece con el texto para verlo completo */
+.itemCampo textarea.itemDescripcion{width:100%;min-width:0;min-height:42px;padding:10px;border:1px solid #d5dae1;border-radius:9px;background:#fff;color:#202225;font:inherit;font-size:14px;font-weight:400;letter-spacing:normal;text-transform:none;line-height:1.4;resize:none;overflow:hidden;box-sizing:border-box;display:block}
+.itemCampo textarea.itemDescripcion:focus{outline:2px solid var(--mova-orange,#de7015);outline-offset:0;border-color:transparent}
+/* En la compu, si la descripción crece, el resto de los campos queda alineado arriba */
+@media (min-width:701px){
+  .presupuestoItem{align-items:start}
+  .presupuestoItem .itemCampo>span{min-height:2.6em;display:flex;align-items:flex-end}
+}
