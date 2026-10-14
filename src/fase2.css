@@ -2229,3 +2229,13 @@ button.orFaltaItem:focus-visible{outline:2px solid #1f9d5c;outline-offset:1px}
   .presupuestoItem{align-items:start}
   .presupuestoItem .itemCampo>span{min-height:2.6em;display:flex;align-items:flex-end}
 }
+
+/* Filtros de Personal → Movimientos: un nombre de obra largo no ensancha la pantalla */
+.peFiltros select{max-width:100%;min-width:0;text-overflow:ellipsis}
+@media (max-width:700px){
+  .peFiltros{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .peFiltros .segTipo{grid-column:1/-1;justify-self:start}
+  .peFiltros select{width:100%}
+}
+/* Ninguna lista desplegable se sale del ancho de la pantalla */
+select{max-width:100%}
