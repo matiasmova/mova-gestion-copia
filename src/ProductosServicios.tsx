@@ -9,6 +9,7 @@ import { formatoDinero, formatoDolar, guardarMoneda, leerCotizacion, leerMoneda,
 import { confirmarEliminacion } from './confirmar'
 import { cargarConfig } from './config'
 import CompararMercado, { type ProductoAComparar } from './CompararMercado'
+import HistorialPrecios, { ListaHistorialPrecios } from './HistorialPrecios'
 import OrdenarCatalogoIA from './OrdenarCatalogoIA'
 import CampoNumero from './CampoNumero'
 
@@ -130,6 +131,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
   const [mostrarImportar, setMostrarImportar] = useState(false)
   const [mostrarCotizacion, setMostrarCotizacion] = useState(false)
   const [mostrarOrdenar, setMostrarOrdenar] = useState(false)
+  const [historial, setHistorial] = useState<{ id: number; nombre: string } | null>(null)
   const [mercado, setMercado] = useState<{ titulo: string; productos: ProductoAComparar[] } | null>(null)
   const [editando, setEditando] = useState<ProductoServicio | null>(null)
   const [guardando, setGuardando] = useState(false)
@@ -632,6 +634,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
         <div className="prodAcciones">
           <button className="editButton" onClick={() => abrirEdicion(el)}>Editar</button>
           {el.tipo === 'producto' && <button type="button" className="editButton" title="Comparar con precios del mercado" onClick={() => compararUno(el)}>💲 Mercado</button>}
+          <button type="button" className="editButton" title="Cambios de precio de este producto" onClick={() => setHistorial({ id: el.id, nombre: el.nombre })}>🕑 Precios</button>
           {el.link_compra && <a className="editButton" href={el.link_compra} target="_blank" rel="noreferrer">Ver en web</a>}
           <button className={el.activo ? 'deactivateButton' : 'activateButton'} onClick={() => cambiarEstado(el)}>{el.activo ? 'Desactivar' : 'Activar'}</button>
         </div>
@@ -904,7 +907,8 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
         />
       )}
 
-      {mercado && <CompararMercado titulo={mercado.titulo} productos={mercado.productos} onCerrar={() => setMercado(null)} />}
+      {mercado && <CompararMercado titulo={mercado.titulo} productos={mercado.productos} onCerrar={() => setMercado(null)} onCambioCatalogo={() => void cargarCatalogo()} />}
+      {historial && <HistorialPrecios producto={historial} onCerrar={() => setHistorial(null)} />}
       {mostrarOrdenar && (
         <OrdenarCatalogoIA
           productos={elementos}
@@ -1010,6 +1014,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                   )}
                 </div>
 
+                {editando && <details className="formFull hpEnFicha"><summary>🕑 Historial de precios</summary><ListaHistorialPrecios productoId={editando.id} /></details>}
                 {editando && <TiendaWebProducto producto={editando} sincronizar={tnSincronizar} onSincronizar={setTnSincronizar} onCambio={() => void cargarCatalogo()} />}
                 <label className="formFull">Detalle interno (no sale en el presupuesto)<textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder="Modelo, especificaciones, notas de instalación, compatibilidades…" /></label>
 

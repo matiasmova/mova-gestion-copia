@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx'
 import { supabase } from './supabase'
+import { actualizarProducto } from './historialPrecios'
 import type { ProductoServicio } from './ProductosServicios'
 import {
   dos,
@@ -598,7 +599,7 @@ export async function ejecutarImportacion(
   const trabajador = async () => {
     while (siguiente < actualizar.length) {
       const fila = actualizar[siguiente++]
-      const { error } = await supabase.from('productos_servicios').update(fila.datos as never).eq('id', fila.existente.id)
+      const { error } = await actualizarProducto(fila.existente.id, fila.datos as Record<string, unknown>, 'importacion')
       if (error) resultado.fallidos.push({ linea: fila.linea, nombre: fila.nombre, mensaje: mensajeError(error) })
       else resultado.actualizados++
       hechas++

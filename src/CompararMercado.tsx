@@ -2,10 +2,15 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { pedirAsistente } from './asistenteIA'
 import { formatoDinero, leerCotizacion } from './catalogoMoneda'
+import { supabase } from './supabase'
+import { actualizarProducto } from './historialPrecios'
+import CampoNumero from './CampoNumero'
 
 // Compara precios propios con los del mercado (la IA busca en internet).
-// Solo muestra la comparación. Si se pasa onUsarPrecio (editor en vivo), cada
-// ítem tiene un botón para usar el precio típico del mercado.
+// Cada ítem puede tomar el precio típico del mercado o uno cargado a mano.
+// · Con onUsarPrecio (editor en vivo) el precio cambia en el presupuesto.
+// · Si el ítem es del catálogo, también se puede guardar en el producto: el
+//   cambio queda en su historial de precios (sección Productos).
 
 export type ProductoAComparar = {
   id?: number | null // del catálogo: la búsqueda usa nombre, código y marca
@@ -60,8 +65,46 @@ export function posicionPrecio(precio: number, r: Resultado | undefined): Posici
 
 const EMOJI = { verde: '🟢', amarillo: '🟡', rojo: '🔴', gris: '⚪' }
 
-function CompararMercado({ productos, titulo, total, onCerrar, onUsarPrecio, onResultados }: { productos: ProductoAComparar[]; titulo: string; total?: number; onCerrar: () => void; onUsarPrecio?: (indice: number, precio: number) => void; onResultados?: (medianas: (number | null)[]) => void }) {
-  const [usados, setUsados] = useState<Record<number, number>>({})
+function CompararMercado({ productos, titulo, total, onCerrar, onUsarPrecio, onResultados, onCambioCatalogo }: { productos: ProductoAComparar[]; titulo: string; total?: number; onCerrar: () => void; onUsarPrecio?: (indice: number, precio: number) => void; onResultados?: (medianas: (number | null)[]) => void; onCambioCatalogo?: () => void }) {
+  const [usados, setUsados] = useState<Record<number, { precio: number; catalogo: boolean }>>({})
+  const [manual, setManual] = useState<{ k: number; valor: string } | null>(null)
+  const [guardarCatalogo, setGuardarCatalogo] = useState(true)
+  const [guardando, setGuardando] = useState<number | null>(null)
+  const [errorPrecio, setErrorPrecio] = useState('')
+  // Moneda de cada producto del catálogo (los de dólares guardan también el precio en USD).
+  const [monedas, setMonedas] = useState<Record<number, string>>({})
+  const hayCatalogo = productos.some((p) => p.id)
+  const puedeCambiar = (p: ProductoAComparar) => !!onUsarPrecio || !!p.id
+
+  useEffect(() => {
+    const ids = productos.map((p) => p.id).filter((x): x is number => !!x)
+    if (!ids.length) return
+    void supabase.from('productos_servicios').select('id, moneda').in('id', ids).then(({ data }) => {
+      const m: Record<number, string> = {}
+      for (const x of (data ?? []) as { id: number; moneda?: string }[]) m[x.id] = x.moneda ?? 'ARS'
+      setMonedas(m)
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Aplica un precio: en el presupuesto (si se puede) y en el catálogo (si se eligió).
+  async function aplicarPrecio(k: number, precio: number, origen: 'mercado' | 'manual') {
+    const p = productos[k]
+    setErrorPrecio('')
+    const alCatalogo = !!p.id && (guardarCatalogo || !onUsarPrecio)
+    if (alCatalogo && p.id) {
+      setGuardando(k)
+      const cot = leerCotizacion()
+      const enUsd = monedas[p.id] === 'USD'
+      if (enUsd && !(cot > 0)) { setGuardando(null); setErrorPrecio('Ese producto está en dólares: cargá la cotización en Productos (💲) para poder guardarlo.'); return }
+      const { error: fallo } = await actualizarProducto(p.id, { precio_venta: precio, ...(enUsd ? { precio_usd: Math.round((precio / cot) * 100) / 100 } : {}) }, origen, `Comparando precios: ${titulo}`)
+      setGuardando(null)
+      if (fallo) { console.error(fallo); setErrorPrecio(`No se pudo guardar en el catálogo: ${fallo.message || 'volvé a intentar.'}`); return }
+      onCambioCatalogo?.()
+    }
+    onUsarPrecio?.(k, precio)
+    setUsados((u) => ({ ...u, [k]: { precio, catalogo: alCatalogo } }))
+    setManual(null)
+  }
   const [analisis, setAnalisis] = useState<Analisis | null>(null)
   const [analizando, setAnalizando] = useState(false)
   const [errorAnalisis, setErrorAnalisis] = useState('')
@@ -83,12 +126,18 @@ function CompararMercado({ productos, titulo, total, onCerrar, onUsarPrecio, onR
       // De a 8 por pedido (cada pedido hace varias búsquedas).
       const nuevos: Record<string, Resultado> = {}
       const todasFuentes: Respuesta['fuentes'] = [], todasBusquedas: string[] = []
+      let fallidas = 0, ultimoError = ''
       for (let i = 0; i < faltan.length; i += 8) {
         const tanda = faltan.slice(i, i + 8)
-        const r = await pedirAsistente<Respuesta>({
+        const pedido = () => pedirAsistente<Respuesta>({
           accion: 'mercado', cotizacion: leerCotizacion(),
           productos: tanda.map(({ p }) => ({ ...(p.id ? { id: p.id } : { descripcion: p.nombre }), ...(esServicio(p) ? { servicio: true, descripcion: p.nombre } : {}) })),
         })
+        // Si una tanda falla (respuesta cortada), se reintenta una vez y se sigue con las demás.
+        let r: Respuesta
+        try { r = await pedido() } catch {
+          try { r = await pedido() } catch (e) { fallidas += tanda.length; ultimoError = (e as Error).message; continue }
+        }
         tanda.forEach(({ p, k }, j) => { const x = r.resultados[j]; if (x) { salida[k] = x; nuevos[claveDe(p)] = x } })
         todasFuentes.push(...r.fuentes); todasBusquedas.push(...r.busquedas)
         setResultados([...salida])
@@ -98,6 +147,7 @@ function CompararMercado({ productos, titulo, total, onCerrar, onUsarPrecio, onR
       onResultados?.(salida.map((x) => (x && x.mediana > 0 ? x.mediana : null)))
       setFuentes(todasFuentes.filter((f, k, a) => a.findIndex((x) => x.titulo === f.titulo) === k).slice(0, 12))
       setBusquedas(Array.from(new Set(todasBusquedas)).slice(0, 10))
+      if (fallidas) setError(fallidas === faltan.length ? ultimoError : `No se pudieron buscar ${fallidas} ítem${fallidas === 1 ? '' : 's'}. Tocá "↻ Buscar de nuevo" para reintentar.`)
     } catch (e) { setError((e as Error).message) } finally { setBuscando(false) }
   }
 
@@ -140,6 +190,11 @@ function CompararMercado({ productos, titulo, total, onCerrar, onUsarPrecio, onR
           </div>
         )}
         {error && <p className="loginError">{error}</p>}
+        {errorPrecio && <p className="loginError">{errorPrecio}</p>}
+        {hayCatalogo && onUsarPrecio && (
+          <label className="mercadoGuardarCat"><input type="checkbox" checked={guardarCatalogo} onChange={(e) => setGuardarCatalogo(e.target.checked)} /> Al cambiar un precio, guardarlo también en el catálogo (queda en el historial del producto)</label>
+        )}
+        {hayCatalogo && !onUsarPrecio && <p className="gestionAyuda">Los precios que cambies acá se guardan en el catálogo y quedan en el historial de cada producto.</p>}
 
         {productos.length > 1 && conDatos > 0 && (
           <div className={`mercadoResumen ${difTotal > 25 ? 'rojo' : difTotal > 10 || difTotal < -15 ? 'amarillo' : 'verde'}`}>
@@ -152,7 +207,8 @@ function CompararMercado({ productos, titulo, total, onCerrar, onUsarPrecio, onR
         <div className="mercadoLista">
           {productos.map((p, k) => {
             const r = resultados[k]
-            const pos = posicionPrecio(p.precio, r)
+            const precioTuyo = usados[k]?.precio ?? p.precio
+            const pos = posicionPrecio(precioTuyo, r)
             const margen = p.costo && p.costo > 0 && r && r.mediana > 0 ? ((r.mediana - p.costo) / r.mediana) * 100 : null
             const ab = abierto === k
             return (
@@ -161,15 +217,26 @@ function CompararMercado({ productos, titulo, total, onCerrar, onUsarPrecio, onR
                   <span className="mercadoSemaforo">{r ? EMOJI[pos.nivel] : buscando ? '⏳' : '⚪'}</span>
                   <span className="mercadoNombre"><b>{esServicio(p) && <span className="mercadoTag">Servicio</span>}{p.nombre}</b><small>{r ? pos.texto : buscando ? 'Buscando…' : 'Sin datos'}</small></span>
                   <span className="mercadoPrecios">
-                    <small>Vos</small><b>{p.precio > 0 ? formatoDinero(p.precio) : '—'}</b>
+                    <small>Vos</small><b>{precioTuyo > 0 ? formatoDinero(precioTuyo) : '—'}</b>
                     {r && r.mediana > 0 && <><small>Mercado</small><b>{formatoDinero(r.mediana)}</b></>}
                   </span>
                   <span className="mercadoFlecha">{ab ? '▲' : '▼'}</span>
                 </button>
-                {onUsarPrecio && r && r.mediana > 0 && Math.abs((usados[k] ?? p.precio) - r.mediana) > 1 && (
-                  <button type="button" className="mercadoUsar" onClick={() => { onUsarPrecio(k, Math.round(r.mediana)); setUsados((u) => ({ ...u, [k]: Math.round(r.mediana) })) }}>Usar el precio del mercado ({formatoDinero(Math.round(r.mediana))})</button>
+                {puedeCambiar(p) && (
+                  manual?.k === k
+                    ? <div className="mercadoManual">
+                        <CampoNumero autoFocus value={manual.valor} onChange={(e) => setManual({ k, valor: e.target.value })} aria-label="Precio nuevo" placeholder="Precio nuevo" />
+                        <button type="button" className="newButton" disabled={guardando === k || !(Number(manual.valor) > 0)} onClick={() => void aplicarPrecio(k, Math.round(Number(manual.valor) * 100) / 100, 'manual')}>{guardando === k ? 'Guardando…' : 'Usar'}</button>
+                        <button type="button" className="editButton" onClick={() => setManual(null)}>Cancelar</button>
+                      </div>
+                    : <div className="mercadoBotones">
+                        {r && r.mediana > 0 && Math.abs((usados[k]?.precio ?? p.precio) - r.mediana) > 1 && (
+                          <button type="button" className="mercadoUsar" disabled={guardando === k} onClick={() => void aplicarPrecio(k, Math.round(r.mediana), 'mercado')}>{guardando === k ? 'Guardando…' : `Usar el precio del mercado (${formatoDinero(Math.round(r.mediana))})`}</button>
+                        )}
+                        <button type="button" className="mercadoUsar" onClick={() => setManual({ k, valor: String(usados[k]?.precio ?? (p.precio || '')) })}>✏️ Otro precio</button>
+                      </div>
                 )}
-                {onUsarPrecio && usados[k] != null && <small className="mercadoUsado">✓ Cambiado a {formatoDinero(usados[k])}</small>}
+                {usados[k] != null && <small className="mercadoUsado">✓ Cambiado a {formatoDinero(usados[k].precio)}{usados[k].catalogo ? ' · guardado en el catálogo (queda en su historial)' : ''}</small>}
                 {ab && r && (
                   <div className="mercadoDetalle">
                     {r.ofertas.length > 0 ? <>
