@@ -2403,3 +2403,24 @@ textarea.pvResTexto:focus{outline:2px solid #de7015;border-color:transparent}
 @media (prefers-reduced-motion:reduce){.pvPanel{animation:none}}
 /* Comparar precios abierto desde el editor en vivo: por encima de él */
 body>.modalOverlay:has(.mercadoModal){z-index:4500}
+
+/* Presupuesto en vivo como pantalla principal */
+.pvBarra{position:relative}
+.pvMenu{top:calc(100% + 4px);right:10px}
+.pvMenu>button:disabled{opacity:.5;cursor:default}
+.pvAcciones{display:flex;gap:8px;align-items:center}
+.pvAcciones button{border:0;border-radius:12px;padding:12px 16px;font:inherit;font-weight:800;font-size:15px;cursor:pointer;white-space:nowrap}
+.pvAcciones .verde{background:#1f9d5c;color:#fff}
+.pvAcciones .claro{background:#f1f2f4;color:#14181e}
+.pvAcciones button:disabled{opacity:.6;cursor:default}
+@media (max-width:420px){.pvAcciones button{padding:11px 12px;font-size:14px}}
+/* Ventanas (aceptar, rechazar, avisos) por encima del presupuesto en vivo */
+body:has(.pvFondo)>.modalOverlay{z-index:4600}
+.pvPie{flex-wrap:wrap}
+.pvAcciones{margin-left:auto}
+@media (max-width:520px){
+  .pvAcciones{width:100%}
+  .pvAcciones button{flex:1}
+  .pvAcciones button[aria-label]{flex:0 0 auto}
+  .pvDoc{padding-bottom:160px}
+}

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from './supabase'
 import { moneda } from './gestionFormat'
@@ -26,7 +26,15 @@ export type PresupuestoVivo = {
   descuento: number; items: ItemPresupuesto[]
 }
 
-type Props = { presupuesto: PresupuestoVivo; cliente: string; obra: string | null; onCerrar: () => void; onEditorCompleto: () => void; modoInicial?: 'edit' | 'ver' }
+type Props = {
+  presupuesto: PresupuestoVivo; cliente: string; obra: string | null; onCerrar: () => void; onEditorCompleto: () => void; modoInicial?: 'edit' | 'ver'
+  // Cuando es la pantalla principal del presupuesto: estado arriba, acciones abajo y menú ⋯.
+  estado?: ReactNode
+  acciones?: ReactNode
+  menu?: (cerrar: () => void) => ReactNode
+  extra?: ReactNode
+  onGuardado?: () => void
+}
 
 const SECCIONES: { tipo: 'producto' | 'servicio'; titulo: string }[] = [
   { tipo: 'producto', titulo: 'Productos y equipos' },
@@ -51,7 +59,8 @@ function Texto({ value, onChange, placeholder, className }: { value: string; onC
   return <textarea ref={ref} rows={1} className={className} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
 }
 
-export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar, onEditorCompleto, modoInicial = 'edit' }: Props) {
+export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar, onEditorCompleto, modoInicial = 'edit', estado, acciones, menu, extra, onGuardado }: Props) {
+  const [menuAbierto, setMenuAbierto] = useState(false)
   const [modo, setModo] = useState<'edit' | 'ver'>(modoInicial)
   const [titulo, setTitulo] = useState(presupuesto.titulo)
   const [items, setItems] = useState<Item[]>(() => presupuesto.items.map(conClave))
@@ -126,6 +135,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
     } while (pendiente.current)
     ocupado.current = false
     setEstadoGuardado(ok ? 'ok' : 'error')
+    if (ok) onGuardado?.()
   }
 
   useEffect(() => {
@@ -141,6 +151,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
     const { error } = await supabase.from('presupuestos').update({ resumen_doc: r }).eq('id', presupuesto.id)
     if (error) { console.error(error); setErrorIA('Para el modo Resumido falta correr en Supabase el SQL "supabase-resumen-documento-fase-28.sql".') }
     setEstadoGuardado(error ? 'error' : 'ok')
+    if (!error) onGuardado?.()
   }
   // Los textos se guardan cuando se deja de escribir.
   const tTexto = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -171,6 +182,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
     setEstadoGuardado('guardando')
     const ok = await guardarFormasPago(presupuesto.id, f)
     setEstadoGuardado(ok ? 'ok' : 'error')
+    if (ok) onGuardado?.()
   }
 
   // ---------- Ítems ----------
@@ -290,7 +302,9 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
             <button type="button" className={!ed ? 'on' : ''} onClick={() => { setModo('ver'); setAbierto(null) }}>👁️ Como lo ve el cliente</button>
           </div>
           <span className={`pvGuardado ${estadoGuardado}`}>{estadoGuardado === 'ok' ? '✓ Guardado' : estadoGuardado === 'guardando' ? 'Guardando…' : '⚠ No se guardó'}</span>
+          {menu && <button type="button" className="pvCerrar" onClick={() => setMenuAbierto((v) => !v)} aria-label="Más opciones" aria-expanded={menuAbierto}>⋯</button>}
           <button type="button" className="pvCerrar" onClick={() => { if (estadoGuardado === 'guardando') void guardarAhora(); onCerrar() }} aria-label="Cerrar">✕</button>
+          {menu && menuAbierto && <div className="pfMas pvMenu" role="menu">{menu(() => setMenuAbierto(false))}</div>}
         </div>
 
         <div className={`pvDoc ${ed ? 'edit' : 'ver'}`}>
@@ -302,6 +316,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
             ? <Texto className="pvTitulo" value={titulo} onChange={setTitulo} placeholder="Título del presupuesto" />
             : <h2 className="pvTitulo">{titulo}</h2>}
           <p className="pvCliente">Cliente: <b>{cliente}</b>{obra ? <> · Obra: <b>{obra}</b></> : null}</p>
+          {estado}
 
           {ed && (
             <div className="pvHerr">
@@ -373,6 +388,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
             </div>
           )}
 
+          {ed && extra}
           {ed && (
             <p className="pvMasOpc">¿Descripción, notas, bonificación general o soluciones? <button type="button" onClick={onEditorCompleto}>Abrir el editor completo</button></p>
           )}
@@ -380,7 +396,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
 
         <div className="pvPie">
           <div><small>Total · seña 70% {moneda(sena)}</small><b>{moneda(total)}</b></div>
-          <button type="button" onClick={() => { if (estadoGuardado === 'guardando') void guardarAhora(); onCerrar() }}>✓ Listo</button>
+          {acciones ?? <button type="button" onClick={() => { if (estadoGuardado === 'guardando') void guardarAhora(); onCerrar() }}>✓ Listo</button>}
         </div>
       </div>
 
