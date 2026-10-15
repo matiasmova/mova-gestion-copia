@@ -126,6 +126,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
   const [abrirAdic, setAbrirAdic] = useState<{ tipo: string; n: number } | null>(null)
   const [refrescoResumen, setRefrescoResumen] = useState(0)
   const [menuFicha, setMenuFicha] = useState(false)
+  const [hojaEnviar, setHojaEnviar] = useState(false)
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -433,6 +434,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
   }
 
   function cerrarSeguimiento() {
+    setHojaEnviar(false)
     setObraSeguimiento(null)
     setAvances([])
     setImagenes([])
@@ -1088,6 +1090,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
               onRegistrarCobro={() => elegirRegistro('cobro')}
               revision={actualizacion}
               secciones={{
+                ...(presupuestoAceptado ? { documento: <PanelPresupuestoObra modo="ajustes" obra={obraSeguimiento} cliente={obtenerCliente(obraSeguimiento.cliente_id)} version={docVersion + actualizacion} onVerDocumento={() => setInformeObra(obraSeguimiento)} onRegistrarCobro={() => elegirRegistro('cobro')} /> } : {}),
                 ...(presupuestoAceptado ? { finanzas: <EconomiaObra key={obraSeguimiento.id} cuenta={cuenta} presupuestoId={presupuestoAceptado.id} obraId={obraSeguimiento.id} onGenerarPdf={() => setInformeObra(obraSeguimiento)} onCambio={() => setActualizacion((v) => v + 1)} /> } : {}),
                 personal: <PersonalObra key={obraSeguimiento.id} onCambio={() => setActualizacion((v) => v + 1)} obraId={obraSeguimiento.id} avance={avanceEfectivo(obraSeguimiento.estado, obraSeguimiento.porcentaje_avance)} />,
                 accesos: <AccesosObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} cliente={obtenerCliente(obraSeguimiento.cliente_id)} obra={obraSeguimiento.nombre_obra} ubicacion={[obraSeguimiento.direccion, obraSeguimiento.localidad].filter(Boolean).join(', ') || null} />,
@@ -1114,6 +1117,22 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
             >
               {presupuestoAceptado && <PresupuestoVivoObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} onCambio={() => setActualizacion((v) => v + 1)} onVerHistorial={() => setSeguTab('adicionales')} />}
             </ResumenObra>}
+
+            {/* Hoja de abajo: enviar el PDF al cliente sin salir de la obra */}
+            {hojaEnviar && presupuestoAceptado && createPortal(
+              <div className="oeHojaFondo" onClick={() => setHojaEnviar(false)}>
+                <div className="oeHoja" role="dialog" aria-modal="true" aria-label="Enviar al cliente" onClick={(e) => e.stopPropagation()}>
+                  <div className="oeHojaCab">
+                    <h3>📤 Enviar al cliente</h3>
+                    <button type="button" className="fichaIcono" aria-label="Cerrar" onClick={() => setHojaEnviar(false)}>×</button>
+                  </div>
+                  <PanelPresupuestoObra modo="enviar" obra={obraSeguimiento} cliente={obtenerCliente(obraSeguimiento.cliente_id)} version={docVersion + actualizacion}
+                    onVerDocumento={() => { setHojaEnviar(false); setInformeObra(obraSeguimiento) }}
+                    onRegistrarCobro={() => { setHojaEnviar(false); elegirRegistro('cobro') }} />
+                </div>
+              </div>,
+              document.body,
+            )}
 
             {/* Hoja de abajo: cargar o corregir un avance sin salir de la obra */}
             {seguTab === 'resumen' && mostrarNuevoAvance && createPortal(
@@ -1280,7 +1299,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
 
             {/* Siempre a mano: enviar al cliente y registrar */}
             <div className="obraBarraAbajo">
-              {presupuestoAceptado && <button type="button" className="enviar" onClick={() => setSeguTab('documento')}>📤 Enviar al cliente</button>}
+              {presupuestoAceptado && <button type="button" className="enviar" onClick={() => setHojaEnviar(true)}>📤 Enviar al cliente</button>}
               <button type="button" className="registrar" onClick={() => setMenuRegistrar(true)}>＋ Registrar</button>
             </div>
           </div>

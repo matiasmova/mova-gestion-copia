@@ -21,9 +21,14 @@ type Props = {
   onVerDocumento: () => void
   onEditarPresupuesto?: (presupuestoId: number) => void
   onRegistrarCobro?: () => void
+  // 'enviar': solo mandar el PDF y el link de pago (la hoja de "Enviar al cliente").
+  // 'ajustes': lo demás del documento (comprobantes, formas de pago, cómo lo ve el cliente…).
+  modo?: 'todo' | 'enviar' | 'ajustes'
 }
 
-export default function PanelPresupuestoObra({ obra, cliente, version, onVerDocumento, onEditarPresupuesto, onRegistrarCobro }: Props) {
+export default function PanelPresupuestoObra({ obra, cliente, version, onVerDocumento, onEditarPresupuesto, onRegistrarCobro, modo = 'todo' }: Props) {
+  const verEnviar = modo !== 'ajustes'
+  const verAjustes = modo !== 'enviar'
   const [linkPago, setLinkPago] = useState<string | null>(null)
   const [linkInfo, setLinkInfo] = useState<{ token: string; activo: boolean } | null>(null)
   const [copiado, setCopiado] = useState(false)
@@ -45,6 +50,7 @@ export default function PanelPresupuestoObra({ obra, cliente, version, onVerDocu
       if (!vigente) return
       setDatos(d)
       setAvisoComp('')
+      if (!verEnviar) return
       const link = await asegurarLinkPago(d)
       if (!vigente) return
       setLinkPago(link)
@@ -81,6 +87,7 @@ export default function PanelPresupuestoObra({ obra, cliente, version, onVerDocu
 
   return (
     <div className="panelPresu">
+      {verEnviar && <>
       <div className="docAcciones">
         <button type="button" className="newButton" disabled={!pdf || compartiendo} onClick={() => void compartir()}>{!pdf ? 'Preparando PDF…' : compartiendo ? 'Compartiendo…' : '📲 Compartir PDF'}</button>
         {linkWa ? <a className="newButton docWa" href={linkWa} target="_blank" rel="noreferrer">💬 WhatsApp</a> : <button type="button" className="newButton docWa" disabled title="El cliente no tiene teléfono cargado">💬 WhatsApp</button>}
@@ -106,14 +113,6 @@ export default function PanelPresupuestoObra({ obra, cliente, version, onVerDocu
         </div>
       </div>
 
-      {datos && <ComprobantesPago presupuestoId={datos.id} obraId={obra.id} cliente={cliente} titulo={datos.titulo} version={version + revision} onRegistrarCobro={onRegistrarCobro} />}
-
-      {datos && onEditarPresupuesto && (
-        <button type="button" className="presuMercadoBtn docEditar" onClick={() => onEditarPresupuesto(datos.id)}>
-          <span>✏️</span><span><b>Editar presupuesto</b><small>Ítems, precios, descuentos y textos</small></span><b>›</b>
-        </button>
-      )}
-      {datos && <FormasPagoEditor presupuestoId={datos.id} onGuardado={refrescar} />}
       {hayComprobantes && (
         <label className="formasPagoCard docComprobantes" title={avisoComp || undefined}>
           <span className="formasPagoIcono">📎</span>
@@ -124,6 +123,17 @@ export default function PanelPresupuestoObra({ obra, cliente, version, onVerDocu
           </select>{avisoComp && <span>{avisoComp}</span>}</div>
         </label>
       )}
+      </>}
+
+      {verAjustes && <>
+      {datos && <ComprobantesPago presupuestoId={datos.id} obraId={obra.id} cliente={cliente} titulo={datos.titulo} version={version + revision} onRegistrarCobro={onRegistrarCobro} />}
+
+      {datos && onEditarPresupuesto && (
+        <button type="button" className="presuMercadoBtn docEditar" onClick={() => onEditarPresupuesto(datos.id)}>
+          <span>✏️</span><span><b>Editar presupuesto</b><small>Ítems, precios, descuentos y textos</small></span><b>›</b>
+        </button>
+      )}
+      {datos && <FormasPagoEditor presupuestoId={datos.id} onGuardado={refrescar} />}
       {datos && <ComoLoVeCliente presupuestoId={datos.id} titulo={datos.titulo} items={datos.items} onGuardado={refrescar} />}
       {datos && <RecomendacionesUso presupuestoId={datos.id} titulo={datos.titulo} descripcion={datos.descripcion ?? null} items={datos.items} onGuardado={refrescar} />}
       {datos && datos.items.length > 0 && (
@@ -132,6 +142,7 @@ export default function PanelPresupuestoObra({ obra, cliente, version, onVerDocu
         </button>
       )}
       {mercado && datos && <CompararMercado titulo={datos.titulo} productos={mercado} total={Number(datos.total)} onCerrar={() => setMercado(null)} />}
+      </>}
     </div>
   )
 }
