@@ -26,7 +26,7 @@ export type PresupuestoVivo = {
   descuento: number; items: ItemPresupuesto[]
 }
 
-type Props = { presupuesto: PresupuestoVivo; cliente: string; obra: string | null; onCerrar: () => void; onEditorCompleto: () => void }
+type Props = { presupuesto: PresupuestoVivo; cliente: string; obra: string | null; onCerrar: () => void; onEditorCompleto: () => void; modoInicial?: 'edit' | 'ver' }
 
 const SECCIONES: { tipo: 'producto' | 'servicio'; titulo: string }[] = [
   { tipo: 'producto', titulo: 'Productos y equipos' },
@@ -51,8 +51,8 @@ function Texto({ value, onChange, placeholder, className }: { value: string; onC
   return <textarea ref={ref} rows={1} className={className} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
 }
 
-export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar, onEditorCompleto }: Props) {
-  const [modo, setModo] = useState<'edit' | 'ver'>('edit')
+export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar, onEditorCompleto, modoInicial = 'edit' }: Props) {
+  const [modo, setModo] = useState<'edit' | 'ver'>(modoInicial)
   const [titulo, setTitulo] = useState(presupuesto.titulo)
   const [items, setItems] = useState<Item[]>(() => presupuesto.items.map(conClave))
   const [abierto, setAbierto] = useState<number | null>(null)
