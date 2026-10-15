@@ -2585,3 +2585,26 @@ body:has(.pvItem.arrastrando){cursor:grabbing}
 .epLink{align-self:center;border:0;background:transparent;font:inherit;font-size:13px;color:#6b7380;text-decoration:underline;cursor:pointer}
 @media (max-width:520px){.epFondo{align-items:flex-end;padding:0}.epHoja{border-radius:22px 22px 0 0;max-height:92vh;padding-bottom:max(18px,env(safe-area-inset-bottom))}}
 @media (prefers-reduced-motion:reduce){.epFondo{animation:none}}
+/* Alta rápida de producto: precio del mercado y foto */
+.bcMercado{display:flex;flex-direction:column;gap:8px;border:1px solid #e6defb;background:#faf8ff;border-radius:12px;padding:10px}
+.bcMercadoBtn{border:0;border-radius:10px;padding:10px 12px;font:inherit;font-weight:800;font-size:14px;cursor:pointer;color:#fff;background:linear-gradient(135deg,#6d4ed6,#9b6cf0)}
+.bcMercadoBtn:disabled{opacity:.75;cursor:default}
+.bcMercadoError{color:#b42318;font-size:12.5px}
+.bcMercadoRango{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.bcMercadoRango div{background:#fff;border:1px solid #ece7fb;border-radius:10px;padding:7px 8px;min-width:0}
+.bcMercadoRango div.tipico{border-color:#9b6cf0;box-shadow:inset 0 0 0 1px #9b6cf0}
+.bcMercadoRango small{display:block;font-size:10.5px;font-weight:800;letter-spacing:.04em;color:#6b7380;text-transform:uppercase}
+.bcMercadoRango b{font-size:14px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.bcMercadoPos{font-size:13px;font-weight:700}
+.bcMercadoPos.verde{color:#1f7a4d}.bcMercadoPos.amarillo{color:#a85008}.bcMercadoPos.rojo{color:#b42318}
+.bcMercadoAcc{display:flex;flex-wrap:wrap;gap:6px}
+.bcMercadoAcc button{padding:8px 12px;font-size:13px}
+.bcMercadoOferta{font-size:12px;color:#6b7380;overflow-wrap:anywhere}
+.bcMercadoOferta a{color:#6d4ed6;font-weight:700}
+.bcFotoCarga{flex-direction:row!important;align-items:center;gap:12px!important;border:2px dashed #d5dae1;border-radius:12px;padding:10px;cursor:pointer}
+.bcFotoCarga>span:first-child{width:56px;height:56px;border-radius:10px;background:#f3f4f6;display:grid;place-items:center;font-size:24px;flex:none}
+.bcFotoCarga img{width:56px;height:56px;border-radius:10px;object-fit:cover;flex:none}
+.bcFotoCarga>span:last-of-type{display:flex;flex-direction:column;gap:2px;min-width:0}
+.bcFotoCarga b{font-size:14px;color:#14181e}
+.bcFotoCarga input{display:none}
+.bcQuitarFoto{align-self:flex-start;border:0;background:transparent;color:#b42318;font:inherit;font-weight:700;font-size:13px;cursor:pointer;padding:0}
