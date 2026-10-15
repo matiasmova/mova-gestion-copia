@@ -237,6 +237,74 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
     })
   }
 
+  // ---------- Mover manteniendo apretado ----------
+  // Se mantiene apretado un ítem (o se arrastra desde ⠿) y se suelta donde va.
+  // Mientras se arrastra, el ítem cambia de lugar en vivo dentro de su sección.
+  const [arrastre, setArrastre] = useState<{ k: number; tipo: string } | null>(null)
+  const espera = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null)
+  const recienArrastrado = useRef(false)
+  function empezarPresion(e: React.PointerEvent, it: Item, inmediato = false) {
+    if (!ed || e.button > 0) return
+    const tipo = it.tipo === 'servicio' ? 'servicio' : 'producto'
+    const arrancar = () => { espera.current = null; setAbierto(null); setArrastre({ k: it._k, tipo }); try { navigator.vibrate?.(25) } catch { /* sin vibración */ } }
+    if (inmediato) { e.preventDefault(); arrancar(); return }
+    espera.current = { timer: setTimeout(arrancar, 380), x: e.clientX, y: e.clientY }
+  }
+  function cancelarEspera() { if (espera.current) { clearTimeout(espera.current.timer); espera.current = null } }
+  useEffect(() => {
+    // Antes de empezar: si el dedo se mueve, es scroll (no se arrastra).
+    const mov = (e: PointerEvent) => { const w = espera.current; if (w && Math.hypot(e.clientX - w.x, e.clientY - w.y) > 8) cancelarEspera() }
+    window.addEventListener('pointermove', mov)
+    window.addEventListener('pointerup', cancelarEspera)
+    window.addEventListener('pointercancel', cancelarEspera)
+    return () => { window.removeEventListener('pointermove', mov); window.removeEventListener('pointerup', cancelarEspera); window.removeEventListener('pointercancel', cancelarEspera) }
+  }, [])
+  useEffect(() => {
+    if (!arrastre) return
+    const doc = document.querySelector('.pvDoc') as HTMLElement | null
+    let ultimaY = 0
+    let auto: ReturnType<typeof setInterval> | null = null
+    const ubicar = (y: number) => {
+      const filas = Array.from(document.querySelectorAll<HTMLElement>(`.pvItem[data-sec="${arrastre.tipo}"]`))
+      const destino = filas.find((f) => { const r = f.getBoundingClientRect(); return y >= r.top && y <= r.bottom })
+      const kDestino = destino ? Number(destino.dataset.item) : null
+      if (kDestino == null || kDestino === arrastre.k) return
+      setItems((l) => {
+        const a = l.findIndex((x) => x._k === arrastre.k), b = l.findIndex((x) => x._k === kDestino)
+        if (a < 0 || b < 0) return l
+        const n = [...l]
+        const [movido] = n.splice(a, 1)
+        n.splice(b, 0, movido)
+        return n
+      })
+    }
+    const mover = (e: PointerEvent) => {
+      ultimaY = e.clientY
+      ubicar(e.clientY)
+      // Cerca del borde, la pantalla se mueve sola.
+      const r = doc?.getBoundingClientRect()
+      if (auto) { clearInterval(auto); auto = null }
+      if (doc && r) {
+        const paso = e.clientY < r.top + 60 ? -12 : e.clientY > r.bottom - 90 ? 12 : 0
+        if (paso) auto = setInterval(() => { doc.scrollBy(0, paso); ubicar(ultimaY) }, 30)
+      }
+    }
+    const soltar = () => { if (auto) clearInterval(auto); recienArrastrado.current = true; setTimeout(() => { recienArrastrado.current = false }, 250); setArrastre(null) }
+    // Mientras se arrastra, el dedo no hace scroll.
+    const sinScroll = (e: TouchEvent) => e.preventDefault()
+    window.addEventListener('pointermove', mover)
+    window.addEventListener('pointerup', soltar)
+    window.addEventListener('pointercancel', soltar)
+    window.addEventListener('touchmove', sinScroll, { passive: false })
+    return () => {
+      if (auto) clearInterval(auto)
+      window.removeEventListener('pointermove', mover)
+      window.removeEventListener('pointerup', soltar)
+      window.removeEventListener('pointercancel', soltar)
+      window.removeEventListener('touchmove', sinScroll)
+    }
+  }, [arrastre])
+
   function filaItem(it: Item, anterior: number | null, siguiente: number | null) {
     numero++
     const ab = ed && abierto === it._k
@@ -244,14 +312,17 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
     const marca = ed ? marcaMercado(it) : null
     const { titulo: t, detalle } = partirDescripcion(it.descripcion)
     return (
-      <div key={it._k} data-item={it._k} className={`pvItem${ab ? ' abierto' : ''}`}>
+      <div key={it._k} data-item={it._k} data-sec={it.tipo === 'servicio' ? 'servicio' : 'producto'} className={`pvItem${ab ? ' abierto' : ''}${arrastre?.k === it._k ? ' arrastrando' : ''}`}>
         <div className="pvFila" role={ed ? 'button' : undefined} tabIndex={ed ? 0 : undefined}
-          onClick={() => ed && setAbierto(ab ? null : it._k)} onKeyDown={(e) => { if (ed && e.key === 'Enter') setAbierto(ab ? null : it._k) }}>
+          onPointerDown={(e) => empezarPresion(e, it)}
+          onContextMenu={(e) => { if (ed) e.preventDefault() }}
+          onClick={() => { if (ed && !recienArrastrado.current) setAbierto(ab ? null : it._k) }}
+          onKeyDown={(e) => { if (ed && e.key === 'Enter') setAbierto(ab ? null : it._k) }}>
           {ed && (
-            <span className="pvMover" onClick={(e) => e.stopPropagation()}>
-              <button type="button" aria-label="Subir" disabled={anterior == null} onClick={() => mover(it._k, anterior)}>▲</button>
-              <button type="button" aria-label="Bajar" disabled={siguiente == null} onClick={() => mover(it._k, siguiente)}>▼</button>
-            </span>
+            <button type="button" className="pvAgarre" aria-label="Mover (arrastrá, o usá las flechas del teclado)" title="Arrastrá para mover"
+              onPointerDown={(e) => { e.stopPropagation(); empezarPresion(e, it, true) }}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => { if (e.key === 'ArrowUp') { e.preventDefault(); mover(it._k, anterior) } if (e.key === 'ArrowDown') { e.preventDefault(); mover(it._k, siguiente) } }}>⠿</button>
           )}
           <span className="pvN">{String(numero).padStart(2, '0')}</span>
           <div className="pvTx">
