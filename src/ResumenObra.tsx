@@ -40,6 +40,12 @@ type Props = {
   presupuesto?: { id: number; titulo: string } | null
   // Botón del cuadro "A pagar hoy".
   onRegistrarCobro?: () => void
+  // Obra en vivo: línea de avances tocable (reemplaza a las etapas) y el
+  // presupuesto editable (children), debajo de "Qué falta".
+  lineaAvances?: ReactNode
+  children?: ReactNode
+  // Cambia cuando se guarda algo, para recontar pendientes sin rearmar la pantalla.
+  revision?: number
 }
 
 // Una persona del equipo, con los mismos números que la sección Personal.
@@ -167,15 +173,15 @@ function Cuadro({ icono, titulo, estado, alerta, ancho, onClick }: { icono: stri
   </button>
 }
 
-export default function ResumenObra({ obraId, estado, avance, avances, cargandoAvances, tienePresupuesto, cuenta, cargandoCuenta, dinero, onIr, presupuesto, onRegistrarCobro, presupuestoSinAceptar }: Props) {
+export default function ResumenObra({ obraId, estado, avance, avances, cargandoAvances, tienePresupuesto, cuenta, cargandoCuenta, dinero, onIr, presupuesto, onRegistrarCobro, presupuestoSinAceptar, lineaAvances, children, revision = 0 }: Props) {
   const [datos, setDatos] = useState<Datos | null>(null)
 
   useEffect(() => {
     let vigente = true
-    setDatos(null)
     void cargarDatos(obraId, avance).then((d) => { if (vigente) setDatos(d) }).catch((e) => console.error(e))
     return () => { vigente = false }
-  }, [obraId, avance])
+  }, [obraId, avance, revision])
+  useEffect(() => { setDatos(null) }, [obraId])
 
   const terminada = estado === 'finalizada' || estado === 'observacion' || avance >= 100
   const cerca = terminada || avance >= 80
@@ -225,7 +231,7 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
       </div>
     ))}
 
-    <div className="orVida"><VidaEtapas pasos={pasosObra({ estado, porcentaje_avance: avance }, cuenta ? Math.max(0, cuenta.saldoTotal) + cuenta.gastoExtraPendiente : undefined)} /></div>
+    {lineaAvances ?? <div className="orVida"><VidaEtapas pasos={pasosObra({ estado, porcentaje_avance: avance }, cuenta ? Math.max(0, cuenta.saldoTotal) + cuenta.gastoExtraPendiente : undefined)} /></div>}
 
     {listo && (pendientes.length > 0 ? (
       <div className="orFalta">
@@ -239,6 +245,8 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
         })}
       </div>
     ) : <p className="orTodoOk">✓ Todo al día en esta obra</p>)}
+
+    {children}
 
     <div className="orTit">Obra</div>
     <div className="orCuadros">

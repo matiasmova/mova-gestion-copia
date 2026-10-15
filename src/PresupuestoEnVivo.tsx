@@ -45,7 +45,7 @@ let claves = 0
 const conClave = (it: ItemPresupuesto): Item => ({ ...it, _k: ++claves })
 
 // Cuadro de texto que crece con lo escrito.
-function Texto({ value, onChange, placeholder, className }: { value: string; onChange: (v: string) => void; placeholder?: string; className?: string }) {
+export function Texto({ value, onChange, placeholder, className }: { value: string; onChange: (v: string) => void; placeholder?: string; className?: string }) {
   const ref = useRef<HTMLTextAreaElement>(null)
   useLayoutEffect(() => {
     const el = ref.current
