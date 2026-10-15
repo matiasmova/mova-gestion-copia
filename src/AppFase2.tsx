@@ -16,6 +16,7 @@ import HomeResumen from './HomeResumen'
 import logo from './assets/mova-logo.png'
 import './fase2.css'
 import './menu.css'
+import { aplicarTema, temaGuardado, type Tema } from './temaOscuro'
 import IconoMenu from './iconosMenu'
 import { BuscadorGlobal, BotonMas, type Pedido, type Ir } from './BuscadorGlobal'
 
@@ -50,6 +51,8 @@ export default function AppFase2() {
   const [obraAbrirId, setObraAbrirId] = useState<number | null>(null)
   const [presupuestoAbrirId, setPresupuestoAbrirId] = useState<number | null>(null)
   const [menuAbierto, setMenuAbierto] = useState(false)
+  const [tema, setTema] = useState<Tema>(temaGuardado)
+  const cambiarTema = (t: Tema) => { setTema(t); aplicarTema(t) }
   const [buscadorAbierto, setBuscadorAbierto] = useState(false)
   // Pedido del buscador o del botón "+" para el módulo de destino (abrir algo o crear nuevo).
   const [pedido, setPedido] = useState<(Pedido & { vista: Vista }) | null>(null)
@@ -234,6 +237,10 @@ export default function AppFase2() {
           )
         })}
       </nav>
+      <div className="menuTema" role="group" aria-label="Modo de pantalla">
+        <button type="button" className={tema === 'claro' ? 'on' : ''} aria-pressed={tema === 'claro'} onClick={() => cambiarTema('claro')}>☀️ Claro</button>
+        <button type="button" className={tema === 'oscuro' ? 'on' : ''} aria-pressed={tema === 'oscuro'} onClick={() => cambiarTema('oscuro')}>🌙 Oscuro</button>
+      </div>
       <div className="fase2Usuario"><div>{(nombreUsuario[0] ?? 'M').toUpperCase()}</div><span><strong>{nombreUsuario || 'Usuario'}</strong><small>{ROLES[rol]}</small></span><button title="Cerrar sesión" aria-label="Cerrar sesión" onClick={salir}><IconoMenu nombre="salir" /></button></div>
     </aside>
     <button type="button" className="fase2BuscarMovil" aria-label="Buscar" onClick={() => setBuscadorAbierto(true)}><IconoMenu nombre="buscar" tamano={20} /><span>Buscar</span></button>

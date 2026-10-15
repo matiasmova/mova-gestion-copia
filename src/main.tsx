@@ -5,6 +5,10 @@ import PaginaPago from './PaginaPago'
 import Arranque from './Arranque'
 import './index.css'
 import { vigilarActualizaciones } from './actualizacion'
+import { iniciarTema } from './temaOscuro'
+
+// Modo claro / oscuro elegido en el menú (se recuerda en este dispositivo).
+iniciarTema()
 
 // Página pública de pago del cliente (?pagar=código): sin login ni el resto de la app.
 const tokenPago = new URLSearchParams(window.location.search).get('pagar')

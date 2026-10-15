@@ -286,3 +286,34 @@
 body:has(.modalOverlay) .bmWrap,body:has(.modalOverlay) .fase2BuscarMovil,body:has(.bgOverlay) .bmWrap{display:none}
 /* Espacio al final para que el "+" no tape lo último de la página. */
 .fase2Main{padding-bottom:96px}
+
+/* Modo claro / oscuro */
+.fase2App .fase2Sidebar .menuTema {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin: 8px 12px 0;
+  padding: 4px;
+  border-radius: 12px;
+  background: #f1f2f4;
+}
+.fase2App .fase2Sidebar .menuTema button {
+  border: 0;
+  border-radius: 9px;
+  padding: 8px 6px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #4b5563;
+  cursor: pointer;
+}
+.fase2App .fase2Sidebar .menuTema button.on {
+  background: #ffffff;
+  color: #101318;
+  box-shadow: 0 1px 3px rgba(16, 19, 24, 0.12);
+}
+.fase2App .fase2Sidebar .menuTema button:focus-visible {
+  outline: 2px solid #e47b00;
+  outline-offset: 2px;
+}
