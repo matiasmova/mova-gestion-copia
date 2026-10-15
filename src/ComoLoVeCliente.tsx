@@ -11,12 +11,12 @@ import { PARTE_UNICA, normalizarResumen, partesConItems, resumenVacio, totalItem
 // sección, que puede escribir la IA, sin el precio de cada ítem). Cada sección
 // se puede dividir en partes (por ejemplo, Planta baja y Planta alta).
 
-type Props = { presupuestoId: number; titulo: string; items: ItemPresupuesto[]; onGuardado: () => void }
+type Props = { presupuestoId: number; titulo: string; items: ItemPresupuesto[]; onGuardado: () => void; abierto?: boolean }
 
 const SQL = 'supabase-resumen-documento-fase-28.sql'
 const nuevaId = () => Math.random().toString(36).slice(2, 9)
 
-export default function ComoLoVeCliente({ presupuestoId, titulo, items, onGuardado }: Props) {
+export default function ComoLoVeCliente({ presupuestoId, titulo, items, onGuardado, abierto = false }: Props) {
   const [r, setR] = useState<ResumenDoc>(resumenVacio)
   const [guardado, setGuardado] = useState('')
   const [cargando, setCargando] = useState(true)
@@ -97,7 +97,7 @@ export default function ComoLoVeCliente({ presupuestoId, titulo, items, onGuarda
   const vuelta = guardado ? normalizarResumen(JSON.parse(guardado)) : null
 
   return (
-    <details className="presuMas presuRecos lvcWrap">
+    <details className="presuMas presuRecos lvcWrap" open={abierto || undefined}>
       <summary>👁️ Cómo lo ve el cliente <span className={vuelta?.modo === 'resumido' ? 'presuRecosSi' : 'presuRecosNo'}>{vuelta?.modo === 'resumido' ? 'resumido' : 'detallado'}</span></summary>
       <div className="presuRecosCuerpo">
         {cargando ? <p className="gestionAyuda">Cargando…</p> : <>
