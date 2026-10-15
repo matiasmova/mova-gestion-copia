@@ -2614,3 +2614,9 @@ body:has(.pvItem.arrastrando){cursor:grabbing}
 .bcNombreOpc{display:flex;flex-wrap:wrap;gap:6px}
 .bcNombreOpc button{border:1px solid #d9d0f5;background:#fff;border-radius:999px;padding:6px 11px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;color:#4b5563}
 .bcNombreOpc button.on{background:#6d4ed6;border-color:#6d4ed6;color:#fff}
+.pvMercadoItem{display:flex;align-items:center;gap:8px;flex-wrap:wrap;align-self:flex-start;border:1px solid #e6defb;background:#faf8ff;border-radius:10px;padding:8px 12px;font:inherit;font-weight:800;font-size:13px;cursor:pointer;color:#5b3fc4}
+.pvMercadoItem:hover{border-color:#9b6cf0}
+.pvMercadoItem small{font-weight:600;color:#8a7cc4}
+.pvMercadoItem em{font-style:normal;font-size:11.5px;border-radius:999px;padding:1px 8px;background:#e9f7ef;color:#1f7a4d}
+.pvMercadoItem em.caro{background:#fde8e8;color:#b42318}
+.pvMercadoItem em.barato{background:#fff3e6;color:#a85008}

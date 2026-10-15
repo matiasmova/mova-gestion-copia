@@ -201,8 +201,9 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
     setTimeout(() => document.querySelector(`[data-item="${nuevo._k}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
   }
 
-  function compararPrecios() {
-    const lista = validos.filter((it) => Number(it.cantidad) > 0)
+  // Todo el presupuesto, o un solo ítem (botón dentro del ítem).
+  function compararPrecios(soloClave?: number) {
+    const lista = validos.filter((it) => Number(it.cantidad) > 0 && (soloClave == null || it._k === soloClave))
     const factor = sumaNeta > 0 ? total / sumaNeta : 1
     setMercado({
       claves: lista.map((it) => it._k),
@@ -212,6 +213,14 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
         precio: Math.round((importeNeto(it) / Number(it.cantidad)) * factor * 100) / 100,
       })),
     })
+  }
+  // Precio de lista para que el precio final (con su descuento y la bonificación) quede en el del mercado.
+  function usarPrecioMercado(clave: number, neto: number) {
+    const it = items.find((x) => x._k === clave)
+    if (!it) return
+    const factor = sumaNeta > 0 ? total / sumaNeta : 1
+    const lista = neto / (factor > 0 ? factor : 1) / Math.max(0.01, 1 - pctItem(it) / 100)
+    cambiarItem(clave, { precio_unitario: Math.round(lista) })
   }
   const marcaMercado = (it: Item) => {
     const m = medianas[it._k]
@@ -349,8 +358,11 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
             <div className="pvCtrl">
               <label>Precio</label>
               <CampoNumero className="pvPrecio" value={it.precio_unitario} onChange={(e) => cambiarItem(it._k, { precio_unitario: Number(e.target.value) || 0 })} aria-label="Precio unitario" />
-              {medianas[it._k] ? <button type="button" className="pvMercadoUsar" onClick={() => cambiarItem(it._k, { precio_unitario: Math.round(medianas[it._k]) })}>Mercado {moneda(medianas[it._k])} · usar</button> : null}
+              {medianas[it._k] ? <button type="button" className="pvMercadoUsar" onClick={() => usarPrecioMercado(it._k, medianas[it._k])}>Mercado {moneda(medianas[it._k])} · usar</button> : null}
             </div>
+            {it.descripcion.trim() && <button type="button" className="pvMercadoItem" onClick={() => compararPrecios(it._k)}>
+              📈 ¿Cómo estoy en el mercado?{marca ? <em className={marca.c}>{marca.t}</em> : <small>la IA busca este ítem</small>}
+            </button>}
             <div className="pvCtrl">
               <label>Descuento</label>
               <div className="pvChips">
@@ -412,7 +424,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
                 <button type="button" className={resumen.modo !== 'resumido' ? 'on' : ''} onClick={() => void guardarResumen({ ...resumen, modo: 'detallado' })}>📋 Detallado</button>
                 <button type="button" className={resumen.modo === 'resumido' ? 'on' : ''} onClick={() => void guardarResumen({ ...resumen, modo: 'resumido' })}>✨ Resumido</button>
               </div>
-              <button type="button" className="pvIA" disabled={validos.length === 0} onClick={compararPrecios}>📈 Comparar precios</button>
+              <button type="button" className="pvIA" disabled={validos.length === 0} onClick={() => compararPrecios()}>📈 Comparar precios</button>
             </div>
           )}
           {errorIA && <p className="loginError" style={{ margin: 0 }}>{errorIA}</p>}
@@ -485,7 +497,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
       {mercado && (
         <CompararMercado titulo={titulo} productos={mercado.productos} total={total} onCerrar={() => setMercado(null)}
           onResultados={(m) => setMedianas((prev) => { const n = { ...prev }; m.forEach((v, i) => { if (v) n[mercado.claves[i]] = v }); return n })}
-          onUsarPrecio={(i, precio) => cambiarItem(mercado.claves[i], { precio_unitario: precio })} />
+          onUsarPrecio={(i, precio) => usarPrecioMercado(mercado.claves[i], precio)} />
       )}
     </div>,
     document.body,
