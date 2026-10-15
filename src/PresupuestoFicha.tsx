@@ -14,7 +14,10 @@ import {
   type ModoComprobantes,
 } from './pdfPresupuesto'
 import { codigoPresupuesto } from './codigoPresupuesto'
-import VidaEtapas, { pasosPresupuesto, type ObraEtapa } from './VidaEtapas'
+import { type ObraEtapa } from './VidaEtapas'
+import { estadoTrabajo } from './estadoTrabajo'
+import { PillTrabajo, VidaTrabajo } from './VidaTrabajo'
+import { textoMedios } from './formasPago'
 import { totalAPagarHoy } from './estadoObra'
 import { createPortal } from 'react-dom'
 import { fechaCorta } from './gestionFormat'
@@ -144,6 +147,13 @@ export default function PresupuestoFicha({
   const [reintento, setReintento] = useState(0)
   const [compartiendo, setCompartiendo] = useState(false)
   const conObra = presupuesto.obra_id != null && presupuesto.estado === 'aceptado'
+  // Menú ⋯ y el cuadro abierto de "Preparar el presupuesto".
+  const [menuMas, setMenuMas] = useState(false)
+  const [seccion, setSeccion] = useState<'pago' | 've' | 'recos' | 'doc' | null>(null)
+  function abrirSeccion(s: 'pago' | 've' | 'recos' | 'doc') {
+    setSeccion((actual) => (actual === s ? null : s))
+    setTimeout(() => document.getElementById('pfSeccion')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
+  }
   // Se recuerda mientras se rearma el PDF (así la casilla no desaparece).
   const [cantComprobantes, setCantComprobantes] = useState(0)
   useEffect(() => { if (preparado) setCantComprobantes(preparado.datos.estado?.gastosExtra.filter((g) => g.comprobante).length ?? 0) }, [preparado])
@@ -212,7 +222,10 @@ export default function PresupuestoFicha({
   }), [presupuesto.id, presupuesto.estado, presupuesto.obra_id, presupuesto.titulo, presupuesto.descripcion, presupuesto.fecha, presupuesto.validez_dias, presupuesto.subtotal, presupuesto.descuento, presupuesto.total, presupuesto.notas, presupuesto.items, cliente, obra])
 
   const listo = preparado?.base === base ? preparado : null
+  // Para los cuadros: lo último cargado (no parpadea mientras se rearma el PDF).
+  const datosDoc = preparado?.datos ?? null
   const estadoObra = listo?.datos.estado ?? null
+  const estTrabajo = estadoTrabajo(presupuesto.estado, presupuesto.obra_id != null ? obraEtapa ?? { estado: 'en_proceso', porcentaje_avance: 0 } : null, estadoObra ? Math.max(0, estadoObra.saldoTotal) + estadoObra.gastoExtraPendiente : 0)
   const nombrePdf = nombreArchivoPresupuesto({ id: presupuesto.id, cliente, obra })
 
   useEffect(() => { setObraForm({ direccion: '', localidad: '', fecha_inicio: '', fecha_fin_estimada: '' }) }, [presupuesto.id])
@@ -308,83 +321,99 @@ export default function PresupuestoFicha({
             <p className="subtitle">PRESUPUESTO {codigo}</p>
             <h2>{presupuesto.titulo}</h2>
           </div>
-          <button type="button" className="closeButton" onClick={onCerrar} aria-label="Cerrar ficha">×</button>
+          <div className="pfCabBotones">
+            <button type="button" className="closeButton" onClick={() => setMenuMas((v) => !v)} aria-label="Más opciones" aria-expanded={menuMas}>⋯</button>
+            <button type="button" className="closeButton" onClick={onCerrar} aria-label="Cerrar ficha">×</button>
+          </div>
+          {/* Lo que casi no se usa: estado a mano, duplicar, nueva versión y eliminar. */}
+          {menuMas && (
+            <div className="pfMas" role="menu">
+              <small>CAMBIAR EL ESTADO A MANO</small>
+              <div className="pfMasEstados">
+                {ESTADOS.map((e) => (
+                  <button type="button" key={e.v} className={presupuesto.estado === e.v ? 'activo' : ''} disabled={convirtiendo} onClick={() => { setMenuMas(false); cambiarEstadoRapido(e.v) }}>{e.t}</button>
+                ))}
+              </div>
+              <button type="button" onClick={() => { setMenuMas(false); onDuplicar() }}>📑 Duplicar</button>
+              {presupuesto.estado !== 'rechazado' && (
+                <button type="button" onClick={() => { setMenuMas(false); if (window.confirm('Se crea la versión nueva para que la edites, y esta queda guardada como historial (rechazada por "nueva versión").\n\n¿Seguimos?')) onNuevaVersion() }}>🆕 Nueva versión</button>
+              )}
+              {presupuesto.obra_id != null && presupuesto.estado === 'rechazado' && onEliminarObra && (
+                <button type="button" className="rojo" onClick={() => { setMenuMas(false); onEliminarObra() }}>🗑 Eliminar obra vinculada</button>
+              )}
+              <button type="button" className="rojo" onClick={() => { setMenuMas(false); onEliminar() }}>🗑 Eliminar presupuesto</button>
+            </div>
+          )}
         </div>
 
-        <div className="fichaBody">
+        <div className="fichaBody pfBody">
+          {/* ---------- Arriba: cliente, estado y montos ---------- */}
           <p className="presuCli">{cliente}{presupuesto.obra_id != null ? ` · ${obra}` : ''}</p>
-          <VidaEtapas pasos={pasosPresupuesto(presupuesto.estado, presupuesto.obra_id != null ? obraEtapa ?? { estado: 'en_proceso', porcentaje_avance: 0 } : null, estadoObra ? Math.max(0, estadoObra.saldoTotal) + estadoObra.gastoExtraPendiente : undefined)} />
-
-          {/* ---------- Estado: cambio rápido ---------- */}
-          <div className="presuEstadoRapido" role="group" aria-label="Estado del presupuesto">
-            <span>Estado</span>
-            <div>
-              {ESTADOS.map((e) => (
-                <button type="button" key={e.v} className={`et-${e.v} ${presupuesto.estado === e.v ? 'activo' : ''}`} disabled={convirtiendo} onClick={() => cambiarEstadoRapido(e.v)}>{e.t}</button>
-              ))}
+          <div className="pfEstado">
+            <VidaTrabajo estado={estTrabajo} />
+            <div className="pfEstadoTxt">
+              <PillTrabajo estado={estTrabajo} extra={presupuesto.estado === 'enviado' ? (diasEnviado === 0 ? 'hoy' : `hace ${diasEnviado} día${diasEnviado === 1 ? '' : 's'}`) : presupuesto.estado === 'borrador' ? 'borrador' : estTrabajo === 'obra' ? `${Math.round(Number(obraEtapa?.porcentaje_avance) || 0)}%` : undefined} />
+              <span>{presupuesto.estado === 'borrador' ? 'El cliente todavía no lo vio' : presupuesto.estado === 'enviado' ? (venceEn != null ? (venceEn < 0 ? `Venció hace ${-venceEn} día${venceEn === -1 ? '' : 's'}` : venceEn === 0 ? 'Vence hoy' : `Vence en ${venceEn} día${venceEn === 1 ? '' : 's'}`) : 'Esperando respuesta') : presupuesto.estado === 'rechazado' ? (motivoRechazo ?? '') : ''}</span>
             </div>
           </div>
 
-          {/* ---------- Editar, siempre a mano ---------- */}
-          {presupuesto.estado !== 'rechazado' && (
-            <button type="button" className="presuEditarTop" onClick={editar}>
-              <span>✏️</span>
-              <span><b>Editar presupuesto</b><small>{conObra ? 'Ítems, precios y textos del presupuesto original' : presupuesto.estado === 'enviado' ? 'Ítems, precios, formas de pago y textos (el cliente ya lo tiene)' : 'Ítems, precios, formas de pago y textos'}</small></span>
-              <i>›</i>
-            </button>
+          {estadoObra && conObra ? (
+            <div className="fichaKpis">
+              <div><span>TOTAL DE LA OBRA</span><strong><Cifra valor={estadoObra.totalActualizado} formato={moneda} /></strong></div>
+              <div><span>COBRADO</span><strong><Cifra valor={estadoObra.cobrado} formato={moneda} /></strong></div>
+              <div className="alerta"><span>FALTA COBRAR HOY</span><strong><Cifra valor={totalAPagarHoy(estadoObra)} formato={moneda} /></strong>{estadoObra.gastoExtraPendiente > 0.5 && <small className="kpiNota">incluye {moneda(estadoObra.gastoExtraPendiente)} de gastos a reintegrar</small>}</div>
+              <div><span>SALDO TOTAL</span><strong>{moneda(Math.max(0, estadoObra.saldoTotal) + estadoObra.gastoExtraPendiente)}</strong>{estadoObra.gastoExtraPendiente > 0.5 && <small className="kpiNota">obra + extras a reintegrar</small>}</div>
+            </div>
+          ) : (
+            <div className="pfMontos">
+              <div><small>TOTAL</small><b><Cifra valor={presupuesto.total} formato={moneda} /></b></div>
+              {pagos.length
+                ? <div><small>COBRADO</small><b>{moneda(pagos.reduce((s, p) => s + p.monto, 0))}</b></div>
+                : <div><small>SEÑA 70%</small><b>{moneda(Math.round(Number(presupuesto.total) * 70) / 100)}</b></div>}
+            </div>
           )}
-          <FormasPagoEditor presupuestoId={presupuesto.id} onGuardado={() => setReintento((v) => v + 1)} />
-          <ComoLoVeCliente presupuestoId={presupuesto.id} titulo={presupuesto.titulo} items={presupuesto.items} onGuardado={() => setReintento((v) => v + 1)} />
-          <RecomendacionesUso presupuestoId={presupuesto.id} titulo={presupuesto.titulo} descripcion={presupuesto.descripcion} items={presupuesto.items} onGuardado={() => setReintento((v) => v + 1)} />
-          <div className="presuHerramientas">
-            {(presupuesto.estado === 'aceptado' || presupuesto.estado === 'rechazado') && <button type="button" className="editButton" onClick={descargarPdf} disabled={!listo}>📄 Descargar PDF</button>}
-            <button type="button" className="editButton" onClick={onDuplicar}>📑 Duplicar</button>
-            {presupuesto.obra_id != null && presupuesto.estado === 'rechazado' && onEliminarObra && (
-              <button type="button" className="deactivateButton" onClick={onEliminarObra}>🗑 Eliminar obra vinculada</button>
-            )}
-            <button type="button" className="deactivateButton" onClick={onEliminar}>🗑 Eliminar</button>
-          </div>
 
-          {/* ---------- Siguiente paso, según la etapa ---------- */}
-          {presupuesto.estado === 'borrador' && <>
-            <button type="button" className="presuPaso wa" onClick={enviarWhatsApp}>
-              <small>Siguiente paso</small><b>📤 Enviar por WhatsApp</b><span>Se abre WhatsApp con el mensaje listo y pasa solo a "Enviado". El PDF lo mandás con Compartir PDF.</span>
-            </button>
-            <div className="presuAccBotones">
-              <button type="button" className="editButton" onClick={compartir} disabled={!listo || compartiendo}>{compartiendo ? 'Compartiendo...' : '📲 Compartir PDF'}</button>
-              <button type="button" className="editButton" onClick={descargarPdf} disabled={!listo}>📄 Descargar PDF</button>
+          {/* ---------- El siguiente paso, primero y grande ---------- */}
+          {presupuesto.estado === 'borrador' && (
+            <div className="pfPaso">
+              <small>SIGUIENTE PASO</small>
+              <b>📤 Enviar por WhatsApp</b>
+              <span>Se abre WhatsApp con el mensaje listo y pasa solo a "Enviado".</span>
+              <div className="pfPasoAcc"><button type="button" className="pfBlanco" onClick={enviarWhatsApp}>Enviar ahora</button></div>
+              <div className="pfPasoMini">
+                <button type="button" onClick={compartir} disabled={!listo || compartiendo}>{compartiendo ? 'Compartiendo…' : '📲 Compartir PDF'}</button>
+                <button type="button" onClick={descargarPdf} disabled={!listo}>📄 Descargar PDF</button>
+              </div>
             </div>
-            <p className="presuNota">📝 <b>Borrador:</b> lo estás armando. Podés cambiar todo; el cliente todavía no lo vio.</p>
-          </>}
+          )}
 
-          {presupuesto.estado === 'enviado' && <>
-            <h3 className="presuPregunta">¿Qué respondió el cliente?</h3>
-            <div className="presuAccBotones">
-              <button type="button" className="presuBtnOk" disabled={convirtiendo} onClick={abrirAceptar}>✅ Aceptó</button>
-              <button type="button" className="presuBtnNo" onClick={() => { setMotivo(''); setNotaRechazo(''); setModal('rechazar') }}>❌ Rechazó</button>
+          {presupuesto.estado === 'enviado' && (
+            <div className="pfPaso azul">
+              <small>SIGUIENTE PASO</small>
+              <b>¿Qué respondió el cliente?</b>
+              <div className="pfPasoAcc">
+                <button type="button" className="pfBlanco" disabled={convirtiendo} onClick={abrirAceptar}>✅ Aceptó</button>
+                <button type="button" className="pfClaro" onClick={() => { setMotivo(''); setNotaRechazo(''); setModal('rechazar') }}>❌ No salió</button>
+                <button type="button" className="pfClaro" onClick={seguimientoWhatsApp}>💬 Seguir</button>
+              </div>
+              <div className="pfPasoMini">
+                <button type="button" onClick={() => { if (window.confirm('Se crea la versión nueva para que la edites, y esta queda guardada como historial (rechazada por "nueva versión").\n\n¿Seguimos?')) onNuevaVersion() }}>✏️ Pidió cambios</button>
+                <button type="button" onClick={compartir} disabled={!listo || compartiendo}>{compartiendo ? 'Compartiendo…' : '📲 Compartir PDF'}</button>
+                <button type="button" onClick={descargarPdf} disabled={!listo}>📄 Descargar PDF</button>
+              </div>
             </div>
-            <button type="button" className="editButton presuAncho" onClick={() => { if (window.confirm('Se crea la versión nueva para que la edites, y esta queda guardada como historial (rechazada por "nueva versión").\n\n¿Seguimos?')) onNuevaVersion() }}>✏️ Pidió cambios → hacer nueva versión</button>
-            <div className="presuAviso">
-              <span>⏰ Enviado {diasEnviado === 0 ? 'hoy' : `hace ${diasEnviado} día${diasEnviado === 1 ? '' : 's'}`}{venceEn != null ? (venceEn < 0 ? ` · venció hace ${-venceEn} día${venceEn === -1 ? '' : 's'}` : venceEn === 0 ? ' · vence hoy' : ` · vence en ${venceEn} día${venceEn === 1 ? '' : 's'}`) : ''}</span>
-              <button type="button" className="caLink" onClick={seguimientoWhatsApp}>💬 Escribirle por WhatsApp</button>
-            </div>
-            <div className="presuAccBotones">
-              <button type="button" className="editButton" onClick={compartir} disabled={!listo || compartiendo}>{compartiendo ? 'Compartiendo...' : '📲 Compartir PDF'}</button>
-              <button type="button" className="editButton" onClick={descargarPdf} disabled={!listo}>📄 Descargar PDF</button>
-            </div>
-          </>}
+          )}
 
-          {presupuesto.estado === 'aceptado' && presupuesto.obra_id == null && <>
+          {presupuesto.estado === 'aceptado' && presupuesto.obra_id == null && (
             <button type="button" className="presuPaso" disabled={convirtiendo} onClick={abrirAceptar}>
               <small>Siguiente paso</small><b>{convirtiendo ? 'Creando obra…' : '🏗️ Crear la obra'}</b><span>Dirección y fecha de inicio, y queda vinculada a este presupuesto</span>
             </button>
-          </>}
+          )}
 
           {conObra && <>
             <button type="button" className="presuPaso" onClick={onIrObra} disabled={!onIrObra}>
               <small>Se trabaja en la obra</small><b>🏗️ Ir a la obra {obra} →</b><span>Cobros, pagos, gastos, extras y avances se cargan ahí, con ➕ Registrar</span>
             </button>
-            <p className="presuNota">🔒 <b>Aceptado:</b> el presupuesto queda fijo como lo aceptó el cliente. Los cambios se cargan en la obra y aparecen solos en el documento.</p>
             <div className="presuAccBotones">
               <button type="button" className="editButton" onClick={compartir} disabled={!listo || compartiendo}>{compartiendo ? 'Compartiendo...' : '📲 Compartir PDF'}</button>
               <button type="button" className="editButton waButton" onClick={enviarWhatsApp}>💬 WhatsApp</button>
@@ -403,10 +432,11 @@ export default function PresupuestoFicha({
           </>}
 
           {presupuesto.estado === 'rechazado' && <>
-            <div className="presuAviso rechazo"><span>❌ <b>Rechazado</b>{motivoRechazo ? ` · ${motivoRechazo}` : ''}</span></div>
+            <div className="presuAviso rechazo"><span>❌ <b>No salió</b>{motivoRechazo ? ` · ${motivoRechazo}` : ''}</span></div>
             <div className="presuAccBotones">
               <button type="button" className="editButton" onClick={onDuplicar}>📑 Duplicar</button>
               <button type="button" className="editButton" onClick={() => onCambiarEstado('borrador')}>↩️ Volver a borrador</button>
+              <button type="button" className="editButton" onClick={descargarPdf} disabled={!listo}>📄 Descargar PDF</button>
             </div>
           </>}
 
@@ -417,28 +447,51 @@ export default function PresupuestoFicha({
             </div>
           )}
 
-          {estadoObra && conObra ? (
-            <div className="fichaKpis">
-              <div><span>TOTAL DE LA OBRA</span><strong><Cifra valor={estadoObra.totalActualizado} formato={moneda} /></strong></div>
-              <div><span>COBRADO</span><strong><Cifra valor={estadoObra.cobrado} formato={moneda} /></strong></div>
-              <div className="alerta"><span>FALTA COBRAR HOY</span><strong><Cifra valor={totalAPagarHoy(estadoObra)} formato={moneda} /></strong>{estadoObra.gastoExtraPendiente > 0.5 && <small className="kpiNota">incluye {moneda(estadoObra.gastoExtraPendiente)} de gastos a reintegrar</small>}</div>
-              <div><span>SALDO TOTAL</span><strong>{moneda(Math.max(0, estadoObra.saldoTotal) + estadoObra.gastoExtraPendiente)}</strong>{estadoObra.gastoExtraPendiente > 0.5 && <small className="kpiNota">obra + extras a reintegrar</small>}</div>
-            </div>
-          ) : (
-            <div className="fichaKpis">
-              <div><span>TOTAL</span><strong><Cifra valor={presupuesto.total} formato={moneda} /></strong></div>
-              <div><span>{pagos.length ? 'COBRADO' : 'ÍTEMS'}</span><strong>{pagos.length ? moneda(pagos.reduce((s, p) => s + p.monto, 0)) : presupuesto.items.length}</strong></div>
-            </div>
-          )}
-
-          {presupuesto.items.length > 0 && (
-            <button type="button" className="presuMercadoBtn" onClick={compararMercado}>
-              <span>💲</span><span><b>¿Cómo estoy en el mercado?</b><small>La IA busca precios de productos y mano de obra, y analiza todo el presupuesto</small></span><b>›</b>
+          {/* ---------- Preparar el presupuesto: cada cosa en su cuadro ---------- */}
+          <div className="pfTit">{conObra ? 'PRESUPUESTO ORIGINAL' : 'PREPARAR EL PRESUPUESTO'}</div>
+          <div className="pfTiles">
+            {presupuesto.estado !== 'rechazado' && (
+              <button type="button" className="pfTile ancho" onClick={editar}>
+                <span className="pfIco">✏️</span>
+                <span className="pfTileTxt"><b>Editar presupuesto</b><small>{presupuesto.items.length} ítem{presupuesto.items.length === 1 ? '' : 's'} · {conObra ? 'el original aceptado' : 'precios, descuentos y textos'}</small></span>
+                <i>›</i>
+              </button>
+            )}
+            <button type="button" className={`pfTile${seccion === 'pago' ? ' activo' : ''}`} onClick={() => abrirSeccion('pago')}>
+              <span className="pfIco">💳</span><b>Formas de pago</b>
+              <small>{datosDoc?.formasPago ? (textoMedios(datosDoc.formasPago) || 'Sin elegir') : '…'}</small>
             </button>
+            <button type="button" className={`pfTile${seccion === 've' ? ' activo' : ''}`} onClick={() => abrirSeccion('ve')}>
+              <span className="pfIco">👁️</span><b>Cómo lo ve</b>
+              <span className={`pfEst ${datosDoc?.resumenDoc?.modo === 'resumido' ? 'ok' : ''}`}>{datosDoc?.resumenDoc?.modo === 'resumido' ? 'Resumido' : 'Detallado'}</span>
+            </button>
+            <button type="button" className={`pfTile${seccion === 'recos' ? ' activo' : ''}`} onClick={() => abrirSeccion('recos')}>
+              <span className="pfIco">📘</span><b>Recomendaciones</b>
+              <span className={`pfEst ${datosDoc?.recomendaciones ? 'ok' : ''}`}>{datosDoc?.recomendaciones ? 'Incluidas' : 'Opcional'}</span>
+            </button>
+            {presupuesto.items.length > 0 && (
+              <button type="button" className="pfTile" onClick={compararMercado}>
+                <span className="pfIco">📈</span><b>Comparar precios</b><small>Con el mercado (IA)</small>
+              </button>
+            )}
+            <button type="button" className={`pfTile ancho2${seccion === 'doc' ? ' activo' : ''}`} onClick={() => abrirSeccion('doc')}>
+              <span className="pfIco">📄</span><b>Ver documento</b><small>Como lo recibe el cliente</small>
+            </button>
+          </div>
+
+          {seccion && (
+            <section className="pfSeccion" id="pfSeccion">
+              <div className="pfSeccionCab">
+                <b>{seccion === 'pago' ? '💳 Formas de pago' : seccion === 've' ? '👁️ Cómo lo ve el cliente' : seccion === 'recos' ? '📘 Formas de uso y recomendaciones' : '📄 Documento del cliente'}</b>
+                <button type="button" onClick={() => setSeccion(null)} aria-label="Cerrar">✕</button>
+              </div>
+              {seccion === 'pago' && <FormasPagoEditor presupuestoId={presupuesto.id} onGuardado={() => setReintento((v) => v + 1)} />}
+              {seccion === 've' && <ComoLoVeCliente abierto presupuestoId={presupuesto.id} titulo={presupuesto.titulo} items={presupuesto.items} onGuardado={() => setReintento((v) => v + 1)} />}
+              {seccion === 'recos' && <RecomendacionesUso abierto presupuestoId={presupuesto.id} titulo={presupuesto.titulo} descripcion={presupuesto.descripcion} items={presupuesto.items} onGuardado={() => setReintento((v) => v + 1)} />}
+              {seccion === 'doc' && (listo ? <DocumentoPresupuesto datos={listo.datos} embebido /> : !error && <p role="status" style={{ color: '#64748b', fontSize: '13px' }}>Cargando documento…</p>)}
+            </section>
           )}
           {mercado && <CompararMercado titulo={presupuesto.titulo} productos={mercado} total={Number(presupuesto.total)} onCerrar={() => setMercado(null)} />}
-
-          {listo ? <DocumentoPresupuesto datos={listo.datos} /> : !error && <p role="status" style={{ color: '#64748b', fontSize: '13px' }}>Cargando documento…</p>}
 
 
         </div>

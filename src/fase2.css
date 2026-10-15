@@ -2239,3 +2239,64 @@ button.orFaltaItem:focus-visible{outline:2px solid #1f9d5c;outline-offset:1px}
 }
 /* Ninguna lista desplegable se sale del ancho de la pantalla */
 select{max-width:100%}
+
+/* ===== Ficha del presupuesto, simplificada ===== */
+.fichaCliente .modalHeader{position:relative}
+.pfCabBotones{display:flex;gap:8px;align-items:center;flex:none}
+.pfCabBotones .closeButton:first-child{font-size:20px;font-weight:800;letter-spacing:1px}
+.pfMas{position:absolute;top:calc(100% - 6px);right:12px;z-index:30;background:#fff;border:1px solid var(--mova-border,#e5e7eb);border-radius:14px;box-shadow:0 18px 40px -14px rgba(0,0,0,.35);padding:6px;display:flex;flex-direction:column;min-width:240px;animation:movEntra .15s ease both}
+.pfMas small{padding:8px 10px 4px;font-size:10.5px;font-weight:800;letter-spacing:.1em;color:#6b7380}
+.pfMas>button{all:unset;box-sizing:border-box;cursor:pointer;padding:11px 10px;border-radius:10px;font-size:14px;font-weight:700;color:#14181e}
+.pfMas>button:hover{background:#f3f4f6}
+.pfMas>button.rojo{color:#b42318}
+.pfMasEstados{display:flex;gap:4px;flex-wrap:wrap;padding:2px 6px 8px;border-bottom:1px solid #f0f2f5;margin-bottom:4px}
+.pfMasEstados button{border:1px solid var(--mova-border,#e5e7eb);background:#fff;border-radius:999px;padding:6px 10px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;color:#4b5563}
+.pfMasEstados button.activo{background:#14181e;border-color:#14181e;color:#fff}
+.pfBody{display:flex;flex-direction:column;gap:14px}
+.pfBody>.presuCli{margin:0}
+.pfEstado{display:flex;flex-direction:column;gap:6px}
+.pfEstadoTxt{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:#6b7380}
+.pfMontos{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pfMontos>div{background:#f5f6f8;border-radius:12px;padding:10px 12px}
+.pfMontos small{display:block;font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#6b7380}
+.pfMontos b{font-size:19px;font-variant-numeric:tabular-nums}
+.pfPaso{border-radius:18px;padding:14px 16px;color:#fff;background:linear-gradient(135deg,#de7015,#f08a2c 70%);display:flex;flex-direction:column;gap:8px;box-shadow:0 12px 24px -14px rgba(222,112,21,.8);animation:movEntra .25s ease both}
+.pfPaso.azul{background:linear-gradient(135deg,#2f5fb3,#4b7bd1);box-shadow:0 12px 24px -14px rgba(47,95,179,.8)}
+.pfPaso>small{font-size:11px;font-weight:800;letter-spacing:.12em;opacity:.85}
+.pfPaso>b{font-size:20px}
+.pfPaso>span{font-size:13px;opacity:.9}
+.pfPasoAcc{display:flex;gap:8px;flex-wrap:wrap}
+.pfPasoAcc button{border:0;border-radius:12px;padding:11px 16px;font:inherit;font-weight:800;font-size:14px;cursor:pointer}
+.pfBlanco{background:#fff;color:#14181e}
+.pfClaro{background:rgba(255,255,255,.2);color:#fff}
+.pfPasoAcc button:disabled{opacity:.6;cursor:default}
+.pfPasoMini{display:flex;gap:16px;flex-wrap:wrap;font-size:13px}
+.pfPasoMini button{border:0;background:none;color:inherit;font:inherit;font-weight:700;text-decoration:underline;cursor:pointer;padding:0;opacity:.95}
+.pfPasoMini button:disabled{opacity:.5;cursor:default}
+.pfTit{font-size:11px;font-weight:800;letter-spacing:.12em;color:#6b7380;margin:4px 2px -6px}
+.pfTiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+@media (min-width:900px){.pfTiles{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.pfTile{all:unset;box-sizing:border-box;cursor:pointer;background:#fff;border:1px solid var(--mova-border,#e5e7eb);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:3px;min-width:0;transition:border-color .15s ease,transform .12s ease}
+.pfTile:hover,.pfTile:focus-visible,.pfTile.activo{border-color:#14181e}
+.pfTile.activo{box-shadow:0 0 0 1px #14181e}
+.pfTile:active{transform:scale(.98)}
+.pfTile b{font-size:14px;color:#14181e}
+.pfTile small{font-size:12px;color:#6b7380;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pfIco{font-size:22px}
+.pfEst{align-self:flex-start;font-size:11px;font-weight:800;border-radius:999px;padding:2px 8px;background:#f1f2f4;color:#6b7380}
+.pfEst.ok{background:#e9f7ef;color:#15803d}
+.pfTile.ancho{grid-column:1/-1;flex-direction:row;align-items:center;gap:12px;background:#14181e;border-color:#14181e;color:#fff}
+.pfTile.ancho b{color:#fff}
+.pfTile.ancho small{color:rgba(255,255,255,.7)}
+.pfTile.ancho i{font-style:normal;font-size:20px;margin-left:auto}
+.pfTileTxt{display:flex;flex-direction:column;min-width:0}
+.pfTile.ancho2{grid-column:1/-1}
+.pfSeccion{border:1px solid var(--mova-border,#e5e7eb);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:10px;animation:movEntra .2s ease both;scroll-margin-top:12px}
+.pfSeccionCab{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.pfSeccionCab b{font-size:15px}
+.pfSeccionCab button{border:0;background:#f1f2f4;border-radius:10px;width:34px;height:34px;cursor:pointer;font-size:14px}
+.pfSeccion .presuRecos{border:0!important;padding:0!important;margin:0!important}
+@media (prefers-reduced-motion:reduce){.pfMas,.pfPaso,.pfSeccion{animation:none}}
+.pfSeccion details>summary{display:none}
+.pfSeccion details>.presuRecosCuerpo{margin-top:0}
+@media (min-width:900px){.pfTile.ancho2{grid-column:auto}}

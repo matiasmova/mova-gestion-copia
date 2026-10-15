@@ -7,9 +7,9 @@ import type { ItemPresupuesto } from './NuevoPresupuesto'
 // "Formas de uso y recomendaciones" del presupuesto: opcional. Se redacta a
 // mano o con IA (según los ítems), se guarda y se elige si va en el documento.
 
-type Props = { presupuestoId: number; titulo: string; descripcion: string | null; items: ItemPresupuesto[]; onGuardado: () => void }
+type Props = { presupuestoId: number; titulo: string; descripcion: string | null; items: ItemPresupuesto[]; onGuardado: () => void; abierto?: boolean }
 
-export default function RecomendacionesUso({ presupuestoId, titulo, descripcion, items, onGuardado }: Props) {
+export default function RecomendacionesUso({ presupuestoId, titulo, descripcion, items, onGuardado, abierto = false }: Props) {
   const [texto, setTexto] = useState('')
   const [incluir, setIncluir] = useState(false)
   const [guardado, setGuardado] = useState({ texto: '', incluir: false })
@@ -62,7 +62,7 @@ export default function RecomendacionesUso({ presupuestoId, titulo, descripcion,
   const cambios = texto.trim() !== guardado.texto.trim() || (incluir && !!texto.trim()) !== guardado.incluir
 
   return (
-    <details className="presuMas presuRecos">
+    <details className="presuMas presuRecos" open={abierto || undefined}>
       <summary>📘 Formas de uso y recomendaciones <span className={guardado.incluir ? 'presuRecosSi' : 'presuRecosNo'}>{guardado.incluir ? 'incluidas' : 'opcional'}</span></summary>
       <div className="presuRecosCuerpo">
         <p className="gestionAyuda" style={{ margin: 0 }}>Consejos de uso para el cliente (apps, cuidados, qué hacer si se corta la luz…). La IA los escribe según los ítems del presupuesto; vos los revisás y elegís si van en el documento.</p>
