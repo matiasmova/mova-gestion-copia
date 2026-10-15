@@ -50,7 +50,7 @@ type Props = {
   secciones?: Partial<Record<SeccionVivo, ReactNode>>
 }
 
-export type SeccionVivo = 'finanzas' | 'personal' | 'accesos' | 'rentabilidad'
+export type SeccionVivo = 'documento' | 'finanzas' | 'personal' | 'accesos' | 'rentabilidad'
 
 // Una persona del equipo, con los mismos números que la sección Personal.
 type MiembroEquipo = { id: number; nombre: string; rol: string | null; pagado: number; falta: number; adelanto: number; faltaValor: boolean }
@@ -267,6 +267,7 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
       <div className="orTit">Más de la obra</div>
       <div className="oeSecciones">
         {([
+          ['documento', '📄', 'Documento y pagos', 'Comprobantes, formas de pago, cómo lo ve el cliente', false],
           ['finanzas', '💰', 'Cobros', !tienePresupuesto ? 'Sin presupuesto' : !cuenta ? 'Cargando…' : `Cobrado ${dinero(cuenta.cobrado)}`, avisoDe('finanzas')],
           ['personal', '👷', 'Equipo', !datos ? 'Cargando…' : datos.equipo.length === 0 ? 'Sin asignar' : `${datos.equipo.length} ${datos.equipo.length === 1 ? 'persona' : 'personas'}${datos.equipo.some((m) => m.falta > 0.5) ? ' · hay pagos pendientes' : ''}`, avisoDe('personal') || !!datos?.equipo.some((m) => m.falta > 0.5)],
           ['accesos', '🔐', 'Accesos y claves', !datos ? 'Cargando…' : datos.accesos === null ? '—' : datos.accesos === 0 ? 'Sin cargar' : `${datos.accesos} cargados`, avisoDe('accesos')],
