@@ -208,6 +208,10 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obra
     }
     const antes = estEd ? estEd.cantidad * estEd.precio : 0
     const ahora = quitar ? 0 : cant * precio
+    if (estEd && itemEd && estEd.modificado && !quitar) {
+      const comoOriginal = edicion.descripcion.trim() === itemEd.descripcion.trim() && Math.abs(precio - precioNeto(itemEd)) < 0.005 && Math.abs(cant - itemEd.cantidad) < 0.0005
+      if (comoOriginal) { void volverAlOriginal(itemEd.id); return }
+    }
     if (estEd && !quitar) {
       const igual = edicion.descripcion.trim() === estEd.descripcion.trim() && Math.abs(precio - estEd.precio) < 0.005 && Math.abs(cant - estEd.cantidad) < 0.0005
       if (igual) { setEdicion(null); return }
@@ -247,6 +251,29 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obra
     terminar(aprobado ? 'Cambio aprobado: el total se actualizó' : 'Cambio guardado, espera aprobación')
   }
 
+  // Deshacer: se borran los cambios del ítem y vuelve a como estaba en el
+  // presupuesto aceptado. Sirve para corregir un cambio cargado de más.
+  async function volverAlOriginal(itemId: number) {
+    const it = items.find((x) => x.id === itemId)
+    if (!it) return
+    if (!window.confirm(`¿Volver "${it.descripcion}" al original (${Number(it.cantidad).toLocaleString('es-AR')} × ${plata(precioNeto(it))})?\n\nSe borran los cambios cargados en este ítem y el total se recalcula.`)) return
+    setGuardando(true)
+    const { error: fallo } = await supabase.from('adicionales').delete().eq('obra_id', obraId).eq('tipo', 'cambio').eq('item_id', itemId)
+    setGuardando(false)
+    if (fallo) { console.error(fallo); setErrorEd('No se pudo volver al original. Volvé a intentar.'); return }
+    terminar('Volvió al original: el total se actualizó')
+  }
+
+  // Un extra agregado por error: se borra.
+  async function borrarAgregado(a: Adicional) {
+    if (!window.confirm(`¿Borrar el extra "${a.descripcion}" (${conSigno(a.importe)})? El total se recalcula.`)) return
+    setGuardando(true)
+    const { error: fallo } = await supabase.from('adicionales').delete().eq('id', a.id)
+    setGuardando(false)
+    if (fallo) { console.error(fallo); setErrorEd('No se pudo borrar. Volvé a intentar.'); return }
+    terminar('Extra borrado: el total se actualizó')
+  }
+
   // Un cambio pendiente: el cliente lo aprobó o no.
   async function decidir(a: Adicional, estado: 'aprobado' | 'rechazado') {
     setGuardando(true)
@@ -273,6 +300,7 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obra
           <button type="button" className="si" disabled={guardando} onClick={() => void decidir(estEd!.cambio!, 'aprobado')}>✅ El cliente aprobó</button>
           <button type="button" className="no" disabled={guardando} onClick={() => void decidir(estEd!.cambio!, 'rechazado')}>❌ No lo aprobó</button>
         </div>
+        <button type="button" className="oeOriginal" disabled={guardando} onClick={() => void volverAlOriginal(itemEd!.id)}>↩️ Volver al original (borrar los cambios de este ítem)</button>
         {errorEd && <p role="alert" className="oeError">{errorEd}</p>}
       </div>
     }
@@ -295,6 +323,10 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obra
     const antes = estEd ? estEd.cantidad * estEd.precio : 0
     const dif = redondear(cant * precio - antes)
     return <div className="oePanel">
+      {estEd?.modificado && itemEd && <div className="oeEraOriginal">
+        <span>{estEd.quitado ? 'Este ítem está quitado.' : 'Este ítem tiene cambios.'} Original: <b>{Number(itemEd.cantidad).toLocaleString('es-AR')} × {plata(precioNeto(itemEd))} = {plata(itemEd.cantidad * precioNeto(itemEd))}</b></span>
+        <button type="button" disabled={guardando} onClick={() => void volverAlOriginal(itemEd.id)}>↩️ Volver al original</button>
+      </div>}
       {edicion.itemId == null && <BuscadorCatalogo catalogo={catalogo ?? []} valor={edicion.catalogoId} cargando={!catalogo} onElegir={elegirProducto}
         onCreado={(p) => { setCatalogo((c) => [...(c ?? []), p]); setEdicion((e) => (e ? { ...e, catalogoId: p.id, descripcion: p.nombre_presupuesto || p.nombre, precio: String(p.precio_venta || '') } : e)) }} />}
       <Texto className="pvDesc" value={edicion.descripcion} onChange={(v) => setEdicion({ ...edicion, descripcion: v })} placeholder="Descripción" />
@@ -370,12 +402,13 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obra
               <small>{a.tipo === 'cambio' ? `${Number(a.cantidad_nueva ?? 1).toLocaleString('es-AR')} × ${plata(a.precio_nuevo ?? a.importe)}` : ETIQUETA_ADICIONAL[a.tipo] ?? a.tipo}</small></span>
             <span className="pvImp">{conSigno(a.importe)}</span>
           </div>
+          {!pend && a.tipo === 'cambio' && <div className="oePanel"><button type="button" className="oeOriginal" disabled={guardando} onClick={() => void borrarAgregado(a)}>↩️ Deshacer: borrar este extra</button></div>}
           {pend && (reintegro
             ? <div className="oePanel"><button type="button" className="oeLink" onClick={onVerHistorial}>Revisar el gasto en Cambios y extras ›</button></div>
             : <div className="oePanel"><div className="oeDecidir">
                 <button type="button" className="si" disabled={guardando} onClick={() => void decidir(a, 'aprobado')}>✅ Aprobó</button>
                 <button type="button" className="no" disabled={guardando} onClick={() => void decidir(a, 'rechazado')}>❌ No aprobó</button>
-              </div></div>)}
+              </div>{a.tipo === 'cambio' && <button type="button" className="oeOriginal" disabled={guardando} onClick={() => void borrarAgregado(a)}>↩️ Lo cargué por error: borrarlo</button>}</div>)}
         </div>
       })}
     </div>}
