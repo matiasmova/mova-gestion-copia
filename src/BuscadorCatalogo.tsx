@@ -4,6 +4,7 @@ import { supabase } from './supabase'
 import { subirFotoProducto } from './fotosProducto'
 import { pedirAsistente } from './asistenteIA'
 import { leerCotizacion } from './catalogoMoneda'
+import { useNombreClienteIA } from './NombreClienteIA'
 
 // Elegir un producto o servicio del catálogo: se abre una ventana grande con
 // buscador, filtros y la foto de cada producto. "Carga manual" sigue disponible.
@@ -207,6 +208,7 @@ function NuevoProductoRapido({ nombreInicial, categorias, onCancelar, onCreado }
   const [mercado, setMercado] = useState<Mercado | null>(null)
   const [buscando, setBuscando] = useState(false)
   const [errorMercado, setErrorMercado] = useState('')
+  const nombreIA = useNombreClienteIA(nombre, tipo, setParaCliente)
   useEffect(() => () => { if (fotoVista) URL.revokeObjectURL(fotoVista) }, [fotoVista])
 
   function elegirFoto(f: File | null) {
@@ -262,7 +264,12 @@ function NuevoProductoRapido({ nombreInicial, categorias, onCancelar, onCreado }
         <button type="button" className={tipo === 'servicio' ? 'activo' : ''} onClick={() => setTipo('servicio')}>🛠️ Servicio</button>
       </div>
       <label>Nombre *<input autoFocus value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej.: Tomacorriente smart doble WiFi" /></label>
-      <label>Nombre para el cliente (opcional)<input value={paraCliente} onChange={(e) => setParaCliente(e.target.value)} placeholder="Ej.: Tomacorriente inteligente" /><small>Es lo que va en el presupuesto, sin marca ni modelo.</small></label>
+      <label>
+        <span className="bcNombreCab">Nombre para el cliente (opcional){nombreIA.boton}</span>
+        <input value={paraCliente} onChange={(e) => setParaCliente(e.target.value)} placeholder="Ej.: Tomacorriente inteligente" />
+        {nombreIA.elegir(paraCliente)}
+        {!nombreIA.error && <small>Es lo que va en el presupuesto, corto y sin marca ni modelo.</small>}
+      </label>
       <div className="bcNuevoFila">
         <label>Precio de venta<input type="number" inputMode="decimal" min="0" step="any" value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="0" /></label>
         <label>Costo (opcional)<input type="number" inputMode="decimal" min="0" step="any" value={costo} onChange={(e) => setCosto(e.target.value)} placeholder="0" /></label>

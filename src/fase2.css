@@ -2608,3 +2608,9 @@ body:has(.pvItem.arrastrando){cursor:grabbing}
 .bcFotoCarga b{font-size:14px;color:#14181e}
 .bcFotoCarga input{display:none}
 .bcQuitarFoto{align-self:flex-start;border:0;background:transparent;color:#b42318;font:inherit;font-weight:700;font-size:13px;cursor:pointer;padding:0}
+.bcNombreCab{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.bcNombreIA{border:0;border-radius:999px;padding:5px 11px;font:inherit;font-size:12.5px;font-weight:800;cursor:pointer;color:#fff;background:linear-gradient(135deg,#6d4ed6,#9b6cf0)}
+.bcNombreIA:disabled{opacity:.75;cursor:default}
+.bcNombreOpc{display:flex;flex-wrap:wrap;gap:6px}
+.bcNombreOpc button{border:1px solid #d9d0f5;background:#fff;border-radius:999px;padding:6px 11px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;color:#4b5563}
+.bcNombreOpc button.on{background:#6d4ed6;border-color:#6d4ed6;color:#fff}
