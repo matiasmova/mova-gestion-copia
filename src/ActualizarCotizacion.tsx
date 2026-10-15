@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from './supabase'
+import { actualizarProducto } from './historialPrecios'
 import type { ProductoServicio } from './ProductosServicios'
 import { dos } from './catalogoCalculos'
 import { formatoDinero, formatoDolar, guardarCotizacion, leerCotizacion, traerCotizacionOnline } from './catalogoMoneda'
@@ -74,10 +75,10 @@ export default function ActualizarCotizacion({ elementos, onCerrar, onActualizad
       const trabajador = async () => {
         while (cursor < enPesos.length) {
           const el = enPesos[cursor++]
-          const { error: e } = await supabase.from('productos_servicios').update({
+          const { error: e } = await actualizarProducto(el.id, {
             costo_unitario: el.costo_unitario > 0 ? dos(el.costo_unitario * ratio) : el.costo_unitario,
             precio_venta: el.precio_venta > 0 ? dos(el.precio_venta * ratio) : el.precio_venta,
-          }).eq('id', el.id)
+          }, 'cotizacion', `Dólar a $ ${numero(nuevaNum)}`)
           if (!e) ok++
         }
       }
