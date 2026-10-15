@@ -27,6 +27,7 @@ import FormasPagoEditor from './FormasPagoEditor'
 import { Cifra } from './Animados'
 import { asegurarLinkPago } from './pagoLink'
 import CompararMercado, { type ProductoAComparar } from './CompararMercado'
+import PresupuestoEnVivo from './PresupuestoEnVivo'
 import { importeNeto } from './presupuestoCalculos'
 
 export type PresupuestoFichaData = {
@@ -83,6 +84,8 @@ type Props = {
   onNuevaVersion: () => void
   onDuplicar: () => void
   onIrObra?: () => void
+  // Después de editar en vivo: recargar el presupuesto.
+  onEditadoEnVivo?: () => void
 }
 
 const MOTIVOS = ['💲 Precio', '⏱️ Tiempos', '🏃 Eligió a otro', '⏸️ Lo postergó', 'Otro']
@@ -120,7 +123,9 @@ export default function PresupuestoFicha({
   onNuevaVersion,
   onDuplicar,
   onIrObra,
+  onEditadoEnVivo,
 }: Props) {
+  const [enVivo, setEnVivo] = useState(false)
   const [pagosSueltos, setPagosSueltos] = useState<Pago[]>([])
   const [obraForm, setObraForm] = useState<DatosObra>({ nombre: '', direccion: '', localidad: '', fecha_inicio: '', fecha_fin_estimada: '' })
   const [modal, setModal] = useState<'aceptar' | 'rechazar' | null>(null)
@@ -162,7 +167,7 @@ export default function PresupuestoFicha({
   function editar() {
     if (conObra && !window.confirm('Este presupuesto ya está aceptado y tiene obra.\n\nLos cambios, extras y descuentos se cargan en la obra (➕ Registrar): así queda el historial y el cliente ve qué cambió.\n\n¿Querés editar igual el presupuesto original?')) return
     if (presupuesto.estado === 'enviado' && !window.confirm('El cliente ya tiene este presupuesto.\n\nSi pidió cambios conviene "Nueva versión" (la anterior queda guardada).\n\n¿Editar igual este?')) return
-    onEditar()
+    setEnVivo(true)
   }
 
   function abrirAceptar() {
@@ -490,6 +495,15 @@ export default function PresupuestoFicha({
               {seccion === 'recos' && <RecomendacionesUso abierto presupuestoId={presupuesto.id} titulo={presupuesto.titulo} descripcion={presupuesto.descripcion} items={presupuesto.items} onGuardado={() => setReintento((v) => v + 1)} />}
               {seccion === 'doc' && (listo ? <DocumentoPresupuesto datos={listo.datos} embebido /> : !error && <p role="status" style={{ color: '#64748b', fontSize: '13px' }}>Cargando documento…</p>)}
             </section>
+          )}
+          {enVivo && (
+            <PresupuestoEnVivo
+              presupuesto={{ id: presupuesto.id, titulo: presupuesto.titulo, estado: presupuesto.estado, fecha: presupuesto.fecha, validez_dias: presupuesto.validez_dias, descuento: Number(presupuesto.descuento) || 0, items: presupuesto.items }}
+              cliente={cliente}
+              obra={presupuesto.obra_id != null ? obra : null}
+              onCerrar={() => { setEnVivo(false); setReintento((v) => v + 1); onEditadoEnVivo?.() }}
+              onEditorCompleto={() => { setEnVivo(false); onEditadoEnVivo?.(); onEditar() }}
+            />
           )}
           {mercado && <CompararMercado titulo={presupuesto.titulo} productos={mercado} total={Number(presupuesto.total)} onCerrar={() => setMercado(null)} />}
 

@@ -499,6 +499,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
           convirtiendo={convirtiendo === ficha.id}
           onCerrar={() => setFicha(null)}
           onEditar={() => editar(ficha)}
+          onEditadoEnVivo={() => void cargarDatos()}
           onPDF={() => setPdfPresupuesto(ficha)}
           obraEtapa={ficha.obra_id != null ? obrasEtapa[ficha.obra_id] ?? null : null}
           motivoRechazo={ficha.motivo_rechazo ?? null}
