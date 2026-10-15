@@ -4,7 +4,8 @@ import { pedirAsistente } from './asistenteIA'
 import { formatoDinero, leerCotizacion } from './catalogoMoneda'
 
 // Compara precios propios con los del mercado (la IA busca en internet).
-// Solo muestra la comparación: nunca cambia un precio.
+// Solo muestra la comparación. Si se pasa onUsarPrecio (editor en vivo), cada
+// ítem tiene un botón para usar el precio típico del mercado.
 
 export type ProductoAComparar = {
   id?: number | null // del catálogo: la búsqueda usa nombre, código y marca
@@ -59,7 +60,8 @@ export function posicionPrecio(precio: number, r: Resultado | undefined): Posici
 
 const EMOJI = { verde: '🟢', amarillo: '🟡', rojo: '🔴', gris: '⚪' }
 
-function CompararMercado({ productos, titulo, total, onCerrar }: { productos: ProductoAComparar[]; titulo: string; total?: number; onCerrar: () => void }) {
+function CompararMercado({ productos, titulo, total, onCerrar, onUsarPrecio, onResultados }: { productos: ProductoAComparar[]; titulo: string; total?: number; onCerrar: () => void; onUsarPrecio?: (indice: number, precio: number) => void; onResultados?: (medianas: (number | null)[]) => void }) {
+  const [usados, setUsados] = useState<Record<number, number>>({})
   const [analisis, setAnalisis] = useState<Analisis | null>(null)
   const [analizando, setAnalizando] = useState(false)
   const [errorAnalisis, setErrorAnalisis] = useState('')
@@ -93,6 +95,7 @@ function CompararMercado({ productos, titulo, total, onCerrar }: { productos: Pr
       }
       guardarCache(nuevos)
       setResultados(salida)
+      onResultados?.(salida.map((x) => (x && x.mediana > 0 ? x.mediana : null)))
       setFuentes(todasFuentes.filter((f, k, a) => a.findIndex((x) => x.titulo === f.titulo) === k).slice(0, 12))
       setBusquedas(Array.from(new Set(todasBusquedas)).slice(0, 10))
     } catch (e) { setError((e as Error).message) } finally { setBuscando(false) }
@@ -163,6 +166,10 @@ function CompararMercado({ productos, titulo, total, onCerrar }: { productos: Pr
                   </span>
                   <span className="mercadoFlecha">{ab ? '▲' : '▼'}</span>
                 </button>
+                {onUsarPrecio && r && r.mediana > 0 && Math.abs((usados[k] ?? p.precio) - r.mediana) > 1 && (
+                  <button type="button" className="mercadoUsar" onClick={() => { onUsarPrecio(k, Math.round(r.mediana)); setUsados((u) => ({ ...u, [k]: Math.round(r.mediana) })) }}>Usar el precio del mercado ({formatoDinero(Math.round(r.mediana))})</button>
+                )}
+                {onUsarPrecio && usados[k] != null && <small className="mercadoUsado">✓ Cambiado a {formatoDinero(usados[k])}</small>}
                 {ab && r && (
                   <div className="mercadoDetalle">
                     {r.ofertas.length > 0 ? <>
