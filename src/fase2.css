@@ -2558,3 +2558,30 @@ body:has(.pvItem.arrastrando){cursor:grabbing}
 .hpEnFicha{border:1px solid #e3e6ea;border-radius:12px;padding:10px 12px}
 .hpEnFicha summary{cursor:pointer;font-weight:800;font-size:14px}
 .hpEnFicha[open] summary{margin-bottom:10px}
+/* Empezar un presupuesto (antes del editor en vivo) */
+.epFondo{position:fixed;inset:0;z-index:990;background:rgba(15,18,22,.55);display:flex;align-items:center;justify-content:center;padding:16px;animation:movEntra .15s ease both}
+.epHoja{background:#fff;border-radius:22px;width:min(520px,100%);max-height:calc(100vh - 32px);overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px;box-shadow:0 30px 70px -30px rgba(0,0,0,.5);box-sizing:border-box}
+.epCab{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.epCab small{font-size:11px;font-weight:800;letter-spacing:.12em;color:#6b7380}
+.epCab h3{margin:2px 0 0;font-size:22px}
+.epCampo{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:#4b5563}
+.epCampo>span{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.epCampo em{font-style:normal;font-weight:600;color:#9aa1ac}
+.epCampo select{border:1px solid #d5dae1;border-radius:12px;padding:12px;font:inherit;font-size:15px;background:#fff;color:#14181e;width:100%;box-sizing:border-box}
+.epMas{margin-left:auto;border:0;background:transparent;color:#de7015;font:inherit;font-weight:800;font-size:13px;cursor:pointer;padding:2px 0}
+.epIA{border:1px solid #e6defb;border-radius:14px;background:#faf8ff;padding:0 12px;display:flex;flex-direction:column;gap:8px}
+.epIA.abierta{padding-bottom:12px}
+.epIACab{all:unset;box-sizing:border-box;display:flex;justify-content:space-between;align-items:center;padding:12px 0;cursor:pointer;color:#5b3fc4;font-size:15px}
+.epIACab small{color:#8a7cc4;font-weight:600}
+.epIACab em{font-style:normal;font-weight:800;width:28px;height:28px;border-radius:50%;background:#efe9ff;display:grid;place-items:center}
+.epIACab:focus-visible{outline:2px solid #6d4ed6;outline-offset:2px;border-radius:8px}
+.epIA textarea{border:1px solid #d9d0f5;border-radius:12px;padding:10px;font:inherit;font-size:14px;resize:vertical;background:#fff;width:100%;box-sizing:border-box}
+.epFoto{border:2px dashed #d9d0f5;border-radius:12px;padding:10px;text-align:center;font-weight:700;font-size:13.5px;color:#5b3fc4;cursor:pointer;overflow-wrap:anywhere}
+.epFoto input{display:none}
+.epAyuda{font-size:12px;color:#6b7380}
+.epError{margin:0;color:#b42318;font-size:13.5px}
+.epEmpezar{border:0;border-radius:14px;padding:14px;font:inherit;font-weight:800;font-size:16px;cursor:pointer;background:#14181e;color:#fff}
+.epEmpezar:disabled{opacity:.7;cursor:default}
+.epLink{align-self:center;border:0;background:transparent;font:inherit;font-size:13px;color:#6b7380;text-decoration:underline;cursor:pointer}
+@media (max-width:520px){.epFondo{align-items:flex-end;padding:0}.epHoja{border-radius:22px 22px 0 0;max-height:92vh;padding-bottom:max(18px,env(safe-area-inset-bottom))}}
+@media (prefers-reduced-motion:reduce){.epFondo{animation:none}}

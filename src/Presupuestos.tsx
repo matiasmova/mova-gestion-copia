@@ -3,6 +3,7 @@ import { cargarFormasPago, guardarFormasPago } from './formasPago'
 import type { Pedido } from './BuscadorGlobal'
 import { supabase } from './supabase'
 import { avisoGuardado } from './Animados'
+import EmpezarPresupuesto from './EmpezarPresupuesto'
 import NuevoPresupuesto, {
   type ClienteOpcion,
   type ItemPresupuesto,
@@ -207,7 +208,21 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
   const nombreObra = (id: number | null) => (!id ? 'Sin obra asociada' : obras.find((o) => o.id === id)?.nombre_obra ?? 'Obra no encontrada')
 
   const [inicialNuevo, setInicialNuevo] = useState<{ cliente_id: number | null; obra_id: number | null; items: [] } | null>(null)
-  function abrirNuevo(inicial: { cliente_id: number | null; obra_id: number | null; items: [] } | null = null) { setInicialNuevo(inicial); setPresupuestoEditado(null); setMostrarFormulario(true) }
+  // Nuevo presupuesto: hoja corta para empezar y después directo al editor en vivo.
+  const [empezar, setEmpezar] = useState(false)
+  const [abrirTrasCrear, setAbrirTrasCrear] = useState<number | null>(null)
+  function abrirNuevo(inicial: { cliente_id: number | null; obra_id: number | null; items: [] } | null = null) { setInicialNuevo(inicial); setPresupuestoEditado(null); setEmpezar(true) }
+  async function creadoEnVivo(id: number, avisoIA?: string) {
+    setEmpezar(false)
+    setAbrirTrasCrear(id)
+    await cargarDatos()
+    if (avisoIA) window.setTimeout(() => window.alert(avisoIA), 400)
+  }
+  useEffect(() => {
+    if (abrirTrasCrear == null) return
+    const p = presupuestos.find((x) => x.id === abrirTrasCrear)
+    if (p) { setFicha(p); setAbrirTrasCrear(null) }
+  }, [abrirTrasCrear, presupuestos])
   function editar(p: PresupuestoCompleto) { setPresupuestoEditado(p); setMostrarFormulario(true); setFicha(null) }
   function cerrarFormulario() { setMostrarFormulario(false); setPresupuestoEditado(null) }
   async function guardado() { cerrarFormulario(); avisoGuardado('Presupuesto guardado'); await cargarDatos() }
@@ -484,6 +499,12 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
         </div>
       )}
 
+      {empezar && (
+        <EmpezarPresupuesto clientes={clientes} obras={obras} inicial={inicialNuevo}
+          onCancelar={() => setEmpezar(false)}
+          onCreado={(id, aviso) => void creadoEnVivo(id, aviso)}
+          onFormularioCompleto={() => { setEmpezar(false); setMostrarFormulario(true) }} />
+      )}
       {mostrarFormulario && (
         <NuevoPresupuesto clientes={clientes} obras={obras} presupuesto={presupuestoEditado} inicial={presupuestoEditado ? undefined : inicialNuevo ?? undefined} onCancelar={cerrarFormulario} onGuardado={guardado} />
       )}
