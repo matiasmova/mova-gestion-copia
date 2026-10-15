@@ -2424,3 +2424,10 @@ body:has(.pvFondo)>.modalOverlay{z-index:4600}
   .pvAcciones button[aria-label]{flex:0 0 auto}
   .pvDoc{padding-bottom:160px}
 }
+/* Agregar al pie de cada sección y flechas para ordenar */
+.pvAgregarSec{border:2px dashed #c9ced6;background:#fff;border-radius:12px;padding:10px;font:inherit;font-weight:800;font-size:14px;cursor:pointer;color:#14181e;margin-top:2px}
+.pvAgregarSec:hover{border-color:#de7015;background:#fff8f0}
+.pvMover{display:flex;flex-direction:column;gap:2px;flex:none;margin:-2px 0 0 -4px}
+.pvMover button{border:1px solid #e3e6ea;background:#fff;border-radius:7px;width:26px;height:22px;font-size:10px;line-height:1;cursor:pointer;color:#4b5563;padding:0}
+.pvMover button:hover:not(:disabled){border-color:#14181e;color:#14181e}
+.pvMover button:disabled{opacity:.25;cursor:default}

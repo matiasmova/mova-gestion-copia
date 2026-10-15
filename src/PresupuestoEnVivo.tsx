@@ -226,7 +226,18 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
   const vence = new Date(new Date(`${presupuesto.fecha.slice(0, 10)}T12:00:00`).getTime() + validez * 86400000).toLocaleDateString('es-AR')
   let numero = 0
 
-  function filaItem(it: Item) {
+  // Sube o baja un ítem dentro de su sección (intercambia el lugar con el vecino).
+  function mover(k: number, con: number | null) {
+    if (con == null) return
+    setItems((l) => {
+      const a = l.findIndex((x) => x._k === k), b = l.findIndex((x) => x._k === con)
+      if (a < 0 || b < 0) return l
+      const n = [...l];[n[a], n[b]] = [n[b], n[a]]
+      return n
+    })
+  }
+
+  function filaItem(it: Item, anterior: number | null, siguiente: number | null) {
     numero++
     const ab = ed && abierto === it._k
     const pct = pctItem(it)
@@ -236,6 +247,12 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
       <div key={it._k} data-item={it._k} className={`pvItem${ab ? ' abierto' : ''}`}>
         <div className="pvFila" role={ed ? 'button' : undefined} tabIndex={ed ? 0 : undefined}
           onClick={() => ed && setAbierto(ab ? null : it._k)} onKeyDown={(e) => { if (ed && e.key === 'Enter') setAbierto(ab ? null : it._k) }}>
+          {ed && (
+            <span className="pvMover" onClick={(e) => e.stopPropagation()}>
+              <button type="button" aria-label="Subir" disabled={anterior == null} onClick={() => mover(it._k, anterior)}>▲</button>
+              <button type="button" aria-label="Bajar" disabled={siguiente == null} onClick={() => mover(it._k, siguiente)}>▼</button>
+            </span>
+          )}
           <span className="pvN">{String(numero).padStart(2, '0')}</span>
           <div className="pvTx">
             <b>{t || <i className="pvVacio">Sin descripción · tocá para completar</i>}</b>
@@ -336,7 +353,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
 
           {SECCIONES.map(({ tipo, titulo: tSec }) => {
             const its = items.filter((it) => (it.tipo === 'servicio' ? 'servicio' : 'producto') === tipo)
-            if (!its.length) { return null }
+            if (!its.length && !ed) { return null }
             const res = resumen.modo === 'resumido'
             const conTexto = its.filter((it) => it.descripcion.trim())
             const partes = res ? partesConItems(resumen, tipo, conTexto, validos).filter((p) => p.items.length) : []
@@ -361,18 +378,12 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
                     {mostrarItems ? '▾ Ocultar ítems y precios' : `▸ Ítems y precios de esta sección (${its.length})`}
                   </button>
                 )}
-                {mostrarItems && its.map(filaItem)}
+                {mostrarItems && its.map((it, i) => filaItem(it, i > 0 ? its[i - 1]._k : null, i < its.length - 1 ? its[i + 1]._k : null))}
+                {ed && <button type="button" className="pvAgregarSec" onClick={() => agregar(tipo)}>＋ Agregar {tipo === 'servicio' ? 'servicio' : 'producto'}</button>}
               </section>
             )
           })}
-          {items.length === 0 && <p className="pvVacioDoc">Todavía no hay ítems. Tocá "＋ Agregar".</p>}
-
-          {ed && (
-            <div className="pvAgregar">
-              <button type="button" onClick={() => agregar('producto')}>＋ Agregar producto</button>
-              <button type="button" onClick={() => agregar('servicio')}>＋ Agregar servicio</button>
-            </div>
-          )}
+          {items.length === 0 && !ed && <p className="pvVacioDoc">Todavía no hay ítems.</p>}
 
           {formas && (
             <div className="pvPagos">
