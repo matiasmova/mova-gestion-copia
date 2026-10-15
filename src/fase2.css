@@ -2431,3 +2431,10 @@ body:has(.pvFondo)>.modalOverlay{z-index:4600}
 .pvMover button{border:1px solid #e3e6ea;background:#fff;border-radius:7px;width:26px;height:22px;font-size:10px;line-height:1;cursor:pointer;color:#4b5563;padding:0}
 .pvMover button:hover:not(:disabled){border-color:#14181e;color:#14181e}
 .pvMover button:disabled{opacity:.25;cursor:default}
+/* Mover ítems manteniendo apretado */
+.pvDoc.edit .pvFila{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.pvAgarre{border:0;background:transparent;color:#9aa1ab;font-size:18px;line-height:1;width:24px;height:30px;padding:0;margin:-2px -2px 0 -6px;cursor:grab;touch-action:none;flex:none}
+.pvAgarre:hover{color:#14181e}
+.pvItem.arrastrando{background:#fff;box-shadow:0 14px 30px -12px rgba(20,24,30,.45),0 0 0 2px #de7015;transform:scale(1.02);position:relative;z-index:2;transition:transform .12s ease}
+.pvItem.arrastrando .pvAgarre{cursor:grabbing;color:#de7015}
+body:has(.pvItem.arrastrando){cursor:grabbing}
