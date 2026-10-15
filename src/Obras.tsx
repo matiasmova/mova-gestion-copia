@@ -4,6 +4,7 @@ import {
   useState,
   type FormEvent,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from './supabase'
 import { avisoGuardado } from './Animados'
 import NuevaObra from './NuevaObra'
@@ -14,6 +15,7 @@ import AdicionalesObra from './AdicionalesObra'
 import PersonalObra from './PersonalObra'
 import RentabilidadObra from './RentabilidadObra'
 import AccesosObra from './AccesosObra'
+import { LineaAvances, PresupuestoVivoObra } from './ObraEnVivo'
 import ResumenObra, { DonaAvance, PresupuestoDocumento, TITULO_SECCION, type TabSeguimiento } from './ResumenObra'
 import VistaToggle, { useVista } from './VistaToggle'
 import './obrasCard.css'
@@ -374,14 +376,15 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
     setImagenes(conUrls)
   }
 
-  function abrirNuevoAvance() {
+  function abrirNuevoAvance(porcentaje?: number) {
     setFotoAvance(null)
     setEditandoAvanceId(null)
     setFormularioAvance({
       ...avanceInicial,
       fecha: new Date().toISOString().slice(0, 10),
       estado: (obraSeguimiento?.estado as EstadoObra) ?? 'en_proceso',
-      porcentaje: Number(obraSeguimiento?.porcentaje_avance || 0),
+      porcentaje: porcentaje ?? Number(obraSeguimiento?.porcentaje_avance || 0),
+      ...(porcentaje != null && porcentaje >= 100 ? { estado: 'finalizada' as EstadoObra, titulo: 'Obra terminada' } : {}),
     })
     setMostrarNuevoAvance(true)
   }
@@ -405,6 +408,8 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
       case 'extra': irA('adicionales'); setAbrirAdic({ tipo: 'producto', n }); break
       case 'descuento': irA('adicionales'); setAbrirAdic({ tipo: 'bonificacion', n }); break
       case 'avance':
+        // En la obra en vivo se carga en la hoja de abajo, sin salir.
+        if (seguTab === 'resumen') { abrirNuevoAvance(); break }
         irA('timeline'); abrirNuevoAvance()
         setTimeout(() => document.querySelector('[data-registrar]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
         break
@@ -692,6 +697,137 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
     return lista
   }
 
+  // Formulario de avance: en la pestaña de avances y en la hoja de la obra en vivo.
+  const formAvance = (
+              <form
+                className="avanceForm clienteForm"
+                data-registrar={seguTab === 'timeline' ? '' : undefined}
+                onSubmit={guardarAvance}
+              >
+                <div className="formGrid">
+                  <label>
+                    Fecha
+                    <input
+                      type="date"
+                      value={formularioAvance.fecha}
+                      onChange={(evento) =>
+                        actualizarAvance(
+                          'fecha',
+                          evento.target.value,
+                        )
+                      }
+                      required
+                    />
+                  </label>
+
+
+
+                  <label className="formFull">
+                    Título del avance *
+                    <input
+                      value={formularioAvance.titulo}
+                      onChange={(evento) =>
+                        actualizarAvance(
+                          'titulo',
+                          evento.target.value,
+                        )
+                      }
+                      placeholder="Ej.: Canalización terminada"
+                      required
+                    />
+                  </label>
+
+                  {/* Avance y estado son lo mismo: 100% = obra terminada */}
+                  <div className="formFull avancePct">
+                    <span className="avancePctTit">Avance de la obra</span>
+                    <div className="avancePctFila">
+                      <CampoNumero min="0" max="100" value={formularioAvance.porcentaje} onChange={(evento) => fijarPorcentaje(Number(evento.target.value))} required />
+                      <span>%</span>
+                      <div className="caChips">
+                        {[25, 50, 75, 100].map((n) => <button type="button" key={n} className={Number(formularioAvance.porcentaje) === n ? 'activo' : ''} onClick={() => fijarPorcentaje(n)}>{n === 100 ? '100% · Terminada' : `${n}%`}</button>)}
+                      </div>
+                    </div>
+                    <input type="range" className="oeRango" min={0} max={100} step={5} value={Number(formularioAvance.porcentaje) || 0} onChange={(e) => fijarPorcentaje(Number(e.target.value))} aria-label="Avance de la obra" />
+                    <small className="avancePctEstado">{Number(formularioAvance.porcentaje) >= 100 ? '🏁 La obra queda Finalizada' : '🏗️ La obra sigue En proceso'}</small>
+                    {Number(formularioAvance.porcentaje) >= 100 && (
+                      <label className="caCheck"><input type="checkbox" checked={formularioAvance.estado === 'observacion'} onChange={(e) => cambiarEstadoAvance(e.target.checked ? 'observacion' : 'finalizada')} /> Terminada con observaciones (queda algo para revisar)</label>
+                    )}
+                    {cuenta && (() => {
+                      const pct = Math.min(100, Math.max(0, Number(formularioAvance.porcentaje) || 0))
+                      const correspondeObra = correspondePorAvance(cuenta.anticipo, cuenta.totalActualizado, pct)
+                      const falta = Math.max(0, correspondeObra - cuenta.cobrado)
+                      return (
+                        <div className="avanceCobro">
+                          <b>💵 Con este avance, el cliente tiene que haber pagado {dineroFicha(correspondeObra)}</b>
+                          <span>{pct <= PCT_ANTICIPO
+                            ? <>El anticipo del {PCT_ANTICIPO}% ({dineroFicha(cuenta.anticipo)}) cubre el avance hasta el {PCT_ANTICIPO}%.</>
+                            : <>Anticipo {PCT_ANTICIPO}% {dineroFicha(cuenta.anticipo)} + avance del {PCT_ANTICIPO}% al {pct}% {dineroFicha(correspondeObra - cuenta.anticipo)} = {pct}% del total</>}</span>
+                          <span>Ya pagó {dineroFicha(cuenta.cobrado)} → {falta > 0.5 ? <strong className="pend">falta cobrar {dineroFicha(falta)}</strong> : <strong className="ok">está al día</strong>}{cuenta.gastoExtraPendiente > 0.5 ? ` (más ${dineroFicha(cuenta.gastoExtraPendiente)} de gastos a reintegrar)` : ''}</span>
+                        </div>
+                      )
+                    })()}
+                  </div>
+
+                  <label className="formFull">
+                    Detalle del trabajo realizado
+                    <textarea
+                      rows={3}
+                      value={formularioAvance.descripcion}
+                      onChange={(evento) =>
+                        actualizarAvance(
+                          'descripcion',
+                          evento.target.value,
+                        )
+                      }
+                      placeholder="Descripción, observaciones o pendientes..."
+                    />
+                  </label>
+
+                  <label className="formFull">
+                    Foto (opcional)
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={(evento) =>
+                        setFotoAvance(evento.target.files?.[0] ?? null)
+                      }
+                    />
+                    {fotoAvance && (
+                      <small>
+                        {fotoAvance.name}{' '}
+                        <button
+                          type="button"
+                          className="editButton"
+                          onClick={() => setFotoAvance(null)}
+                        >
+                          Quitar
+                        </button>
+                      </small>
+                    )}
+                  </label>
+                </div>
+
+                {errorAvances && (
+                  <p className="loginError">{errorAvances}</p>
+                )}
+
+                <div className="formActions">
+                  <button
+                    type="submit"
+                    className="newButton"
+                    disabled={guardandoAvance}
+                  >
+                    {guardandoAvance
+                      ? 'Guardando...'
+                      : editandoAvanceId
+                        ? 'Guardar cambios'
+                        : 'Guardar avance'}
+                  </button>
+                </div>
+              </form>
+  )
+
   return (
     <div className="obrasPage">
       {!embebido && <div className="pageHeader">
@@ -950,6 +1086,16 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
               onIr={setSeguTab}
               presupuesto={presupuestoAceptado ? { id: presupuestoAceptado.id, titulo: presupuestoAceptado.titulo } : null}
               onRegistrarCobro={() => elegirRegistro('cobro')}
+              revision={actualizacion}
+              lineaAvances={<LineaAvances
+                avances={avances}
+                cargando={cargandoAvances}
+                terminada={obraTerminada(obraSeguimiento)}
+                onTocar={(id) => { const a = avances.find((x) => x.id === id); if (a) editarAvance(a) }}
+                onNuevo={(pct) => abrirNuevoAvance(pct)}
+                onInforme={puedeInformeIA ? () => setInformeIA(obraSeguimiento) : undefined}
+                onVerTodo={() => setSeguTab('timeline')}
+              />}
               presupuestoSinAceptar={(() => {
                 if (presupuestoAceptado) return null
                 const obra = obraSeguimiento
@@ -959,7 +1105,27 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                 if (onNuevoPresupuesto) return { texto: 'La obra todavía no tiene presupuesto. Tocá para armarlo.', abrir: () => { cerrarSeguimiento(); onNuevoPresupuesto({ id: obra.id, cliente_id: obra.cliente_id }) } }
                 return null
               })()}
-            />}
+            >
+              {presupuestoAceptado && <PresupuestoVivoObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} onCambio={() => setActualizacion((v) => v + 1)} onVerHistorial={() => setSeguTab('adicionales')} />}
+            </ResumenObra>}
+
+            {/* Hoja de abajo: cargar o corregir un avance sin salir de la obra */}
+            {seguTab === 'resumen' && mostrarNuevoAvance && createPortal(
+              <div className="oeHojaFondo" onClick={() => { setMostrarNuevoAvance(false); setEditandoAvanceId(null) }}>
+                <div className="oeHoja" role="dialog" aria-modal="true" aria-label={editandoAvanceId ? 'Corregir avance' : 'Cargar avance'} onClick={(e) => e.stopPropagation()}>
+                  <div className="oeHojaCab">
+                    <h3>{editandoAvanceId ? '✏️ Corregir avance' : '🏗️ Cargar avance'}</h3>
+                    <button type="button" className="fichaIcono" aria-label="Cerrar" onClick={() => { setMostrarNuevoAvance(false); setEditandoAvanceId(null) }}>×</button>
+                  </div>
+                  {formAvance}
+                  {editandoAvanceId != null && (() => {
+                    const a = avances.find((x) => x.id === editandoAvanceId)
+                    return a ? <button type="button" className="oeBorrar" onClick={() => void eliminarAvance(a)}>🗑 Eliminar este avance</button> : null
+                  })()}
+                </div>
+              </div>,
+              document.body,
+            )}
 
             {/* Presupuesto y documento: enviar, link de pago, comprobantes, editar, formas de pago… */}
             {seguTab === 'documento' && presupuestoAceptado && (
@@ -1010,134 +1176,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
               </button>
             </div>
 
-            {mostrarNuevoAvance && (
-              <form
-                className="avanceForm"
-                data-registrar
-                onSubmit={guardarAvance}
-              >
-                <div className="formGrid">
-                  <label>
-                    Fecha
-                    <input
-                      type="date"
-                      value={formularioAvance.fecha}
-                      onChange={(evento) =>
-                        actualizarAvance(
-                          'fecha',
-                          evento.target.value,
-                        )
-                      }
-                      required
-                    />
-                  </label>
-
-
-
-                  <label className="formFull">
-                    Título del avance *
-                    <input
-                      value={formularioAvance.titulo}
-                      onChange={(evento) =>
-                        actualizarAvance(
-                          'titulo',
-                          evento.target.value,
-                        )
-                      }
-                      placeholder="Ej.: Canalización terminada"
-                      required
-                    />
-                  </label>
-
-                  {/* Avance y estado son lo mismo: 100% = obra terminada */}
-                  <div className="formFull avancePct">
-                    <span className="avancePctTit">Avance de la obra</span>
-                    <div className="avancePctFila">
-                      <CampoNumero min="0" max="100" value={formularioAvance.porcentaje} onChange={(evento) => fijarPorcentaje(Number(evento.target.value))} required />
-                      <span>%</span>
-                      <div className="caChips">
-                        {[25, 50, 75, 100].map((n) => <button type="button" key={n} className={Number(formularioAvance.porcentaje) === n ? 'activo' : ''} onClick={() => fijarPorcentaje(n)}>{n === 100 ? '100% · Terminada' : `${n}%`}</button>)}
-                      </div>
-                    </div>
-                    <small className="avancePctEstado">{Number(formularioAvance.porcentaje) >= 100 ? '🏁 La obra queda Finalizada' : '🏗️ La obra sigue En proceso'}</small>
-                    {Number(formularioAvance.porcentaje) >= 100 && (
-                      <label className="caCheck"><input type="checkbox" checked={formularioAvance.estado === 'observacion'} onChange={(e) => cambiarEstadoAvance(e.target.checked ? 'observacion' : 'finalizada')} /> Terminada con observaciones (queda algo para revisar)</label>
-                    )}
-                    {cuenta && (() => {
-                      const pct = Math.min(100, Math.max(0, Number(formularioAvance.porcentaje) || 0))
-                      const correspondeObra = correspondePorAvance(cuenta.anticipo, cuenta.totalActualizado, pct)
-                      const falta = Math.max(0, correspondeObra - cuenta.cobrado)
-                      return (
-                        <div className="avanceCobro">
-                          <b>💵 Con este avance, el cliente tiene que haber pagado {dineroFicha(correspondeObra)}</b>
-                          <span>{pct <= PCT_ANTICIPO
-                            ? <>El anticipo del {PCT_ANTICIPO}% ({dineroFicha(cuenta.anticipo)}) cubre el avance hasta el {PCT_ANTICIPO}%.</>
-                            : <>Anticipo {PCT_ANTICIPO}% {dineroFicha(cuenta.anticipo)} + avance del {PCT_ANTICIPO}% al {pct}% {dineroFicha(correspondeObra - cuenta.anticipo)} = {pct}% del total</>}</span>
-                          <span>Ya pagó {dineroFicha(cuenta.cobrado)} → {falta > 0.5 ? <strong className="pend">falta cobrar {dineroFicha(falta)}</strong> : <strong className="ok">está al día</strong>}{cuenta.gastoExtraPendiente > 0.5 ? ` (más ${dineroFicha(cuenta.gastoExtraPendiente)} de gastos a reintegrar)` : ''}</span>
-                        </div>
-                      )
-                    })()}
-                  </div>
-
-                  <label className="formFull">
-                    Detalle del trabajo realizado
-                    <textarea
-                      rows={3}
-                      value={formularioAvance.descripcion}
-                      onChange={(evento) =>
-                        actualizarAvance(
-                          'descripcion',
-                          evento.target.value,
-                        )
-                      }
-                      placeholder="Descripción, observaciones o pendientes..."
-                    />
-                  </label>
-
-                  <label className="formFull">
-                    Foto (opcional)
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      onChange={(evento) =>
-                        setFotoAvance(evento.target.files?.[0] ?? null)
-                      }
-                    />
-                    {fotoAvance && (
-                      <small>
-                        {fotoAvance.name}{' '}
-                        <button
-                          type="button"
-                          className="editButton"
-                          onClick={() => setFotoAvance(null)}
-                        >
-                          Quitar
-                        </button>
-                      </small>
-                    )}
-                  </label>
-                </div>
-
-                {errorAvances && (
-                  <p className="loginError">{errorAvances}</p>
-                )}
-
-                <div className="formActions">
-                  <button
-                    type="submit"
-                    className="newButton"
-                    disabled={guardandoAvance}
-                  >
-                    {guardandoAvance
-                      ? 'Guardando...'
-                      : editandoAvanceId
-                        ? 'Guardar cambios'
-                        : 'Guardar avance'}
-                  </button>
-                </div>
-              </form>
-            )}
+            {mostrarNuevoAvance && seguTab === 'timeline' && formAvance}
 
             {/* Estado de cuenta: los mismos números que el documento */}
             {!presupuestoAceptado ? null : cargandoCuenta ? <p role="status">Cargando cuenta…</p> : errorCuenta ? <p role="alert">{errorCuenta}</p> : cuenta && <CuentaObraResumen cuenta={cuenta} dinero={dineroFicha} />}
