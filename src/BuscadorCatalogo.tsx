@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from './supabase'
+import { subirFotoProducto } from './fotosProducto'
+import { pedirAsistente } from './asistenteIA'
+import { leerCotizacion } from './catalogoMoneda'
 
 // Elegir un producto o servicio del catálogo: se abre una ventana grande con
 // buscador, filtros y la foto de cada producto. "Carga manual" sigue disponible.
@@ -22,6 +25,15 @@ const UNIDADES = ['unidad', 'metro', 'hora', 'servicio', 'kit', 'boca', 'circuit
 const normal = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 const plata = (n: number) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(Number(n) || 0)
 const esHttp = (s: string) => /^https?:\/\//.test(s)
+// Dónde queda un precio respecto del típico del mercado.
+function posicionMercado(precio: number, tipico: number): { c: string; t: string } {
+  const dif = ((precio - tipico) / tipico) * 100
+  const pct = `${Math.abs(dif).toFixed(0)}%`
+  if (dif > 25) return { c: 'rojo', t: `🔴 Tu precio está ${pct} más caro que el mercado` }
+  if (dif > 10) return { c: 'amarillo', t: `🟡 Tu precio está ${pct} arriba del mercado` }
+  if (dif < -15) return { c: 'amarillo', t: `🟡 Tu precio está ${pct} abajo: podrías cobrar más` }
+  return { c: 'verde', t: '🟢 Tu precio está en el precio del mercado' }
+}
 
 // Fotos firmadas: se piden una sola vez por sesión y se reutilizan.
 const fotosCache: Record<string, string> = {}
@@ -175,8 +187,11 @@ export default function BuscadorCatalogo({ catalogo, valor, cargando, onElegir, 
   )
 }
 
-// Alta rápida de un producto o servicio sin salir del presupuesto.
-// Lo demás (foto, stock, proveedor, web…) se completa después en Productos y servicios.
+// Alta rápida de un producto o servicio sin salir del presupuesto, con foto y
+// comparación con el precio del mercado. Lo demás (stock, proveedor, web…) se
+// completa después en Productos y servicios.
+
+type Mercado = { minimo: number; maximo: number; mediana: number; comentario: string; ofertas: { tienda: string; titulo: string; precio: number; url: string }[] }
 function NuevoProductoRapido({ nombreInicial, categorias, onCancelar, onCreado }: { nombreInicial: string; categorias: string[]; onCancelar: () => void; onCreado: NonNullable<Props['onCreado']> }) {
   const [tipo, setTipo] = useState<'producto' | 'servicio'>('producto')
   const [nombre, setNombre] = useState(nombreInicial)
@@ -187,12 +202,45 @@ function NuevoProductoRapido({ nombreInicial, categorias, onCancelar, onCreado }
   const [categoria, setCategoria] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
+  const [foto, setFoto] = useState<File | null>(null)
+  const [fotoVista, setFotoVista] = useState('')
+  const [mercado, setMercado] = useState<Mercado | null>(null)
+  const [buscando, setBuscando] = useState(false)
+  const [errorMercado, setErrorMercado] = useState('')
+  useEffect(() => () => { if (fotoVista) URL.revokeObjectURL(fotoVista) }, [fotoVista])
+
+  function elegirFoto(f: File | null) {
+    setFoto(f)
+    setFotoVista(f ? URL.createObjectURL(f) : '')
+  }
+
+  async function buscarMercado() {
+    if (!nombre.trim()) { setErrorMercado('Escribí primero el nombre del producto.'); return }
+    setErrorMercado(''); setBuscando(true); setMercado(null)
+    try {
+      const r = await pedirAsistente<{ resultados: (Mercado & { ofertas: Mercado['ofertas'] })[] }>({
+        accion: 'mercado', cotizacion: leerCotizacion(),
+        productos: [{ descripcion: nombre.trim(), ...(tipo === 'servicio' ? { servicio: true } : {}) }],
+      })
+      const x = r.resultados?.[0]
+      if (!x || !x.ofertas?.length || !(x.mediana > 0)) setErrorMercado('No encontré precios publicados. Cargalo a mano.')
+      else setMercado(x)
+    } catch (e) { setErrorMercado((e as Error).message) } finally { setBuscando(false) }
+  }
 
   async function guardar() {
     setError('')
     if (!nombre.trim()) { setError('Escribí el nombre.'); return }
     setGuardando(true)
+    let fotoPath: string | null = null
+    if (foto) {
+      const subida = await subirFotoProducto(foto)
+      if ('error' in subida) { setGuardando(false); setError(subida.error); return }
+      fotoPath = subida.path
+      if (fotoVista) fotosCache[subida.path] = fotoVista // se ve al toque en el buscador
+    }
     const fila: Record<string, unknown> = {
+      ...(fotoPath ? { foto_url: fotoPath } : {}),
       tipo, nombre: nombre.trim(), unidad: tipo === 'servicio' && unidad === 'unidad' ? 'servicio' : unidad,
       precio_venta: Number(precio) || 0, costo_unitario: Number(costo) || 0, categoria: categoria.trim() || null,
       stock: 0, stock_minimo: 0, iva_pct: 21, activo: true, nombre_presupuesto: paraCliente.trim() || null,
@@ -219,13 +267,44 @@ function NuevoProductoRapido({ nombreInicial, categorias, onCancelar, onCreado }
         <label>Precio de venta<input type="number" inputMode="decimal" min="0" step="any" value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="0" /></label>
         <label>Costo (opcional)<input type="number" inputMode="decimal" min="0" step="any" value={costo} onChange={(e) => setCosto(e.target.value)} placeholder="0" /></label>
       </div>
+
+      {/* Precio de referencia del mercado: comparar, copiar el recomendado o dejar el propio */}
+      <div className="bcMercado">
+        {!mercado && <button type="button" className="bcMercadoBtn" disabled={buscando} onClick={() => void buscarMercado()}>{buscando ? '⏳ Buscando precios en internet… (10 a 60 s)' : '📈 Ver precio del mercado'}</button>}
+        {errorMercado && <small className="bcMercadoError">{errorMercado}</small>}
+        {mercado && (() => {
+          const pos = Number(precio) > 0 ? posicionMercado(Number(precio), mercado.mediana) : null
+          return <>
+            <div className="bcMercadoRango">
+              <div><small>Más barato</small><b>{plata(mercado.minimo)}</b></div>
+              <div className="tipico"><small>Típico</small><b>{plata(mercado.mediana)}</b></div>
+              <div><small>Más caro</small><b>{plata(mercado.maximo)}</b></div>
+            </div>
+            {pos && <small className={`bcMercadoPos ${pos.c}`}>{pos.t}</small>}
+            <div className="bcMercadoAcc">
+              <button type="button" className="newButton" onClick={() => setPrecio(String(Math.round(mercado.mediana)))}>Usar el típico ({plata(mercado.mediana)})</button>
+              <button type="button" className="editButton" onClick={() => { const el = document.querySelector<HTMLInputElement>('.bcNuevoForm input[placeholder="0"]'); el?.focus(); el?.select() }}>✏️ Cargar a mano</button>
+              <button type="button" className="editButton" disabled={buscando} onClick={() => void buscarMercado()}>↻</button>
+            </div>
+            {mercado.ofertas.slice(0, 3).map((o, i) => <small key={i} className="bcMercadoOferta">{o.tienda || 'Tienda'} · {plata(o.precio)}{o.url && <> · <a href={o.url} target="_blank" rel="noreferrer noopener">ver ↗</a></>}</small>)}
+            {mercado.comentario && <small className="bcMercadoOferta">💡 {mercado.comentario}</small>}
+          </>
+        })()}
+      </div>
+
+      <label className="bcFotoCarga">
+        {fotoVista ? <img src={fotoVista} alt="Foto del producto" /> : <span aria-hidden>📷</span>}
+        <span><b>{foto ? 'Cambiar foto' : 'Sumar foto (opcional)'}</b><small>{foto ? foto.name : 'Sacá una foto o elegila de la galería'}</small></span>
+        <input type="file" accept="image/*" onChange={(e) => elegirFoto(e.target.files?.[0] ?? null)} />
+      </label>
+      {foto && <button type="button" className="bcQuitarFoto" onClick={() => elegirFoto(null)}>Quitar foto</button>}
       <div className="bcNuevoFila">
         <label>Unidad<select value={unidad} onChange={(e) => setUnidad(e.target.value)}>{UNIDADES.map((u) => <option key={u} value={u}>{u[0].toUpperCase() + u.slice(1)}</option>)}</select></label>
         <label>Categoría<input list="bcCategorias" value={categoria} onChange={(e) => setCategoria(e.target.value)} placeholder="Ej.: Domótica" /></label>
         <datalist id="bcCategorias">{categorias.map((c) => <option key={c} value={c} />)}</datalist>
       </div>
       {error && <p className="loginError" style={{ margin: 0 }}>{error}</p>}
-      <p className="bcNuevoNota">La foto, el stock y lo demás los completás después en Productos y servicios.</p>
+      <p className="bcNuevoNota">El stock y lo demás los completás después en Productos y servicios.</p>
       <div className="bcNuevoAcc">
         <button type="button" className="cancelButton" onClick={onCancelar}>Volver</button>
         <button type="submit" className="newButton" disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar y usar'}</button>
