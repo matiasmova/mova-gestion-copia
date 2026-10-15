@@ -125,7 +125,7 @@ export default function PresupuestoFicha({
   onIrObra,
   onEditadoEnVivo,
 }: Props) {
-  const [enVivo, setEnVivo] = useState(false)
+  const [enVivo, setEnVivo] = useState<false | 'edit' | 'ver'>(false)
   const [pagosSueltos, setPagosSueltos] = useState<Pago[]>([])
   const [obraForm, setObraForm] = useState<DatosObra>({ nombre: '', direccion: '', localidad: '', fecha_inicio: '', fecha_fin_estimada: '' })
   const [modal, setModal] = useState<'aceptar' | 'rechazar' | null>(null)
@@ -167,7 +167,7 @@ export default function PresupuestoFicha({
   function editar() {
     if (conObra && !window.confirm('Este presupuesto ya está aceptado y tiene obra.\n\nLos cambios, extras y descuentos se cargan en la obra (➕ Registrar): así queda el historial y el cliente ve qué cambió.\n\n¿Querés editar igual el presupuesto original?')) return
     if (presupuesto.estado === 'enviado' && !window.confirm('El cliente ya tiene este presupuesto.\n\nSi pidió cambios conviene "Nueva versión" (la anterior queda guardada).\n\n¿Editar igual este?')) return
-    setEnVivo(true)
+    setEnVivo('edit')
   }
 
   function abrirAceptar() {
@@ -458,7 +458,7 @@ export default function PresupuestoFicha({
             {presupuesto.estado !== 'rechazado' && (
               <button type="button" className="pfTile ancho" onClick={editar}>
                 <span className="pfIco">✏️</span>
-                <span className="pfTileTxt"><b>Editar presupuesto</b><small>{presupuesto.items.length} ítem{presupuesto.items.length === 1 ? '' : 's'} · {conObra ? 'el original aceptado' : 'precios, descuentos y textos'}</small></span>
+                <span className="pfTileTxt"><b>Editar en vivo</b><small>Tocá y cambiá sobre el documento · {presupuesto.items.length} ítem{presupuesto.items.length === 1 ? '' : 's'}{conObra ? ' (original aceptado)' : ''}</small></span>
                 <i>›</i>
               </button>
             )}
@@ -479,7 +479,7 @@ export default function PresupuestoFicha({
                 <span className="pfIco">📈</span><b>Comparar precios</b><small>Con el mercado (IA)</small>
               </button>
             )}
-            <button type="button" className={`pfTile ancho2${seccion === 'doc' ? ' activo' : ''}`} onClick={() => abrirSeccion('doc')}>
+            <button type="button" className={`pfTile ancho2${seccion === 'doc' ? ' activo' : ''}`} onClick={() => (conObra ? abrirSeccion('doc') : setEnVivo('ver'))}>
               <span className="pfIco">📄</span><b>Ver documento</b><small>Como lo recibe el cliente</small>
             </button>
           </div>
@@ -501,6 +501,7 @@ export default function PresupuestoFicha({
               presupuesto={{ id: presupuesto.id, titulo: presupuesto.titulo, estado: presupuesto.estado, fecha: presupuesto.fecha, validez_dias: presupuesto.validez_dias, descuento: Number(presupuesto.descuento) || 0, items: presupuesto.items }}
               cliente={cliente}
               obra={presupuesto.obra_id != null ? obra : null}
+              modoInicial={enVivo === 'ver' ? 'ver' : 'edit'}
               onCerrar={() => { setEnVivo(false); setReintento((v) => v + 1); onEditadoEnVivo?.() }}
               onEditorCompleto={() => { setEnVivo(false); onEditadoEnVivo?.(); onEditar() }}
             />
