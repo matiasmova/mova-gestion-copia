@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import type { Pedido } from './BuscadorGlobal'
 import { supabase } from './supabase'
 import { comprimirImagen } from './fotosProducto'
+import { useNombreClienteIA } from './NombreClienteIA'
 import VistaToggle, { useVista } from './VistaToggle'
 import ImportarCatalogo from './ImportarCatalogo'
 import ActualizarCotizacion from './ActualizarCotizacion'
@@ -119,6 +120,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
   const [faltaSqlMoneda, setFaltaSqlMoneda] = useState(false)
   const [codigo, setCodigo] = useState('')
   const [nombre, setNombre] = useState('')
+  const nombreIA = useNombreClienteIA(nombre, tipo, setNombrePresupuesto)
   const [descripcion, setDescripcion] = useState('')
   const [categoria, setCategoria] = useState('')
   const [proveedor, setProveedor] = useState('')
@@ -918,7 +920,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                 </label>
                 <label>Código / SKU<input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="Ej.: QS-1234 (para importar desde hoja)" /></label>
                 <label>Nombre interno *<input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej.: TP-Link Deco X20 AX1800 (pack x3)" required /></label>
-                <label>Cómo aparece en el presupuesto<input value={nombrePresupuesto} onChange={(e) => setNombrePresupuesto(e.target.value)} placeholder="Ej.: Red mesh WiFi 6 · Domótica de iluminación" /><small className="npAyuda">El cliente ve solo esto (sin marca, modelo, foto ni detalle). Si lo dejás vacío, sale el nombre interno.</small></label>
+                <label><span className="bcNombreCab">Cómo aparece en el presupuesto{nombreIA.boton}</span><input value={nombrePresupuesto} onChange={(e) => setNombrePresupuesto(e.target.value)} placeholder="Ej.: Red mesh WiFi 6 · Domótica de iluminación" />{nombreIA.elegir(nombrePresupuesto)}<small className="npAyuda">El cliente ve solo esto (sin marca, modelo, foto ni detalle). Si lo dejás vacío, sale el nombre interno.</small></label>
                 <label>Categoría<input value={categoria} onChange={(e) => setCategoria(e.target.value)} placeholder="Ej.: Domótica" /></label>
                 <label>Proveedor<input value={proveedor} onChange={(e) => setProveedor(e.target.value)} placeholder="Ej.: Tuya / Sonoff" /></label>
 

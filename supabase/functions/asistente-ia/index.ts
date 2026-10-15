@@ -221,6 +221,12 @@ Para cada producto o servicio devolvé:
 - descripcion: una frase corta (máximo 160 caracteres) de qué es y para qué sirve, para uso interno. Sin precios.
 Español rioplatense, sin emojis.`
 
+const SISTEMA_NOMBRE_CLIENTE = `Escribís cómo ve el cliente un producto o servicio en los presupuestos de MOVA Tecnología Smart (Mendoza, Argentina): domótica, WiFi, cámaras, alarmas, riego, electricidad e instalación.
+- Corto y representativo: 2 a 5 palabras que digan qué es y para qué sirve.
+- Sin marca, sin modelo, sin código, sin cantidades de pack ni detalles técnicos finos (nada de "AX3000", "X50", "3-Pack", "2 MP", "Zigbee 3.0"). Se puede decir la tecnología general si ayuda (por ejemplo "WiFi 6", "inteligente", "exterior").
+- Ejemplos: "Sistema WiFi mesh", "Cámara de seguridad exterior", "Interruptor inteligente", "Kit de riego automático", "Instalación y configuración".
+- Las 3 opciones distintas entre sí, en español rioplatense, con mayúscula inicial y sin punto final ni emojis.`
+
 const SISTEMA_INFORME = `Escribís, para MOVA Tecnología Smart (Mendoza, Argentina), el mensaje de WhatsApp con el avance de una obra para mandarle al cliente.
 - Español rioplatense con voseo, claro y profesional. Saludo con el primer nombre del cliente.
 - Contá lo que se hizo en el período (según los AVANCES), en qué porcentaje está la obra y qué sigue.
@@ -482,6 +488,14 @@ Deno.serve(async (req) => {
         }
       })
       return responder({ resultados, fuentes: fuentes.slice(0, 12), busquedas })
+    }
+    if (accion === 'nombre_cliente') {
+      // Nombre del producto para el presupuesto: corto, genérico, sin marca ni modelo.
+      const nombre = recorte(cuerpo.nombre, 200)
+      if (!nombre) return responder({ error: 'Escribí primero el nombre del producto.' }, 400)
+      const tipoProd = cuerpo.tipo === 'servicio' ? 'servicio' : 'producto'
+      const r = await gemini(clave, `Proponé 3 nombres para que el cliente vea este ${tipoProd} en el presupuesto.\nNombre técnico: "${nombre}"`, lista({ nombre: { type: 'STRING' } }), SISTEMA_NOMBRE_CLIENTE, 0.4) as { opciones?: { nombre: string }[] }
+      return responder({ opciones: (r.opciones ?? []).map((o) => recorte(o.nombre, 60)).filter(Boolean).slice(0, 3) })
     }
     if (accion === 'ordenar_catalogo') {
       const ids = (Array.isArray(cuerpo.ids) ? cuerpo.ids : []).map(Number).filter(Boolean).slice(0, 40)
