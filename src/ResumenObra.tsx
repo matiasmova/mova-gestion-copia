@@ -46,7 +46,11 @@ type Props = {
   children?: ReactNode
   // Cambia cuando se guarda algo, para recontar pendientes sin rearmar la pantalla.
   revision?: number
+  // Obra en vivo: estas secciones se abren ahí mismo (acordeón) en lugar de ir a otra pantalla.
+  secciones?: Partial<Record<SeccionVivo, ReactNode>>
 }
+
+export type SeccionVivo = 'finanzas' | 'personal' | 'accesos' | 'rentabilidad'
 
 // Una persona del equipo, con los mismos números que la sección Personal.
 type MiembroEquipo = { id: number; nombre: string; rol: string | null; pagado: number; falta: number; adelanto: number; faltaValor: boolean }
@@ -173,8 +177,19 @@ function Cuadro({ icono, titulo, estado, alerta, ancho, onClick }: { icono: stri
   </button>
 }
 
-export default function ResumenObra({ obraId, estado, avance, avances, cargandoAvances, tienePresupuesto, cuenta, cargandoCuenta, dinero, onIr, presupuesto, onRegistrarCobro, presupuestoSinAceptar, lineaAvances, children, revision = 0 }: Props) {
+export default function ResumenObra({ obraId, estado, avance, avances, cargandoAvances, tienePresupuesto, cuenta, cargandoCuenta, dinero, onIr, presupuesto, onRegistrarCobro, presupuestoSinAceptar, lineaAvances, children, revision = 0, secciones }: Props) {
   const [datos, setDatos] = useState<Datos | null>(null)
+  const [abiertas, setAbiertas] = useState<string[]>([])
+  const alternar = (id: string) => setAbiertas((a) => (a.includes(id) ? a.filter((x) => x !== id) : [...a, id]))
+  // Ir a una sección: si está en vivo se despliega acá mismo; si no, se abre su pantalla.
+  function irA(tab: TabSeguimiento) {
+    if (secciones?.[tab as SeccionVivo]) {
+      setAbiertas((a) => (a.includes(tab) ? a : [...a, tab]))
+      setTimeout(() => document.querySelector(`[data-seccion="${tab}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
+      return
+    }
+    onIr(tab)
+  }
 
   useEffect(() => {
     let vigente = true
@@ -240,7 +255,7 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
           const urgente = p.tab === 'finanzas' && p.tono === 'alerta'
           const contenido = <><i className={urgente ? 'urg' : p.tono} aria-hidden /><span>{p.texto}</span>{(p.tab || p.accion) && <em aria-hidden>›</em>}</>
           return p.accion || p.tab
-            ? <button key={i} type="button" className="orFaltaItem" onClick={() => (p.accion ? p.accion() : onIr(p.tab!))}>{contenido}</button>
+            ? <button key={i} type="button" className="orFaltaItem" onClick={() => (p.accion ? p.accion() : irA(p.tab!))}>{contenido}</button>
             : <div key={i} className="orFaltaItem">{contenido}</div>
         })}
       </div>
@@ -248,6 +263,27 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
 
     {children}
 
+    {secciones ? <>
+      <div className="orTit">Más de la obra</div>
+      <div className="oeSecciones">
+        {([
+          ['finanzas', '💰', 'Cobros', !tienePresupuesto ? 'Sin presupuesto' : !cuenta ? 'Cargando…' : `Cobrado ${dinero(cuenta.cobrado)}`, avisoDe('finanzas')],
+          ['personal', '👷', 'Equipo', !datos ? 'Cargando…' : datos.equipo.length === 0 ? 'Sin asignar' : `${datos.equipo.length} ${datos.equipo.length === 1 ? 'persona' : 'personas'}${datos.equipo.some((m) => m.falta > 0.5) ? ' · hay pagos pendientes' : ''}`, avisoDe('personal') || !!datos?.equipo.some((m) => m.falta > 0.5)],
+          ['accesos', '🔐', 'Accesos y claves', !datos ? 'Cargando…' : datos.accesos === null ? '—' : datos.accesos === 0 ? 'Sin cargar' : `${datos.accesos} cargados`, avisoDe('accesos')],
+          ['rentabilidad', '📊', 'Rentabilidad', !datos || (tienePresupuesto && !cuenta) ? 'Cargando…' : `${cajaObra >= 0 ? '+' : '−'} ${dinero(Math.abs(cajaObra))} en caja`, false],
+        ] as [SeccionVivo, string, string, string, boolean][]).filter(([id]) => secciones[id]).map(([id, icono, titulo, estadoTxt, alerta]) => {
+          const abierta = abiertas.includes(id)
+          return <div key={id} className={`oeSeccion${abierta ? ' abierta' : ''}`} data-seccion={id}>
+            <button type="button" className="oeSeccionCab" aria-expanded={abierta} onClick={() => alternar(id)}>
+              <span className="oeSeccionIco" aria-hidden>{icono}</span>
+              <span className="oeSeccionTx"><b>{titulo}</b><small className={alerta ? 'alerta' : ''}>{estadoTxt}</small></span>
+              <span className="oeSeccionFlecha" aria-hidden>{abierta ? '−' : '＋'}</span>
+            </button>
+            {abierta && <div className="oeSeccionCuerpo">{secciones[id]}</div>}
+          </div>
+        })}
+      </div>
+    </> : <>
     <div className="orTit">Obra</div>
     <div className="orCuadros">
       {presupuesto && <Cuadro ancho icono="📄" titulo="Presupuesto y documento" estado="Enviar PDF, link de pago, editar, formas de pago" onClick={() => onIr('documento')} />}
@@ -265,5 +301,6 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
       <Cuadro icono="📊" titulo="Rentabilidad" onClick={() => onIr('rentabilidad')}
         estado={!datos || (tienePresupuesto && !cuenta) ? 'Cargando…' : `${cajaObra >= 0 ? '+' : '−'} ${dinero(Math.abs(cajaObra))} en caja`} />
     </div>
+    </>}
   </section>
 }

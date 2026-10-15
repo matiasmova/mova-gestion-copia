@@ -1087,6 +1087,12 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
               presupuesto={presupuestoAceptado ? { id: presupuestoAceptado.id, titulo: presupuestoAceptado.titulo } : null}
               onRegistrarCobro={() => elegirRegistro('cobro')}
               revision={actualizacion}
+              secciones={{
+                ...(presupuestoAceptado ? { finanzas: <EconomiaObra key={obraSeguimiento.id} cuenta={cuenta} presupuestoId={presupuestoAceptado.id} obraId={obraSeguimiento.id} onGenerarPdf={() => setInformeObra(obraSeguimiento)} onCambio={() => setActualizacion((v) => v + 1)} /> } : {}),
+                personal: <PersonalObra key={obraSeguimiento.id} onCambio={() => setActualizacion((v) => v + 1)} obraId={obraSeguimiento.id} avance={avanceEfectivo(obraSeguimiento.estado, obraSeguimiento.porcentaje_avance)} />,
+                accesos: <AccesosObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} cliente={obtenerCliente(obraSeguimiento.cliente_id)} obra={obraSeguimiento.nombre_obra} ubicacion={[obraSeguimiento.direccion, obraSeguimiento.localidad].filter(Boolean).join(', ') || null} />,
+                rentabilidad: <RentabilidadObra key={`${obraSeguimiento.id}-${actualizacion}`} obraId={obraSeguimiento.id} avance={avanceEfectivo(obraSeguimiento.estado, obraSeguimiento.porcentaje_avance)} estado={obraSeguimiento.estado ?? undefined} />,
+              }}
               lineaAvances={<LineaAvances
                 avances={avances}
                 cargando={cargandoAvances}
