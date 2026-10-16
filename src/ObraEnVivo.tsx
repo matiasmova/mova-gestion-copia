@@ -4,6 +4,7 @@ import { avisoGuardado } from './Animados'
 import CampoNumero from './CampoNumero'
 import BuscadorCatalogo from './BuscadorCatalogo'
 import { Texto } from './PresupuestoEnVivo'
+import ComoLoVeCliente from './ComoLoVeCliente'
 import { hoy } from './gestionFormat'
 import type { CambioTipo } from './presupuestoModificaciones'
 import { ETIQUETA_ADICIONAL } from './presupuestoModificaciones'
@@ -73,7 +74,7 @@ export function LineaAvances({ avances, cargando, terminada, onTocar, onNuevo, o
 // Presupuesto en vivo de la obra (cada cambio = modificación)
 // ---------------------------------------------------------------------------
 
-type Item = { id: number; presupuesto_id: number; descripcion: string; cantidad: number; precio_unitario: number; descuento_pct: number }
+type Item = { id: number; presupuesto_id: number; descripcion: string; cantidad: number; precio_unitario: number; descuento_pct: number; tipo?: string | null; costo_unitario?: number | null }
 type Adicional = {
   id: number; tipo: string; descripcion: string; motivo: string | null; importe: number; estado: string; fecha: string
   presupuesto_id: number | null; item_id: number | null; cambio_tipo: CambioTipo | null
@@ -129,7 +130,7 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obra
       const aceptados = (rPres.data ?? []).filter((p) => p.activo !== false && p.estado === 'aceptado').map((p) => ({ id: p.id, titulo: p.titulo, total: Number(p.total || 0) }))
       let filas: Item[] = []
       if (aceptados.length) {
-        const rItems = await supabase.from('presupuesto_items').select('id, presupuesto_id, descripcion, cantidad, precio_unitario, descuento_pct').in('presupuesto_id', aceptados.map((p) => p.id)).order('orden', { ascending: true })
+        const rItems = await supabase.from('presupuesto_items').select('id, presupuesto_id, descripcion, cantidad, precio_unitario, descuento_pct, tipo, costo_unitario').in('presupuesto_id', aceptados.map((p) => p.id)).order('orden', { ascending: true })
         if (!vigente) return
         if (rItems.error) console.error(rItems.error)
         filas = (rItems.data ?? []).map((it) => ({ ...it, cantidad: Number(it.cantidad), precio_unitario: Number(it.precio_unitario), descuento_pct: Number(it.descuento_pct ?? 0) })) as Item[]
@@ -370,6 +371,9 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obra
       const delPresu = items.filter((it) => it.presupuesto_id === p.id)
       return <div key={p.id} className="oeLista">
         {presus.length > 1 && <div className="oeSubTit">{p.titulo}</div>}
+        {/* Cómo lo ve el cliente: detallado o resumido, con textos escritos por la IA */}
+        <ComoLoVeCliente presupuestoId={p.id} titulo={p.titulo} onGuardado={onCambio}
+          items={delPresu.map((it) => ({ tipo: it.tipo === 'servicio' ? 'servicio' : 'producto', descripcion: it.descripcion, cantidad: it.cantidad, precio_unitario: it.precio_unitario, costo_unitario: Number(it.costo_unitario) || 0, descuento_pct: it.descuento_pct }))} />
         {delPresu.map((it, i) => {
           const e = estadoDe(it, adicionales)
           // Lo que vale hoy: solo con los cambios aprobados (lo pendiente se muestra aparte).

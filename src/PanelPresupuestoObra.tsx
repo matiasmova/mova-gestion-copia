@@ -134,7 +134,7 @@ export default function PanelPresupuestoObra({ obra, cliente, version, onVerDocu
         </button>
       )}
       {datos && <FormasPagoEditor presupuestoId={datos.id} onGuardado={refrescar} />}
-      {datos && <ComoLoVeCliente presupuestoId={datos.id} titulo={datos.titulo} items={datos.items} onGuardado={refrescar} />}
+      {datos && modo === 'todo' && <ComoLoVeCliente presupuestoId={datos.id} titulo={datos.titulo} items={datos.items} onGuardado={refrescar} />}
       {datos && <RecomendacionesUso presupuestoId={datos.id} titulo={datos.titulo} descripcion={datos.descripcion ?? null} items={datos.items} onGuardado={refrescar} />}
       {datos && datos.items.length > 0 && (
         <button type="button" className="presuMercadoBtn" onClick={() => setMercado(itemsParaMercado(datos))}>
