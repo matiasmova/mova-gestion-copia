@@ -337,7 +337,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
           <div className="pvTx">
             <b>{t || <i className="pvVacio">Sin descripción · tocá para completar</i>}</b>
             {detalle && <small className="pvDet">{detalle}</small>}
-            <small>{Number(it.cantidad).toLocaleString('es-AR')} × {moneda(Number(it.precio_unitario))}{pct > 0 && <span className="pvPct">−{pct}%</span>}{marca && <span className={`pvMerc ${marca.c}`}>{marca.t}</span>}</small>
+            <small>{Number(it.cantidad).toLocaleString('es-AR')} × {moneda(Number(it.precio_unitario))}{pct > 0 && <span className="pvPct">−{pct}%</span>}{pct > 0 && <span className="pvCU">= {moneda(Number(it.precio_unitario) * (1 - pct / 100))} c/u</span>}{marca && <span className={`pvMerc ${marca.c}`}>{marca.t}</span>}</small>
           </div>
           <div className="pvImp">{moneda(importeNeto(it))}{pct > 0 && <s>{moneda(importeBruto(it))}</s>}</div>
         </div>
@@ -370,6 +370,12 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
                   <button type="button" key={d} className={pct === d ? 'on' : ''} onClick={() => cambiarItem(it._k, { descuento_pct: d })}>{d}%</button>
                 ))}
               </div>
+            </div>
+            {/* Lo que paga el cliente por unidad, con el descuento ya aplicado */}
+            <div className="pvFinal">
+              <span><small>Al cliente le queda</small><b>{moneda(Number(it.precio_unitario) * (1 - pct / 100))} <em>c/u</em></b></span>
+              {Number(it.cantidad) !== 1 && <span className="der"><small>{Number(it.cantidad).toLocaleString('es-AR')} unidades</small><b>{moneda(importeNeto(it))}</b></span>}
+              {pct > 0 && <small className="pvFinalAhorro">Ahorra {moneda(Number(it.precio_unitario) * pct / 100)} por unidad ({pct}%)</small>}
             </div>
             <div className="pvCtrl">
               <label>Tipo</label>

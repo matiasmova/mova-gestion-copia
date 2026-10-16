@@ -2620,3 +2620,11 @@ body:has(.pvItem.arrastrando){cursor:grabbing}
 .pvMercadoItem em{font-style:normal;font-size:11.5px;border-radius:999px;padding:1px 8px;background:#e9f7ef;color:#1f7a4d}
 .pvMercadoItem em.caro{background:#fde8e8;color:#b42318}
 .pvMercadoItem em.barato{background:#fff3e6;color:#a85008}
+.pvFinal{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:4px 12px;background:#e9f7ef;border:1px solid #bfe6cf;border-radius:12px;padding:9px 12px}
+.pvFinal span{display:flex;flex-direction:column;gap:1px}
+.pvFinal span.der{text-align:right;align-items:flex-end}
+.pvFinal small{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#1f7a4d}
+.pvFinal b{font-size:17px;font-variant-numeric:tabular-nums;color:#14181e}
+.pvFinal b em{font-style:normal;font-size:12px;font-weight:700;color:#4b5563}
+.pvFinal .pvFinalAhorro{flex-basis:100%;text-transform:none;letter-spacing:0;font-weight:600;font-size:12px;color:#4b5563}
+.pvCU{display:block;font-weight:700;color:#1f7a4d}
