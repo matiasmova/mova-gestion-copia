@@ -17,6 +17,7 @@ import { codigoPresupuesto } from './codigoPresupuesto'
 import { type ObraEtapa } from './VidaEtapas'
 import { estadoTrabajo } from './estadoTrabajo'
 import { PillTrabajo, VidaTrabajo } from './VidaTrabajo'
+import LineaPresupuesto from './LineaPresupuesto'
 import { textoMedios } from './formasPago'
 import { totalAPagarHoy } from './estadoObra'
 import { createPortal } from 'react-dom'
@@ -129,6 +130,7 @@ export default function PresupuestoFicha({
   const [pagosSueltos, setPagosSueltos] = useState<Pago[]>([])
   const [obraForm, setObraForm] = useState<DatosObra>({ nombre: '', direccion: '', localidad: '', fecha_inicio: '', fecha_fin_estimada: '' })
   const [modal, setModal] = useState<'aceptar' | 'rechazar' | null>(null)
+  const [lineaAbierta, setLineaAbierta] = useState(false)
   // Los comprobantes de los gastos a reintegrar van como anexo del PDF (se puede sacar).
   const [modoComp, setModoComp] = useState<ModoComprobantes>(leerModoComprobantes)
   const [avisoComp, setAvisoComp] = useState('')
@@ -373,12 +375,14 @@ export default function PresupuestoFicha({
   }
   if (!conObra) {
     const pdfListo = !!listo
+    // Tocando la línea se abre para editar fechas, etapa y notas con foto.
     const estadoVivo = (
-      <div className="pfEstado">
+      <div className="pfEstado lpTocable" role="button" tabIndex={0} title="Tocá para editar la línea de tiempo" onClick={() => setLineaAbierta(true)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLineaAbierta(true) } }}>
         <VidaTrabajo estado={estTrabajo} />
         <div className="pfEstadoTxt">
           <PillTrabajo estado={estTrabajo} extra={presupuesto.estado === 'enviado' ? (diasEnviado === 0 ? 'hoy' : `hace ${diasEnviado} día${diasEnviado === 1 ? '' : 's'}`) : presupuesto.estado === 'borrador' ? 'borrador' : undefined} />
           <span>{presupuesto.estado === 'borrador' ? 'El cliente todavía no lo vio' : presupuesto.estado === 'enviado' ? (venceEn != null ? (venceEn < 0 ? `Venció hace ${-venceEn} día${venceEn === -1 ? '' : 's'}` : venceEn === 0 ? 'Vence hoy' : `Vence en ${venceEn} día${venceEn === 1 ? '' : 's'}`) : 'Esperando respuesta') : presupuesto.estado === 'rechazado' ? (motivoRechazo ?? '') : presupuesto.estado === 'aceptado' ? 'Falta crear la obra' : ''}</span>
+          <em className="lpEditar">✏️ Editar</em>
         </div>
       </div>
     )
@@ -410,6 +414,12 @@ export default function PresupuestoFicha({
       <button type="button" className="rojo" onClick={() => { cerrar(); onEliminar() }}>🗑 Eliminar presupuesto</button>
     </>
     return <>
+      {lineaAbierta && <LineaPresupuesto
+        presupuesto={{ id: presupuesto.id, estado: presupuesto.estado, fecha: presupuesto.fecha, enviado_at: presupuesto.enviado_at ?? null, obra_id: presupuesto.obra_id }}
+        motivoRechazo={motivoRechazo ?? null}
+        onCerrar={() => setLineaAbierta(false)}
+        onCambiarEstado={cambiarEstadoRapido}
+        onCambio={() => onEditadoEnVivo?.()} />}
       <PresupuestoEnVivo
         presupuesto={{ id: presupuesto.id, titulo: presupuesto.titulo, estado: presupuesto.estado, fecha: presupuesto.fecha, validez_dias: presupuesto.validez_dias, descuento: Number(presupuesto.descuento) || 0, items: presupuesto.items }}
         cliente={cliente}
