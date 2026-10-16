@@ -2638,3 +2638,41 @@ body:has(.pvItem.arrastrando){cursor:grabbing}
   .pvPie>.pvAcciones button[aria-label]{flex:0 0 auto}
   .pvDoc{padding-bottom:170px}
 }
+/* Línea de tiempo del presupuesto (tocable) */
+.lpTocable{cursor:pointer;border-radius:12px;padding:4px;margin:-4px;transition:background .15s ease}
+.lpTocable:hover{background:#f7f8fa}
+.lpTocable:focus-visible{outline:2px solid #de7015;outline-offset:2px}
+.lpEditar{font-style:normal;font-weight:800;font-size:12px;color:#de7015;white-space:nowrap}
+.lpPasos{list-style:none;margin:4px 0 14px;padding:0;display:flex;flex-direction:column}
+.lpPasos li{display:flex;gap:12px;position:relative;padding:0 0 14px}
+.lpPasos li::before{content:"";position:absolute;left:17px;top:36px;bottom:0;width:2px;background:#e3e6ea}
+.lpPasos li:last-child::before{display:none}
+.lpPasos li.ok::before{background:#1f9d5c}
+.lpPasos li>i{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:16px;background:#f3f4f6;border:2px solid #e3e6ea;flex:none;position:relative;z-index:1}
+.lpPasos li.ok>i{background:#e9f7ef;border-color:#1f9d5c}
+.lpPasos li.no>i{background:#fde8e8;border-color:#b42318}
+.lpPasos li.actual>i{border-color:#de7015;box-shadow:0 0 0 4px #fff3e6}
+.lpPasos li>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;padding-top:6px}
+.lpPasos b{font-size:15px}
+.lpPasos small{font-size:12.5px;color:#6b7380}
+.lpFecha{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:#6b7380;font-weight:600}
+.lpFecha input,.lpNuevaFila input[type=date]{border:1px solid #d5dae1;border-radius:10px;padding:8px 10px;font:inherit;font-size:14px;background:#fff;color:#14181e}
+.lpChips{display:flex;flex-wrap:wrap;gap:6px}
+.lpChips button,.lpBtn{border:1px solid #d5dae1;background:#fff;border-radius:999px;padding:7px 12px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;color:#14181e;align-self:flex-start}
+.lpChips .si{background:#1f9d5c;border-color:#1f9d5c;color:#fff}
+.lpChips .no{background:#fde8e8;border-color:#f3c9c4;color:#b42318}
+.lpNotasCab{display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid #eef0f3;padding-top:12px;margin-bottom:8px}
+.lpNotasCab b{font-size:15px}
+.lpNueva{display:flex;flex-direction:column;gap:8px;background:#f7f8fa;border-radius:12px;padding:10px;margin-bottom:10px}
+.lpNueva textarea{border:1px solid #d5dae1;border-radius:10px;padding:9px 10px;font:inherit;font-size:14px;resize:vertical;width:100%;box-sizing:border-box;background:#fff}
+.lpNuevaFila{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.lpFoto{border:2px dashed #d5dae1;border-radius:10px;padding:6px 12px;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;min-height:36px}
+.lpFoto img{width:44px;height:44px;object-fit:cover;border-radius:8px}
+.lpFoto input{display:none}
+.lpNotas{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.lpNotas li{display:flex;gap:10px;align-items:flex-start;border:1px solid #e3e6ea;border-radius:12px;padding:8px 10px;background:#fff}
+.lpNotas img{width:64px;height:64px;object-fit:cover;border-radius:8px;flex:none}
+.lpNotas li>div{flex:1;min-width:0}
+.lpNotas small{font-size:12px;color:#6b7380}
+.lpNotas p{margin:2px 0 0;font-size:14px;line-height:1.4;overflow-wrap:anywhere}
+.lpNotas button{border:0;background:transparent;cursor:pointer;font-size:15px;padding:4px}
