@@ -5,6 +5,7 @@ import CampoNumero from './CampoNumero'
 import BuscadorCatalogo from './BuscadorCatalogo'
 import { Texto } from './PresupuestoEnVivo'
 import ComoLoVeCliente from './ComoLoVeCliente'
+import CompararMercado, { type ProductoAComparar } from './CompararMercado'
 import { hoy } from './gestionFormat'
 import type { CambioTipo } from './presupuestoModificaciones'
 import { ETIQUETA_ADICIONAL, etiquetaModificacion } from './presupuestoModificaciones'
@@ -117,6 +118,8 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obra
   const [errorEd, setErrorEd] = useState('')
   const [catalogo, setCatalogo] = useState<Producto[] | null>(null)
   const [verCambios, setVerCambios] = useState(false)
+  // Comparar con el mercado: todo el presupuesto (solo para ver) o el ítem que se está editando.
+  const [mercado, setMercado] = useState<{ productos: ProductoAComparar[]; deItem: boolean } | null>(null)
 
   useEffect(() => {
     let vigente = true
@@ -359,6 +362,9 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obra
         <label>Precio</label>
         <CampoNumero className="pvPrecio" value={edicion.precio} onChange={(e) => setEdicion({ ...edicion, precio: e.target.value })} aria-label="Precio unitario" />
       </div>
+      {edicion.descripcion.trim() && <button type="button" className="pvMercadoItem" onClick={() => setMercado({ deItem: true, productos: [{ nombre: edicion.descripcion.split('\n')[0].trim(), precio: Number(edicion.precio) || 0, cantidad: Number(edicion.cantidad) || 1, tipo: itemEd?.tipo === 'servicio' ? 'servicio' : 'producto', costo: Number(itemEd?.costo_unitario) || 0 }] })}>
+        📈 ¿Cómo estoy en el mercado?<small>la IA busca este ítem</small>
+      </button>}
       <input className="oeMotivo" value={edicion.motivo} onChange={(e) => setEdicion({ ...edicion, motivo: e.target.value })} placeholder="Motivo (opcional): ej. lo pidió el cliente" />
       <p className="oeAviso">🔁 No se pisa el presupuesto aceptado: queda como modificación{edicion.itemId != null && Math.abs(dif) > 0.5 ? <> · <b>{conSigno(dif)}</b></> : ''}.</p>
       {errorEd && <p role="alert" className="oeError">{errorEd}</p>}
@@ -374,7 +380,10 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obra
     e.pendiente ? <span className="oeMod pe">⏳ por aprobar</span> : e.quitado ? <span className="oeMod no">quitado</span> : e.modificado ? <span className="oeMod ap">modificado</span> : null
 
   return <section className="oeDoc" aria-label="Presupuesto de la obra">
-    <div className="oeTit"><span>PRESUPUESTO</span><button type="button" className="oeLink" onClick={onVerHistorial}>Historial ›</button></div>
+    <div className="oeTit"><span>PRESUPUESTO</span><span className="oeTitBtns">
+      <button type="button" className="oeIA" disabled={!items.length} onClick={() => setMercado({ deItem: false, productos: items.map((it) => { const e = estadoDe(it, adicionales.filter((a) => a.estado !== 'pendiente')); return { nombre: e.descripcion.split('\n')[0], precio: Math.round(e.precio * 100) / 100, cantidad: e.cantidad, tipo: it.tipo === 'servicio' ? 'servicio' : 'producto', costo: Number(it.costo_unitario) || 0 } }).filter((x) => x.cantidad > 0) })}>📈 Comparar precios</button>
+      <button type="button" className="oeLink" onClick={onVerHistorial}>Historial ›</button>
+    </span></div>
     <div className="oeTotales">
       <div><small>ORIGINAL</small><b>{plata(original)}</b></div>
       <button type="button" className={`cambio${verCambios ? ' on' : ''}`} aria-expanded={verCambios} onClick={() => setVerCambios((v) => !v)}><small>CAMBIOS {verCambios ? '▴' : '▾'}</small><b>{conSigno(aprobados)}</b></button>
@@ -453,5 +462,8 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obra
     {edicion?.clave === 'nuevo'
       ? <div className="oeItem abierto" data-oe-nuevo><div className="oeFila fija"><span className="pvN">＋</span><span className="oeTx"><b>Extra nuevo</b><small>Elegilo del catálogo o escribilo</small></span></div>{panel()}</div>
       : <button type="button" className="pvAgregarSec" onClick={abrirExtra}>＋ Agregar un extra</button>}
+
+    {mercado && <CompararMercado titulo={presus[0]?.titulo ?? 'Presupuesto de la obra'} productos={mercado.productos} onCerrar={() => setMercado(null)}
+      onUsarPrecio={mercado.deItem ? (_i, precio) => setEdicion((e) => (e ? { ...e, precio: String(precio) } : e)) : undefined} />}
   </section>
 }
