@@ -424,15 +424,16 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
           <p className="pvCliente">Cliente: <b>{cliente}</b>{obra ? <> · Obra: <b>{obra}</b></> : null}</p>
           {estado}
 
-          {ed && (
-            <div className="pvHerr">
-              <div className="pvVista" role="tablist" aria-label="Cómo lo ve el cliente">
-                <button type="button" className={resumen.modo !== 'resumido' ? 'on' : ''} onClick={() => void guardarResumen({ ...resumen, modo: 'detallado' })}>📋 Detallado</button>
-                <button type="button" className={resumen.modo === 'resumido' ? 'on' : ''} onClick={() => void guardarResumen({ ...resumen, modo: 'resumido' })}>✨ Resumido</button>
-              </div>
-              <button type="button" className="pvIA" disabled={validos.length === 0} onClick={() => compararPrecios()}>📈 Comparar precios</button>
+          {/* Detallado / Resumido: también en "Como lo ve el cliente", para ver cada versión */}
+          <div className={`pvHerr${ed ? '' : ' ver'}`}>
+            <div className="pvVista" role="tablist" aria-label="Cómo lo ve el cliente">
+              <button type="button" className={resumen.modo !== 'resumido' ? 'on' : ''} onClick={() => void guardarResumen({ ...resumen, modo: 'detallado' })}>📋 Detallado</button>
+              <button type="button" className={resumen.modo === 'resumido' ? 'on' : ''} onClick={() => void guardarResumen({ ...resumen, modo: 'resumido' })}>✨ Resumido</button>
             </div>
-          )}
+            {ed
+              ? <button type="button" className="pvIA" disabled={validos.length === 0} onClick={() => compararPrecios()}>📈 Comparar precios</button>
+              : <small className="pvVistaAyuda">El cliente lo recibe {resumen.modo === 'resumido' ? 'resumido: textos por sección, sin el detalle de ítems' : 'detallado: cada ítem con su precio'}.</small>}
+          </div>
           {errorIA && <p className="loginError" style={{ margin: 0 }}>{errorIA}</p>}
 
           <div className="pvTotal">

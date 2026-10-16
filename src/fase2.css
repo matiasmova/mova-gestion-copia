@@ -2676,3 +2676,5 @@ body:has(.pvItem.arrastrando){cursor:grabbing}
 .lpNotas small{font-size:12px;color:#6b7380}
 .lpNotas p{margin:2px 0 0;font-size:14px;line-height:1.4;overflow-wrap:anywhere}
 .lpNotas button{border:0;background:transparent;cursor:pointer;font-size:15px;padding:4px}
+.pvHerr.ver{flex-direction:column;align-items:stretch;gap:6px}
+.pvVistaAyuda{font-size:12px;color:#6b7380;padding:0 4px}
