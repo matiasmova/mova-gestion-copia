@@ -7,7 +7,7 @@ import { Texto } from './PresupuestoEnVivo'
 import ComoLoVeCliente from './ComoLoVeCliente'
 import { hoy } from './gestionFormat'
 import type { CambioTipo } from './presupuestoModificaciones'
-import { ETIQUETA_ADICIONAL } from './presupuestoModificaciones'
+import { ETIQUETA_ADICIONAL, etiquetaModificacion } from './presupuestoModificaciones'
 
 // La obra en vivo: la línea de avances que se toca para cargar o corregir, y el
 // presupuesto aceptado que se edita directo. El presupuesto nunca se pisa: cada
@@ -116,6 +116,7 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obra
   const [guardando, setGuardando] = useState(false)
   const [errorEd, setErrorEd] = useState('')
   const [catalogo, setCatalogo] = useState<Producto[] | null>(null)
+  const [verCambios, setVerCambios] = useState(false)
 
   useEffect(() => {
     let vigente = true
@@ -168,6 +169,11 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obra
   const pendientes = cuentan.filter((a) => a.estado === 'pendiente')
   const totalPend = pendientes.reduce((s, a) => s + a.importe, 0)
   const agregados = adicionales.filter((a) => a.tipo === 'cambio' && a.cambio_tipo === 'agregado' && a.estado !== 'rechazado')
+  // Todo lo que suma o resta al total (para ver de dónde sale "Cambios").
+  const idsItems = new Set(items.map((it) => it.id))
+  const huerfano = (a: Adicional) => a.tipo === 'cambio' && a.cambio_tipo !== 'agregado' && a.item_id != null && !idsItems.has(a.item_id)
+  const detalleCambios = cuentan.filter((a) => a.estado !== 'rechazado').sort((x, y) => (y.fecha ?? '').localeCompare(x.fecha ?? '') || y.id - x.id)
+  const huerfanos = detalleCambios.filter(huerfano)
   const extras = adicionales.filter((a) => a.tipo !== 'cambio' && a.estado !== 'rechazado')
 
   function terminar(texto: string) {
@@ -263,6 +269,16 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obra
     setGuardando(false)
     if (fallo) { console.error(fallo); setErrorEd('No se pudo volver al original. Volvé a intentar.'); return }
     terminar('Volvió al original: el total se actualizó')
+  }
+
+  // Borrar un cambio del detalle (con confirmación). Los reintegros y lo cobrado no se tocan acá.
+  async function borrarCambio(a: Adicional) {
+    if (!window.confirm(`¿Borrar "${a.descripcion}" (${conSigno(a.importe)})?\n\nDeja de sumar o restar y el total se recalcula.`)) return
+    setGuardando(true)
+    const { error: fallo } = await supabase.from('adicionales').delete().eq('id', a.id)
+    setGuardando(false)
+    if (fallo) { console.error(fallo); setErrorEd('No se pudo borrar. Volvé a intentar.'); return }
+    terminar('Cambio borrado: el total se actualizó')
   }
 
   // Un extra agregado por error: se borra.
@@ -361,9 +377,24 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obra
     <div className="oeTit"><span>PRESUPUESTO</span><button type="button" className="oeLink" onClick={onVerHistorial}>Historial ›</button></div>
     <div className="oeTotales">
       <div><small>ORIGINAL</small><b>{plata(original)}</b></div>
-      <div className="cambio"><small>CAMBIOS</small><b>{conSigno(aprobados)}</b></div>
+      <button type="button" className={`cambio${verCambios ? ' on' : ''}`} aria-expanded={verCambios} onClick={() => setVerCambios((v) => !v)}><small>CAMBIOS {verCambios ? '▴' : '▾'}</small><b>{conSigno(aprobados)}</b></button>
       <div className="total"><small>TOTAL HOY</small><b>{plata(original + aprobados)}</b></div>
     </div>
+    {huerfanos.length > 0 && !verCambios && <button type="button" className="oeAviso pend oeAvisoBtn" onClick={() => setVerCambios(true)}>⚠ {huerfanos.length === 1 ? 'Hay 1 cambio' : `Hay ${huerfanos.length} cambios`} de ítems que ya no están en el presupuesto (se editó después). Tocá para verlos ›</button>}
+    {verCambios && <div className="oeCambios">
+      <div className="oeCambiosCab"><b>De dónde salen los cambios</b><button type="button" className="oeLink" onClick={() => setVerCambios(false)}>Cerrar</button></div>
+      {detalleCambios.length === 0 ? <small className="oeAyuda">No hay cambios: el total es el del presupuesto aceptado.</small> : detalleCambios.map((a) => (
+        <div key={a.id} className="oeCambio">
+          <span className="oeTx">
+            <b>{a.descripcion}</b>
+            <small>{etiquetaModificacion(a)} · {new Date(`${(a.fecha ?? '').slice(0, 10)}T12:00:00`).toLocaleDateString('es-AR')}{a.estado === 'pendiente' ? ' · ⏳ por aprobar (no suma)' : ''}{a.motivo ? ` · ${a.motivo}` : ''}</small>
+            {huerfano(a) && <small className="oePropuesto">Este ítem ya no está en el presupuesto: si fue un error, borralo.</small>}
+          </span>
+          <span className="pvImp">{conSigno(a.importe)}</span>
+          {a.estado !== 'pagado' && <button type="button" className="oeCambioBorrar" aria-label="Borrar este cambio" disabled={guardando} onClick={() => void borrarCambio(a)}>🗑</button>}
+        </div>
+      ))}
+    </div>}
     <small className="oeAyuda">Tocá un ítem para cambiarlo: queda como modificación y el total se recalcula.</small>
     {pendientes.length > 0 && <p className="oeAviso pend">⏳ {pendientes.length === 1 ? '1 cambio espera' : `${pendientes.length} cambios esperan`} aprobación del cliente ({conSigno(totalPend)}). Todavía no suman.</p>}
 
@@ -384,7 +415,9 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obra
           return <div key={it.id} className={`oeItem${abierto ? ' abierto' : ''}${e.quitado ? ' quitado' : ''}`}>
             <button type="button" className="oeFila" aria-expanded={abierto} onClick={() => abrirItem(it)}>
               <span className="pvN">{String(i + 1).padStart(2, '0')}</span>
-              <span className="oeTx"><b>{e.descripcion}{marca(e)}</b><small>{vigente.quitado ? 'Se quita' : `${Number(vigente.cantidad).toLocaleString('es-AR')} × ${plata(vigente.precio)}`}</small>
+              <span className="oeTx"><b>{e.descripcion}{marca(e)}</b><small>{vigente.quitado ? 'Se quita' : !vigente.modificado && Number(it.descuento_pct) > 0
+                  ? <>{Number(it.cantidad).toLocaleString('es-AR')} × {plata(it.precio_unitario)}<span className="pvPct">−{Number(it.descuento_pct)}%</span><span className="pvCU">= {plata(precioNeto(it))} c/u</span></>
+                  : `${Number(vigente.cantidad).toLocaleString('es-AR')} × ${plata(vigente.precio)}`}</small>
                 {e.pendiente && <small className="oePropuesto">Propuesto: {e.quitado ? 'quitarlo' : `${Number(e.cantidad).toLocaleString('es-AR')} × ${plata(e.precio)} = ${plata(e.cantidad * e.precio)}`}</small>}</span>
               <span className="pvImp">{plata(ahora)}{vigente.modificado && Math.abs(ahora - original) > 0.5 && <s>{plata(original)}</s>}</span>
             </button>
