@@ -2628,3 +2628,13 @@ body:has(.pvItem.arrastrando){cursor:grabbing}
 .pvFinal b em{font-style:normal;font-size:12px;font-weight:700;color:#4b5563}
 .pvFinal .pvFinalAhorro{flex-basis:100%;text-transform:none;letter-spacing:0;font-weight:600;font-size:12px;color:#4b5563}
 .pvCU{display:block;font-weight:700;color:#1f7a4d}
+/* Pie del presupuesto en vivo: el total a la izquierda y los botones al lado;
+   si no entran, los botones bajan a su propia fila (nunca se cortan). */
+.pvPie>div:first-child{flex:1 1 160px;min-width:0}
+.pvPie>.pvAcciones{flex:0 1 auto;min-width:0;max-width:100%;margin-left:auto}
+@media (max-width:640px){
+  .pvPie>.pvAcciones{flex:1 1 100%}
+  .pvPie>.pvAcciones button{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .pvPie>.pvAcciones button[aria-label]{flex:0 0 auto}
+  .pvDoc{padding-bottom:170px}
+}
