@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import type { Pedido } from './BuscadorGlobal'
 import { supabase } from './supabase'
-import { fechaCorta, hoy, moneda } from './gestionFormat'
+import { fechaCorta } from './gestionFormat'
+import { linkWhatsApp } from './whatsapp'
+import { entenderFrase, isoLocal } from './agendaFrase'
 import { estadoPush, activarPush, desactivarPush, type EstadoPush } from './push'
 import { confirmarEliminacion } from './confirmar'
 
 // Agenda: reuniones, recordatorios, visitas y llamadas, con aviso al celular.
-// Vistas: Próximos (lista por día), Calendario (mes) y Alertas automáticas
-// (plazos de obra y saldos por cobrar, que antes estaban en Notificaciones).
+// La semana a la vista (o el mes), carga rápida dictada o escrita en una frase,
+// el día en línea de tiempo con acciones y "Para agendar" (plazos de obra,
+// seguros y presupuestos sin respuesta).
 // El aviso push lo manda la Edge Function "enviar-recordatorios" cuando llega
 // notificar_en (fecha + hora − anticipación, hora de Argentina).
 
@@ -26,7 +29,6 @@ export type Evento = {
 }
 
 type Opcion = { id: number; nombre: string }
-type Vista = 'proximos' | 'calendario' | 'alertas'
 
 export const TIPOS_EVENTO: Record<string, { icono: string; texto: string }> = {
   reunion: { icono: '🤝', texto: 'Reunión' },
@@ -42,7 +44,6 @@ const AVISOS: [string, string][] = [
   ['', 'Sin aviso'],
 ]
 const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
-const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 const pad = (n: number) => String(n).padStart(2, '0')
 const sumarDias = (f: string, n: number) => {
   const d = new Date(`${f}T12:00:00`)
@@ -63,35 +64,37 @@ const textoAviso = (e: Evento) =>
   e.aviso_min == null ? 'Sin aviso' : AVISOS.find(([v]) => v === String(e.aviso_min))?.[1] ?? `${e.aviso_min} min antes`
 
 export default function Agenda({ pedido, onPedidoAtendido }: { pedido?: Pedido | null; onPedidoAtendido?: () => void } = {}) {
-  const [vista, setVista] = useState<Vista>('proximos')
+  const hoyStr = isoLocal(new Date())
   const [eventos, setEventos] = useState<Evento[]>([])
   const [obras, setObras] = useState<Opcion[]>([])
-  const [clientes, setClientes] = useState<Opcion[]>([])
+  const [clientes, setClientes] = useState<(Opcion & { telefono: string | null })[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [tick, setTick] = useState(0)
   const [form, setForm] = useState<{ evento?: Evento; fecha?: string } | null>(null)
+  const [sel, setSel] = useState(hoyStr)
+  const [inicioSem, setInicioSem] = useState(() => lunesDe(hoyStr))
+  const [verMes, setVerMes] = useState(false)
+  const [frase, setFrase] = useState('')
+  const [guardandoFrase, setGuardandoFrase] = useState(false)
+  const [aviso, setAviso] = useState('')
   // Pedido del buscador general o del botón "+".
   useEffect(() => {
     if (!pedido) return
-    if (pedido.accion === 'nuevo') setForm({})
+    if (pedido.accion === 'nuevo') setForm({ fecha: hoyStr })
     onPedidoAtendido?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pedido])
-  const [verHechos, setVerHechos] = useState(false)
   const [push, setPush] = useState<EstadoPush | 'cargando' | 'procesando'>('cargando')
-  const [pushMsg, setPushMsg] = useState('')
-
   useEffect(() => { void estadoPush().then(setPush).catch(() => setPush('no-soportado')) }, [])
-
   async function togglePush() {
-    if (push === 'activo') {
-      const r = await desactivarPush(); setPushMsg(r.msg)
-    } else {
-      setPush('procesando'); const r = await activarPush(); setPushMsg(r.msg)
-    }
+    if (push === 'no-soportado') { mostrar('Para recibir avisos instalá la app: en iPhone, Compartir → Agregar a inicio, y abrila desde el ícono.'); return }
+    if (push === 'bloqueado') { mostrar('Los avisos están bloqueados: habilitalos en los ajustes del navegador o del teléfono y recargá.'); return }
+    if (push === 'activo') { const r = await desactivarPush(); mostrar(r.msg) }
+    else { setPush('procesando'); const r = await activarPush(); mostrar(r.msg) }
     setPush(await estadoPush())
   }
+  function mostrar(t: string) { setAviso(t); window.setTimeout(() => setAviso((a) => (a === t ? '' : a)), 4000) }
 
   useEffect(() => {
     let vigente = true
@@ -100,13 +103,13 @@ export default function Agenda({ pedido, onPedidoAtendido }: { pedido?: Pedido |
       const [rE, rO, rC] = await Promise.all([
         supabase.from('recordatorios').select('*').order('fecha', { ascending: true }).order('hora', { ascending: true, nullsFirst: true }),
         supabase.from('obras').select('id,nombre_obra').eq('activo', true).order('nombre_obra'),
-        supabase.from('Clientes').select('id,nombre,apellido').order('nombre'),
+        supabase.from('Clientes').select('id,nombre,apellido,telefono').order('nombre'),
       ])
       if (!vigente) return
       if (rE.error) { console.error(rE.error); setError('No se pudo cargar la agenda.'); setCargando(false); return }
       setEventos(((rE.data ?? []) as Evento[]).map((e) => ({ ...e, aviso_min: e.aviso_min === undefined ? 0 : e.aviso_min })))
       setObras(((rO.data ?? []) as { id: number; nombre_obra: string }[]).map((o) => ({ id: o.id, nombre: o.nombre_obra })))
-      setClientes(((rC.data ?? []) as { id: number; nombre: string; apellido: string | null }[]).map((c) => ({ id: c.id, nombre: `${c.nombre} ${c.apellido ?? ''}`.trim() })))
+      setClientes(((rC.data ?? []) as { id: number; nombre: string; apellido: string | null; telefono: string | null }[]).map((c) => ({ id: c.id, nombre: `${c.nombre} ${c.apellido ?? ''}`.trim(), telefono: c.telefono })))
       setCargando(false)
     }
     void cargar()
@@ -114,180 +117,311 @@ export default function Agenda({ pedido, onPedidoAtendido }: { pedido?: Pedido |
   }, [tick])
 
   const nombreObra = (id: number | null) => obras.find((o) => o.id === id)?.nombre ?? null
-  const nombreCliente = (id: number | null) => clientes.find((c) => c.id === id)?.nombre ?? null
+  const cliente = (id: number | null) => clientes.find((c) => c.id === id) ?? null
 
   async function completar(e: Evento) {
     const { error: fallo } = await supabase.from('recordatorios').update({ completado: !e.completado }).eq('id', e.id)
     if (fallo) { setError('No se pudo actualizar.'); return }
     setEventos((arr) => arr.map((x) => (x.id === e.id ? { ...x, completado: !x.completado } : x)))
   }
-
   async function eliminar(e: Evento) {
     if (!confirmarEliminacion(`¿Eliminar "${e.titulo}" del ${fechaCorta(e.fecha)}?`)) return
     const { error: fallo } = await supabase.from('recordatorios').delete().eq('id', e.id)
     if (fallo) { setError('No se pudo eliminar.'); return }
     setEventos((arr) => arr.filter((x) => x.id !== e.id))
   }
-
-  const tarjeta = (e: Evento) => {
-    const t = tipoDe(e.tipo)
-    const extra = [e.lugar ? `📍 ${e.lugar}` : null, nombreObra(e.obra_id) ? `🏗 ${nombreObra(e.obra_id)}` : null, nombreCliente(e.cliente_id) ? `👤 ${nombreCliente(e.cliente_id)}` : null].filter(Boolean)
-    return (
-      <article key={e.id} className={`agEvento tipo-${e.tipo ?? 'recordatorio'} ${e.completado ? 'hecho' : ''}`}>
-        <div className="agHora">{e.hora ? e.hora.slice(0, 5) : 'Todo el día'}</div>
-        <div className="agCuerpo">
-          <strong>{t.icono} {e.titulo}</strong>
-          {extra.length > 0 && <small>{extra.join(' · ')}</small>}
-          {e.detalle && <small className="agDetalle">{e.detalle}</small>}
-          <small className="agAviso">{e.aviso_min == null ? '🔕 Sin aviso' : `🔔 ${textoAviso(e)}`}</small>
-        </div>
-        <div className="agAcciones">
-          <button type="button" className={`agBtn ${e.completado ? 'ok' : ''}`} title={e.completado ? 'Marcar pendiente' : 'Marcar hecho'} onClick={() => void completar(e)}>✓</button>
-          <button type="button" className="agBtn" title="Editar" onClick={() => setForm({ evento: e })}>✏️</button>
-          <button type="button" className="agBtn peligro" title="Eliminar" onClick={() => void eliminar(e)}>🗑</button>
-        </div>
-      </article>
-    )
+  // Pasar a otro día (mañana, o a hoy si estaba atrasado): se reprograma el aviso.
+  async function mover(e: Evento, fecha: string) {
+    const datos = { fecha, notificado: false, notificar_en: momentoAviso(fecha, e.hora, e.aviso_min) }
+    let r = await supabase.from('recordatorios').update(datos).eq('id', e.id)
+    if (r.error && /notificar_en/.test(r.error.message)) r = await supabase.from('recordatorios').update({ fecha, notificado: false }).eq('id', e.id)
+    if (r.error) { setError('No se pudo mover.'); return }
+    setEventos((arr) => arr.map((x) => (x.id === e.id ? { ...x, fecha } : x)))
+    mostrar(fecha === hoyStr ? 'Pasado a hoy' : `Pasado al ${diaSemana(fecha)}`)
   }
 
-  // ---------- Próximos, agrupados ----------
-  const hoyStr = hoy()
-  const manana = sumarDias(hoyStr, 1)
-  const enSemana = sumarDias(hoyStr, 7)
-  const grupos = useMemo(() => {
-    const visibles = eventos.filter((e) => verHechos || !e.completado)
-    const g: { clave: string; titulo: string; items: Evento[] }[] = [
-      { clave: 'atrasados', titulo: '⚠ Atrasados', items: visibles.filter((e) => !e.completado && e.fecha < hoyStr) },
-      { clave: 'hoy', titulo: 'Hoy', items: visibles.filter((e) => e.fecha === hoyStr) },
-      { clave: 'manana', titulo: 'Mañana', items: visibles.filter((e) => e.fecha === manana) },
-      { clave: 'semana', titulo: 'Esta semana', items: visibles.filter((e) => e.fecha > manana && e.fecha <= enSemana) },
-      { clave: 'despues', titulo: 'Más adelante', items: visibles.filter((e) => e.fecha > enSemana) },
-    ]
-    return g.filter((x) => x.items.length > 0 || x.clave === 'hoy')
-  }, [eventos, verHechos, hoyStr, manana, enSemana])
+  // ---------- Carga rápida (dictada o escrita) ----------
+  const entendida = useMemo(() => (frase.trim().length > 2 ? entenderFrase(frase, clientes, obras) : null), [frase, clientes, obras])
+  const dictado = useDictado((t, final) => { setFrase(t); if (final) setTimeout(() => document.getElementById('agFraseOk')?.focus(), 50) })
+  async function guardarFrase(datos: { titulo: string; fecha: string; hora: string | null; tipo: string; cliente_id: number | null; obra_id: number | null }) {
+    setGuardandoFrase(true)
+    const r = await crearEvento({ ...datos, aviso_min: 60 })
+    setGuardandoFrase(false)
+    if (r) { setError(r); return false }
+    irA(datos.fecha)
+    setTick((t) => t + 1)
+    mostrar(`Agendado: ${diaSemana(datos.fecha)}${datos.hora ? ` · ${datos.hora}` : ''}`)
+    return true
+  }
+
+  function irA(f: string) { setSel(f); setInicioSem(lunesDe(f)); setVerMes(false) }
+
+  // ---------- Datos de la pantalla ----------
+  const atrasados = eventos.filter((e) => !e.completado && e.fecha < hoyStr)
+  const delDia = eventos.filter((e) => e.fecha === sel).sort((a, b) => (a.hora ?? '').localeCompare(b.hora ?? ''))
+  const proximos = eventos.filter((e) => !e.completado && e.fecha > sel).slice(0, 6)
+  const ahora = new Date()
+  const horaAhora = `${pad(ahora.getHours())}:${pad(ahora.getMinutes())}`
+  const sugerencias = useSugerencias(tick)
+
+  const puntos = (f: string) => eventos.filter((e) => e.fecha === f && !e.completado).slice(0, 3)
+  const tituloDia = sel === hoyStr ? 'Hoy' : sel === sumarDias(hoyStr, 1) ? 'Mañana' : sel === sumarDias(hoyStr, -1) ? 'Ayer' : capital(diaSemana(sel))
+  const pendDia = delDia.filter((e) => !e.completado).length
+
+  const carta = (e: Evento) => {
+    const t = tipoDe(e.tipo)
+    const c = cliente(e.cliente_id)
+    const obra = nombreObra(e.obra_id)
+    const wa = c?.telefono ? linkWhatsApp(c.telefono, `Hola ${c.nombre.split(' ')[0]}, te escribo de MOVA por: ${e.titulo}.`) : null
+    const mapa = e.lugar ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.lugar)}` : null
+    return <div key={e.id} className={`agEv${e.completado ? ' hecho' : ''}`}>
+      <span className="agEvHora">{e.hora ? e.hora.slice(0, 5) : 'Día'}</span>
+      <div className={`agCarta tipo-${e.tipo ?? 'recordatorio'}`}>
+        <div className="agCartaTop">
+          <span aria-hidden>{t.icono}</span>
+          <div><b>{e.titulo}</b><small>{t.texto}{e.lugar ? ` · ${e.lugar}` : ''}{e.aviso_min != null && !e.completado ? ` · 🔔 ${textoAviso(e).toLowerCase()}` : ''}</small></div>
+        </div>
+        {(c || obra) && <div className="agEtiq">{c && <span>👤 {c.nombre}</span>}{obra && <span>🏗️ {obra}</span>}</div>}
+        {e.detalle && <p className="agNota">{e.detalle}</p>}
+        <div className="agAcc">
+          <button type="button" className="ok" onClick={() => void completar(e)}>{e.completado ? '↩️ Deshacer' : '✓ Hecho'}</button>
+          {wa && <a href={wa} target="_blank" rel="noreferrer">💬 WhatsApp</a>}
+          {mapa && <a href={mapa} target="_blank" rel="noreferrer">📍 Cómo llegar</a>}
+          {!e.completado && <button type="button" onClick={() => void mover(e, sumarDias(e.fecha < hoyStr ? hoyStr : e.fecha, 1))}>⏰ Posponer</button>}
+          <button type="button" aria-label="Editar" onClick={() => setForm({ evento: e })}>✏️</button>
+          <button type="button" aria-label="Eliminar" onClick={() => void eliminar(e)}>🗑</button>
+        </div>
+      </div>
+    </div>
+  }
 
   return (
-    <div className="gestionPage agenda">
-      <div className="pageHeader agHead">
-        <div><p className="subtitle">ORGANIZACIÓN</p><h2>Agenda</h2><p className="welcome">Reuniones, recordatorios, visitas y llamadas</p></div>
-        <button className="newButton" onClick={() => setForm({ fecha: hoyStr })}>+ Nuevo</button>
+    <div className="gestionPage agenda agNueva">
+      <div className="agCab">
+        <div><small>{capital(diaSemana(hoyStr))}</small><h2>Agenda</h2></div>
+        <button type="button" className={`agIcono${push === 'activo' ? ' on' : ''}`} disabled={push === 'cargando' || push === 'procesando'} onClick={() => void togglePush()} title="Avisos en este dispositivo">
+          {push === 'activo' ? '🔔 On' : push === 'procesando' ? '…' : '🔕 Off'}
+        </button>
+        <button type="button" className="agIcono nuevo" onClick={() => setForm({ fecha: sel })} aria-label="Nuevo evento">＋</button>
       </div>
 
-      <div className={`agPush ${push === 'activo' ? 'on' : ''}`}>
-        <span>{push === 'activo' ? '🔔 Avisos activados en este dispositivo' : push === 'bloqueado' ? '🔕 Avisos bloqueados en este dispositivo' : push === 'no-soportado' ? '📱 Para recibir avisos, instalá la app en el celular' : '🔕 Avisos desactivados en este dispositivo'}</span>
-        {push === 'no-soportado' ? <small>En iPhone: Compartir → Agregar a inicio, abrila desde el ícono y volvé acá.</small>
-          : push === 'bloqueado' ? <small>Habilitá las notificaciones en los ajustes del navegador o del teléfono y recargá.</small>
-          : <button type="button" className={`configSwitch ${push === 'activo' ? 'on' : ''}`} onClick={() => void togglePush()} disabled={push === 'cargando' || push === 'procesando'} aria-label="Activar avisos en este dispositivo"><i /></button>}
-        {pushMsg && <small className="agPushMsg">{pushMsg}</small>}
-      </div>
+      {/* ---- Semana / mes ---- */}
+      <section className="agSemana" aria-label="Calendario">
+        <div className="agSemCab">
+          <b>{capital((verMes ? new Date(`${sel}T12:00:00`) : new Date(`${inicioSem}T12:00:00`)).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }))}</b>
+          <div>
+            <button type="button" aria-label="Anterior" onClick={() => (verMes ? setSel(sumarMeses(sel, -1)) : setInicioSem(sumarDias(inicioSem, -7)))}>‹</button>
+            <button type="button" className="txt" onClick={() => { setVerMes((v) => !v); setInicioSem(lunesDe(sel)) }}>{verMes ? 'Semana' : 'Mes'}</button>
+            {(sel !== hoyStr || inicioSem !== lunesDe(hoyStr)) && <button type="button" className="txt" onClick={() => irA(hoyStr)}>Hoy</button>}
+            <button type="button" aria-label="Siguiente" onClick={() => (verMes ? setSel(sumarMeses(sel, 1)) : setInicioSem(sumarDias(inicioSem, 7)))}>›</button>
+          </div>
+        </div>
+        {!verMes ? <div className="agDias">
+          {Array.from({ length: 7 }, (_, i) => sumarDias(inicioSem, i)).map((f, i) => (
+            <button key={f} type="button" className={`agDiaBtn${f === hoyStr ? ' hoy' : ''}${f === sel ? ' sel' : ''}`} onClick={() => setSel(f)} aria-label={diaSemana(f)}>
+              <small>{DIAS[i]}</small><b>{Number(f.slice(8))}</b>
+              <span className="agPuntos">{puntos(f).map((e) => <i key={e.id} className={`tipo-${e.tipo ?? 'recordatorio'}`} />)}</span>
+            </button>
+          ))}
+        </div> : <div className="agMes">
+          {DIAS.map((d) => <span key={d}>{d[0]}</span>)}
+          {(() => {
+            const primero = `${sel.slice(0, 7)}-01`
+            const ini = lunesDe(primero)
+            return Array.from({ length: 42 }, (_, i) => sumarDias(ini, i)).filter((f, i) => i < 35 || f.slice(0, 7) === sel.slice(0, 7)).map((f) => (
+              <button key={f} type="button" className={`${f.slice(0, 7) !== sel.slice(0, 7) ? 'fuera ' : ''}${f === sel ? 'sel ' : ''}${f === hoyStr ? 'hoy' : ''}`} onClick={() => irA(f)}>
+                {Number(f.slice(8))}{puntos(f).length > 0 && <i />}
+              </button>
+            ))
+          })()}
+        </div>}
+      </section>
 
-      <div className="gestionTabs homeTabs">
-        <button className={vista === 'proximos' ? 'active' : ''} onClick={() => setVista('proximos')}>Próximos</button>
-        <button className={vista === 'calendario' ? 'active' : ''} onClick={() => setVista('calendario')}>📅 Calendario</button>
-        <button className={vista === 'alertas' ? 'active' : ''} onClick={() => setVista('alertas')}>⚠ Alertas</button>
+      {/* ---- Carga rápida: dictar o escribir ---- */}
+      <div className={`agRapida${dictado.escuchando ? ' oyendo' : ''}`}>
+        <button type="button" className="agMic" aria-label={dictado.escuchando ? 'Dejar de escuchar' : 'Dictar'} onClick={() => (dictado.escuchando ? dictado.parar() : dictado.empezar())}>🎤</button>
+        <input value={frase} onChange={(e) => setFrase(e.target.value)} placeholder="Dictá o escribí: “visita obra el martes 9hs”" aria-label="Carga rápida"
+          onKeyDown={(e) => { if (e.key === 'Enter' && entendida) void guardarFrase(entendida).then((ok) => ok && setFrase('')) }} />
       </div>
+      {dictado.escuchando && <div className="agEscucha"><span className="agOndas" aria-hidden><i /><i /><i /><i /><i /></span><div><b>Escuchando…</b><small>Hablá normal: “reunión con Aldo el jueves a las 3 de la tarde”</small></div><button type="button" onClick={dictado.parar}>Listo</button></div>}
+      {dictado.error && <p className="agAvisoTxt">{dictado.error}</p>}
+      {entendida && !dictado.escuchando && <div className="agPrevia">
+        <b>{tipoDe(entendida.tipo).icono} {entendida.titulo}</b>
+        <div className="agChipsPrev">
+          <span>📅 {capital(diaSemana(entendida.fecha))}</span>
+          <span>🕑 {entendida.hora ?? 'sin hora'}</span>
+          {entendida.cliente_id && <span>👤 {cliente(entendida.cliente_id)?.nombre}</span>}
+          {entendida.obra_id && <span>🏗️ {nombreObra(entendida.obra_id)}</span>}
+          <span>🔔 1 h antes</span>
+        </div>
+        <div className="agPreviaAcc">
+          <button id="agFraseOk" type="button" className="ok" disabled={guardandoFrase} onClick={() => void guardarFrase(entendida).then((ok) => ok && setFrase(''))}>{guardandoFrase ? 'Guardando…' : '✓ Guardar'}</button>
+          <button type="button" onClick={() => setForm({ evento: { id: 0, titulo: entendida.titulo, detalle: null, fecha: entendida.fecha, hora: entendida.hora, tipo: entendida.tipo, lugar: null, obra_id: entendida.obra_id, cliente_id: entendida.cliente_id, completado: false, aviso_min: 60 } })}>✏️ Ajustar</button>
+          <button type="button" onClick={() => setFrase('')}>Cancelar</button>
+        </div>
+      </div>}
 
+      {aviso && <p className="agAvisoTxt ok" role="status">{aviso}</p>}
       {error && <p className="loginError">{error}</p>}
-      {cargando && vista !== 'alertas' && <p>Cargando agenda...</p>}
+      {cargando ? <p>Cargando agenda…</p> : <>
+        {/* ---- Atrasados ---- */}
+        {atrasados.length > 0 && <section className="agAtrasados">
+          <b>⚠ {atrasados.length === 1 ? '1 quedó sin hacer' : `${atrasados.length} quedaron sin hacer`}</b>
+          {atrasados.slice(0, 4).map((e) => <div key={e.id} className="agAtr">
+            <span>{tipoDe(e.tipo).icono} {e.titulo}<small>{fechaCorta(e.fecha)}</small></span>
+            <button type="button" onClick={() => void completar(e)}>✓ Hecho</button>
+            <button type="button" onClick={() => void mover(e, hoyStr)}>Pasar a hoy</button>
+          </div>)}
+        </section>}
 
-      {!cargando && vista === 'proximos' && <>
-        {grupos.map((g) => (
-          <section key={g.clave} className={`agGrupo ${g.clave}`}>
-            <h3>{g.titulo}{g.clave === 'hoy' && <span> · {diaSemana(hoyStr)}</span>}</h3>
-            {g.items.length === 0 ? <p className="agVacio">Nada para hoy. <button type="button" className="caLink" onClick={() => setForm({ fecha: hoyStr })}>+ Agregar</button></p>
-              : g.clave === 'hoy' || g.clave === 'manana'
-                ? g.items.map(tarjeta)
-                : Object.entries(g.items.reduce<Record<string, Evento[]>>((acc, e) => { (acc[e.fecha] ??= []).push(e); return acc }, {})).map(([f, lista]) => (
-                  <div key={f} className="agDia"><p className="agDiaTit">{diaSemana(f)}</p>{lista.map(tarjeta)}</div>
-                ))}
-          </section>
-        ))}
-        <label className="agVerHechos"><input type="checkbox" checked={verHechos} onChange={(e) => setVerHechos(e.target.checked)} /> Mostrar también lo ya hecho</label>
+        {/* ---- El día ---- */}
+        <div className="agDiaTit"><b>{tituloDia}</b>{delDia.length > 0 && <span>{pendDia ? `${pendDia} pendiente${pendDia === 1 ? '' : 's'}` : '✓ Todo hecho'}</span>}</div>
+        <div className="agLinea">
+          {delDia.length === 0
+            ? <div className="agLibre">Día libre. <button type="button" onClick={() => setForm({ fecha: sel })}>＋ Agendar algo</button></div>
+            : (() => {
+              const out: ReactNode[] = []
+              let puesta = sel !== hoyStr
+              delDia.forEach((e) => {
+                if (!puesta && e.hora && e.hora.slice(0, 5) > horaAhora) { puesta = true; out.push(<div key="ahora" className="agAhora"><span>{horaAhora}</span><i /></div>) }
+                out.push(carta(e))
+              })
+              if (!puesta) out.push(<div key="ahora" className="agAhora"><span>{horaAhora}</span><i /></div>)
+              return out
+            })()}
+        </div>
+
+        {/* ---- Para agendar (antes: Alertas) ---- */}
+        {sugerencias.length > 0 && <section className="agSug">
+          <div className="agSugCab"><b>Para agendar</b><small>Se arman solas</small></div>
+          {sugerencias.map((s) => <div key={s.clave} className="agSugItem">
+            <span className={`agSugIco ${s.tono}`} aria-hidden>{s.icono}</span>
+            <div><b>{s.titulo}</b><small>{s.detalle}</small></div>
+            <button type="button" onClick={() => void guardarFrase({ titulo: s.agendar, fecha: sumarDias(hoyStr, 1), hora: '10:00', tipo: s.tipo, cliente_id: null, obra_id: s.obra_id ?? null })}>Agendar</button>
+          </div>)}
+        </section>}
+
+        {/* ---- Lo que viene ---- */}
+        {proximos.length > 0 && <section className="agProx">
+          <h3>Lo que viene</h3>
+          {proximos.map((e, i) => <div key={e.id}>
+            {(i === 0 || proximos[i - 1].fecha !== e.fecha) && <small className="agProxDia">{capital(diaSemana(e.fecha))}</small>}
+            <button type="button" className="agProxFila" onClick={() => irA(e.fecha)}>
+              <span aria-hidden>{tipoDe(e.tipo).icono}</span>
+              <div><b>{e.titulo}</b><small>{tipoDe(e.tipo).texto}{cliente(e.cliente_id) ? ` · ${cliente(e.cliente_id)!.nombre}` : ''}</small></div>
+              <em>{e.hora ? e.hora.slice(0, 5) : ''}</em>
+            </button>
+          </div>)}
+        </section>}
       </>}
-
-      {!cargando && vista === 'calendario' && (
-        <CalendarioMes eventos={eventos} onDia={(f) => setForm({ fecha: f })} tarjeta={tarjeta} />
-      )}
-
-      {vista === 'alertas' && <AlertasAutomaticas />}
 
       {form && (
         <FormEvento
-          evento={form.evento}
+          evento={form.evento && form.evento.id ? form.evento : undefined}
+          inicial={form.evento && !form.evento.id ? form.evento : undefined}
           fecha={form.fecha}
           obras={obras}
           clientes={clientes}
           onCancelar={() => setForm(null)}
-          onGuardado={() => { setForm(null); setTick((t) => t + 1) }}
+          onGuardado={(f) => { setForm(null); setFrase(''); if (f) irA(f); setTick((t) => t + 1) }}
         />
       )}
     </div>
   )
 }
 
-// ---------- Calendario del mes ----------
-function CalendarioMes({ eventos, onDia, tarjeta }: { eventos: Evento[]; onDia: (fecha: string) => void; tarjeta: (e: Evento) => ReactNode }) {
-  const [cursor, setCursor] = useState(() => { const d = new Date(); return { anio: d.getFullYear(), mes: d.getMonth() } })
-  const [sel, setSel] = useState(hoy())
-  const { anio, mes } = cursor
-  const celdas = useMemo(() => {
-    const offset = (new Date(anio, mes, 1).getDay() + 6) % 7
-    const dias = new Date(anio, mes + 1, 0).getDate()
-    const arr: (number | null)[] = []
-    for (let i = 0; i < offset; i++) arr.push(null)
-    for (let d = 1; d <= dias; d++) arr.push(d)
-    return arr
-  }, [anio, mes])
-  const mover = (delta: number) => setCursor((c) => { const nm = c.mes + delta; return { anio: c.anio + Math.floor(nm / 12), mes: ((nm % 12) + 12) % 12 } })
-  const hoyStr = hoy()
-  const delSel = eventos.filter((e) => e.fecha === sel)
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+const lunesDe = (f: string) => { const d = new Date(`${f}T12:00:00`); return sumarDias(f, -((d.getDay() + 6) % 7)) }
+const sumarMeses = (f: string, n: number) => { const d = new Date(`${f.slice(0, 7)}-01T12:00:00`); d.setMonth(d.getMonth() + n); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01` }
 
-  return (
-    <div className="calWrap">
-      <div className="calMain">
-        <div className="calHead">
-          <button onClick={() => mover(-1)} aria-label="Mes anterior">‹</button>
-          <h3>{MESES[mes]} {anio}</h3>
-          <button onClick={() => mover(1)} aria-label="Mes siguiente">›</button>
-          <button className="calHoy" onClick={() => { const d = new Date(); setCursor({ anio: d.getFullYear(), mes: d.getMonth() }); setSel(hoyStr) }}>Hoy</button>
-        </div>
-        <div className="calSemana">{DIAS.map((d) => <span key={d}>{d}</span>)}</div>
-        <div className="calGrid">
-          {celdas.map((dia, i) => {
-            if (dia === null) return <div className="calCell vacia" key={`v${i}`} />
-            const f = `${anio}-${pad(mes + 1)}-${pad(dia)}`
-            const delDia = eventos.filter((e) => e.fecha === f)
-            return (
-              <div className={`calCell ${f === hoyStr ? 'hoy' : ''} ${f === sel ? 'sel' : ''}`} key={f} onClick={() => setSel(f)}>
-                <span className="calNum">{dia}</span>
-                {delDia.slice(0, 3).map((e) => (
-                  <span className={`calChip tipo-${e.tipo ?? 'recordatorio'} ${e.completado ? 'ok' : ''}`} key={e.id} title={e.titulo}>{e.hora ? `${e.hora.slice(0, 5)} ` : ''}{e.titulo}</span>
-                ))}
-                {delDia.length > 0 && <span className="calPuntos" aria-hidden>{delDia.slice(0, 4).map((e) => <i key={e.id} className={`tipo-${e.tipo ?? 'recordatorio'}`} />)}</span>}
-                {delDia.length > 3 && <span className="calMas">+{delDia.length - 3}</span>}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-      <div className="calLateral">
-        <div className="calLateralTitulo">{diaSemana(sel)}</div>
-        {delSel.length === 0 ? <p className="agVacio">Nada cargado este día.</p> : delSel.map(tarjeta)}
-        <button type="button" className="newButton agAgregarDia" onClick={() => onDia(sel)}>+ Agregar en este día</button>
-      </div>
-    </div>
-  )
+// Crea un evento (con su aviso programado). Devuelve el error o null.
+async function crearEvento(d: { titulo: string; fecha: string; hora: string | null; tipo: string; cliente_id: number | null; obra_id: number | null; aviso_min: number | null; lugar?: string | null; detalle?: string | null }): Promise<string | null> {
+  const { data: userData } = await supabase.auth.getUser()
+  const base = { titulo: d.titulo, fecha: d.fecha, hora: d.hora, tipo: d.tipo, obra_id: d.obra_id, cliente_id: d.cliente_id, detalle: d.detalle ?? null, notificado: false, completado: false, user_id: userData.user?.id ?? null }
+  let r = await supabase.from('recordatorios').insert({ ...base, lugar: d.lugar ?? null, aviso_min: d.aviso_min, notificar_en: momentoAviso(d.fecha, d.hora, d.aviso_min) })
+  if (r.error && /column|lugar|aviso_min|notificar_en/i.test(r.error.message)) r = await supabase.from('recordatorios').insert(base)
+  if (r.error) { console.error(r.error); return 'No se pudo guardar.' }
+  return null
 }
 
-// ---------- Formulario de evento (nuevo / editar) ----------
-function FormEvento({ evento, fecha, obras, clientes, onCancelar, onGuardado }: {
-  evento?: Evento; fecha?: string; obras: Opcion[]; clientes: Opcion[]; onCancelar: () => void; onGuardado: () => void
+// Dictado con el micrófono (reconocimiento de voz del navegador, en español).
+type Reconocedor = { lang: string; interimResults: boolean; continuous: boolean; start: () => void; stop: () => void; onresult: ((ev: { results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null; onend: (() => void) | null; onerror: ((ev: { error: string }) => void) | null }
+function useDictado(alTexto: (texto: string, final: boolean) => void) {
+  const [escuchando, setEscuchando] = useState(false)
+  const [error, setError] = useState('')
+  const ref = useRef<Reconocedor | null>(null)
+  function empezar() {
+    setError('')
+    const w = window as unknown as { SpeechRecognition?: new () => Reconocedor; webkitSpeechRecognition?: new () => Reconocedor }
+    const Clase = w.SpeechRecognition ?? w.webkitSpeechRecognition
+    if (!Clase) { setError('En este navegador no se puede usar el micrófono acá. Tocá el campo y usá el 🎤 del teclado para dictar.'); return }
+    const r = new Clase()
+    r.lang = 'es-AR'; r.interimResults = true; r.continuous = false
+    r.onresult = (ev) => {
+      let texto = '', final = false
+      for (let i = 0; i < ev.results.length; i++) { texto += ev.results[i][0].transcript; final = ev.results[i].isFinal }
+      alTexto(texto.trim(), final)
+    }
+    r.onerror = (ev) => setError(ev.error === 'not-allowed' || ev.error === 'service-not-allowed' ? 'No hay permiso para el micrófono. Habilitalo en los ajustes del navegador, o usá el 🎤 del teclado.' : ev.error === 'no-speech' ? 'No te escuché. Probá de nuevo.' : 'No se pudo usar el micrófono. Usá el 🎤 del teclado.')
+    r.onend = () => setEscuchando(false)
+    ref.current = r
+    try { r.start(); setEscuchando(true) } catch { setError('No se pudo usar el micrófono. Usá el 🎤 del teclado.') }
+  }
+  function parar() { ref.current?.stop(); setEscuchando(false) }
+  useEffect(() => () => ref.current?.stop(), [])
+  return { escuchando, error, empezar, parar }
+}
+
+// "Para agendar": se arman solas con plazos de obra, seguros del personal y presupuestos sin respuesta.
+type Sugerencia = { clave: string; icono: string; tono: 'r' | 'n' | 'a'; titulo: string; detalle: string; agendar: string; tipo: string; obra_id?: number }
+function useSugerencias(tick: number): Sugerencia[] {
+  const [lista, setLista] = useState<Sugerencia[]>([])
+  useEffect(() => {
+    let vigente = true
+    void (async () => {
+      const hoyStr = isoLocal(new Date())
+      const [o, p, s, r] = await Promise.all([
+        supabase.from('obras').select('id,nombre_obra,fecha_fin_estimada').eq('activo', true).eq('estado', 'en_proceso'),
+        supabase.from('presupuestos').select('id,titulo,enviado_at,fecha').eq('activo', true).eq('estado', 'enviado'),
+        supabase.from('personal').select('id,nombre,apellido,seguro,seguro_vencimiento').eq('activo', true).not('seguro_vencimiento', 'is', null),
+        supabase.from('recordatorios').select('titulo').eq('completado', false).gte('fecha', hoyStr),
+      ])
+      if (!vigente) return
+      const yaAgendado = new Set(((r.data ?? []) as { titulo: string }[]).map((x) => x.titulo))
+      const out: Sugerencia[] = []
+      for (const ob of (o.data ?? []) as { id: number; nombre_obra: string; fecha_fin_estimada: string | null }[]) {
+        if (!ob.fecha_fin_estimada || ob.fecha_fin_estimada > sumarDias(hoyStr, 7)) continue
+        const vencido = ob.fecha_fin_estimada < hoyStr
+        out.push({ clave: `o${ob.id}`, icono: '⏰', tono: vencido ? 'r' : 'n', titulo: `${ob.nombre_obra} · ${vencido ? 'plazo vencido' : 'vence pronto'}`, detalle: `Fin estimado ${fechaCorta(ob.fecha_fin_estimada)}`, agendar: `Revisar plazo de ${ob.nombre_obra}`, tipo: 'recordatorio', obra_id: ob.id })
+      }
+      if (!s.error) for (const pe of (s.data ?? []) as { id: number; nombre: string; apellido: string | null; seguro: string | null; seguro_vencimiento: string | null }[]) {
+        if (!pe.seguro_vencimiento || pe.seguro_vencimiento > sumarDias(hoyStr, 15)) continue
+        const nom = `${pe.nombre} ${pe.apellido ?? ''}`.trim()
+        out.push({ clave: `s${pe.id}`, icono: '🦺', tono: pe.seguro_vencimiento < hoyStr ? 'r' : 'n', titulo: `${pe.seguro || 'Seguro / ART'} de ${nom} ${pe.seguro_vencimiento < hoyStr ? 'vencido' : 'por vencer'}`, detalle: `Vence ${fechaCorta(pe.seguro_vencimiento)}`, agendar: `Renovar ${pe.seguro || 'seguro / ART'} de ${nom}`, tipo: 'recordatorio' })
+      }
+      for (const pr of (p.data ?? []) as { id: number; titulo: string; enviado_at?: string | null; fecha: string | null }[]) {
+        const desde = (pr.enviado_at ?? pr.fecha ?? '').slice(0, 10)
+        if (!desde || desde > sumarDias(hoyStr, -5)) continue
+        const dias = Math.round((Date.parse(hoyStr) - Date.parse(desde)) / 86400000)
+        out.push({ clave: `p${pr.id}`, icono: '💬', tono: 'a', titulo: `Seguir presupuesto ${pr.titulo}`, detalle: `Enviado hace ${dias} días · sin respuesta`, agendar: `Seguimiento presupuesto ${pr.titulo}`, tipo: 'llamada' })
+      }
+      setLista(out.filter((x) => !yaAgendado.has(x.agendar)).slice(0, 6))
+    })()
+    return () => { vigente = false }
+  }, [tick])
+  return lista
+}
+
+function FormEvento({ evento: editado, inicial, fecha, obras, clientes, onCancelar, onGuardado }: {
+  evento?: Evento; inicial?: Evento; fecha?: string; obras: Opcion[]; clientes: Opcion[]; onCancelar: () => void; onGuardado: (fecha?: string) => void
 }) {
-  const editando = !!evento
+  const editando = !!editado
+  // "inicial": lo que entendió la carga rápida, para ajustarlo antes de guardar.
+  const evento = editado ?? inicial
   const [f, setF] = useState({
     tipo: evento?.tipo && TIPOS_EVENTO[evento.tipo] ? evento.tipo : 'reunion',
     titulo: evento?.titulo ?? '',
-    fecha: evento?.fecha ?? fecha ?? hoy(),
+    fecha: evento?.fecha ?? fecha ?? isoLocal(new Date()),
     hora: evento?.hora ? evento.hora.slice(0, 5) : '',
     lugar: evento?.lugar ?? '',
     obra_id: evento?.obra_id ? String(evento.obra_id) : '',
@@ -323,7 +457,7 @@ function FormEvento({ evento, fecha, obras, clientes, onCancelar, onGuardado }: 
       if (!r.error) window.alert('Se guardó, pero falta correr el SQL de la Agenda en Supabase para guardar el lugar y el horario del aviso.')
     }
     if (r.error) { console.error(r.error); setError('No se pudo guardar.'); setGuardando(false); return }
-    onGuardado()
+    onGuardado(f.fecha)
   }
 
   return (
@@ -357,66 +491,6 @@ function FormEvento({ evento, fecha, obras, clientes, onCancelar, onGuardado }: 
           </div>
         </form>
       </div>
-    </div>
-  )
-}
-
-// ---------- Alertas automáticas (antes: Notificaciones) ----------
-type ObraAlerta = { id: number; nombre_obra: string; fecha_fin_estimada: string | null }
-type PresupuestoAlerta = { id: number; titulo: string; obra_id: number | null; saldo: number }
-type SeguroAlerta = { id: number; nombre: string; apellido: string | null; seguro: string | null; seguro_vencimiento: string | null }
-
-function AlertasAutomaticas() {
-  const [obras, setObras] = useState<ObraAlerta[]>([])
-  const [presupuestos, setPresupuestos] = useState<PresupuestoAlerta[]>([])
-  const [seguros, setSeguros] = useState<SeguroAlerta[]>([])
-  const [cargando, setCargando] = useState(true)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    let vigente = true
-    async function cargar() {
-      // Seguros / ART del personal (si falta el SQL de Personal, no hay alertas de esto).
-      void supabase.from('personal').select('id,nombre,apellido,seguro,seguro_vencimiento').eq('activo', true).not('seguro_vencimiento', 'is', null)
-        .then(({ data, error: e }) => { if (vigente && !e) setSeguros((data ?? []) as SeguroAlerta[]) })
-      const [o, p] = await Promise.all([
-        supabase.from('obras').select('id,nombre_obra,fecha_fin_estimada').eq('activo', true).eq('estado', 'en_proceso'),
-        supabase.from('presupuestos').select('id,titulo,obra_id,saldo').eq('activo', true).eq('estado', 'aceptado'),
-      ])
-      if (!vigente) return
-      if (o.error) { setError('No se pudieron cargar las alertas.'); setCargando(false); return }
-      setObras((o.data ?? []) as ObraAlerta[])
-      setPresupuestos(((p.data ?? []) as PresupuestoAlerta[]).map((x) => ({ ...x, saldo: Number(x.saldo) || 0 })))
-      setCargando(false)
-    }
-    void cargar()
-    return () => { vigente = false }
-  }, [])
-
-  const hoyStr = hoy()
-  const en7 = sumarDias(hoyStr, 7)
-  const nombreObra = (id: number | null) => obras.find((o) => o.id === id)?.nombre_obra ?? 'Sin obra'
-  const alertas = [
-    ...obras.filter((o) => o.fecha_fin_estimada && o.fecha_fin_estimada < hoyStr).map((o) => ({ clave: `v${o.id}`, icono: '⏰', titulo: `${o.nombre_obra} — plazo vencido`, detalle: `Fin estimado: ${fechaCorta(o.fecha_fin_estimada)}`, urgente: true })),
-    ...obras.filter((o) => o.fecha_fin_estimada && o.fecha_fin_estimada >= hoyStr && o.fecha_fin_estimada <= en7).map((o) => ({ clave: `p${o.id}`, icono: '⏰', titulo: `${o.nombre_obra} — vence pronto`, detalle: `Fin estimado: ${fechaCorta(o.fecha_fin_estimada)}`, urgente: false })),
-    ...seguros.filter((s) => s.seguro_vencimiento && s.seguro_vencimiento <= sumarDias(hoyStr, 15)).map((s) => ({ clave: `s${s.id}`, icono: '🦺', titulo: `${s.nombre} ${s.apellido ?? ''} — ${s.seguro || 'seguro / ART'} ${s.seguro_vencimiento! < hoyStr ? 'vencido' : 'por vencer'}`, detalle: `Vence: ${fechaCorta(s.seguro_vencimiento)}`, urgente: s.seguro_vencimiento! < hoyStr })),
-    ...presupuestos.filter((p) => p.saldo > 0).map((p) => ({ clave: `c${p.id}`, icono: '💰', titulo: `Saldo por cobrar — ${p.titulo}`, detalle: `${nombreObra(p.obra_id)} · ${moneda(p.saldo)} pendiente`, urgente: false })),
-  ]
-
-  if (cargando) return <p>Calculando alertas...</p>
-  if (error) return <p className="loginError">{error}</p>
-  return (
-    <div className="clientesPanel">
-      <p className="gestionAyuda" style={{ padding: '12px 20px 0', margin: 0 }}>Se arman solas con los plazos de las obras y los saldos de los presupuestos aceptados.</p>
-      {alertas.length === 0 ? (
-        <div className="empty"><span>✓</span><h3>Todo al día</h3><p>No hay plazos vencidos ni saldos pendientes.</p></div>
-      ) : alertas.map((a) => (
-        <div className="gestionNotificacion" key={a.clave}>
-          <div className="gestionNotifIcono">{a.icono}</div>
-          <div><strong>{a.titulo}</strong><p>{a.detalle}</p></div>
-          {a.urgente && <span className="gestionEstado alerta">Urgente</span>}
-        </div>
-      ))}
     </div>
   )
 }
