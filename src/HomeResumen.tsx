@@ -1,13 +1,13 @@
 import GraficosInicio from './GraficosInicio'
+import InicioPro, { type Tarea } from './InicioPro'
 import QueMirarHoy, { type DestinoHoy } from './QueMirarHoy'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { listarComprobantesPago, type ComprobantePago } from './pagoLink'
 import { supabase } from './supabase'
 import { TIPOS_EVENTO } from './Agenda'
 import Tablero, { type Pestana } from './Tablero'
 import { moneda } from './gestionFormat'
 import { calcularPersona } from './personalCalculos'
-import { Cifra } from './Animados'
 import { avanceEfectivo, cuentasPorObra } from './cuentaObra'
 
 // Pantalla de Inicio: resumen rápido de la empresa y, en pestañas, el detalle
@@ -19,7 +19,7 @@ import { avanceEfectivo, cuentasPorObra } from './cuentaObra'
 //  · Obras: todos.
 
 type Rol = 'admin' | 'encargado' | 'auxiliar' | 'contable'
-type Destino = 'obras' | 'presupuestos' | 'clientes' | 'agenda'
+type Destino = 'obras' | 'presupuestos' | 'clientes' | 'agenda' | 'gastos'
 type TabInicio = 'resumen' | 'graficos' | Pestana
 
 type Obra = { id: number; cliente_id: number; nombre_obra: string; localidad: string | null; estado: string | null; porcentaje_avance: number | null; activo: boolean }
@@ -40,6 +40,7 @@ type Props = {
   onNavegar: (destino: Destino) => void
   onSalir: () => void
   onAbrirObra: (obraId: number) => void
+  onAbrirPresupuesto?: (presupuestoId: number) => void
 }
 
 const mesActual = () => new Date().toISOString().slice(0, 7)
@@ -49,26 +50,17 @@ const sumarMeses = (ym: string, n: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 const enMes = (f: string | null | undefined, ym: string) => (f ?? '').slice(0, 7) === ym
-const nombreMes = (ym: string) => new Date(`${ym}-01T12:00:00`).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
 const diasDesde = (f: string | null) => f ? Math.max(0, Math.floor((Date.now() - new Date(`${f.slice(0, 10)}T12:00:00`).getTime()) / 86400000)) : null
 const num = (x: unknown) => Number(x) || 0
 const redondear = (n: number) => Math.round(n * 100) / 100
 
-const VERDE = '#23764e'
-const ROJO = '#b23b32'
-const NARANJA = '#b86608'
 
-export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSalir, onAbrirObra }: Props) {
+export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSalir, onAbrirObra, onAbrirPresupuesto }: Props) {
   const verFinanzas = rol === 'admin' || rol === 'contable'
   const verPersonal = verFinanzas || rol === 'encargado'
   const verPresupuestos = verFinanzas
 
   const [tab, setTab] = useState<TabInicio>('resumen')
-  // En el celular las secciones arrancan cerradas para que el inicio sea corto.
-  const [esMovil] = useState(() => typeof window !== 'undefined' && window.matchMedia?.('(max-width: 700px)').matches)
-  const [abiertas, setAbiertas] = useState<Record<string, boolean>>({})
-  const [verTodas, setVerTodas] = useState<Record<string, boolean>>({})
-  const [detalleNeto, setDetalleNeto] = useState(false)
   // Lo que hay hoy en la Agenda (pendiente), para mostrarlo arriba en "Para mirar".
   const [agendaHoy, setAgendaHoy] = useState<{ id: number; titulo: string; hora: string | null; tipo: string | null }[]>([])
   useEffect(() => {
@@ -80,7 +72,7 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
   // Comprobantes de pago que mandaron los clientes y todavía no revisaste.
   const [compNuevos, setCompNuevos] = useState<ComprobantePago[]>([])
   useEffect(() => { if (verFinanzas) void listarComprobantesPago({ soloNuevos: true }).then(setCompNuevos) }, [verFinanzas])
-  const [mesSel, setMesSel] = useState(mesActual())
+  const [mesSel] = useState(mesActual())
   const [cargando, setCargando] = useState(true)
   const [obras, setObras] = useState<Obra[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
@@ -240,90 +232,6 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
     }
   }, [pagos, costos, compras, gastos, mesSel, personal.debe])
 
-  const colorMonto = (v: number) => (v > 0 ? VERDE : v < 0 ? ROJO : undefined)
-  const salidas = mes.manoObra + mes.otrosCostos + mes.fijos
-  const maxBarra = Math.max(1, mes.cobrado, salidas)
-
-  const barraNeto = (etiqueta: string, monto: number, signo: '+' | '−', color: string) => (
-    <div className="homeBarra">
-      <span>{etiqueta}</span>
-      <div className="tabBar"><span style={{ width: `${(monto / maxBarra) * 100}%`, background: color }} /></div>
-      <strong style={{ color: signo === '−' && monto > 0 ? ROJO : undefined }}>{signo === '−' && monto > 0 ? '− ' : ''}{moneda(monto)}</strong>
-    </div>
-  )
-
-  // Lista con tope: muestra las primeras N filas y un botón para ver el resto.
-  const Filas = ({ clave, items, max = 4 }: { clave: string; items: ReactNode[]; max?: number }) => {
-    const todas = verTodas[clave]
-    return <>
-      {(todas ? items : items.slice(0, max))}
-      {items.length > max && (
-        <button type="button" className="homeVerMas" onClick={() => setVerTodas((v) => ({ ...v, [clave]: !todas }))}>
-          {todas ? 'Ver menos' : `Ver ${items.length - max} más`}
-        </button>
-      )}
-    </>
-  }
-
-  // Sección plegable: en el celular arranca cerrada y muestra solo el título y el total.
-  const Seccion = ({ clave, titulo, resumen, alerta, children, onIr, textoIr }: { clave: string; titulo: string; resumen: ReactNode; alerta?: boolean; children: ReactNode; onIr?: () => void; textoIr?: string }) => {
-    const abierta = abiertas[clave] ?? !esMovil
-    return <section className={`homeSeccion ${abierta ? 'abierta' : ''}`}>
-      <button type="button" className="homeSeccionHead" aria-expanded={abierta} onClick={() => setAbiertas((v) => ({ ...v, [clave]: !abierta }))}>
-        <span className="homeSeccionTit">{titulo}</span>
-        <span className={`homeSeccionRes ${alerta ? 'alerta' : ''}`}>{resumen}</span>
-        <span className="homeChevron" aria-hidden>›</span>
-      </button>
-      {abierta && <div className="homeSeccionCuerpo">
-        {children}
-        {onIr && <button type="button" className="homeIr" onClick={onIr}>{textoIr ?? 'Ver detalle →'}</button>}
-      </div>}
-    </section>
-  }
-
-  const alertas: ReactNode[] = [
-    ...compNuevos.map((c) => (
-      <div className="fase2Cuenta" key={`cp-${c.id}`} role="button" tabIndex={0} onClick={() => (c.obra_id ? onAbrirObra(c.obra_id) : onNavegar('presupuestos'))}>
-        <div><strong>🧾 Comprobante de pago recibido</strong><span>{c.cliente ?? 'Cliente'}{c.titulo ? ` · ${c.titulo}` : ''} · para revisar</span></div>
-        <b>Ver →</b>
-      </div>
-    )),
-    ...agendaHoy.map((e) => (
-      <div className="fase2Cuenta" key={`ag-${e.id}`} role="button" tabIndex={0} onClick={() => onNavegar('agenda')}>
-        <div><strong>{(TIPOS_EVENTO[e.tipo ?? ''] ?? TIPOS_EVENTO.recordatorio).icono} {e.titulo}</strong><span>Hoy en la agenda{e.hora ? ` · ${e.hora.slice(0, 5)}` : ''}</span></div>
-        <b>Ver →</b>
-      </div>
-    )),
-    ...(verFinanzas && mes.recurrentesPendientes.length > 0 ? [(
-      <div className="fase2Cuenta" key="gastos-pend" role="button" tabIndex={0} onClick={() => setTab('gastos')}>
-        <div><strong>⏰ Gastos fijos sin cargar</strong><span>{mes.recurrentesPendientes.length} recurrente{mes.recurrentesPendientes.length === 1 ? '' : 's'} del mes pasado todavía no se cargaron este mes</span></div>
-        <b>{moneda(mes.recurrentesMonto)}</b>
-      </div>
-    )] : []),
-    ...(verFinanzas ? obrasInfo.terminadasConSaldo.map((d) => (
-      <div className="fase2Cuenta" key={`t-${d.obra.id}`} role="button" tabIndex={0} onClick={() => onAbrirObra(d.obra.id)}>
-        <div><strong>🔴 {d.obra.nombre_obra}</strong><span>Terminada con saldo · {nombreCli(d.obra.cliente_id)}</span></div>
-        <b style={{ color: ROJO }}>{moneda(d.saldo)}</b>
-      </div>
-    )) : []),
-    // Una obra terminada con saldo ya aparece arriba: no se repite como "en observación".
-    ...obrasInfo.enObservacion.filter((o) => !(verFinanzas && obrasInfo.terminadasConSaldo.some((d) => d.obra.id === o.id))).map((o) => (
-      <div className="fase2Cuenta" key={`o-${o.id}`} role="button" tabIndex={0} onClick={() => onAbrirObra(o.id)}>
-        <div><strong>🟠 {o.nombre_obra}</strong><span>En observación · {nombreCli(o.cliente_id)}</span></div>
-        <b>Revisar →</b>
-      </div>
-    )),
-    ...(verPresupuestos ? borradores.map((p) => {
-      const dias = diasDesde(p.fecha)
-      return (
-        <div className="fase2Cuenta" key={`b-${p.id}`} role="button" tabIndex={0} onClick={() => onNavegar('presupuestos')}>
-          <div><strong>📝 {p.titulo}</strong><span>Borrador sin enviar · {nombreCli(p.cliente_id)}{dias != null ? ` · hace ${dias} día${dias === 1 ? '' : 's'}` : ''}</span></div>
-          <b>{moneda(p.total)}</b>
-        </div>
-      )
-    }) : []),
-  ]
-
   // Datos del día para "Qué mirar hoy" (la IA elige lo más importante).
   const hechosHoy = useMemo(() => {
     if (cargando) return []
@@ -353,158 +261,79 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
     ...(verFinanzas ? [['graficos', '📊 Gráficos'], ['pyl', 'Balance'], ['caja', 'Cobranzas'], ['personal', 'Personal'], ['gastos', 'Gastos fijos'], ['inventario', 'Inventario']] as [TabInicio, string][] : []),
   ]
 
+  // ---- "Hoy": todo lo que hay que hacer, cada cosa con su botón ----
+  const tareas: Tarea[] = [
+    ...compNuevos.map((c): Tarea => ({ clave: `cp-${c.id}`, icono: '🧾', tono: 'v', titulo: 'Revisar comprobante de pago', detalle: `${c.cliente ?? 'Cliente'}${c.titulo ? ` · ${c.titulo}` : ''}`, boton: 'Ver', accion: () => (c.obra_id ? onAbrirObra(c.obra_id) : onNavegar('presupuestos')) })),
+    ...agendaHoy.map((e): Tarea => ({ clave: `ag-${e.id}`, icono: (TIPOS_EVENTO[e.tipo ?? ''] ?? TIPOS_EVENTO.recordatorio).icono, tono: 'a', titulo: e.titulo, detalle: `Hoy en la agenda${e.hora ? ` · ${e.hora.slice(0, 5)}` : ''}`, boton: 'Ver', accion: () => onNavegar('agenda') })),
+    ...(verFinanzas ? obrasInfo.deudas.filter((dd) => dd.situacion === 'rojo' || dd.faltaAvance + dd.extras > 0.5).map((dd): Tarea => ({
+      clave: `co-${dd.obra.id}`, icono: '💵', tono: 'r', principal: true,
+      titulo: `Cobrar ${dd.obra.nombre_obra}`,
+      detalle: `${nombreCli(dd.obra.cliente_id)} · ${dd.situacion === 'rojo' ? `terminada, debe ${moneda(dd.saldo)}` : `corresponde ${moneda(dd.faltaAvance + dd.extras)}`}`,
+      boton: 'Cobrar', accion: () => onAbrirObra(dd.obra.id),
+    })) : []),
+    ...(verPresupuestos ? borradores.map((pr): Tarea => {
+      const dias = diasDesde(pr.fecha)
+      return { clave: `b-${pr.id}`, icono: '📤', tono: 'n', titulo: `Enviar ${pr.titulo}`, detalle: `${nombreCli(pr.cliente_id)} · ${moneda(pr.total)}${dias != null ? ` · hace ${dias} día${dias === 1 ? '' : 's'}` : ''}`, boton: 'Enviar', accion: () => (onAbrirPresupuesto ? onAbrirPresupuesto(pr.id) : onNavegar('presupuestos')) }
+    }) : []),
+    ...(verPersonal ? personal.filas.filter((f) => f.debe > 0.5).map((f): Tarea => ({ clave: `pe-${f.clave}`, icono: '👷', tono: 'n', titulo: `Pagarle a ${f.nombre}`, detalle: `${f.obra} · le debés ${moneda(f.debe)}`, boton: 'Pagar', accion: () => onAbrirObra(f.obraId) })) : []),
+    ...(verFinanzas && mes.esMesActual ? mes.recurrentesPendientes.map((g, i): Tarea => ({ clave: `gf-${i}`, icono: '🧾', tono: 'a', titulo: `Cargar ${g.descripcion || g.categoria || 'gasto fijo'}`, detalle: `Gasto fijo del mes pasado · ${moneda(g.monto)}`, boton: 'Cargar', accion: () => onNavegar('gastos') })) : []),
+    ...obrasInfo.enObservacion.map((o): Tarea => ({ clave: `ob-${o.id}`, icono: '🟠', tono: 'n', titulo: `Revisar ${o.nombre_obra}`, detalle: `En observación · ${nombreCli(o.cliente_id)}`, boton: 'Revisar', accion: () => onAbrirObra(o.id) })),
+  ]
+  const [verIA, setVerIA] = useState(false)
+
+  if (tab === 'resumen') return <div className="fase2Dashboard homeCompacto">
+    {cargando ? <p>Cargando inicio…</p> : <InicioPro
+      nombre={nombre}
+      verFinanzas={verFinanzas}
+      verPresupuestos={verPresupuestos}
+      pagos={pagos} costos={costos} gastos={gastos} compras={compras}
+      presupuestos={presupuestos}
+      obrasActivas={obrasInfo.activas}
+      avancePromedio={obrasInfo.avancePromedio}
+      deudas={obrasInfo.deudas}
+      porCobrar={obrasInfo.porCobrar}
+      borradores={borradores}
+      personal={{ debe: verPersonal ? personal.debe : 0, alDia: verPersonal ? personal.alDia : 0, aPagar: personal.filas.filter((f) => f.debe > 0.5).length }}
+      recurrentes={{ cantidad: mes.esMesActual ? mes.recurrentesPendientes.length : 0, monto: mes.esMesActual ? mes.recurrentesMonto : 0 }}
+      netoProyectado={mes.esMesActual && mesSel === mesActual() ? mes.netoProyectado : null}
+      tareas={tareas}
+      nombreCli={nombreCli}
+      onAbrirObra={onAbrirObra}
+      onIr={(dd) => {
+        if (dd === 'obras' || dd === 'presupuestos' || dd === 'gastos') onNavegar(dd)
+        else if (dd === 'cobranzas') setTab('caja')
+        else if (dd === 'personal') { if (verFinanzas) setTab('personal'); else onNavegar('obras') }
+        else if (dd === 'balance') setTab('pyl')
+        else if (dd === 'graficos') setTab('graficos')
+      }}
+      acciones={<div className="ipAcc">
+        {verFinanzas && <button type="button" className="ipIcono" title="Más análisis" aria-label="Más análisis" onClick={() => setTab('graficos')}>📊</button>}
+        <button type="button" className="ipIcono" title="Cerrar sesión" aria-label="Cerrar sesión" onClick={onSalir}>⏻</button>
+      </div>}
+      ia={verFinanzas ? (verIA
+        ? <QueMirarHoy hechos={hechosHoy} nombreCli={nombreCli} onIr={irDesdeHoy} />
+        : <button type="button" className="ipIA" onClick={() => setVerIA(true)}>✨ Resumen del día con IA</button>) : undefined}
+    />}
+  </div>
+
   return <div className="fase2Dashboard homeCompacto">
     <header className="fase2Encabezado">
       <div><p className="subtitle">MOVA GESTIÓN · {rolEtiqueta.toUpperCase()}</p><h2><span className="saludoTxt">¡Hola{nombre ? `, ${nombre}` : ''}!</span> <span className="saludoMano" aria-hidden="true">👋</span></h2><p className="welcome">Resumen rápido de tu empresa</p></div>
       <div className="headerActions"><button className="logoutButton" onClick={onSalir}>Cerrar sesión</button><button className="newButton" onClick={() => onNavegar('clientes')}>+ Nuevo</button></div>
     </header>
 
+    <button type="button" className="ipVolver" onClick={() => setTab('resumen')}>‹ Volver al inicio</button>
     <div className="gestionTabs homeTabs">
-      {pestanas.map(([clave, texto]) => (
+      {pestanas.filter(([clave]) => clave !== 'resumen').map(([clave, texto]) => (
         <button key={clave} className={tab === clave ? 'active' : ''} onClick={() => setTab(clave)}>{texto}</button>
       ))}
     </div>
 
     {tab === 'graficos' && verFinanzas && <GraficosInicio onIr={(v) => onNavegar(v)} />}
-    {tab !== 'resumen' && tab !== 'graficos' && verFinanzas && (
+    {tab !== 'graficos' && verFinanzas && (
       <Tablero embebido pestana={tab} onAbrirObra={onAbrirObra} />
     )}
 
 
-    {tab === 'resumen' && (cargando ? <p>Cargando resumen...</p> : <>
-      {verFinanzas && <QueMirarHoy hechos={hechosHoy} nombreCli={nombreCli} onIr={irDesdeHoy} />}
-      {/* ---- Neto del mes: número grande, mes y detalle desplegable ---- */}
-      {verFinanzas && (
-        <section className="homeNeto">
-          <div className="homeNetoTop">
-            <div>
-              <span className="homeEtq">Neto de {nombreMes(mesSel)}</span>
-              <strong style={{ color: colorMonto(mes.neto) }}><Cifra valor={mes.neto} formato={moneda} /></strong>
-              <small>
-                {mes.esMesActual && (mes.recurrentesMonto > 0 || mes.personalPendiente > 0)
-                  ? <>Si pagás lo previsto: <b style={{ color: colorMonto(mes.netoProyectado) }}>{moneda(mes.netoProyectado)}</b></>
-                  : 'Cobrado − todos los gastos'}
-              </small>
-            </div>
-            <input type="month" aria-label="Mes" value={mesSel} max={mesActual()} onChange={(e) => e.target.value && setMesSel(e.target.value)} />
-          </div>
-          <div className="homeNetoBarra" aria-hidden>
-            <span style={{ width: `${(mes.cobrado / maxBarra) * 100}%`, background: '#23935b' }} />
-            <span style={{ width: `${(salidas / maxBarra) * 100}%`, background: '#d0645b' }} />
-          </div>
-          <div className="homeNetoLeyenda">
-            <span><i style={{ background: '#23935b' }} />Entró {moneda(mes.cobrado)}</span>
-            <span><i style={{ background: '#d0645b' }} />Salió {moneda(salidas)}</span>
-            <button type="button" onClick={() => setDetalleNeto((v) => !v)}>{detalleNeto ? 'Ocultar detalle' : 'Ver detalle'}</button>
-          </div>
-          {detalleNeto && <div className="homeNetoDetalle">
-            {barraNeto('Cobrado', mes.cobrado, '+', '#23935b')}
-            {barraNeto('Mano de obra', mes.manoObra, '−', '#b23b32')}
-            {barraNeto('Materiales y otros', mes.otrosCostos, '−', '#d0645b')}
-            {barraNeto('Gastos fijos', mes.fijos, '−', '#b86608')}
-            {mes.extraPorReintegrar > 0.5 && <p>Gastos extra por reintegrar (adelantados a clientes): <strong>{moneda(mes.extraPorReintegrar)}</strong>. No cuentan acá: el cliente te los devuelve.</p>}
-            {mes.esMesActual && (mes.recurrentesMonto > 0 || mes.personalPendiente > 0) && (
-              <p>
-                Previsto por pagar:
-                {mes.recurrentesMonto > 0 && <> gastos fijos sin cargar <strong>{moneda(mes.recurrentesMonto)}</strong></>}
-                {mes.recurrentesMonto > 0 && mes.personalPendiente > 0 && ' ·'}
-                {mes.personalPendiente > 0 && <> personal por avance <strong>{moneda(mes.personalPendiente)}</strong></>}
-              </p>
-            )}
-            <button type="button" className="homeIr" onClick={() => setTab('pyl')}>Ver balance completo →</button>
-          </div>}
-        </section>
-      )}
-
-      {/* ---- Números clave, en 2 columnas ---- */}
-      <section className="homeKpis">
-        <button type="button" onClick={() => onNavegar('obras')}>
-          <span>Obras activas</span>
-          <strong><Cifra valor={obrasInfo.activas.length} formato={(n) => String(Math.round(n))} dur={600} /></strong>
-          <small>{obrasInfo.activas.length ? `${obrasInfo.avancePromedio}% avance prom.` : 'Ninguna en proceso'}</small>
-        </button>
-        {verFinanzas && (
-          <button type="button" onClick={() => setTab('caja')}>
-            <span>Te deben</span>
-            <strong style={{ color: obrasInfo.terminadasConSaldo.length ? ROJO : undefined }}><Cifra valor={obrasInfo.porCobrar} formato={moneda} /></strong>
-            <small>{obrasInfo.deudas.length} obra{obrasInfo.deudas.length === 1 ? '' : 's'} con saldo</small>
-          </button>
-        )}
-        {verPersonal && (
-          <button type="button" onClick={() => verFinanzas ? setTab('personal') : setAbiertas((v) => ({ ...v, personal: true }))}>
-            <span>Personal</span>
-            {personal.debe > 0.5
-              ? <strong style={{ color: ROJO }}>Le debés {moneda(personal.debe)}</strong>
-              : personal.adelantado > 0.5
-                ? <strong style={{ color: NARANJA }}>Adelantado {moneda(personal.adelantado)}</strong>
-                : <strong style={{ color: VERDE }}>Al día</strong>}
-            <small>
-              {personal.debe > 0.5 && personal.adelantado > 0.5 && <b style={{ color: NARANJA }}>Adelantado {moneda(personal.adelantado)} · </b>}
-              {[
-                personal.filas.filter((f) => f.debe > 0.5).length ? `${personal.filas.filter((f) => f.debe > 0.5).length} a pagar` : null,
-                personal.filas.filter((f) => f.debe <= 0.5 && f.adelantado > 0.5).length ? `${personal.filas.filter((f) => f.debe <= 0.5 && f.adelantado > 0.5).length} adelantado` : null,
-                personal.alDia ? `${personal.alDia} al día` : null,
-              ].filter(Boolean).join(' · ') || 'Sin personal asignado'}
-            </small>
-          </button>
-        )}
-        {verPresupuestos ? (
-          <button type="button" onClick={() => onNavegar('presupuestos')}>
-            <span>Borradores</span>
-            <strong style={{ color: borradores.length ? NARANJA : undefined }}>{borradores.length}</strong>
-            <small>{borradores.length ? 'Sin enviar' : 'Todos enviados'}</small>
-          </button>
-        ) : (
-          <button type="button" onClick={() => onNavegar('obras')}>
-            <span>En observación</span>
-            <strong style={{ color: obrasInfo.enObservacion.length ? NARANJA : undefined }}>{obrasInfo.enObservacion.length}</strong>
-            <small>{obrasInfo.enObservacion.length ? 'Para revisar' : 'Nada para revisar'}</small>
-          </button>
-        )}
-      </section>
-
-      {/* ---- Para mirar: siempre abierto, con tope ---- */}
-      <section className="homeSeccion abierta homeAlertas">
-        <div className="homeSeccionHead estatico">
-          <span className="homeSeccionTit">Para mirar</span>
-          <span className={`homeSeccionRes ${alertas.length ? 'alerta' : 'ok'}`}>{alertas.length ? `${alertas.length} ${alertas.length === 1 ? 'cosa' : 'cosas'}` : '✓ Todo en orden'}</span>
-        </div>
-        {alertas.length > 0 && <div className="homeSeccionCuerpo"><Filas clave="alertas" items={alertas} max={3} /></div>}
-      </section>
-
-      <div className="homeGrilla">
-        {/* ---- Obras activas ---- */}
-        <Seccion clave="obras" titulo="Obras activas" resumen={`${obrasInfo.activas.length} · ${obrasInfo.avancePromedio}% prom.`} onIr={() => onNavegar('obras')} textoIr="Ver todas las obras →">
-          {obrasInfo.activas.length === 0 ? <p className="homeVacio">No hay obras en proceso con presupuesto aceptado.</p>
-            : <Filas clave="obras" items={obrasInfo.activas.map((o) => (
-              <div className="fase2Cuenta homeObra" key={o.id} role="button" tabIndex={0} onClick={() => onAbrirObra(o.id)}>
-                <div className="homeObraFila">
-                  <div><strong>{o.nombre_obra}</strong><span>{nombreCli(o.cliente_id)}{o.localidad ? ` · ${o.localidad}` : ''}</span></div>
-                  <b>{num(o.porcentaje_avance)}%</b>
-                </div>
-                <div className="tabBar"><span style={{ width: `${Math.min(100, num(o.porcentaje_avance))}%`, background: '#2f6fb3' }} /></div>
-              </div>
-            ))} />}
-        </Seccion>
-
-        {/* ---- Pagos al personal ---- */}
-        {verPersonal && !verFinanzas && (
-          <Seccion clave="personal" titulo="Pagos al personal" resumen={personal.debe > 0.5 ? `Le debés ${moneda(personal.debe)}` : personal.adelantado > 0.5 ? `Adelantado ${moneda(personal.adelantado)}` : 'Al día'} alerta={personal.debe > 0.5}>
-            {personal.filas.length === 0 ? <p className="homeVacio">{personal.alDia ? '✓ Todo el personal al día.' : 'Sin personal asignado.'}</p> : <>
-              <Filas clave="personal" items={personal.filas.map((f) => (
-                <div className="fase2Cuenta" key={f.clave} role="button" tabIndex={0} onClick={() => onAbrirObra(f.obraId)}>
-                  <div><strong>{f.nombre}</strong><span>{f.obra}</span></div>
-                  {f.debe > 0.5
-                    ? <b style={{ color: ROJO }}>Le debés {moneda(f.debe)}</b>
-                    : <b style={{ color: NARANJA }}>Adelantado {moneda(f.adelantado)}</b>}
-                </div>
-              ))} />
-              {personal.alDia > 0 && <p className="homeNota" style={{ color: VERDE }}>🟢 {personal.alDia} asignación{personal.alDia === 1 ? '' : 'es'} al día</p>}
-            </>}
-          </Seccion>
-        )}
-
-      </div>
-    </>)}
   </div>
 }
