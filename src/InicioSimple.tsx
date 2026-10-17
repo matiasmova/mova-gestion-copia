@@ -9,9 +9,11 @@ import { importeNeto } from './presupuestoCalculos'
 //  · Ganancia de cada presupuesto: los servicios quedan al 100%; los productos
 //    dejan venta − costo. La bonificación general ya está en el total.
 //  · Después se restan lo pagado a empleados, los gastos extras y los impuestos.
-//  · Las compras de materiales no se restan aparte: ya están en el costo de
-//    los productos (si no, se contarían dos veces). El Gasto extra que el
-//    cliente devuelve tampoco cuenta.
+//  · Costo de productos: lo que compraste en el mes (compras de materiales,
+//    gastos de obra de materiales e "Inversión en productos"). Si el costo
+//    cargado en los presupuestos de ese mes es mayor, se usa ese (así no se
+//    cuenta dos veces ni queda en $ 0 cuando falta cargar costos).
+//  · El Gasto extra que el cliente devuelve no cuenta.
 
 type Pres = { id: number; cliente_id: number; obra_id: number | null; titulo: string; estado: string; total: number; fecha: string | null }
 type Costo = { monto: number; fecha: string; tipo?: string | null; personal_id: number | null; obra_id: number | null }
@@ -32,6 +34,7 @@ type Props = {
   presupuestos: Pres[]
   costos: Costo[]
   gastos: Gasto[]
+  compras: { fecha: string; monto: number }[]
   adicionales: Adicional[]
   personas: Persona[]
   deudas: Deuda[]
@@ -65,6 +68,7 @@ const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 const ymDe = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 const mesNombre = (ym: string, f: 'long' | 'short') => new Date(`${ym}-01T12:00:00`).toLocaleDateString('es-AR', { month: f }).replace('.', '')
 const esImpuesto = (g: Gasto) => (g.categoria ?? '').trim().toLowerCase() === 'impuestos'
+const esInvProductos = (g: Gasto) => (g.categoria ?? '').trim().toLowerCase() === 'inversión en productos'
 const esSueldo = (g: Gasto) => (g.categoria ?? '').trim().toLowerCase() === 'sueldos fijos'
 const esEmpleado = (c: Costo) => c.personal_id != null || c.tipo === 'mano_obra'
 const esProducto = (tipo: string) => tipo === 'producto' || tipo === 'material'
@@ -153,6 +157,14 @@ export default function InicioSimple(p: Props) {
       }).sort((a, b) => b.pres.total - a.pres.total)
       const vendido = filas.reduce((s, f) => s + f.pres.total, 0) + adicionales
 
+      // Lo que realmente compraste para vender e instalar.
+      const compraMateriales = p.compras.filter((c) => en(c.fecha)).reduce((s, c) => s + c.monto, 0)
+      const materialObra = p.costos.filter((c) => !esEmpleado(c) && c.tipo === 'material' && en(c.fecha)).reduce((s, c) => s + c.monto, 0)
+      const invProductos = p.gastos.filter((g) => esInvProductos(g) && en(g.fecha)).reduce((s, g) => s + g.monto, 0)
+      const comprado = compraMateriales + materialObra + invProductos
+      const productos = Math.max(costoProductos, comprado)
+      const reintegrar = p.costos.filter((c) => c.tipo === 'gasto_extra' && en(c.fecha)).reduce((s, c) => s + c.monto, 0)
+
       const pagosEmp = p.costos.filter((c) => esEmpleado(c) && en(c.fecha))
       const sueldos = p.gastos.filter((g) => esSueldo(g) && en(g.fecha))
       const porPersona: Record<string, number> = {}
@@ -164,7 +176,7 @@ export default function InicioSimple(p: Props) {
       sueldos.forEach((g) => { const k = g.descripcion?.trim() || 'Sueldos fijos'; porPersona[k] = (porPersona[k] || 0) + g.monto })
       const empleados = pagosEmp.reduce((s, c) => s + c.monto, 0) + sueldos.reduce((s, g) => s + g.monto, 0)
 
-      const gastosEmp = p.gastos.filter((g) => !esImpuesto(g) && !esSueldo(g) && en(g.fecha))
+      const gastosEmp = p.gastos.filter((g) => !esImpuesto(g) && !esSueldo(g) && !esInvProductos(g) && en(g.fecha))
       const gastosObra = p.costos.filter((c) => !esEmpleado(c) && c.tipo !== 'material' && c.tipo !== 'gasto_extra' && en(c.fecha))
       const porCat: Record<string, number> = {}
       gastosEmp.forEach((g) => { const k = g.categoria || 'Otros'; porCat[k] = (porCat[k] || 0) + g.monto })
@@ -174,14 +186,14 @@ export default function InicioSimple(p: Props) {
       const impuestosLista = p.gastos.filter((g) => esImpuesto(g) && en(g.fecha)).sort((a, b) => b.fecha.localeCompare(a.fecha))
       const impuestos = impuestosLista.reduce((s, g) => s + g.monto, 0)
       return {
-        filas, vendido, adicionales, ventaProductos, productos: costoProductos, ventaServicios, sinDetalle, bonificacion, productosSinCosto,
+        filas, vendido, adicionales, ventaProductos, productos, costoCargado: costoProductos, compraMateriales, materialObra, invProductos, reintegrar, ventaServicios, sinDetalle, bonificacion, productosSinCosto,
         empleados, porPersona: Object.entries(porPersona).sort((a, b) => b[1] - a[1]),
         gastos, porCat: Object.entries(porCat).sort((a, b) => b[1] - a[1]),
         impuestos, impuestosLista,
-        ganancia: vendido - costoProductos - empleados - gastos - impuestos,
+        ganancia: vendido - productos - empleados - gastos - impuestos,
       }
     }
-  }, [aceptados, items, p.costos, p.gastos, p.adicionales, p.personas])
+  }, [aceptados, items, p.costos, p.gastos, p.compras, p.adicionales, p.personas])
 
   const serie = useMemo(() => meses.map((ym) => ({ ym, ...calcular(ym) })), [meses, calcular])
   const d = useMemo(() => calcular(sel), [calcular, sel])
@@ -235,14 +247,20 @@ export default function InicioSimple(p: Props) {
       {ir('Ir a Presupuestos', 'presupuestos')}
     </>]
     if (h === 'productos') return [`Costo de productos · ${nombreMes}`, `− ${pesos(d.productos)}`, s!.c, <>
+      {lista([
+        ['Compras de materiales', 'Cargadas en las obras', d.compraMateriales],
+        ['Materiales en gastos de obra', '', d.materialObra],
+        ['Inversión en productos', 'Stock y mercadería (Gastos)', d.invProductos],
+      ].filter((f) => (f[2] as number) > 0.5) as [string, string, number][], s!.c)}
       <div className="isMini">
+        <div><small>Lo que compraste</small><b>{pesos(d.compraMateriales + d.materialObra + d.invProductos)}</b></div>
+        <div><small>Costo cargado en presupuestos</small><b>{pesos(d.costoCargado)}</b></div>
         <div><small>Vendiste en productos</small><b>{pesos(d.ventaProductos)}</b></div>
-        <div><small>Te costaron</small><b>{pesos(d.productos)}</b></div>
-        <div><small>Ganancia productos</small><b className="v">{pesos(d.ventaProductos - d.productos)}</b></div>
         <div><small>Servicios (100%)</small><b className="v">{pesos(d.ventaServicios + d.sinDetalle)}</b></div>
       </div>
+      <p className="isNota">Se resta lo que compraste en el mes. Si el costo cargado en los presupuestos es mayor, se usa ese.</p>
       {d.bonificacion > 0.5 && <p className="isNota">Bonificaciones generales: − {pesos(d.bonificacion)} (ya descontadas del total).</p>}
-      {d.productosSinCosto > 0 && <p className="isAviso">⚠️ {d.productosSinCosto} producto{d.productosSinCosto === 1 ? '' : 's'} sin costo cargado: se toman como ganancia completa. Cargales el costo en Productos y el número se corrige solo.</p>}
+      {d.productosSinCosto > 0 && <p className="isAviso">⚠️ {d.productosSinCosto} producto{d.productosSinCosto === 1 ? '' : 's'} de los presupuestos sin costo cargado. Cargales el costo en Productos para ver el margen real.</p>}
       {items == null && <p className="isNota">Calculando…</p>}
     </>]
     if (h === 'empleados') return [`Empleados · ${nombreMes}`, `− ${pesos(d.empleados)}`, s!.c, <>
@@ -254,11 +272,12 @@ export default function InicioSimple(p: Props) {
     </>]
     if (h === 'gastos') return [`Gastos extras · ${nombreMes}`, `− ${pesos(d.gastos)}`, s!.c, <>
       {d.porCat.length === 0 ? <p className="isVacio">No hay gastos cargados en {nombreMes}.</p> : lista(d.porCat.map(([k, v]) => [k, '', v]), s!.c)}
-      <p className="isNota">Gastos de la empresa (sin sueldos ni impuestos) y gastos de obra que no son materiales.</p>
+      <p className="isNota">Gastos de la empresa (sin impuestos ni inversión en productos) y gastos de obra que no son materiales ni personal.</p>
+      {d.reintegrar > 0.5 && <p className="isNota">Además adelantaste {pesos(d.reintegrar)} en gastos extra que te devuelve el cliente: no se restan.</p>}
       {ir('Cargar o ver gastos', 'gastos')}
     </>]
     if (h === 'impuestos') return [`Impuestos · ${nombreMes}`, `− ${pesos(d.impuestos)}`, s!.c, <>
-      {d.impuestosLista.length === 0 ? <p className="isVacio">No hay impuestos cargados en {nombreMes}. Cargalos en Gastos con la categoría “Impuestos”.</p>
+      {d.impuestosLista.length === 0 ? <p className="isVacio">No hay impuestos cargados en {nombreMes}. Cargalos en Gastos → Empresa → 🏛️ Impuestos.</p>
         : lista(d.impuestosLista.map((g) => [g.descripcion || 'Impuesto', new Date(`${g.fecha.slice(0, 10)}T12:00:00`).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }), g.monto]), s!.c)}
       {ir('Cargar o ver gastos', 'gastos')}
     </>]
@@ -354,9 +373,7 @@ export default function InicioSimple(p: Props) {
           const v = d[s.k]
           const sub = s.k === 'vendido' ? `${d.filas.length} presupuesto${d.filas.length === 1 ? '' : 's'}`
             : s.k === 'ganancia' ? 'Te queda'
-              : s.k === 'productos' && d.productosSinCosto > 0 ? '⚠️ hay productos sin costo'
-                : s.k === 'productos' && d.ventaProductos > 0 ? `${Math.round((1 - v / d.ventaProductos) * 100)}% de margen`
-                  : d.vendido > 0 ? `${Math.round((v / d.vendido) * 100)}% de lo vendido` : '—'
+              : d.vendido > 0 ? `${Math.round((v / d.vendido) * 100)}% de lo vendido` : '—'
           return <button key={s.k} type="button" className={`isNum${s.k === 'ganancia' ? ' gan' : s.k === 'vendido' ? ' ancho' : ''}`} style={{ borderLeftColor: s.c }} onClick={() => setHoja(s.k)}>
             <small>{s.t}</small><b className={s.k === 'ganancia' ? (v < 0 ? 'r' : 'v') : ''}>{s.k === 'vendido' || s.k === 'ganancia' ? '' : '− '}{pesos(v)}</b><span>{sub}</span>
           </button>

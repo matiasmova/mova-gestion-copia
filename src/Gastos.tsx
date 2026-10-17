@@ -17,6 +17,7 @@ const CATEGORIAS: Record<Ambito, Cat[]> = {
     { nombre: 'Gastos empresa', icono: '🏢', ayuda: 'Alquiler, servicios, contador, celular…' },
     { nombre: 'Inversión en herramientas', icono: '🧰', ayuda: 'Herramientas y equipos de trabajo' },
     { nombre: 'Inversión en productos', icono: '📦', ayuda: 'Stock y mercadería para vender' },
+    { nombre: 'Impuestos', icono: '🏛️', ayuda: 'Monotributo, IIBB, IVA, Ganancias…' },
   ],
   personal: [
     { nombre: 'Gastos casa', icono: '🏠', ayuda: 'Supermercado, servicios, alquiler…' },

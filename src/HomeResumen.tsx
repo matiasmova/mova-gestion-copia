@@ -81,6 +81,8 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
   const [personas, setPersonas] = useState<Persona[]>([])
   // Compras a proveedores ya pagadas (salen de la caja como los demás costos).
   const [compras, setCompras] = useState<{ fecha: string; monto: number }[]>([])
+  // Todas las compras de materiales (pagadas o no): son costo de productos en el Inicio.
+  const [comprasTodas, setComprasTodas] = useState<{ fecha: string; monto: number }[]>([])
   const [jornales, setJornales] = useState<Jornal[]>([])
 
   useEffect(() => {
@@ -112,6 +114,7 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
       setPersonas(rPe.error ? [] : (rPe.data ?? []).map((p) => ({ ...p, costo_dia: p.costo_dia == null ? null : num(p.costo_dia) })) as Persona[])
       setJornales(rJ.error ? [] : (rJ.data ?? []).map((j) => ({ ...j, jornada: num(j.jornada), horas: j.horas == null ? null : num(j.horas) })) as Jornal[])
       setCompras(rM.error ? [] : ((rM.data ?? []) as { cantidad: unknown; precio_unitario: unknown; fecha: string; pagado: boolean | null }[]).filter((m) => m.pagado !== false).map((m) => ({ fecha: m.fecha, monto: num(m.cantidad) * num(m.precio_unitario) })))
+      setComprasTodas(rM.error ? [] : ((rM.data ?? []) as { cantidad: unknown; precio_unitario: unknown; fecha: string }[]).map((m) => ({ fecha: m.fecha, monto: num(m.cantidad) * num(m.precio_unitario) })))
       setCargando(false)
     }
     void cargar()
@@ -277,6 +280,7 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
       presupuestos={presupuestos}
       costos={costos}
       gastos={gastos}
+      compras={comprasTodas}
       adicionales={adicionales}
       personas={personas}
       deudas={verFinanzas ? obrasInfo.deudas : []}
