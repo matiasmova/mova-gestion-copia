@@ -1,11 +1,9 @@
-import GraficosInicio from './GraficosInicio'
 import InicioSimple, { type Tarea } from './InicioSimple'
 import QueMirarHoy, { type DestinoHoy } from './QueMirarHoy'
 import { useEffect, useMemo, useState } from 'react'
 import { listarComprobantesPago, type ComprobantePago } from './pagoLink'
 import { supabase } from './supabase'
 import { TIPOS_EVENTO } from './Agenda'
-import Tablero, { type Pestana } from './Tablero'
 import { moneda } from './gestionFormat'
 import { calcularPersona } from './personalCalculos'
 import { avanceEfectivo, cuentasPorObra } from './cuentaObra'
@@ -20,7 +18,6 @@ import { avanceEfectivo, cuentasPorObra } from './cuentaObra'
 
 type Rol = 'admin' | 'encargado' | 'auxiliar' | 'contable'
 type Destino = 'obras' | 'presupuestos' | 'clientes' | 'agenda' | 'gastos'
-type TabInicio = 'resumen' | 'graficos' | Pestana
 
 type Obra = { id: number; cliente_id: number; nombre_obra: string; localidad: string | null; estado: string | null; porcentaje_avance: number | null; activo: boolean }
 type Cliente = { id: number; nombre: string; apellido: string | null }
@@ -55,12 +52,11 @@ const num = (x: unknown) => Number(x) || 0
 const redondear = (n: number) => Math.round(n * 100) / 100
 
 
-export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSalir, onAbrirObra, onAbrirPresupuesto }: Props) {
+export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirObra, onAbrirPresupuesto }: Props) {
   const verFinanzas = rol === 'admin' || rol === 'contable'
   const verPersonal = verFinanzas || rol === 'encargado'
   const verPresupuestos = verFinanzas
 
-  const [tab, setTab] = useState<TabInicio>('resumen')
   // Lo que hay hoy en la Agenda (pendiente), para mostrarlo arriba en "Para mirar".
   const [agendaHoy, setAgendaHoy] = useState<{ id: number; titulo: string; hora: string | null; tipo: string | null }[]>([])
   useEffect(() => {
@@ -250,16 +246,9 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
   }, [cargando, agendaHoy, obrasInfo, borradores, personal, mes])
 
   const irDesdeHoy = (d: DestinoHoy) => {
-    if (d === 'cobranzas') setTab('caja')
-    else if (d === 'personal') setTab('personal')
-    else if (d === 'gastos') setTab('gastos')
+    if (d === 'cobranzas' || d === 'personal') onNavegar('obras')
     else onNavegar(d)
   }
-
-  const pestanas: [TabInicio, string][] = [
-    ['resumen', 'Resumen'],
-    ...(verFinanzas ? [['graficos', '📊 Gráficos'], ['pyl', 'Balance'], ['caja', 'Cobranzas'], ['personal', 'Personal'], ['gastos', 'Gastos fijos'], ['inventario', 'Inventario']] as [TabInicio, string][] : []),
-  ]
 
   // ---- "Hoy": todo lo que hay que hacer, cada cosa con su botón ----
   const tareas: Tarea[] = [
@@ -281,7 +270,7 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
   ]
   const [verIA, setVerIA] = useState(false)
 
-  if (tab === 'resumen') return <div className="fase2Dashboard homeCompacto">
+  return <div className="fase2Dashboard homeCompacto">
     {cargando ? <p>Cargando inicio…</p> : <InicioSimple
       nombre={nombre}
       verFinanzas={verFinanzas}
@@ -290,44 +279,21 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
       gastos={gastos}
       adicionales={adicionales}
       personas={personas}
+      deudas={verFinanzas ? obrasInfo.deudas : []}
       porCobrar={obrasInfo.porCobrar}
-      obrasActivas={obrasInfo.activas.length}
+      obrasActivas={obrasInfo.activas}
+      debePersonal={verPersonal ? personal.filas.filter((f) => f.debe > 0.5) : []}
       tareas={tareas}
       nombreCli={nombreCli}
+      onAbrirObra={onAbrirObra}
       onAbrirPresupuesto={onAbrirPresupuesto}
-      onIr={(dd) => {
-        if (dd === 'obras' || dd === 'presupuestos' || dd === 'gastos') onNavegar(dd)
-        else if (dd === 'cobranzas') setTab('caja')
-        else if (dd === 'personal') { if (verFinanzas) setTab('personal'); else onNavegar('obras') }
-      }}
+      onIr={(dd) => onNavegar(dd)}
       acciones={<div className="ipAcc">
-        {verFinanzas && <button type="button" className="ipIcono" title="Más análisis" aria-label="Más análisis" onClick={() => setTab('graficos')}>📊</button>}
         <button type="button" className="ipIcono" title="Cerrar sesión" aria-label="Cerrar sesión" onClick={onSalir}>⏻</button>
       </div>}
       ia={verFinanzas ? (verIA
         ? <QueMirarHoy hechos={hechosHoy} nombreCli={nombreCli} onIr={irDesdeHoy} />
         : <button type="button" className="ipIA" onClick={() => setVerIA(true)}>✨ Resumen del día con IA</button>) : undefined}
     />}
-  </div>
-
-  return <div className="fase2Dashboard homeCompacto">
-    <header className="fase2Encabezado">
-      <div><p className="subtitle">MOVA GESTIÓN · {rolEtiqueta.toUpperCase()}</p><h2><span className="saludoTxt">¡Hola{nombre ? `, ${nombre}` : ''}!</span> <span className="saludoMano" aria-hidden="true">👋</span></h2><p className="welcome">Resumen rápido de tu empresa</p></div>
-      <div className="headerActions"><button className="logoutButton" onClick={onSalir}>Cerrar sesión</button><button className="newButton" onClick={() => onNavegar('clientes')}>+ Nuevo</button></div>
-    </header>
-
-    <button type="button" className="ipVolver" onClick={() => setTab('resumen')}>‹ Volver al inicio</button>
-    <div className="gestionTabs homeTabs">
-      {pestanas.filter(([clave]) => clave !== 'resumen').map(([clave, texto]) => (
-        <button key={clave} className={tab === clave ? 'active' : ''} onClick={() => setTab(clave)}>{texto}</button>
-      ))}
-    </div>
-
-    {tab === 'graficos' && verFinanzas && <GraficosInicio onIr={(v) => onNavegar(v)} />}
-    {tab !== 'graficos' && verFinanzas && (
-      <Tablero embebido pestana={tab} onAbrirObra={onAbrirObra} />
-    )}
-
-
   </div>
 }
