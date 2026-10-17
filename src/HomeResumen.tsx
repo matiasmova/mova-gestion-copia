@@ -1,5 +1,5 @@
 import GraficosInicio from './GraficosInicio'
-import InicioPro, { type Tarea } from './InicioPro'
+import InicioSimple, { type Tarea } from './InicioSimple'
 import QueMirarHoy, { type DestinoHoy } from './QueMirarHoy'
 import { useEffect, useMemo, useState } from 'react'
 import { listarComprobantesPago, type ComprobantePago } from './pagoLink'
@@ -282,29 +282,23 @@ export default function HomeResumen({ nombre, rol, rolEtiqueta, onNavegar, onSal
   const [verIA, setVerIA] = useState(false)
 
   if (tab === 'resumen') return <div className="fase2Dashboard homeCompacto">
-    {cargando ? <p>Cargando inicio…</p> : <InicioPro
+    {cargando ? <p>Cargando inicio…</p> : <InicioSimple
       nombre={nombre}
       verFinanzas={verFinanzas}
-      verPresupuestos={verPresupuestos}
-      pagos={pagos} costos={costos} gastos={gastos} compras={compras}
       presupuestos={presupuestos}
-      obrasActivas={obrasInfo.activas}
-      avancePromedio={obrasInfo.avancePromedio}
-      deudas={obrasInfo.deudas}
+      costos={costos}
+      gastos={gastos}
+      adicionales={adicionales}
+      personas={personas}
       porCobrar={obrasInfo.porCobrar}
-      borradores={borradores}
-      personal={{ debe: verPersonal ? personal.debe : 0, alDia: verPersonal ? personal.alDia : 0, aPagar: personal.filas.filter((f) => f.debe > 0.5).length }}
-      recurrentes={{ cantidad: mes.esMesActual ? mes.recurrentesPendientes.length : 0, monto: mes.esMesActual ? mes.recurrentesMonto : 0 }}
-      netoProyectado={mes.esMesActual && mesSel === mesActual() ? mes.netoProyectado : null}
+      obrasActivas={obrasInfo.activas.length}
       tareas={tareas}
       nombreCli={nombreCli}
-      onAbrirObra={onAbrirObra}
+      onAbrirPresupuesto={onAbrirPresupuesto}
       onIr={(dd) => {
         if (dd === 'obras' || dd === 'presupuestos' || dd === 'gastos') onNavegar(dd)
         else if (dd === 'cobranzas') setTab('caja')
         else if (dd === 'personal') { if (verFinanzas) setTab('personal'); else onNavegar('obras') }
-        else if (dd === 'balance') setTab('pyl')
-        else if (dd === 'graficos') setTab('graficos')
       }}
       acciones={<div className="ipAcc">
         {verFinanzas && <button type="button" className="ipIcono" title="Más análisis" aria-label="Más análisis" onClick={() => setTab('graficos')}>📊</button>}
