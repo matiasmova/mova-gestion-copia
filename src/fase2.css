@@ -2692,3 +2692,102 @@ body:has(.pvItem.arrastrando){cursor:grabbing}
 .oeCambioBorrar:disabled{opacity:.5;cursor:default}
 .pvDescOtro{display:inline-flex;align-items:center;gap:3px;border:1px solid #14181e;background:#14181e;color:#fff;border-radius:999px;padding:2px 10px 2px 4px;font-weight:700;font-size:13px}
 .pvDescOtro input{width:52px;border:0;border-radius:999px;padding:4px 6px;font:inherit;font-size:14px;text-align:center;background:#fff;color:#14181e}
+
+/* ---------- Inicio simplificado ---------- */
+.ip{--ip-linea:#e4e7eb;--ip-verde:#1d9a5b;--ip-rojo:#cf4b37;display:flex;flex-direction:column;gap:14px;max-width:760px;margin:0 auto;width:100%}
+.ipCab{display:flex;align-items:center;gap:10px}
+.ipAvatar{width:42px;height:42px;border-radius:13px;background:linear-gradient(135deg,#fd5a3e,#e47b00);color:#fff;display:grid;place-items:center;font-weight:800;font-size:17px;flex:none}
+.ipCab>div{flex:1;min-width:0}
+.ipCab small{display:block;font-size:12.5px;color:#6a7382;font-weight:600}
+.ipCab h2{margin:0;font-size:22px;letter-spacing:-.01em}
+.ipAcc{display:flex;gap:6px}
+.ipIcono{border:1px solid #e4e7eb;background:#fff;color:#13171d;width:40px;height:40px;border-radius:12px;cursor:pointer;font-size:16px}
+.ipPeriodo{display:flex;background:#fff;border:1px solid #e4e7eb;border-radius:12px;padding:3px;gap:2px}
+.ipPeriodo button{flex:1;border:0;background:transparent;border-radius:9px;padding:8px 4px;font:inherit;font-size:13px;font-weight:700;color:#6a7382;cursor:pointer}
+.ipPeriodo button.on{background:#13171d;color:#fff}
+.ipPulso{border-radius:22px;padding:16px 16px 12px;background:linear-gradient(160deg,#14181f,#1f2630);color:#f2f4f7;display:flex;flex-direction:column;gap:6px}
+.ipEtq{font-size:11px;font-weight:800;letter-spacing:.12em;opacity:.65}
+.ipFila1{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.ipNeto{font-size:34px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1}
+.ipDelta{font-size:12px;font-weight:800;border-radius:999px;padding:4px 9px;white-space:nowrap}
+.ipDelta.sube{background:rgba(63,191,127,.18);color:#6be0a3}.ipDelta.baja{background:rgba(226,112,91,.2);color:#f39a88}
+.ipPrev{font-size:12.5px;opacity:.75}
+.ipCurva svg{display:block;width:100%;height:120px;overflow:visible;touch-action:none;cursor:pointer;margin-top:4px}
+.ipMeses{display:flex;justify-content:space-between;gap:2px}
+.ipMeses button{border:0;background:transparent;color:inherit;opacity:.5;font:inherit;font-size:11px;font-weight:700;cursor:pointer;padding:2px 3px;border-radius:6px}
+.ipMeses button.on{opacity:1;background:rgba(255,255,255,.12)}
+.ipMini3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px}
+.ipMini3 div{background:rgba(255,255,255,.07);border-radius:12px;padding:8px 9px;min-width:0}
+.ipMini3 small{display:block;font-size:10.5px;font-weight:800;letter-spacing:.06em;opacity:.6}
+.ipMini3 b{font-size:14px;font-variant-numeric:tabular-nums}
+.ipMini3 .v{color:#6be0a3}.ipMini3 .r{color:#f39a88}
+.ipKpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:8px}
+.ipKpi{all:unset;cursor:pointer;box-sizing:border-box;background:#fff;border-radius:16px;padding:12px 11px;display:flex;flex-direction:column;gap:2px;min-width:0;box-shadow:0 1px 2px rgba(19,23,29,.04),0 8px 24px -16px rgba(19,23,29,.25);position:relative}
+.ipKpi small{font-size:10.5px;font-weight:800;letter-spacing:.05em;color:#6a7382;text-transform:uppercase}
+.ipKpi b{font-size:19px;font-variant-numeric:tabular-nums;letter-spacing:-.01em;overflow-wrap:anywhere}
+.ipKpi>span{font-size:11.5px;color:#6a7382}
+.ipKpi:focus-visible{outline:2px solid #e0701a}
+.ipMarca{position:absolute;top:11px;right:11px;width:8px;height:8px;border-radius:50%;background:#e0701a}
+.ipBarra{display:block;height:6px;border-radius:999px;background:#f1f3f5;margin-top:5px;overflow:hidden}
+.ipBarra i{display:block;height:100%;background:#2f63b8;border-radius:999px}
+.ipChips{display:flex;gap:8px;flex-wrap:wrap}
+.ipChip{font:inherit;font-size:12.5px;font-weight:700;border-radius:999px;padding:6px 11px;border:0}
+button.ipChip{cursor:pointer}
+.ipChip.ok{background:#e7f6ee;color:#1d9a5b}.ipChip.av{background:#fff2e5;color:#b85a10}
+.ipCard{background:#fff;border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:0 1px 2px rgba(19,23,29,.04),0 8px 24px -16px rgba(19,23,29,.25)}
+.ipTit{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ipTit>b{font-size:16px}
+.ipCnt{font-size:12px;font-weight:800;border-radius:999px;padding:3px 9px;background:#fdecea;color:#cf4b37}
+.ipCnt.ok{background:#e7f6ee;color:#1d9a5b}
+.ipLink{border:0;background:transparent;color:#e0701a;font:inherit;font-weight:800;font-size:13px;cursor:pointer;padding:2px 0;align-self:flex-start}
+.ipTareas{display:flex;flex-direction:column;gap:6px}
+.ipTarea{display:flex;gap:10px;align-items:center;padding:9px 10px;border-radius:14px;background:#f5f6f8}
+.ipIco{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;font-size:17px;flex:none}
+.ipIco.r{background:#fdecea}.ipIco.n{background:#fff2e5}.ipIco.a{background:#e9f0fc}.ipIco.v{background:#f1edff}
+.ipTarea>div{flex:1;min-width:0}
+.ipTarea b{display:block;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ipTarea small{font-size:12px;color:#6a7382;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ipTarea button{border:0;border-radius:10px;padding:9px 12px;font:inherit;font-weight:800;font-size:13px;cursor:pointer;background:#fff;color:#13171d;white-space:nowrap;box-shadow:inset 0 0 0 1px #e4e7eb}
+.ipTarea button.prim{background:#1d9a5b;color:#fff;box-shadow:none}
+.ipVerMas{border:0;background:transparent;color:#6a7382;font:inherit;font-weight:700;font-size:13px;cursor:pointer;padding:4px}
+.ipIA{border:1px solid #e6defb;background:#faf8ff;color:#5b3fc4;border-radius:12px;padding:9px 12px;font:inherit;font-weight:800;font-size:13px;cursor:pointer;align-self:flex-start}
+.ipFlujoBar{display:flex;height:12px;border-radius:999px;overflow:hidden;background:#f1f3f5;gap:2px}
+.ipFlujoBar i{display:block;height:100%}
+.ipFlujo{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.ipFlujo div{border-radius:12px;padding:9px 10px;background:#f5f6f8;min-width:0}
+.ipFlujo small{display:block;font-size:11.5px;color:#6a7382;font-weight:700}
+.ipFlujo b{font-size:16px;font-variant-numeric:tabular-nums}
+.ipFlujoRes{font-size:13px;font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px dashed #e4e7eb;padding-top:9px}
+.ipFlujoRes b{font-size:18px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ipFlujoRes .v{color:#1d9a5b}.ipFlujoRes .r{color:#cf4b37}
+.ipDona{display:flex;gap:14px;align-items:center}
+.ipDona svg{flex:none}
+.ipDona path{cursor:pointer;transition:opacity .2s}
+.ipDona path.apagado{opacity:.22}
+.ipDona ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;flex:1;min-width:0}
+.ipDona li button{all:unset;box-sizing:border-box;width:100%;display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;border-radius:9px;padding:6px 7px}
+.ipDona li button.on{background:#f1f3f5}
+.ipDona li button:focus-visible{outline:2px solid #e0701a}
+.ipDona li i{width:10px;height:10px;border-radius:3px;flex:none}
+.ipDona li span{flex:1;min-width:0}.ipDona li b{font-variant-numeric:tabular-nums}
+.ipObras{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scroll-snap-type:x mandatory}
+.ipObra{all:unset;cursor:pointer;box-sizing:border-box;flex:0 0 min(72%,260px);scroll-snap-align:start;border-radius:14px;background:#f5f6f8;padding:10px;display:flex;gap:10px;align-items:center}
+.ipObra:focus-visible{outline:2px solid #e0701a}
+.ipObra>div{min-width:0}
+.ipObra b{display:block;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ipObra small{font-size:12px;color:#6a7382;display:block}
+.ipObra em{font-style:normal;font-size:12.5px;font-weight:800;color:#e0701a}
+.ipObra em.ok{color:#1d9a5b}
+.ipConv{font-size:12.5px;color:#6a7382}.ipConv b{color:#1d9a5b}
+.ipEmbudo{display:flex;flex-direction:column;gap:6px}
+.ipPaso{display:grid;grid-template-columns:80px 1fr auto;gap:8px;align-items:center;font-size:13px}
+.ipPasoBar{height:26px;border-radius:7px;background:#e9f0fc;position:relative;overflow:hidden}
+.ipPasoBar i{position:absolute;inset:0 auto 0 0;background:#2f63b8;border-radius:7px;min-width:26px}
+.ipPasoBar em{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-style:normal;font-size:12px;font-weight:800;color:#fff}
+.ipPaso b{font-variant-numeric:tabular-nums}
+.ipVolver{align-self:flex-start;border:0;background:transparent;color:#e0701a;font:inherit;font-weight:800;font-size:14px;cursor:pointer;padding:4px 0;margin-bottom:6px}
+@media (prefers-reduced-motion:reduce){.ipDona path{transition:none}}
+.ipCurva{position:relative}
+.ipPunto{position:absolute;width:14px;height:14px;border-radius:50%;background:#5ad394;border:3px solid #14181f;transform:translate(-50%,-50%);margin-top:2px;pointer-events:none;transition:left .2s ease,top .2s ease}
+.ipCab>.ipAcc{flex:none}
+@media (prefers-reduced-motion:reduce){.ipPunto{transition:none}}
