@@ -65,6 +65,8 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
   const [titulo, setTitulo] = useState(presupuesto.titulo)
   const [items, setItems] = useState<Item[]>(() => presupuesto.items.map(conClave))
   const [abierto, setAbierto] = useState<number | null>(null)
+  // Ítem con el campo "Otro %" abierto (descuento cargado a mano).
+  const [descOtro, setDescOtro] = useState<number | null>(null)
   const [catalogo, setCatalogo] = useState<Producto[]>([])
   const [cargandoCat, setCargandoCat] = useState(true)
   const [resumen, setResumen] = useState<ResumenDoc>(resumenVacio)
@@ -366,9 +368,14 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
             <div className="pvCtrl">
               <label>Descuento</label>
               <div className="pvChips">
-                {[...new Set([...DESCUENTOS, pct])].sort((a, b) => a - b).map((d) => (
-                  <button type="button" key={d} className={pct === d ? 'on' : ''} onClick={() => cambiarItem(it._k, { descuento_pct: d })}>{d}%</button>
+                {DESCUENTOS.map((d) => (
+                  <button type="button" key={d} className={pct === d && descOtro !== it._k ? 'on' : ''} onClick={() => { setDescOtro(null); cambiarItem(it._k, { descuento_pct: d }) }}>{d}%</button>
                 ))}
+                {descOtro === it._k || !DESCUENTOS.includes(pct)
+                  ? <span className="pvDescOtro on">
+                      <CampoNumero autoFocus={descOtro === it._k} value={pct} aria-label="Descuento en %" onChange={(e) => cambiarItem(it._k, { descuento_pct: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })} />%
+                    </span>
+                  : <button type="button" onClick={() => setDescOtro(it._k)}>Otro</button>}
               </div>
             </div>
             {/* Lo que paga el cliente por unidad, con el descuento ya aplicado */}
