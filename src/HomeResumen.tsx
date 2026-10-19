@@ -7,7 +7,7 @@ import { TIPOS_EVENTO } from './Agenda'
 import { moneda } from './gestionFormat'
 import { calcularPersona } from './personalCalculos'
 import { avanceEfectivo, cuentasPorObra } from './cuentaObra'
-import { empleadosDeObra, esPagoEmpleado } from './gananciaTrabajo'
+import { empleadosDeObra, esPagoEmpleado, type FilaEmpleado } from './gananciaTrabajo'
 
 // Pantalla de Inicio: resumen rápido de la empresa y, en pestañas, el detalle
 // que antes estaba en Tablero (balance, cobranzas, personal, gastos, inventario).
@@ -194,7 +194,7 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
 
   // ---- Lo acordado con el personal de cada obra (para la ganancia del Inicio) ----
   const empleadosObra = useMemo(() => {
-    const m: Record<number, number> = {}
+    const m: Record<number, FilaEmpleado[]> = {}
     const valorObra = (obraId: number) =>
       presupuestos.filter((p) => p.obra_id === obraId && p.estado === 'aceptado').reduce((s, p) => s + p.total, 0) +
       adicionales.filter((a) => a.obra_id === obraId && a.estado === 'aprobado' && a.tipo !== 'gasto_extra').reduce((s, a) => s + a.importe, 0)
@@ -203,7 +203,7 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
       m[obraId] = empleadosDeObra(
         asignaciones.filter((a) => a.obra_id === obraId), personas,
         costos.filter((c) => c.obra_id === obraId && esPagoEmpleado(c)), jornales.filter((j) => j.obra_id === obraId), valorObra(obraId),
-      ).reduce((s, f) => s + f.total, 0)
+      )
     })
     return m
   }, [asignaciones, personas, costos, jornales, presupuestos, adicionales])

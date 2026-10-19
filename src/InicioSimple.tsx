@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { supabase } from './supabase'
 import GraficoMeses from './GraficoMeses'
-import { cuentaTrabajo, esExtraDeObra } from './gananciaTrabajo'
+import { cuentaTrabajo, esExtraDeObra, totalEmpleados, type FilaEmpleado } from './gananciaTrabajo'
 
 // Inicio en una sola pantalla, con la misma cuenta que el presupuesto:
 //  · Ganancia en productos: venta − costo de cada producto vendido.
@@ -32,7 +32,7 @@ type Props = {
   costos: Costo[]
   gastos: Gasto[]
   adicionales: Adicional[]
-  empleadosObra: Record<number, number> // lo acordado con el personal de cada obra
+  empleadosObra: Record<number, FilaEmpleado[]> // personal de cada obra (acordado y pagado)
   deudas: Deuda[]
   porCobrar: number
   obrasActivas: ObraAct[]
@@ -150,9 +150,10 @@ export default function InicioSimple(p: Props) {
         let emp = 0
         if (x.obra_id == null) { emp = Number(x.pago_empleados_estimado) || 0; if (emp) conEstimado++ }
         else if (deObra) {
-          // Lo real (acordado o pagado); si todavía es $ 0, el estimado del presupuesto.
-          if ((p.empleadosObra[x.obra_id] ?? 0) > 0) emp = p.empleadosObra[x.obra_id]
-          else { emp = estimadoObra[x.obra_id] ?? 0; if (emp) conEstimado++ }
+          // Lo acordado + (lo estimado para los que cobran por pagos, o lo ya pagado si es más).
+          const t = totalEmpleados(p.empleadosObra[x.obra_id] ?? [], estimadoObra[x.obra_id] ?? 0)
+          emp = t.total
+          if (t.pagos < (estimadoObra[x.obra_id] ?? 0)) conEstimado++
         }
         const ext = deObra ? p.costos.filter((c) => c.obra_id === x.obra_id && esExtraDeObra(c)).reduce((s2, c) => s2 + c.monto, 0) : 0
         const c = cuentaTrabajo(itemsPor[x.id] ?? [], x.total, emp, ext, adic)
