@@ -90,10 +90,16 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
   useEffect(() => { cargarDatos() }, [])
 
   // Abrir automáticamente un presupuesto cuando se llega desde otro módulo (ej. Obras).
+  const refrescadoPara = useRef<number | null>(null)
   useEffect(() => {
-    if (presupuestoAbrirId == null || presupuestos.length === 0) return
+    if (presupuestoAbrirId == null) { refrescadoPara.current = null; return }
+    if (presupuestos.length === 0) return
     const p = presupuestos.find((x) => x.id === presupuestoAbrirId)
-    if (p) { setFicha(p); onPresupuestoAbierto?.() }
+    if (p) {
+      setFicha(p); onPresupuestoAbierto?.()
+      // Se abre ya y se actualiza con lo último de la base (el estado pudo cambiar en otra pantalla o dispositivo).
+      if (refrescadoPara.current !== presupuestoAbrirId) { refrescadoPara.current = presupuestoAbrirId; void cargarDatos() }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [presupuestoAbrirId, presupuestos])
 

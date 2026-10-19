@@ -31,6 +31,11 @@ type Props = {
   presupuesto: PresupuestoVivo; cliente: string; obra: string | null; onCerrar: () => void; onEditorCompleto: () => void; modoInicial?: 'edit' | 'ver'
   // Cuando es la pantalla principal del presupuesto: estado arriba, acciones abajo y menú ⋯.
   estado?: ReactNode
+  // Texto del estado (ej. "Borrador · el cliente todavía no lo vio") y tocar la etapa abre la línea de tiempo.
+  estadoTexto?: string
+  onLinea?: () => void
+  // "Como lo ve el cliente": el PDF tal cual lo recibe (si no se pasa, se muestra la vista en la página).
+  vistaPdf?: ReactNode
   acciones?: ReactNode
   menu?: (cerrar: () => void) => ReactNode
   extra?: ReactNode
@@ -67,7 +72,7 @@ export function Texto({ value, onChange, placeholder, className }: { value: stri
   return <textarea ref={ref} rows={1} className={className} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
 }
 
-export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar, onEditorCompleto, modoInicial = 'edit', estado, acciones, menu, extra, onGuardado, obraId = null }: Props) {
+export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar, onEditorCompleto, modoInicial = 'edit', estado, estadoTexto, onLinea, vistaPdf, acciones, menu, extra, onGuardado, obraId = null }: Props) {
   const [menuAbierto, setMenuAbierto] = useState(false)
   // Pestañas del editor (solo al editar) y la ganancia para el encabezado.
   const [pestana, setPestana] = useState<'doc' | 'gan'>('doc')
@@ -439,11 +444,12 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
 
         {/* Encabezado del color de la etapa: dónde está, los números clave y las pestañas */}
         {ed && <div className={`pvEtapa et-${ETAPA_DE[presupuesto.estado] ?? 'arm'}`}>
-          <div className="pvPasos">
+          <button type="button" className="pvPasos" disabled={!onLinea} onClick={onLinea} title={onLinea ? 'Tocá para ver o cambiar la línea de tiempo' : undefined}>
             {presupuesto.estado === 'rechazado'
               ? <span className="on">❌ No salió</span>
               : PASOS.map(([k, t], i) => { const actual = PASOS.findIndex(([x]) => x === (ETAPA_DE[presupuesto.estado] ?? 'arm')); return <span key={k} className={i < actual ? 'ok' : i === actual ? 'on' : ''}>{i < actual ? '✓ ' : ''}{t}</span> })}
-          </div>
+          </button>
+          {estadoTexto && <button type="button" className="pvEstadoTxt" disabled={!onLinea} onClick={onLinea}>{estadoTexto}{onLinea && <em>Línea de tiempo ›</em>}</button>}
           <div className="pvNums">
             <div><small>TOTAL</small><b>{moneda(total)}</b></div>
             <button type="button" onClick={() => setPestana('gan')}><small>VAS A GANAR ›</small><b>{ganancia == null ? '…' : moneda(ganancia)}</b></button>
@@ -454,7 +460,16 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
             <button type="button" role="tab" aria-selected={pestana === 'gan'} className={pestana === 'gan' ? 'on' : ''} onClick={() => setPestana('gan')}>💰 Ganancia y personal</button>
           </div>
         </div>}
-        <div className={`pvDoc ${ed ? 'edit' : 'ver'}${ed && pestana === 'gan' ? ' soloGan' : ''}`}>
+        {!ed && vistaPdf ? <div className="pvDoc ver pvPdf">
+          <div className="pvHerr ver">
+            <div className="pvVista" role="tablist" aria-label="Cómo lo recibe el cliente">
+              <button type="button" className={resumen.modo !== 'resumido' ? 'on' : ''} onClick={() => void guardarResumen({ ...resumen, modo: 'detallado' })}>📋 Detallado</button>
+              <button type="button" className={resumen.modo === 'resumido' ? 'on' : ''} onClick={() => void guardarResumen({ ...resumen, modo: 'resumido' })}>✨ Resumido</button>
+            </div>
+            <small className="pvVistaAyuda">Así le llega el PDF al cliente.</small>
+          </div>
+          {vistaPdf}
+        </div> : <div className={`pvDoc ${ed ? 'edit' : 'ver'}${ed && pestana === 'gan' ? ' soloGan' : ''}`}>
           <div className="pvCab">
             <img src={logo} alt="MOVA Tecnología Smart" />
             <div className="pvCod"><small>PRESUPUESTO</small><b>{codigo}</b><span>Válido hasta {vence}</span></div>
@@ -463,7 +478,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
             ? <Texto className="pvTitulo" value={titulo} onChange={setTitulo} placeholder="Título del presupuesto" />
             : <h2 className="pvTitulo">{titulo}</h2>}
           <p className="pvCliente">Cliente: <b>{cliente}</b>{obra ? <> · Obra: <b>{obra}</b></> : null}</p>
-          {estado}
+          {!estadoTexto && estado}
 
           {/* Detallado / Resumido: también en "Como lo ve el cliente", para ver cada versión */}
           <div className={`pvHerr${ed ? '' : ' ver'}`}>
@@ -542,7 +557,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
           {ed && (
             <p className="pvMasOpc">¿Descripción, notas, bonificación general o soluciones? <button type="button" onClick={onEditorCompleto}>Abrir el editor completo</button></p>
           )}
-        </div>
+        </div>}
 
         <div className="pvPie">
           <div className="pvPieTot"><small>TOTAL DEL PRESUPUESTO</small><b>{moneda(total)}</b><span>Seña 70%: <strong>{moneda(sena)}</strong></span></div>
