@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { useActualizarDatos } from './actualizarDatos'
+import { useActualizarDatos, useVersionNueva } from './actualizarDatos'
 import { avisoGuardado } from './Animados'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, TIPO_LINK_AUTH, ERROR_LINK_AUTH } from './supabase'
@@ -60,6 +60,9 @@ export default function AppFase2() {
   const [recarga, setRecarga] = useState(0)
   const actualizarPantalla = useCallback(() => setRecarga((v) => v + 1), [])
   const cambiosAfuera = useActualizarDatos(() => { actualizarPantalla(); avisoGuardado('🔄 Actualizado con los cambios nuevos') })
+  // Si hay una versión nueva del sistema publicada, el ↻ recarga la página entera.
+  const versionNueva = useVersionNueva()
+  const actualizarTodo = () => { if (versionNueva) { window.location.reload(); return } cambiosAfuera.listo(); actualizarPantalla() }
   // Pedido del buscador o del botón "+" para el módulo de destino (abrir algo o crear nuevo).
   const [pedido, setPedido] = useState<(Pedido & { vista: Vista }) | null>(null)
   const [rol, setRol] = useState<Rol>('auxiliar')
@@ -226,7 +229,7 @@ export default function AppFase2() {
       <button type="button" className="menuBuscar" onClick={() => { setMenuAbierto(false); setBuscadorAbierto(true) }}>
         <IconoMenu nombre="buscar" /><span>Buscar…</span><kbd>Ctrl K</kbd>
       </button>
-      <button type="button" className="menuRecargar" title="Trae lo último que se cargó desde otro celular o computadora" onClick={() => { setMenuAbierto(false); cambiosAfuera.listo(); actualizarPantalla() }}>
+      <button type="button" className="menuRecargar" title="Trae lo último que se cargó desde otro celular o computadora" onClick={() => { setMenuAbierto(false); actualizarTodo() }}>
         <span aria-hidden>↻</span><span>Actualizar datos</span>
       </button>
       <nav>
@@ -253,8 +256,9 @@ export default function AppFase2() {
       <div className="fase2Usuario"><div>{(nombreUsuario[0] ?? 'M').toUpperCase()}</div><span><strong>{nombreUsuario || 'Usuario'}</strong><small>{ROLES[rol]}</small></span><button title="Cerrar sesión" aria-label="Cerrar sesión" onClick={salir}><IconoMenu nombre="salir" /></button></div>
     </aside>
     <button type="button" className="fase2BuscarMovil" aria-label="Buscar" onClick={() => setBuscadorAbierto(true)}><IconoMenu nombre="buscar" tamano={20} /><span>Buscar</span></button>
-    <button type="button" className="fase2RecargarMovil" aria-label="Actualizar" title="Actualizar" onClick={() => { cambiosAfuera.listo(); actualizarPantalla() }}>↻</button>
-    {cambiosAfuera.hayCambios && <button type="button" className="avisoCambios" onClick={() => { cambiosAfuera.listo(); actualizarPantalla() }}>🔄 Hay cambios nuevos de otro dispositivo · <b>Actualizar</b></button>}
+    <button type="button" className="fase2RecargarMovil" aria-label="Actualizar" title="Actualizar" onClick={actualizarTodo}>↻</button>
+    {versionNueva ? <button type="button" className="avisoCambios" onClick={() => window.location.reload()}>✨ Hay una versión nueva del sistema · <b>Actualizar</b></button>
+    : cambiosAfuera.hayCambios && <button type="button" className="avisoCambios" onClick={() => { cambiosAfuera.listo(); actualizarPantalla() }}>🔄 Hay cambios nuevos de otro dispositivo · <b>Actualizar</b></button>}
     <BuscadorGlobal rol={rol} abierto={buscadorAbierto} onCerrar={() => setBuscadorAbierto(false)} ir={ir} />
     <BotonMas rol={rol} ir={ir} />
     {(rol === 'admin' || rol === 'contable') && <AvisoComprobantes onAbrirObra={(id) => { if (id) { setObraAbrirId(id); navegar('obras') } else navegar('presupuestos') }} />}
