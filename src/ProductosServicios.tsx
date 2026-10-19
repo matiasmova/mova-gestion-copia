@@ -1,5 +1,5 @@
 import ResumenProductos from './ResumenProductos'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import type { Pedido } from './BuscadorGlobal'
 import { supabase } from './supabase'
 import { comprimirImagen } from './fotosProducto'
@@ -15,7 +15,8 @@ import CompararMercado, { type ProductoAComparar } from './CompararMercado'
 import HistorialPrecios, { ListaHistorialPrecios } from './HistorialPrecios'
 import OrdenarCatalogoIA from './OrdenarCatalogoIA'
 import CampoNumero from './CampoNumero'
-import { CATEGORIAS_PRODUCTO, COLORES, esCategoriaApp, hexColor, iconoCategoria, sugerirCategoria, sugerirColor } from './categoriasApp'
+import { CATEGORIAS_PRODUCTO, COLORES, esCategoriaApp, hexColor, sugerirCategoria, sugerirColor } from './categoriasApp'
+import IconoCategoria from './IconoCategoria'
 import ProductosEnPagina from './ProductosEnPagina'
 
 export type ProductoServicio = {
@@ -51,6 +52,8 @@ export type ProductoServicio = {
   tn_sincronizar?: boolean
   // Color (opcional; si falta el SQL de la fase 36 queda vacío).
   color?: string | null
+  // Orden propio ("Mi orden"; si falta el SQL de la fase 37 queda vacío).
+  orden?: number | null
   fotoView?: string | null
 }
 
@@ -102,7 +105,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
   const [fFoto, setFFoto] = useState<'todas' | 'con' | 'sin'>('todas')
   const [fDatos, setFDatos] = useState<'todos' | 'sinPrecio' | 'sinCosto'>('todos')
   const [fRotacion, setFRotacion] = useState<'todos' | 'parados' | 'vendidos'>('todos')
-  const [orden, setOrden] = useState<'nombre' | 'precioAsc' | 'precioDesc' | 'stock' | 'vendidos' | 'inversion'>('nombre')
+  const [orden, setOrden] = useState<'manual' | 'nombre' | 'precioAsc' | 'precioDesc' | 'stock' | 'vendidos' | 'inversion'>(() => { try { return localStorage.getItem('mova_prod_orden') === 'manual' ? 'manual' : 'nombre' } catch { return 'nombre' } })
   // Ventas (presupuestos aceptados) por producto, para rotación.
   const [ventas, setVentas] = useState<Record<number, { unidades: number; veces: number; ultima: string | null; fechas: { f: string; c: number }[] }>>({})
   const [diasVendidos, setDiasVendidos] = useState(90)
@@ -114,6 +117,10 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
   const [mostrarCotizacion, setMostrarCotizacion] = useState(false)
   const [mostrarOrdenar, setMostrarOrdenar] = useState(false)
   const [ordenarCategorias, setOrdenarCategorias] = useState(false)
+  const [ordenDisponible, setOrdenDisponible] = useState(false)
+  const [reordenando, setReordenando] = useState(false)
+  const [arrastrando, setArrastrando] = useState<number | null>(null)
+  useEffect(() => { try { localStorage.setItem('mova_prod_orden', orden === 'manual' ? 'manual' : '') } catch { /* sin almacenamiento */ } }, [orden])
   const [historial, setHistorial] = useState<{ id: number; nombre: string } | null>(null)
   const [mercado, setMercado] = useState<{ titulo: string; productos: ProductoAComparar[] } | null>(null)
   const [editando, setEditando] = useState<ProductoServicio | null>(null)
@@ -204,6 +211,13 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
     setCargando(false)
     void cargarVentas()
     // Vínculo con la tienda web (si ya se corrió el SQL de Tiendanube).
+    // Orden propio (si ya se corrió el SQL de la fase 37).
+    void supabase.from('productos_servicios').select('id, orden').not('orden', 'is', null).then(({ data: os, error: e }) => {
+      setOrdenDisponible(!e)
+      if (e || !os?.length) return
+      const mapa = new Map((os as { id: number; orden: number }[]).map((x) => [x.id, x.orden]))
+      setElementos((arr) => arr.map((x) => (mapa.has(x.id) ? { ...x, orden: mapa.get(x.id) } : x)))
+    })
     // Color de cada producto (si ya se corrió el SQL de la fase 36).
     void supabase.from('productos_servicios').select('id, color').not('color', 'is', null).then(({ data: cs, error: e }) => {
       setColorDisponible(!e)
@@ -281,6 +295,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
       return true
     })
     const cmp: Record<typeof orden, (a: ProductoServicio, b: ProductoServicio) => number> = {
+      manual: (a, b) => (a.orden ?? 1e9) - (b.orden ?? 1e9) || a.nombre.localeCompare(b.nombre),
       nombre: (a, b) => a.nombre.localeCompare(b.nombre),
       precioAsc: (a, b) => a.precio_venta - b.precio_venta,
       precioDesc: (a, b) => b.precio_venta - a.precio_venta,
@@ -452,6 +467,28 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
       return
     }
     setGuardando(false); cerrarFormulario(); await cargarCatalogo()
+  }
+
+  // ---- Mi orden: mover un producto dentro de lo que se ve y guardar los números ----
+  const pendienteOrden = useRef<Map<number, number>>(new Map())
+  function moverProducto(desde: number, hasta: number, guardarYa: boolean) {
+    const lista = [...elementosFiltrados]
+    const [x] = lista.splice(desde, 1)
+    lista.splice(hasta, 0, x)
+    // Los visibles se numeran de 10 en 10, dentro de los números que ya ocupaban (así no se mezclan con los filtrados).
+    const usados = elementosFiltrados.map((e) => e.orden).filter((n): n is number => n != null).sort((a, b) => a - b)
+    const base = usados.length === elementosFiltrados.length ? usados : lista.map((_, i) => (i + 1) * 10)
+    const nuevos = new Map(lista.map((e, i) => [e.id, base[i]]))
+    nuevos.forEach((v, id) => { const actual = elementos.find((e) => e.id === id)?.orden; if (actual !== v) pendienteOrden.current.set(id, v) })
+    setElementos((arr) => arr.map((e) => (nuevos.has(e.id) ? { ...e, orden: nuevos.get(e.id) } : e)))
+    if (guardarYa) void guardarOrden()
+  }
+  async function guardarOrden() {
+    const cambios = Array.from(pendienteOrden.current.entries())
+    pendienteOrden.current.clear()
+    for (let i = 0; i < cambios.length; i += 10) {
+      await Promise.all(cambios.slice(i, i + 10).map(([id, v]) => supabase.from('productos_servicios').update({ orden: v }).eq('id', id)))
+    }
   }
 
   // Publicar en la tienda web desde la tarjeta (visible u oculto para revisar).
@@ -642,7 +679,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
     return (
       <article className={`prodCard ${el.activo ? '' : 'inactivo'}`} key={el.id}>
         <div className="prodCardFoto">
-          {el.fotoView ? <img src={el.fotoView} alt={el.nombre} loading="lazy" /> : <span>{el.tipo === 'servicio' ? '🛠️' : '📦'}</span>}
+          {el.fotoView ? <img src={el.fotoView} alt={el.nombre} loading="lazy" /> : <span className="prodSinFoto"><IconoCategoria nombre={el.tipo === 'servicio' ? 'Servicios' : el.categoria || 'Productos'} tamano={34} /></span>}
         </div>
         <div className="prodCardTop">
           <span className={`catalogoTipo ${el.tipo}`}>{el.tipo === 'producto' ? 'Producto' : 'Servicio'}</span>
@@ -654,10 +691,10 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
         </div>
         <h3>{el.nombre}</h3>
         {el.nombre_presupuesto && <small className="prodPres" title="Así aparece en el presupuesto">📄 {el.nombre_presupuesto}</small>}
-        {el.tn_variant_id && <button type="button" className={`prodWeb ${el.tn_sincronizar === false ? 'pausa' : ''}`} title="Ver en Productos en página" onClick={() => setPestana('pagina')}>🛒 {el.tn_sincronizar === false ? 'En la página · no se actualiza solo' : 'En la página · se actualiza solo'}</button>}
+        {el.tn_variant_id && <button type="button" className={`prodWeb ${el.tn_sincronizar === false ? 'pausa' : ''}`} title="Ver en Productos en página" onClick={() => setPestana('pagina')}>{el.tn_sincronizar === false ? 'En la página · no se actualiza solo' : 'En la página · se actualiza solo'}</button>}
         {el.codigo && <small className="prodCat">Cód. {el.codigo}</small>}
         {el.color && <small className="prodColor"><i style={{ background: hexColor(el.color) ?? '#cfd5de' }} />{el.color}</small>}
-        <small className="prodCat">{el.tipo === 'producto' && esCategoriaApp(el.categoria) ? `${iconoCategoria(el.categoria)} ${el.categoria}` : el.categoria || 'Sin categoría'}{el.proveedor ? ` · ${el.proveedor}` : ''}</small>
+        <small className="prodCat">{el.tipo === 'producto' && esCategoriaApp(el.categoria) ? <><IconoCategoria nombre={el.categoria} tamano={13} /> {el.categoria}</> : el.categoria || 'Sin categoría'}{el.proveedor ? ` · ${el.proveedor}` : ''}</small>
         <div className="prodPrecio">
           {tieneDesc ? (<>
             <strong>{mostrar(final)}</strong><s>{mostrar(el.precio_venta)}</s>
@@ -674,12 +711,12 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
         </div>
         <div className="prodAcciones">
           <button className="editButton" onClick={() => abrirEdicion(el)}>Editar</button>
-          {el.tipo === 'producto' && <button type="button" className="editButton" title="Comparar con precios del mercado" onClick={() => compararUno(el)}>💲 Mercado</button>}
-          <button type="button" className="editButton" title="Cambios de precio de este producto" onClick={() => setHistorial({ id: el.id, nombre: el.nombre })}>🕑 Precios</button>
-          {el.tipo === 'producto' && !el.tn_variant_id && el.activo && <button type="button" className="editButton prodPublicar" title="Publicar en la tienda web" disabled={publicandoId === el.id} onClick={() => void publicarUno(el)}>{publicandoId === el.id ? 'Publicando…' : '🛒 Publicar'}</button>}
+          {el.tipo === 'producto' && <button type="button" className="editButton" title="Comparar con precios del mercado" onClick={() => compararUno(el)}>Mercado</button>}
+          <button type="button" className="editButton" title="Cambios de precio de este producto" onClick={() => setHistorial({ id: el.id, nombre: el.nombre })}>Precios</button>
+          {el.tipo === 'producto' && !el.tn_variant_id && el.activo && <button type="button" className="editButton prodPublicar" title="Publicar en la tienda web" disabled={publicandoId === el.id} onClick={() => void publicarUno(el)}>{publicandoId === el.id ? 'Publicando…' : 'Publicar'}</button>}
           {el.link_compra && <a className="editButton" href={el.link_compra} target="_blank" rel="noreferrer">Ver en web</a>}
           <button className={el.activo ? 'deactivateButton' : 'activateButton'} title={el.activo ? 'Lo oculta para elegir en los presupuestos, sin borrarlo' : undefined} onClick={() => cambiarEstado(el)}>{el.activo ? 'Desactivar' : 'Activar'}</button>
-          <button type="button" className="deactivateButton prodEliminar" onClick={() => void eliminarUno(el)}>🗑 Eliminar</button>
+          <button type="button" className="deactivateButton prodEliminar" onClick={() => void eliminarUno(el)}>Eliminar</button>
         </div>
       </article>
     )
@@ -801,6 +838,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
           </button>
           <label>Ordenar
             <select value={orden} onChange={(e) => setOrden(e.target.value as typeof orden)}>
+              <option value="manual">Mi orden (a mano)</option>
               <option value="nombre">Nombre (A-Z)</option>
               <option value="precioAsc">Precio: menor a mayor</option>
               <option value="precioDesc">Precio: mayor a menor</option>
@@ -809,6 +847,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
               <option value="inversion">Más plata invertida</option>
             </select>
           </label>
+          <button type="button" className={`editButton reordBtn${reordenando ? ' active' : ''}`} onClick={() => { if (!reordenando) setOrden('manual'); setReordenando((v) => !v) }}>{reordenando ? '✓ Listo' : '↕ Reordenar'}</button>
           <small>{elementosFiltrados.length} de {elementos.length}</small>
           {filtrosAvanzadosActivos > 0 && <button type="button" className="caLink" onClick={limpiarFiltrosAvanzados}>Limpiar filtros ✕</button>}
         </div>
@@ -839,20 +878,46 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
       {!cargando && !error && !modoEdicion && (
         <div className="catApp">
           <div className="prodChips" role="tablist" aria-label="Categorías">
-            <button type="button" className={fCategoria === 'todas' && tipoFiltro === 'todos' ? 'active' : ''} onClick={() => { setTipoFiltro('todos'); setFCategoria('todas') }}>Todo <b>{enEstado.length}</b></button>
-            <button type="button" className={`catTipo${fCategoria === 'todas' && tipoFiltro === 'producto' ? ' active' : ''}`} onClick={() => { setTipoFiltro('producto'); setFCategoria('todas') }}>📦 Productos <b>{prodsEstado.length}</b></button>
-            <button type="button" className={`catTipo${tipoFiltro === 'servicio' && fCategoria === 'todas' ? ' active' : ''}`} onClick={() => { setTipoFiltro('servicio'); setFCategoria('todas') }}>🛠️ Servicios <b>{servsEstado.length}</b></button>
+            <button type="button" className={fCategoria === 'todas' && tipoFiltro === 'todos' ? 'active' : ''} onClick={() => { setTipoFiltro('todos'); setFCategoria('todas') }}><IconoCategoria nombre="Todo" />Todo <b>{enEstado.length}</b></button>
+            <button type="button" className={`catTipo${fCategoria === 'todas' && tipoFiltro === 'producto' ? ' active' : ''}`} onClick={() => { setTipoFiltro('producto'); setFCategoria('todas') }}>{<IconoCategoria nombre="Productos" />}Productos <b>{prodsEstado.length}</b></button>
+            <button type="button" className={`catTipo${tipoFiltro === 'servicio' && fCategoria === 'todas' ? ' active' : ''}`} onClick={() => { setTipoFiltro('servicio'); setFCategoria('todas') }}>{<IconoCategoria nombre="Servicios" />}Servicios <b>{servsEstado.length}</b></button>
           </div>
           {tipoFiltro !== 'servicio' ? <div className="prodChips catSub" aria-label="Categorías de productos">
-            {CATEGORIAS_PRODUCTO.map((c) => { const n = prodsEstado.filter((el) => el.categoria?.trim() === c.nombre).length; return <button type="button" key={c.nombre} className={`${fCategoria === c.nombre ? 'active' : ''}${n ? '' : ' vacia'}`} onClick={() => elegirCategoria(c.nombre, 'producto')}>{c.icono} {c.nombre} <b>{n}</b></button> })}
-            {sinCategoriaApp > 0 && <button type="button" className={`catSin${fCategoria === '__sinApp' ? ' active' : ''}`} onClick={() => elegirCategoria('__sinApp', 'producto')}>🏷️ Sin categoría <b>{sinCategoriaApp}</b></button>}
-            {sinCategoriaApp > 0 && <button type="button" className="catOrdenar" onClick={() => setOrdenarCategorias(true)}>✨ Ordenar {sinCategoriaApp} en categorías</button>}
+            {CATEGORIAS_PRODUCTO.map((c) => { const n = prodsEstado.filter((el) => el.categoria?.trim() === c.nombre).length; return <button type="button" key={c.nombre} className={`${fCategoria === c.nombre ? 'active' : ''}${n ? '' : ' vacia'}`} onClick={() => elegirCategoria(c.nombre, 'producto')}>{<IconoCategoria nombre={c.nombre} />}{c.nombre} <b>{n}</b></button> })}
+            {sinCategoriaApp > 0 && <button type="button" className={`catSin${fCategoria === '__sinApp' ? ' active' : ''}`} onClick={() => elegirCategoria('__sinApp', 'producto')}>{<IconoCategoria nombre="sin" />}Sin categoría <b>{sinCategoriaApp}</b></button>}
+            {sinCategoriaApp > 0 && <button type="button" className="catOrdenar" onClick={() => setOrdenarCategorias(true)}>Asignar categoría a {sinCategoriaApp}</button>}
           </div> : chipsServicios.length > 1 && <div className="prodChips catSub" aria-label="Categorías de servicios">
             {chipsServicios.map(([c, n]) => <button type="button" key={c} className={fCategoria === c ? 'active' : ''} onClick={() => elegirCategoria(c, 'servicio')}>{c} <b>{n}</b></button>)}
           </div>}
         </div>
       )}
-      {!cargando && !error && elementosFiltrados.length > 0 && !modoEdicion && vista === 'kanban' && (
+      {reordenando && !cargando && !error && (
+        <div className="reordPanel">
+          {!ordenDisponible
+            ? <p className="gestionAyuda usFalta">Para guardar tu orden falta correr en Supabase el SQL <b>supabase-productos-orden-fase-37.sql</b>.</p>
+            : <p className="gestionAyuda">Arrastrá cada producto (o usá las flechas) para dejarlos en el orden que quieras. Se guarda solo. Podés filtrar por categoría y ordenar cada una.</p>}
+          <div className="reordLista">
+            {elementosFiltrados.map((el, i) => (
+              <div key={el.id} className={`reordFila${arrastrando === el.id ? ' arrastra' : ''}`} draggable={ordenDisponible}
+                onDragStart={(e) => { setArrastrando(el.id); e.dataTransfer.effectAllowed = 'move' }}
+                onDragEnd={() => setArrastrando(null)}
+                onDragOver={(e) => { e.preventDefault(); if (arrastrando != null && arrastrando !== el.id) { const desde = elementosFiltrados.findIndex((x) => x.id === arrastrando); if (desde >= 0) moverProducto(desde, i, false) } }}
+                onDrop={(e) => { e.preventDefault(); void guardarOrden(); setArrastrando(null) }}>
+                <span className="reordAsa" aria-hidden>⋮⋮</span>
+                <span className="reordNum">{i + 1}</span>
+                <span className="reordFoto">{el.fotoView ? <img src={el.fotoView} alt="" /> : <IconoCategoria nombre={el.tipo === 'servicio' ? 'Servicios' : el.categoria} />}</span>
+                <span className="reordNom"><b>{el.nombre}</b><small>{el.categoria || 'Sin categoría'}</small></span>
+                <span className="reordFlechas">
+                  <button type="button" disabled={!ordenDisponible || i === 0} aria-label="Subir" onClick={() => { moverProducto(i, i - 1, true) }}>▲</button>
+                  <button type="button" disabled={!ordenDisponible || i === elementosFiltrados.length - 1} aria-label="Bajar" onClick={() => { moverProducto(i, i + 1, true) }}>▼</button>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!reordenando && !cargando && !error && elementosFiltrados.length > 0 && !modoEdicion && vista === 'kanban' && (
         <div className="prodGrid">
           {elementosFiltrados.map((el) => tarjeta(el))}
         </div>
@@ -935,7 +1000,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                   <td>{el.tipo === 'producto'
                     ? <select value={el.categoria ?? ''} onChange={(e) => { const v = e.target.value || null; actualizarCampoLocal(el.id, 'categoria', v); void persistirCampo(el.id, 'categoria', v) }} style={{ width: '140px' }}>
                         <option value="">Sin categoría</option>
-                        {CATEGORIAS_PRODUCTO.map((c) => <option key={c.nombre} value={c.nombre}>{c.icono} {c.nombre}</option>)}
+                        {CATEGORIAS_PRODUCTO.map((c) => <option key={c.nombre} value={c.nombre}>{c.nombre}</option>)}
                         {el.categoria && !esCategoriaApp(el.categoria) && <option value={el.categoria}>{el.categoria} (vieja)</option>}
                       </select>
                     : <input value={el.categoria ?? ''} onChange={(e) => actualizarCampoLocal(el.id, 'categoria', e.target.value)} onBlur={(e) => persistirCampo(el.id, 'categoria', e.target.value.trim() || null)} style={{ width: '120px' }} list="catServicios" />}</td>
@@ -1028,10 +1093,10 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                 {tipo === 'producto'
                   ? <label>Categoría<select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
                       <option value="">Sin categoría</option>
-                      {CATEGORIAS_PRODUCTO.map((c) => <option key={c.nombre} value={c.nombre}>{c.icono} {c.nombre}</option>)}
+                      {CATEGORIAS_PRODUCTO.map((c) => <option key={c.nombre} value={c.nombre}>{c.nombre}</option>)}
                       {categoria && !esCategoriaApp(categoria) && <option value={categoria}>{categoria} (vieja)</option>}
                     </select>
-                    {!esCategoriaApp(categoria) && sugerirCategoria(nombre, categoria) && <button type="button" className="catSugerida" onClick={() => setCategoria(sugerirCategoria(nombre, categoria)!)}>Sugerida: {iconoCategoria(sugerirCategoria(nombre, categoria))} {sugerirCategoria(nombre, categoria)} · usar</button>}</label>
+                    {!esCategoriaApp(categoria) && sugerirCategoria(nombre, categoria) && <button type="button" className="catSugerida" onClick={() => setCategoria(sugerirCategoria(nombre, categoria)!)}>Sugerida: {sugerirCategoria(nombre, categoria)} · usar</button>}</label>
                   : null}
                 {tipo === 'producto' && <label>Color <small className="npAyuda">si corresponde</small>
                   {colorDisponible ? <>
@@ -1290,7 +1355,7 @@ function OrdenarCategorias({ productos, conColor, onCerrar, onGuardado }: { prod
   }
   return <div className="modalOverlay" onClick={(e) => { if (e.target === e.currentTarget && !guardando) onCerrar() }}>
     <div className="modalCard catModal" role="dialog" aria-modal="true" aria-label="Ordenar en categorías">
-      <div className="modalHeader"><div><p className="subtitle">PRODUCTOS</p><h2>✨ Ordenar en categorías</h2></div><button type="button" className="closeButton" disabled={guardando} onClick={onCerrar} aria-label="Cerrar">×</button></div>
+      <div className="modalHeader"><div><p className="subtitle">PRODUCTOS</p><h2>Asignar categorías</h2></div><button type="button" className="closeButton" disabled={guardando} onClick={onCerrar} aria-label="Cerrar">×</button></div>
       <div className="catCuerpo">
         <p className="gestionAyuda">Te propongo una categoría según el nombre de cada producto. Revisalas, cambiá las que no van y tocá Guardar. Las que dejes en “Sin categoría” quedan como están.</p>
         <div className="catLista">
@@ -1298,7 +1363,7 @@ function OrdenarCategorias({ productos, conColor, onCerrar, onGuardado }: { prod
             <div><b>{p.nombre}</b><small>{p.categoria ? `Antes: ${p.categoria}` : 'Sin categoría'}</small></div>
             <select value={elegidas[p.id] ?? ''} onChange={(e) => setElegidas((m) => ({ ...m, [p.id]: e.target.value }))} aria-label={`Categoría de ${p.nombre}`}>
               <option value="">Sin categoría</option>
-              {CATEGORIAS_PRODUCTO.map((c) => <option key={c.nombre} value={c.nombre}>{c.icono} {c.nombre}</option>)}
+              {CATEGORIAS_PRODUCTO.map((c) => <option key={c.nombre} value={c.nombre}>{c.nombre}</option>)}
             </select>
             {conColor && <select className="catColor" value={colores[p.id] ?? ''} onChange={(e) => setColores((m) => ({ ...m, [p.id]: e.target.value }))} aria-label={`Color de ${p.nombre}`}>
               <option value="">Sin color</option>

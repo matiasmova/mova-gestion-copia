@@ -3704,3 +3704,51 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .catFila select.catColor{width:120px}
 @media (max-width:620px){.catFila{grid-template-columns:1fr 1fr}.catFila>div{grid-column:1/-1}.catFila select.catColor{width:auto}}
 .catSub{flex-wrap:wrap;overflow:visible}
+
+/* =====================================================================
+   Productos: estilo sobrio (pocos colores, íconos de línea)
+   ===================================================================== */
+.icoCat{flex:none;vertical-align:-2px;color:currentColor;opacity:.85}
+.prodChips button{display:inline-flex;align-items:center;gap:6px}
+.catalogoPage .catalogoTipo.producto,.catalogoPage .catalogoTipo.servicio{background:#f1f3f6;color:#4a5466;font-weight:700;letter-spacing:.02em}
+.catalogoPage .prodStock{background:#f1f3f6;color:#4a5466;display:inline-flex;align-items:center;gap:5px}
+.catalogoPage .prodStock::before{content:"";width:6px;height:6px;border-radius:50%;background:#7b8597}
+.catalogoPage .prodStock.bajo{background:#f1f3f6;color:#4a5466}.catalogoPage .prodStock.bajo::before{background:#c98a00}
+.catalogoPage .prodStock.sin{background:#f1f3f6;color:#4a5466}.catalogoPage .prodStock.sin::before{background:#c0392b}
+.catalogoPage .prodWeb,.catalogoPage .prodWeb.pausa{color:#4a5466;font-weight:600}
+.catalogoPage .prodCat{display:inline-flex;align-items:center;gap:5px;color:#6a7382}
+.catalogoPage .prodSinPrecio{border:1px dashed #c7ced8;background:#f7f8fa;color:#4a5466}
+.catalogoPage .prodFalta{color:#6a7382}
+.catalogoPage .prodBadgeDesc{background:#141a24}
+.catalogoPage .prodAcciones .editButton,.catalogoPage .prodAcciones .deactivateButton,.catalogoPage .prodAcciones .activateButton{background:#fff;border:1px solid #e3e8ef;color:#2b3442;font-weight:600}
+.catalogoPage .prodAcciones .editButton:hover,.catalogoPage .prodAcciones .activateButton:hover{border-color:#9aa3b1;background:#f7f8fa}
+.catalogoPage .prodAcciones .deactivateButton:hover{border-color:#e3b4ae;color:#b23b32;background:#fdf6f5}
+.catalogoPage .prodAcciones .prodPublicar{color:#2b3442!important;border-color:#e3e8ef!important;background:#fff!important}
+.catalogoPage .stockAviso{background:#f7f8fa;border:1px solid #e3e8ef;border-left:3px solid #c98a00;color:#2b3442}
+.catalogoPage .stockAviso strong{color:#141a24}
+.catalogoPage .stockAviso .caLink{color:#2b3442;font-weight:700;text-decoration:underline}
+.catSub button.catOrdenar{background:#fff;color:#141a24;border:1px solid #141a24;font-weight:700}
+.catSub button.catOrdenar:hover{background:#141a24;color:#fff}
+.catSub button.catSin{border-style:dashed;color:#6a7382}
+.catSugerida{border-color:#c7ced8;background:#f7f8fa;color:#2b3442}
+/* Reordenar ("Mi orden") */
+.reordBtn.active{background:#141a24;color:#fff;border-color:#141a24}
+.reordPanel{display:flex;flex-direction:column;gap:10px;margin-bottom:16px}
+.reordLista{display:flex;flex-direction:column;gap:6px}
+.reordFila{display:grid;grid-template-columns:22px 28px 40px minmax(0,1fr) auto;gap:10px;align-items:center;background:#fff;border:1px solid #e3e8ef;border-radius:12px;padding:8px 10px;cursor:grab;transition:box-shadow .15s ease,transform .15s ease}
+.reordFila:hover{box-shadow:0 8px 20px -14px rgba(20,26,36,.4)}
+.reordFila.arrastra{opacity:.55;transform:scale(.99);cursor:grabbing;border-style:dashed}
+.reordAsa{color:#9aa3b1;font-size:14px;letter-spacing:-2px;text-align:center}
+.reordNum{font-size:12px;font-weight:800;color:#7b8597;text-align:right;font-variant-numeric:tabular-nums}
+.reordFoto{width:40px;height:40px;border-radius:9px;background:#f3f5f8;display:grid;place-items:center;overflow:hidden;color:#6a7382}
+.reordFoto img{width:100%;height:100%;object-fit:cover}
+.reordNom{min-width:0}
+.reordNom b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.reordNom small{font-size:12px;color:#7b8597}
+.reordFlechas{display:flex;gap:4px}
+.reordFlechas button{width:32px;height:32px;border:1px solid #e3e8ef;background:#fff;border-radius:8px;cursor:pointer;color:#2b3442;font-size:11px}
+.reordFlechas button:hover:not(:disabled){background:#f3f5f8}
+.reordFlechas button:disabled{opacity:.35;cursor:default}
+@media (max-width:620px){.reordFila{grid-template-columns:18px 22px 36px minmax(0,1fr) auto;gap:8px}.reordFoto{width:36px;height:36px}}
+.catalogoPage .prodDatos{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.catalogoPage .prodSinFoto{color:#b3bac5;display:grid;place-items:center}
