@@ -5,6 +5,7 @@ import { cargarConfig, configActual, configTablaDisponible, guardarConfig, linea
 import { confirmarEliminacion } from './confirmar'
 import Tiendanube from './Tiendanube'
 import CampoNumero from './CampoNumero'
+import { anotarCopia, diasDesdeUltimaCopia } from './copiaSeguridad'
 
 // Configuración (solo admin): datos de la empresa, textos de presupuestos y
 // documentos, copia de seguridad en Excel y auditoría legible.
@@ -142,13 +143,22 @@ function PresupuestosForm({ habilitado }: { habilitado: boolean }) {
 }
 
 // ---------- Copia de seguridad ----------
+// Tres caminos (en el plan gratuito Supabase no hace backups propios):
+//  · Respaldo automático semanal: la función "respaldo-semanal" guarda todos los
+//    datos cada domingo en un espacio privado de Supabase (los últimos 12).
+//  · Excel: todo en un archivo, para guardar en la compu o en Drive.
+//  · Fotos y archivos: un ZIP con las fotos de obras y productos, comprobantes, etc.
+// Lo que se baja a la compu se anota, para avisar si pasó más de una semana.
 const TABLAS_BACKUP: [string, string][] = [
   ['Clientes', 'Clientes'], ['obras', 'Obras'], ['presupuestos', 'Presupuestos'], ['presupuesto_items', 'Items de presupuestos'],
-  ['adicionales', 'Cambios y adicionales'], ['pagos', 'Cobros'], ['costos', 'Costos y pagos personal'], ['materiales', 'Compras'],
-  ['gastos_generales', 'Gastos fijos'], ['personal', 'Personal'], ['obra_asignaciones', 'Asignaciones'], ['jornales', 'Jornales'],
-  ['obra_avances', 'Avances de obra'], ['productos_servicios', 'Productos y servicios'], ['soluciones', 'Soluciones'],
-  ['recordatorios', 'Agenda'], ['obra_accesos', 'Accesos y claves'],
+  ['presupuesto_notas', 'Notas de presupuestos'], ['adicionales', 'Cambios y adicionales'], ['pagos', 'Cobros'], ['pago_links', 'Links de pago'],
+  ['pago_comprobantes', 'Comprobantes de pago'], ['costos', 'Costos y pagos personal'], ['materiales', 'Compras'],
+  ['gastos_generales', 'Gastos empresa'], ['gastos_personales', 'Gastos personales'], ['personal', 'Personal'], ['obra_asignaciones', 'Asignaciones'],
+  ['jornales', 'Jornales'], ['obra_avances', 'Avances de obra'], ['productos_servicios', 'Productos y servicios'],
+  ['productos_precios_historial', 'Historial de precios'], ['soluciones', 'Soluciones'], ['relevamientos', 'Relevamientos'],
+  ['relevamiento_items', 'Items de relevamientos'], ['recordatorios', 'Agenda'], ['obra_accesos', 'Accesos y claves'],
 ]
+const tamano = (b: number | null) => (b == null ? '' : b > 1e6 ? `${(b / 1e6).toLocaleString('es-AR', { maximumFractionDigits: 1 })} MB` : `${Math.max(1, Math.round(b / 1e3))} KB`)
 
 async function leerTabla(tabla: string) {
   const filas: Record<string, unknown>[] = []
@@ -162,10 +172,36 @@ async function leerTabla(tabla: string) {
   return filas.map((f) => Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v !== null && typeof v === 'object' ? JSON.stringify(v) : v])))
 }
 
+async function funcionRespaldo<T>(accion: string): Promise<T> {
+  const { data, error } = await supabase.functions.invoke('respaldo-semanal', { body: { accion } })
+  if (error) throw new Error('La función "respaldo-semanal" no respondió. ¿Ya la desplegaste en Supabase?')
+  if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error)
+  return data as T
+}
+
+type Respaldo = { nombre: string; bytes: number | null; fecha: string | null; url: string | null }
+
 function CopiaSeguridad() {
   const [progreso, setProgreso] = useState('')
   const [resultado, setResultado] = useState<{ tabla: string; filas: number; error?: boolean }[]>([])
   const [trabajando, setTrabajando] = useState(false)
+  const [respaldos, setRespaldos] = useState<Respaldo[] | null>(null)
+  const [errorAuto, setErrorAuto] = useState('')
+  const [haciendo, setHaciendo] = useState(false)
+  const [zip, setZip] = useState('')
+  const [errorZip, setErrorZip] = useState('')
+  const [dias, setDias] = useState(diasDesdeUltimaCopia())
+
+  async function cargarRespaldos() {
+    setErrorAuto('')
+    try { setRespaldos((await funcionRespaldo<{ respaldos: Respaldo[] }>('listar')).respaldos) } catch (e) { setErrorAuto((e as Error).message); setRespaldos([]) }
+  }
+  useEffect(() => { void cargarRespaldos() }, [])
+
+  async function respaldarAhora() {
+    setHaciendo(true); setErrorAuto('')
+    try { await funcionRespaldo('respaldar'); await cargarRespaldos() } catch (e) { setErrorAuto((e as Error).message) } finally { setHaciendo(false) }
+  }
 
   async function descargar() {
     setTrabajando(true); setResultado([])
@@ -184,24 +220,86 @@ function CopiaSeguridad() {
     }
     const fecha = new Date().toISOString().slice(0, 10)
     XLSX.writeFile(libro, `MOVA-copia-de-seguridad-${fecha}.xlsx`)
+    anotarCopia(); setDias(0)
     setResultado(res); setProgreso(''); setTrabajando(false)
   }
 
+  async function descargarArchivos() {
+    setErrorZip(''); setZip('Buscando fotos y archivos…')
+    try {
+      const { archivos } = await funcionRespaldo<{ archivos: { bucket: string; ruta: string; url: string | null }[] }>('archivos')
+      const { default: JSZip } = await import('jszip')
+      const caja = new JSZip()
+      let hechos = 0, fallas = 0
+      for (const a of archivos) {
+        setZip(`Bajando ${hechos + 1} de ${archivos.length}…`)
+        try {
+          if (!a.url) throw new Error('sin link')
+          const r = await fetch(a.url)
+          if (!r.ok) throw new Error(String(r.status))
+          caja.file(`${a.bucket}/${a.ruta}`, await r.blob())
+        } catch { fallas++ }
+        hechos++
+      }
+      setZip('Armando el ZIP…')
+      const blob = await caja.generateAsync({ type: 'blob' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = `MOVA-fotos-y-archivos-${new Date().toISOString().slice(0, 10)}.zip`
+      link.click()
+      setTimeout(() => URL.revokeObjectURL(link.href), 60000)
+      anotarCopia(); setDias(0)
+      setZip(`✓ ${archivos.length - fallas} archivos descargados${fallas ? ` (${fallas} no se pudieron bajar)` : ''}`)
+    } catch (e) { setErrorZip((e as Error).message); setZip('') }
+  }
+
   return <section className="cfgSeccion">
+    <div className={`cfgUltima ${dias == null || dias > 7 ? 'alerta' : ''}`}>
+      {dias == null ? '⚠ Todavía no descargaste ninguna copia en esta computadora.' : dias === 0 ? '✓ Descargaste una copia hoy.' : dias > 7 ? `⚠ Tu última copia en la compu es de hace ${dias} días. Descargá una nueva.` : `✓ Última copia en la compu: hace ${dias} día${dias === 1 ? '' : 's'}.`}
+    </div>
+
     <div className="cfgBackup">
-      <div className="configIcono">💾</div>
+      <div className="configIcono">🔁</div>
+      <div>
+        <h3>Respaldo automático semanal</h3>
+        <p>Todos los domingos a las 3 de la mañana se guarda una copia de todos los datos en un espacio privado de tu Supabase. Se guardan las últimas 12 (unos 3 meses).</p>
+        {errorAuto && <p className="loginError" style={{ margin: '6px 0 0' }}>{errorAuto}</p>}
+      </div>
+      <button type="button" className="newButton" disabled={haciendo} onClick={() => void respaldarAhora()}>{haciendo ? 'Respaldando…' : '💾 Respaldar ahora'}</button>
+    </div>
+    {respaldos && respaldos.length > 0 && <div className="cfgRespaldos">
+      {respaldos.map((r) => <div key={r.nombre} className="cfgRespaldo">
+        <span>🗂 <b>{r.nombre.replace('MOVA-respaldo-', '').replace('.json', '')}</b> <small>{tamano(r.bytes)}</small></span>
+        {r.url && <a className="editButton" href={r.url} onClick={() => { anotarCopia(); setDias(0) }}>⬇ Descargar</a>}
+      </div>)}
+    </div>}
+    {respaldos && respaldos.length === 0 && !errorAuto && <p className="gestionAyuda">Todavía no hay respaldos automáticos. Tocá "💾 Respaldar ahora" para hacer el primero.</p>}
+
+    <div className="cfgBackup">
+      <div className="configIcono">📊</div>
       <div>
         <h3>Descargar todo en Excel</h3>
-        <p>Un archivo con una hoja por sección: clientes, obras, presupuestos, cobros, compras, personal, agenda y más. Guardalo en tu computadora o en Drive como respaldo.</p>
+        <p>Un archivo con una hoja por sección: clientes, obras, presupuestos, cobros, compras, personal, agenda y más. Guardalo en tu computadora o en Drive.</p>
         <p className="gestionAyuda">⚠ Incluye la hoja "Accesos y claves" con las contraseñas de los clientes: guardá el archivo en un lugar seguro.</p>
       </div>
-      <button type="button" className="newButton" disabled={trabajando} onClick={() => void descargar()}>{trabajando ? progreso || 'Preparando…' : '⬇ Descargar copia'}</button>
+      <button type="button" className="newButton" disabled={trabajando} onClick={() => void descargar()}>{trabajando ? progreso || 'Preparando…' : '⬇ Descargar Excel'}</button>
     </div>
     {resultado.length > 0 && <div className="cfgResultado">
       <strong>✓ Copia descargada</strong>
       <ul>{resultado.map((r) => <li key={r.tabla} className={r.error ? 'err' : ''}>{r.tabla}: {r.error ? 'no se pudo leer (puede que la tabla no exista)' : `${r.filas} fila${r.filas === 1 ? '' : 's'}`}</li>)}</ul>
     </div>}
-    <p className="gestionAyuda">Recomendación: descargá una copia una vez por semana o antes de hacer cambios grandes. Supabase además guarda sus propios respaldos diarios del plan.</p>
+
+    <div className="cfgBackup">
+      <div className="configIcono">📸</div>
+      <div>
+        <h3>Fotos y archivos</h3>
+        <p>Un ZIP con todas las fotos de obras y productos, comprobantes y archivos guardados, ordenados por carpeta.</p>
+        {zip && <p className="gestionAyuda" role="status">{zip}</p>}
+        {errorZip && <p className="loginError" style={{ margin: '6px 0 0' }}>{errorZip}</p>}
+      </div>
+      <button type="button" className="newButton" disabled={!!zip && !zip.startsWith('✓')} onClick={() => void descargarArchivos()}>⬇ Descargar ZIP</button>
+    </div>
+    <p className="gestionAyuda">Recomendación: una vez por semana bajá el Excel (o el último respaldo automático) y el ZIP de fotos, y subilos a Google Drive. Así tenés todo fuera de Supabase.</p>
   </section>
 }
 
