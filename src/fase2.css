@@ -3020,3 +3020,5 @@ button.isFila2:focus-visible{outline:2px solid #e0701a}
 .rpMas{border:0;background:transparent;color:#e0701a;font:inherit;font-weight:800;font-size:13px;cursor:pointer;align-self:flex-start;padding:2px 0}
 .rpNota{margin:0;font-size:12.5px;color:#6a7382}
 .rpAlerta{margin:0;font-size:12.5px;color:#b85a10;background:#fff2e5;border-radius:10px;padding:7px 9px}
+.gtLineas>div.gtSub{padding:3px 0 3px 18px;font-size:12.5px;color:#4b525c}
+.gtLineas>div.gtSub small{padding-left:0}
