@@ -1,4 +1,7 @@
-import InicioSimple, { type Tarea } from './InicioSimple'
+import InicioSimple, { type Tarea, type Balance } from './InicioSimple'
+import Agenda from './Agenda'
+import type { Pedido } from './BuscadorGlobal'
+import type { TareaPH } from './paraHacer'
 import QueMirarHoy, { type DestinoHoy } from './QueMirarHoy'
 import { useEffect, useMemo, useState } from 'react'
 import { listarComprobantesPago, type ComprobantePago } from './pagoLink'
@@ -40,6 +43,10 @@ type Props = {
   onSalir: () => void
   onAbrirObra: (obraId: number) => void
   onAbrirPresupuesto?: (presupuestoId: number) => void
+  // 'balance' = Balance general (antes Inicio); 'tareas' = Para hacer (la Agenda con todo lo pendiente).
+  modo?: 'balance' | 'tareas'
+  pedido?: Pedido | null
+  onPedidoAtendido?: () => void
 }
 
 const mesActual = () => new Date().toISOString().slice(0, 7)
@@ -54,7 +61,7 @@ const num = (x: unknown) => Number(x) || 0
 const redondear = (n: number) => Math.round(n * 100) / 100
 
 
-export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirObra, onAbrirPresupuesto }: Props) {
+export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirObra, onAbrirPresupuesto, modo = 'balance', pedido, onPedidoAtendido }: Props) {
   const verFinanzas = rol === 'admin' || rol === 'contable'
   const verPersonal = verFinanzas || rol === 'encargado'
   const verPresupuestos = verFinanzas
@@ -84,6 +91,10 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
   // Compras a proveedores ya pagadas (salen de la caja como los demás costos).
   const [compras, setCompras] = useState<{ fecha: string; monto: number }[]>([])
   const [jornales, setJornales] = useState<Jornal[]>([])
+  const [comprasSinPagar, setComprasSinPagar] = useState(0)
+  // Para "Para hacer": stock bajo, productos sin costo y último avance de cada obra.
+  const [productos, setProductos] = useState<{ id: number; nombre: string; stock: number; stock_minimo: number; costo: number }[]>([])
+  const [ultimoAvance, setUltimoAvance] = useState<Record<number, string>>({})
 
   useEffect(() => {
     let vigente = true
@@ -104,6 +115,10 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
         supabase.from('jornales').select('obra_id,personal_id,jornada,horas'),
         supabase.from('materiales').select('cantidad,precio_unitario,fecha,pagado'),
       ])
+      const [rPr, rAv] = await Promise.all([
+        supabase.from('productos_servicios').select('id,nombre,tipo,activo,stock,stock_minimo,costo_unitario').eq('tipo', 'producto').eq('activo', true),
+        supabase.from('obra_avances').select('obra_id,fecha').order('fecha', { ascending: false }).limit(2000),
+      ])
       if (!vigente) return
       setObras(rO.error ? [] : (rO.data ?? []) as Obra[])
       setClientes(rC.error ? [] : (rC.data ?? []) as Cliente[])
@@ -116,6 +131,11 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
       setPersonas(rPe.error ? [] : (rPe.data ?? []).map((p) => ({ ...p, costo_dia: p.costo_dia == null ? null : num(p.costo_dia) })) as Persona[])
       setJornales(rJ.error ? [] : (rJ.data ?? []).map((j) => ({ ...j, jornada: num(j.jornada), horas: j.horas == null ? null : num(j.horas) })) as Jornal[])
       setCompras(rM.error ? [] : ((rM.data ?? []) as { cantidad: unknown; precio_unitario: unknown; fecha: string; pagado: boolean | null }[]).filter((m) => m.pagado !== false).map((m) => ({ fecha: m.fecha, monto: num(m.cantidad) * num(m.precio_unitario) })))
+      setComprasSinPagar(rM.error ? 0 : ((rM.data ?? []) as { cantidad: unknown; precio_unitario: unknown; pagado: boolean | null }[]).filter((m) => m.pagado === false).reduce((s, m) => s + num(m.cantidad) * num(m.precio_unitario), 0))
+      setProductos(rPr.error ? [] : ((rPr.data ?? []) as Record<string, unknown>[]).map((x) => ({ id: Number(x.id), nombre: String(x.nombre ?? ''), stock: num(x.stock), stock_minimo: num(x.stock_minimo), costo: num(x.costo_unitario) })))
+      const ult: Record<number, string> = {}
+      for (const a of (rAv.error ? [] : rAv.data ?? []) as { obra_id: number; fecha: string | null }[]) if (a.fecha && !ult[a.obra_id]) ult[a.obra_id] = a.fecha
+      setUltimoAvance(ult)
       setCargando(false)
     }
     void cargar()
@@ -293,6 +313,65 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
   ]
   const [verIA, setVerIA] = useState(false)
 
+  // ---- "Para hacer": lo mismo, con tipo y grupo (atrasado / hoy / esta semana / cuando puedas) ----
+  const tareasPH: TareaPH[] = cargando ? [] : [
+    ...compNuevos.map((c): TareaPH => ({ clave: `cp-${c.id}`, tipo: 'cobro', grupo: 'hoy', icono: '🧾', titulo: 'Revisar comprobante de pago', detalle: `${c.cliente ?? 'Cliente'}${c.titulo ? ` · ${c.titulo}` : ''}`, boton: 'Ver', accion: () => (c.obra_id ? onAbrirObra(c.obra_id) : onNavegar('presupuestos')) })),
+    ...(verFinanzas ? obrasInfo.deudas.filter((dd) => dd.situacion === 'rojo' || dd.faltaAvance + dd.extras > 0.5).map((dd): TareaPH => ({
+      clave: `co-${dd.obra.id}`, tipo: 'cobro', grupo: dd.situacion === 'rojo' ? 'atr' : 'hoy',
+      titulo: `Cobrar ${dd.obra.nombre_obra}`, monto: dd.situacion === 'rojo' ? dd.saldo : dd.faltaAvance + dd.extras,
+      detalle: `${nombreCli(dd.obra.cliente_id)} · ${dd.situacion === 'rojo' ? `terminada, debe ${moneda(dd.saldo)}` : `corresponde ${moneda(dd.faltaAvance + dd.extras)}`}`,
+      boton: 'Cobrar', accion: () => onAbrirObra(dd.obra.id), agendar: `Cobrar ${dd.obra.nombre_obra}`, obra_id: dd.obra.id,
+    })) : []),
+    ...(verPresupuestos ? presupuestos.filter((pr) => pr.estado === 'aceptado' && pr.obra_id == null && (diasDesde(pr.fecha) ?? 999) <= 60).map((pr): TareaPH => ({ clave: `sin-obra-${pr.id}`, tipo: 'pres', grupo: 'hoy', titulo: `Crear la obra de ${pr.titulo}`, detalle: `${nombreCli(pr.cliente_id)} · presupuesto aceptado`, boton: 'Abrir', accion: () => (onAbrirPresupuesto ? onAbrirPresupuesto(pr.id) : onNavegar('presupuestos')) })) : []),
+    ...(verPresupuestos ? borradores.map((pr): TareaPH => {
+      const dias = diasDesde(pr.fecha)
+      return { clave: `b-${pr.id}`, tipo: 'pres', grupo: dias != null && dias >= 3 ? 'atr' : 'hoy', titulo: `Enviar ${pr.titulo}`, detalle: `${nombreCli(pr.cliente_id)} · ${moneda(pr.total)}${dias != null ? ` · armado hace ${dias} día${dias === 1 ? '' : 's'}` : ''}`, boton: 'Enviar', accion: () => (onAbrirPresupuesto ? onAbrirPresupuesto(pr.id) : onNavegar('presupuestos')), agendar: `Enviar presupuesto ${pr.titulo}` }
+    }) : []),
+    ...(verPersonal ? personal.filas.filter((f) => f.debe > 0.5).map((f): TareaPH => ({ clave: `pe-${f.clave}`, tipo: 'personal', grupo: 'hoy', titulo: `Pagarle a ${f.nombre}`, detalle: `${f.obra} · le debés ${moneda(f.debe)}`, monto: f.debe, boton: 'Pagar', accion: () => onAbrirObra(f.obraId), agendar: `Pagarle a ${f.nombre}`, obra_id: f.obraId })) : []),
+    ...obrasInfo.enObservacion.map((o): TareaPH => ({ clave: `ob-${o.id}`, tipo: 'obra', grupo: 'hoy', icono: '🟠', titulo: `Revisar ${o.nombre_obra}`, detalle: `En observación · ${nombreCli(o.cliente_id)}`, boton: 'Revisar', accion: () => onAbrirObra(o.id), obra_id: o.id })),
+    // Obras en curso sin un avance cargado en la última semana: mandarle novedades al cliente.
+    ...obrasInfo.activas.filter((o) => { const u = ultimoAvance[o.id]; return !u || (diasDesde(u) ?? 0) >= 7 }).map((o): TareaPH => {
+      const u = ultimoAvance[o.id]
+      return { clave: `inf-${o.id}`, tipo: 'obra', grupo: 'sem', titulo: `Mandar avance a ${nombreCli(o.cliente_id)}`, detalle: `${o.nombre_obra} · ${u ? `último avance hace ${diasDesde(u)} días` : 'todavía sin avances cargados'}`, boton: 'Redactar', accion: () => onAbrirObra(o.id), agendar: `Mandar informe de avance de ${o.nombre_obra}`, obra_id: o.id }
+    }),
+    ...(verFinanzas && mes.esMesActual ? mes.recurrentesPendientes.map((g, i): TareaPH => ({ clave: `gf-${i}`, tipo: 'gasto', grupo: 'sem', titulo: `Cargar ${g.descripcion || g.categoria || 'gasto fijo'}`, detalle: `Gasto fijo del mes pasado · ${moneda(g.monto)}`, boton: 'Cargar', accion: () => onNavegar('gastos') })) : []),
+    ...(() => {
+      const bajos = productos.filter((x) => x.stock_minimo > 0 && x.stock <= x.stock_minimo).sort((a, b) => a.stock - b.stock)
+      if (!bajos.length) return []
+      return [{ clave: 'stock-bajo', tipo: 'stock' as const, grupo: 'sem' as const, titulo: bajos.length === 1 ? `Reponer ${bajos[0].nombre}` : `Reponer ${bajos.length} productos`, detalle: bajos.slice(0, 3).map((x) => `${x.nombre} (${x.stock})`).join(' · ') + (bajos.length > 3 ? ` y ${bajos.length - 3} más` : ''), boton: 'Ver', accion: () => onNavegar('catalogo'), agendar: 'Comprar productos para reponer stock' }]
+    })(),
+    ...(verFinanzas && productos.some((x) => !(x.costo > 0)) ? [{ clave: 'sin-costo', tipo: 'stock' as const, grupo: 'luego' as const, titulo: `Cargar el costo de ${productos.filter((x) => !(x.costo > 0)).length} producto${productos.filter((x) => !(x.costo > 0)).length === 1 ? '' : 's'}`, detalle: 'Sin costo la ganancia aparece de más', boton: 'Ver', accion: () => onNavegar('catalogo') }] : []),
+    ...(rol === 'admin' && (diasCopia == null || diasCopia > 7) ? [{ clave: 'copia', tipo: 'otro' as const, grupo: 'luego' as const, icono: '💾', titulo: 'Descargar la copia de seguridad', detalle: diasCopia == null ? 'Todavía no guardaste ninguna copia en esta computadora' : `La última copia es de hace ${diasCopia} días`, boton: 'Ir', accion: () => onNavegar('configuracion') }] : []),
+  ]
+
+  // ---- Balance general: caja de los últimos 6 meses, lo que debés y cuánto tardás en cobrar ----
+  const balance: Balance = useMemo(() => {
+    const ym0 = mesActual()
+    const caja = Array.from({ length: 6 }, (_, i) => sumarMeses(ym0, i - 5)).map((ym) => ({
+      ym,
+      entro: pagos.filter((x) => enMes(x.fecha, ym)).reduce((s, x) => s + x.monto, 0),
+      salio: costos.filter((c) => enMes(c.fecha, ym) && c.tipo !== 'gasto_extra').reduce((s, c) => s + c.monto, 0)
+        + compras.filter((c) => enMes(c.fecha, ym)).reduce((s, c) => s + c.monto, 0)
+        + gastos.filter((g) => enMes(g.fecha, ym)).reduce((s, g) => s + g.monto, 0),
+    }))
+    // Días desde que te aceptan el presupuesto hasta que te pagan (promedio por monto, últimos 6 meses).
+    const aceptadaObra: Record<number, string> = {}
+    presupuestos.filter((x) => x.estado === 'aceptado' && x.obra_id != null && x.fecha).forEach((x) => { const o = x.obra_id as number; if (!aceptadaObra[o] || x.fecha! < aceptadaObra[o]) aceptadaObra[o] = x.fecha! })
+    const desde6 = `${sumarMeses(ym0, -5)}-01`
+    let peso = 0, sumaDias = 0
+    pagos.filter((x) => x.fecha >= desde6 && x.obra_id != null && aceptadaObra[x.obra_id]).forEach((x) => {
+      const d = Math.max(0, (Date.parse(x.fecha.slice(0, 10)) - Date.parse(aceptadaObra[x.obra_id as number].slice(0, 10))) / 86400000)
+      sumaDias += d * x.monto; peso += x.monto
+    })
+    return {
+      caja, debePersonal: personal.debe, comprasSinPagar,
+      fijosMes: mes.recurrentesMes + mes.recurrentesMonto,
+      diasCobro: peso > 0 ? Math.round(sumaDias / peso) : null,
+    }
+  }, [pagos, costos, compras, gastos, presupuestos, personal.debe, comprasSinPagar, mes.recurrentesMes, mes.recurrentesMonto])
+
+  if (modo === 'tareas') return <Agenda pedido={pedido} onPedidoAtendido={onPedidoAtendido} tareas={tareasPH} cargandoTareas={cargando} porCobrar={verFinanzas ? obrasInfo.porCobrar : null} />
+
   return <div className="fase2Dashboard homeCompacto">
     {cargando ? <p>Cargando inicio…</p> : <InicioSimple
       nombre={nombre}
@@ -307,6 +386,10 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
       obrasActivas={obrasInfo.activas}
       debePersonal={verPersonal ? personal.filas.filter((f) => f.debe > 0.5) : []}
       tareas={tareas}
+      tareasPH={tareasPH}
+      balance={balance}
+      onParaHacer={() => onNavegar('agenda')}
+      agendaHoy={agendaHoy.length}
       nombreCli={nombreCli}
       onAbrirObra={onAbrirObra}
       onAbrirPresupuesto={onAbrirPresupuesto}

@@ -6,11 +6,11 @@ export const ROLES: Record<Rol, string> = {
 }
 export const ROLES_VALIDOS: Rol[] = ['admin', 'encargado', 'auxiliar', 'contable']
 
-// Inicio reúne el resumen y lo que antes era el Tablero (balance, cobranzas,
-// personal, gastos fijos e inventario), cada cosa en su pestaña.
+// "Para hacer" (vista agenda) junta la agenda con todo lo pendiente; "Balance
+// general" (vista dashboard) es el resumen de la plata de la empresa.
 export const NAVEGACION = [
-  ['dashboard', 'principal', 'Inicio'],
-  ['agenda', 'principal', 'Agenda'],
+  ['agenda', 'principal', 'Para hacer'],
+  ['dashboard', 'principal', 'Balance general'],
   ['clientes', 'comercial', 'Clientes'],
   ['relevamientos', 'comercial', 'Relevamientos'],
   // Presupuestos y Obras se ven juntos en "Trabajos" (un solo ítem del menú).
