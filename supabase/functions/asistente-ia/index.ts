@@ -227,6 +227,12 @@ const SISTEMA_NOMBRE_CLIENTE = `Escribís cómo ve el cliente un producto o serv
 - Ejemplos: "Sistema WiFi mesh", "Cámara de seguridad exterior", "Interruptor inteligente", "Kit de riego automático", "Instalación y configuración".
 - Las 3 opciones distintas entre sí, en español rioplatense, con mayúscula inicial y sin punto final ni emojis.`
 
+const SISTEMA_DESCRIPCION_WEB = `Escribís la descripción de un producto para la tienda online de MOVA Tecnología Smart (www.movaelectronica.com.ar, Mendoza, Argentina): domótica, WiFi, cámaras, alarmas, riego y electricidad.
+- Para el cliente final: clara, vendedora pero honesta, en español rioplatense (vos).
+- Estructura: 1 párrafo corto que diga qué es y para qué sirve; después una línea en blanco y 4 a 7 características principales, cada una en su renglón empezando con "• "; al final, en otro párrafo, una línea sobre compatibilidad o qué incluye si se sabe, y que MOVA también lo instala.
+- Solo datos que se deduzcan del nombre, marca, modelo o descripción dados, o que sean conocidos de ese modelo. No inventes medidas, garantías, precios ni stock. Si un dato no es seguro, no lo pongas.
+- Texto plano: sin HTML, sin markdown (nada de ** ni #), sin emojis, sin el precio.`
+
 const SISTEMA_INFORME = `Escribís, para MOVA Tecnología Smart (Mendoza, Argentina), el mensaje de WhatsApp con el avance de una obra para mandarle al cliente.
 - Español rioplatense con voseo, claro y profesional. Saludo con el primer nombre del cliente.
 - Contá lo que se hizo en el período (según los AVANCES), en qué porcentaje está la obra y qué sigue.
@@ -496,6 +502,24 @@ Deno.serve(async (req) => {
       const tipoProd = cuerpo.tipo === 'servicio' ? 'servicio' : 'producto'
       const r = await gemini(clave, `Proponé 3 nombres para que el cliente vea este ${tipoProd} en el presupuesto.\nNombre técnico: "${nombre}"`, lista({ nombre: { type: 'STRING' } }), SISTEMA_NOMBRE_CLIENTE, 0.4) as { opciones?: { nombre: string }[] }
       return responder({ opciones: (r.opciones ?? []).map((o) => recorte(o.nombre, 60)).filter(Boolean).slice(0, 3) })
+    }
+    if (accion === 'descripcion_web') {
+      // Descripción del producto para la tienda web (Productos en página).
+      const nombre = recorte(cuerpo.nombre, 200)
+      if (!nombre) return responder({ error: 'Falta el nombre del producto.' }, 400)
+      const datos = [
+        `Nombre en la web: ${nombre}`,
+        cuerpo.nombre_catalogo ? `Nombre en el catálogo: ${recorte(cuerpo.nombre_catalogo, 200)}` : '',
+        cuerpo.marca ? `Marca o proveedor: ${recorte(cuerpo.marca, 80)}` : '',
+        cuerpo.codigo ? `Código/SKU: ${recorte(cuerpo.codigo, 60)}` : '',
+        cuerpo.categoria ? `Categoría: ${recorte(cuerpo.categoria, 80)}` : '',
+        cuerpo.actual ? `Descripción actual (mejorala, conservando los datos correctos):\n${recorte(cuerpo.actual, 3000)}` : '',
+        cuerpo.notas ? `Detalle interno del producto (usalo solo como información):\n${recorte(cuerpo.notas, 1500)}` : '',
+      ].filter(Boolean).join('\n')
+      const r = await gemini(clave, `Escribí la descripción para la tienda web de este producto.\n${datos}`, { type: 'OBJECT', properties: { descripcion: { type: 'STRING' } }, required: ['descripcion'] }, SISTEMA_DESCRIPCION_WEB, 0.5) as { descripcion?: string }
+      const descripcion = recorte(r.descripcion, 4000).replace(/\*\*/g, '')
+      if (!descripcion) return responder({ error: 'La IA no escribió la descripción. Probá de nuevo.' }, 502)
+      return responder({ descripcion })
     }
     if (accion === 'ordenar_catalogo') {
       const ids = (Array.isArray(cuerpo.ids) ? cuerpo.ids : []).map(Number).filter(Boolean).slice(0, 40)
