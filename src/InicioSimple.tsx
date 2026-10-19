@@ -332,6 +332,7 @@ export default function InicioSimple(p: Props) {
     </div>
 
     {p.verFinanzas && <section className="isCard" aria-label="Resumen de la plata">
+      <div className="isIzq">
       <div className="ipPeriodo" role="tablist" aria-label="Período">
         {([[6, '6 meses'], [12, '12 meses'], [0, 'Este año']] as [Rango, string][]).map(([v, t]) => (
           <button key={v} type="button" role="tab" aria-selected={rango === v} className={rango === v ? 'on' : ''} onClick={() => { setRango(v); setSel(ymHoy) }}>{t}</button>
@@ -367,6 +368,8 @@ export default function InicioSimple(p: Props) {
         {SERIES.map((s) => <button key={s.k} type="button" aria-pressed={!ocultas.has(s.k)} className={ocultas.has(s.k) ? 'off' : ''} onClick={() => alternar(s.k)}><i style={{ background: s.c }} />{s.t}</button>)}
       </div>
 
+      </div>
+      <div className="isDer">
       <p className="isSub">Números de {nombreMes} · tocá uno para ver el detalle</p>
       <div className="isNums">
         {SERIES.map((s) => {
@@ -382,6 +385,7 @@ export default function InicioSimple(p: Props) {
             <small>{s.t}</small><b className={s.k === 'ganancia' ? (v < 0 ? 'r' : 'v') : v < 0 ? 'r' : ''}>{resta ? '− ' : ''}{pesos(v)}</b><span>{sub}</span>
           </button>
         })}
+      </div>
       </div>
     </section>}
 
