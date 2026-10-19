@@ -52,7 +52,7 @@ type Situacion = {
 type Pestana = 'equipo' | 'liquidacion' | 'movimientos'
 
 const MODALIDADES: Record<string, string> = {
-  por_dia: 'Por día', por_hora: 'Por hora', por_obra: 'Por acuerdo', porcentaje: 'Por porcentaje', por_etapa: 'Por etapa',
+  por_dia: 'Por día', por_hora: 'Por hora', por_obra: 'Por acuerdo', porcentaje: 'Por porcentaje', por_etapa: 'Por etapa', libre: 'Por pagos',
 }
 const TIPOS: Record<string, string> = { obrero: 'Obrero', auxiliar: 'Auxiliar', terciarizado: 'Tercerizado' }
 const num = (x: unknown) => Number(x) || 0
@@ -129,7 +129,8 @@ function situacionDe(d: Datos, persona: Persona, desdeSemana: string): Situacion
   const susJornales = d.jornales.filter((j) => j.personal_id === persona.id)
   return {
     persona, lineas, sueltos, saldoJornal, saldoAcuerdo,
-    saldo: redondear(saldoJornal + saldoAcuerdo - sueltos),
+    // "Por pagos": sin monto fijo, nunca se le debe ni se le pagó de más.
+    saldo: persona.modalidad_pago === 'libre' ? 0 : redondear(saldoJornal + saldoAcuerdo - sueltos),
     diasMes: susJornales.filter((j) => j.fecha.slice(0, 7) === mes).reduce((s, j) => s + j.jornada, 0),
     diasSemana: susJornales.filter((j) => j.fecha >= desdeSemana && j.fecha <= sumarDias(desdeSemana, 6)).reduce((s, j) => s + j.jornada, 0),
     pagadoMes: redondear(suyos.filter((c) => c.fecha.slice(0, 7) === mes).reduce((s, c) => s + c.monto, 0)),
@@ -248,8 +249,13 @@ function Personal({ pedido, onPedidoAtendido }: { pedido?: Pedido | null; onPedi
           </div>
         </div>
         {visibles.length === 0 ? <div className="agVacio">{verBajas ? 'No hay personas dadas de baja.' : 'Sin personal cargado. Agregá a alguien con "+ Nueva persona".'}</div> : (
+          <div className="peGrupos">{([
+            ['acuerdo', '🤝 Por acuerdo', 'Monto por obra · se le paga según el avance', visibles.filter((x) => x.persona.modalidad_pago !== 'libre')],
+            ['libre', '💵 Por pagos', 'Sin monto fijo · vas cargando lo que le pagás', visibles.filter((x) => x.persona.modalidad_pago === 'libre')],
+          ] as const).filter((g) => g[3].length > 0).map(([clave, titulo, ayuda, lista]) => <section key={clave} className="peGrupo">
+          <div className="peGrupoCab"><b>{titulo}</b><small>{ayuda}</small><span>{lista.length}</span></div>
           <div className="peGrid">
-            {visibles.map((s) => {
+            {lista.map((s) => {
               const p = s.persona
               const seguro = estadoSeguro(p)
               const conJornal = s.lineas.some((l) => l.porJornal)
@@ -259,12 +265,14 @@ function Personal({ pedido, onPedidoAtendido }: { pedido?: Pedido | null; onPedi
                   <div className="peNombre">
                     <strong>{nombrePersona(p)}</strong>
                     <small>{[p.especialidad, TIPOS[p.tipo] ?? p.tipo].filter(Boolean).join(' · ')}</small>
-                    <small>{esJornal(p.modalidad_pago) ? (p.costo_dia ? `${moneda(p.costo_dia)} por ${p.modalidad_pago === 'por_hora' ? 'hora' : 'día'}` : 'Falta el valor por día') : 'Por acuerdo en cada obra'}</small>
+                    <small>{esJornal(p.modalidad_pago) ? (p.costo_dia ? `${moneda(p.costo_dia)} por ${p.modalidad_pago === 'por_hora' ? 'hora' : 'día'}` : 'Falta el valor por día') : p.modalidad_pago === 'libre' ? 'Por pagos · sin monto fijo' : 'Por acuerdo en cada obra'}</small>
                   </div>
-                  <div className={`peSaldo ${s.saldo > 1 ? 'debe' : s.saldo < -1 ? 'adelantado' : 'ok'}`}>
-                    <span>{s.saldo > 1 ? 'Le debés' : s.saldo < -1 ? 'Pagado de más' : 'Al día'}</span>
-                    <strong>{Math.abs(s.saldo) > 1 ? moneda(Math.abs(s.saldo)) : '✓'}</strong>
-                  </div>
+                  {p.modalidad_pago === 'libre'
+                    ? <div className="peSaldo libre"><span>Pagado este mes</span><strong>{moneda(s.pagadoMes)}</strong></div>
+                    : <div className={`peSaldo ${s.saldo > 1 ? 'debe' : s.saldo < -1 ? 'adelantado' : 'ok'}`}>
+                      <span>{s.saldo > 1 ? 'Le debés' : s.saldo < -1 ? 'Pagado de más' : 'Al día'}</span>
+                      <strong>{Math.abs(s.saldo) > 1 ? moneda(Math.abs(s.saldo)) : '✓'}</strong>
+                    </div>}
                 </div>
                 {seguro && <p className={`peSeguro ${seguro.clase}`}>⚠ {seguro.texto}</p>}
                 <div className="peDatos">
@@ -274,7 +282,7 @@ function Personal({ pedido, onPedidoAtendido }: { pedido?: Pedido | null; onPedi
                 <div className="peObras">
                   {s.lineas.length === 0 ? <em>Sin obras asignadas</em> : s.lineas.map((l) => (
                     <span key={l.asig.id} className={l.obra?.activo === false ? 'inactiva' : ''} title={`${MODALIDADES[l.asig.modalidad ?? ''] ?? l.asig.modalidad} · ${l.calc.diferencia > 0 ? `le corresponden ${moneda(l.calc.diferencia)}` : 'al día'}`}>
-                      {l.obra?.nombre_obra ?? 'Obra'}{l.porJornal ? ' · jornal' : ' · acuerdo'}
+                      {l.obra?.nombre_obra ?? 'Obra'}{l.porJornal ? ' · jornal' : l.asig.modalidad === 'libre' ? ' · por pagos' : ' · acuerdo'}
                     </span>
                   ))}
                 </div>
@@ -302,6 +310,7 @@ function Personal({ pedido, onPedidoAtendido }: { pedido?: Pedido | null; onPedi
               </article>
             })}
           </div>
+          </section>)}</div>
         )}
       </>}
 
@@ -683,7 +692,7 @@ function FormularioPersona({ persona, conDatosPersonales, onCancelar, onGuardado
   const editando = !!persona
   const [f, setF] = useState({
     nombre: persona?.nombre ?? '', apellido: persona?.apellido ?? '', tipo: persona?.tipo ?? 'obrero',
-    especialidad: persona?.especialidad ?? '', modalidad_pago: persona?.modalidad_pago ?? 'por_dia',
+    especialidad: persona?.especialidad ?? '', modalidad_pago: persona?.modalidad_pago ?? 'libre',
     telefono: persona?.telefono ?? '', costo_dia: persona?.costo_dia != null ? String(persona.costo_dia) : '',
     documento: persona?.documento ?? '', cuil: persona?.cuil ?? '', contacto_emergencia: persona?.contacto_emergencia ?? '',
     seguro: persona?.seguro ?? '', seguro_vencimiento: persona?.seguro_vencimiento?.slice(0, 10) ?? '', notas: persona?.notas ?? '',
@@ -714,7 +723,7 @@ function FormularioPersona({ persona, conDatosPersonales, onCancelar, onGuardado
         <label>Teléfono (WhatsApp)<input value={f.telefono} onChange={(e) => set('telefono', e.target.value)} placeholder="Ej.: 261 555 7970" /></label>
         {porDia && <label>{f.modalidad_pago === 'por_hora' ? 'Valor por hora *' : 'Valor por día (jornal) *'}<CampoNumero min="0" value={f.costo_dia} onChange={(e) => set('costo_dia', e.target.value)} /></label>}
       </div>
-      <p className="gestionAyuda">{porDia ? 'Se le paga por los días que cargues en el Parte del día: días × valor del día. Se liquida al cierre de la semana.' : 'El monto se acuerda en cada obra al asignarlo, y le corresponde según el avance de la obra. Le pagás cuando quieras.'}</p>
+      <p className="gestionAyuda">{porDia ? 'Se le paga por los días que cargues en el Parte del día: días × valor del día. Se liquida al cierre de la semana.' : f.modalidad_pago === 'libre' ? 'Sin monto fijo: vas cargando lo que le pagás (💵 Pagar) y queda el registro por obra. Nunca figura como deuda.' : 'El monto se acuerda en cada obra al asignarlo, y le corresponde según el avance de la obra. Le pagás cuando quieras.'}</p>
       <details className="peDetalles" open={!!(persona?.documento || persona?.seguro_vencimiento)}>
         <summary>Datos personales y seguro (para ingresar a obras)</summary>
         {!conDatosPersonales ? <p className="usFalta">Para guardar DNI, CUIL, contacto de emergencia y ART, corré el SQL de Personal (fase 18) en Supabase.</p> : <div className="formGrid">
@@ -739,9 +748,9 @@ function FormularioAsignacion({ persona, obras, asignadas, onCancelar, onGuardad
   const libres = obras.filter((o) => !asignadas.includes(o.id))
   async function guardar(e: FormEvent) {
     e.preventDefault(); setError('')
-    if (!(Number(valor) > 0)) { setError(modalidad === 'por_obra' ? 'Ingresá el monto acordado para esta obra.' : 'Ingresá el valor por día.'); return }
+    if (modalidad !== 'libre' && !(Number(valor) > 0)) { setError(modalidad === 'por_obra' ? 'Ingresá el monto acordado para esta obra.' : 'Ingresá el valor por día.'); return }
     setGuardando(true)
-    const r = await supabase.from('obra_asignaciones').insert({ obra_id: Number(obraId), personal_id: persona.id, rol_en_obra: rol.trim() || null, modalidad, valor_acordado: Number(valor) })
+    const r = await supabase.from('obra_asignaciones').insert({ obra_id: Number(obraId), personal_id: persona.id, rol_en_obra: rol.trim() || null, modalidad, valor_acordado: modalidad === 'libre' ? 0 : Number(valor) })
     if (r.error) { console.error(r.error); setError('No se pudo asignar.'); setGuardando(false); return }
     onGuardado()
   }
@@ -749,10 +758,10 @@ function FormularioAsignacion({ persona, obras, asignadas, onCancelar, onGuardad
     <form className="clienteForm" onSubmit={guardar}><div className="formGrid">
       <label>Obra *<select required value={obraId} onChange={(e) => setObraId(e.target.value)}><option value="">{libres.length ? 'Seleccionar obra' : 'Ya está en todas las obras activas'}</option>{libres.map((o) => <option key={o.id} value={o.id}>{o.nombre_obra}</option>)}</select></label>
       <label>Cómo se le paga<select value={modalidad} onChange={(e) => { setModalidad(e.target.value); setValor(e.target.value !== 'por_obra' && persona.costo_dia ? String(persona.costo_dia) : '') }}>{MODALIDADES_PRINCIPALES.map(([v, t]) => <option key={v} value={v}>{t}</option>)}{!MODALIDADES_PRINCIPALES.some(([v]) => v === modalidad) && <option value={modalidad}>{MODALIDADES[modalidad] ?? modalidad}</option>}</select></label>
-      <label>{modalidad === 'por_obra' ? 'Monto acordado por esta obra *' : modalidad === 'por_hora' ? 'Valor por hora *' : 'Valor por día (jornal) *'}<CampoNumero min="0" required value={valor} onChange={(e) => setValor(e.target.value)} /></label>
+      {modalidad !== 'libre' && <label>{modalidad === 'por_obra' ? 'Monto acordado por esta obra *' : modalidad === 'por_hora' ? 'Valor por hora *' : 'Valor por día (jornal) *'}<CampoNumero min="0" required value={valor} onChange={(e) => setValor(e.target.value)} /></label>}
       <label>Función en la obra<input value={rol} onChange={(e) => setRol(e.target.value)} placeholder="Ej.: Instalador" /></label>
     </div>
-      <p className="gestionAyuda">{modalidad === 'por_obra' ? 'Le corresponde el monto acordado × el % de avance de la obra.' : 'Le corresponde lo que cargues en el Parte del día × el valor del día.'}{asignadas.length > 0 ? ` Ya está en ${asignadas.length} obra(s); para cambiar un valor, hacelo desde la ficha de la obra.` : ''}</p>
+      <p className="gestionAyuda">{modalidad === 'por_obra' ? 'Le corresponde el monto acordado × el % de avance de la obra.' : modalidad === 'libre' ? 'Sin monto fijo: en esta obra le corresponde lo que le vayas pagando.' : 'Le corresponde lo que cargues en el Parte del día × el valor del día.'}{asignadas.length > 0 ? ` Ya está en ${asignadas.length} obra(s); para cambiar un valor, hacelo desde la ficha de la obra.` : ''}</p>
       {error && <p className="loginError">{error}</p>}
       <div className="formActions"><button type="button" className="cancelButton" onClick={onCancelar}>Cancelar</button><button className="newButton" disabled={guardando || !libres.length}>{guardando ? 'Guardando...' : 'Asignar'}</button></div>
     </form></div></div>

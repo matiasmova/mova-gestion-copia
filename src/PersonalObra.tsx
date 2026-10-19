@@ -31,7 +31,7 @@ type CostoPersonal = { id: number; personal_id: number | null; monto: number; fe
 type Jornal = { id: number; personal_id: number | null; fecha: string; jornada: number; horas: number | null; observaciones: string | null }
 
 const MODALIDADES: Record<string, string> = {
-  por_dia: 'Por día', por_hora: 'Por hora', por_obra: 'Por obra', porcentaje: 'Por porcentaje', por_etapa: 'Por etapa',
+  por_dia: 'Por día', por_hora: 'Por hora', por_obra: 'Por acuerdo', porcentaje: 'Por porcentaje', por_etapa: 'Por etapa', libre: 'Por pagos',
 }
 
 // Qué significa "valor acordado" según la modalidad.
@@ -48,11 +48,13 @@ const AYUDA_MODALIDAD: Record<string, string> = {
   por_obra: 'Le corresponde el monto acordado × el % de avance de la obra.',
   por_etapa: 'Le corresponde el valor total × el % de avance de la obra.',
   porcentaje: 'Le corresponde ese % del valor de la obra × el % de avance.',
+  libre: 'Sin monto fijo: le corresponde lo que le vayas pagando (con 💵 Pago). Nunca figura como deuda.',
 }
 const nombreDe = (p?: Persona) => (p ? `${p.nombre} ${p.apellido ?? ''}`.trim() : 'Persona')
 
 // Texto corto con la condición pactada.
 function textoCondicion(modalidad: string, valor: number, total: number | null, valorObra: number) {
+  if (modalidad === 'libre') return 'Lo que le pagues'
   if (modalidad === 'por_dia') return valor > 0 ? `${moneda(valor)} por día` : 'Valor por día de la ficha'
   if (modalidad === 'por_hora') return valor > 0 ? `${moneda(valor)} por hora` : 'Sin valor por hora'
   if (modalidad === 'porcentaje') return `${valor.toLocaleString('es-AR')}% de ${moneda(valorObra)} = ${moneda(total ?? 0)}`
@@ -391,7 +393,7 @@ function FormAsignar({ obraId, personas, asignacion, nombrePersona, onCancelar, 
   async function guardar(e: FormEvent) {
     e.preventDefault(); setError('')
     if (!f.personal_id) { setError('Elegí una persona.'); return }
-    if (!(Number(f.valor_acordado) > 0)) { setError(f.modalidad === 'por_obra' || f.modalidad === 'por_etapa' ? 'Ingresá el monto acordado para esta obra.' : f.modalidad === 'porcentaje' ? 'Ingresá el porcentaje.' : 'Ingresá el valor por día.'); return }
+    if (f.modalidad !== 'libre' && !(Number(f.valor_acordado) > 0)) { setError(f.modalidad === 'por_obra' || f.modalidad === 'por_etapa' ? 'Ingresá el monto acordado para esta obra.' : f.modalidad === 'porcentaje' ? 'Ingresá el porcentaje.' : 'Ingresá el valor por día.'); return }
     if (f.modalidad === 'porcentaje' && Number(f.valor_acordado) > 100) { setError('El porcentaje no puede ser mayor que 100.'); return }
     setGuardando(true)
     const datos = {
@@ -411,9 +413,9 @@ function FormAsignar({ obraId, personas, asignacion, nombrePersona, onCancelar, 
       <div className="formGrid">
         {editando
           ? <label>Persona<input value={nombrePersona ?? ''} disabled /></label>
-          : <label>Persona *<select required value={f.personal_id} onChange={(e) => elegirPersona(e.target.value)}><option value="">Seleccionar</option>{personas.map((p) => <option key={p.id} value={p.id}>{nombreDe(p)}{p.especialidad ? ` · ${p.especialidad}` : ''} · {modalidadDePersona(p.modalidad_pago) === 'por_obra' ? 'por acuerdo' : 'por día'}</option>)}</select></label>}
+          : <label>Persona *<select required value={f.personal_id} onChange={(e) => elegirPersona(e.target.value)}><option value="">Seleccionar</option>{personas.map((p) => <option key={p.id} value={p.id}>{nombreDe(p)}{p.especialidad ? ` · ${p.especialidad}` : ''} · {({ por_obra: 'por acuerdo', libre: 'por pagos' } as Record<string, string>)[modalidadDePersona(p.modalidad_pago)] ?? 'por día'}</option>)}</select></label>}
         <label>Cómo se le paga<select value={f.modalidad} onChange={(e) => cambiarModalidad(e.target.value)}>{MODALIDADES_PRINCIPALES.map(([v, t]) => <option key={v} value={v}>{t}</option>)}{!MODALIDADES_PRINCIPALES.some(([v]) => v === f.modalidad) && <option value={f.modalidad}>{MODALIDADES[f.modalidad] ?? f.modalidad}</option>}</select></label>
-        <label>{f.modalidad === 'por_obra' ? 'Monto acordado por esta obra *' : f.modalidad === 'por_dia' ? 'Valor por día (jornal) *' : `${ETIQUETA_VALOR[f.modalidad] ?? 'Valor acordado'} *`}<CampoNumero min="0" max={f.modalidad === 'porcentaje' ? 100 : undefined} value={f.valor_acordado} onChange={(e) => set('valor_acordado', e.target.value)} /></label>
+        {f.modalidad !== 'libre' && <label>{f.modalidad === 'por_obra' ? 'Monto acordado por esta obra *' : f.modalidad === 'por_dia' ? 'Valor por día (jornal) *' : `${ETIQUETA_VALOR[f.modalidad] ?? 'Valor acordado'} *`}<CampoNumero min="0" max={f.modalidad === 'porcentaje' ? 100 : undefined} value={f.valor_acordado} onChange={(e) => set('valor_acordado', e.target.value)} /></label>}
         <label>Función en la obra<input value={f.rol_en_obra} onChange={(e) => set('rol_en_obra', e.target.value)} placeholder="Ej.: Instalador" /></label>
         <label className="adicAncho">Notas<input value={f.notas} onChange={(e) => set('notas', e.target.value)} /></label>
       </div>

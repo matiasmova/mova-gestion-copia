@@ -71,7 +71,10 @@ export function calcularPersona(
   let totalContrato: number | null = null
   let faltaValor = false
 
-  if (modalidad === 'por_dia') {
+  if (modalidad === 'libre') {
+    // Por pagos: no hay monto fijo; lo que le corresponde es lo que le pagaste.
+    devengado = pagado
+  } else if (modalidad === 'por_dia') {
     const valorDia = base > 0 ? base : Number(persona?.costo_dia) || 0
     faltaValor = valorDia === 0
     devengado = jornadas * valorDia
@@ -109,14 +112,16 @@ export function calcularPersona(
   }
 }
 
-// Las dos formas de contratar: por acuerdo (monto por obra, se paga según el
-// avance) o por día (se paga por los jornales cargados). Las demás modalidades
-// (por hora, por etapa, porcentaje) se siguen calculando si ya estaban cargadas.
+// Las dos formas de trabajar con el personal:
+//  · Por acuerdo: un monto por obra que se le paga según el avance.
+//  · Por pagos: sin monto fijo; se carga lo que se le paga y nunca "se le debe".
+// Las demás modalidades (por día, por hora, por etapa, porcentaje) se siguen
+// calculando si ya estaban cargadas.
 export const MODALIDADES_PRINCIPALES: [string, string][] = [
-  ['por_obra', 'Por acuerdo (monto por obra)'],
-  ['por_dia', 'Por día (jornal)'],
+  ['por_obra', 'Por acuerdo (monto por obra, según el avance)'],
+  ['libre', 'Por pagos (sin monto fijo)'],
 ]
 
 // Modalidad con la que se asigna a una persona según su ficha.
 export const modalidadDePersona = (modalidadPago: string | null | undefined) =>
-  modalidadPago === 'por_dia' || modalidadPago === 'por_hora' ? modalidadPago : 'por_obra'
+  modalidadPago === 'por_dia' || modalidadPago === 'por_hora' || modalidadPago === 'libre' ? modalidadPago : 'por_obra'
