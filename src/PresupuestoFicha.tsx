@@ -424,6 +424,7 @@ export default function PresupuestoFicha({
         presupuesto={{ id: presupuesto.id, titulo: presupuesto.titulo, estado: presupuesto.estado, fecha: presupuesto.fecha, validez_dias: presupuesto.validez_dias, descuento: Number(presupuesto.descuento) || 0, items: presupuesto.items }}
         cliente={cliente}
         obra={presupuesto.obra_id != null ? obra : null}
+        obraId={presupuesto.obra_id ?? null}
         modoInicial={presupuesto.estado === 'borrador' ? 'edit' : 'ver'}
         estado={estadoVivo}
         acciones={acciones}
@@ -620,6 +621,7 @@ export default function PresupuestoFicha({
               presupuesto={{ id: presupuesto.id, titulo: presupuesto.titulo, estado: presupuesto.estado, fecha: presupuesto.fecha, validez_dias: presupuesto.validez_dias, descuento: Number(presupuesto.descuento) || 0, items: presupuesto.items }}
               cliente={cliente}
               obra={presupuesto.obra_id != null ? obra : null}
+        obraId={presupuesto.obra_id ?? null}
               modoInicial={enVivo === 'ver' ? 'ver' : 'edit'}
               onCerrar={() => { setEnVivo(false); setReintento((v) => v + 1); onEditadoEnVivo?.() }}
               onEditorCompleto={() => { setEnVivo(false); onEditadoEnVivo?.(); onEditar() }}

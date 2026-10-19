@@ -2966,3 +2966,57 @@ button.isFila2:focus-visible{outline:2px solid #e0701a}
 .isVacio{margin:0;font-size:13px;color:#6a7382}
 .isIr{align-self:flex-start;border:0;background:transparent;color:#e0701a;font:inherit;font-weight:800;font-size:13.5px;cursor:pointer;padding:2px 0}
 @media (prefers-reduced-motion:reduce){.isPto{transition:none}.isHoja{animation:none}}
+
+/* ---------- Vas a ganar (cuenta del trabajo) ---------- */
+.gtCaja{background:#fff;border:1px solid #e3efe8;border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:9px;margin:4px 0 10px}
+.gtCab{all:unset;cursor:pointer;display:flex;align-items:center;gap:10px}
+.gtCab:focus-visible{outline:2px solid #e0701a}
+.gtCab>span{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.gtCab small{font-size:10.5px;font-weight:800;letter-spacing:.07em;color:#6a7382}
+.gtCab b{font-size:24px;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.gtCab em{font-style:normal;font-size:12.5px;color:#6a7382}
+.gtCab>i{font-style:normal;color:#6a7382;font-size:14px}
+.gtCaja .v{color:#1d9a5b}.gtCaja .r{color:#cf4b37}
+.gtBarra{display:flex;height:10px;border-radius:999px;overflow:hidden;background:#f1f3f5;gap:2px}
+.gtBarra i{display:block;height:100%}
+.gtAviso{border:0;background:#fff2e5;color:#b85a10;border-radius:10px;padding:8px 10px;font:inherit;font-size:12.5px;font-weight:700;text-align:left;cursor:pointer}
+.gtLineas{display:flex;flex-direction:column}
+.gtLineas>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;font-variant-numeric:tabular-nums;font-size:13.5px}
+.gtLineas>div>span{display:flex;flex-wrap:wrap;align-items:center;gap:0 8px;min-width:0}
+.gtLineas>div>span i{width:10px;height:10px;border-radius:3px;flex:none}
+.gtLineas small{flex-basis:100%;padding-left:18px;color:#6a7382;font-size:12px}
+.gtLineas b{white-space:nowrap}
+.gtLineas .tot{border-top:1px dashed #e4e7eb;margin-top:3px;padding-top:9px;font-weight:800;font-size:15px}
+.gtLineas .tot b{font-size:18px}
+.gtCampo{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#f5f6f8;border-radius:12px;padding:8px 10px}
+.gtCampo>span{display:flex;flex-direction:column;min-width:0}
+.gtCampo b{font-size:13.5px}
+.gtCampo small{font-size:12px;color:#6a7382}
+.gtCampo input{width:130px;border:1px solid #e4e7eb;border-radius:9px;padding:8px 9px;font:inherit;font-weight:800;text-align:right;background:#fff}
+.gtNota{margin:0;font-size:12.5px;color:#6a7382}
+.gtAlerta{margin:0;font-size:12.5px;color:#b85a10;background:#fff2e5;border-radius:10px;padding:7px 9px}
+
+/* ---------- Resumen de productos y servicios ---------- */
+.rpCaja{background:#fff;border-radius:18px;padding:12px;display:flex;flex-direction:column;gap:10px;margin-bottom:12px;box-shadow:0 1px 2px rgba(19,23,29,.04),0 8px 24px -16px rgba(19,23,29,.25)}
+.rpSeg{display:flex;background:#f1f3f5;border-radius:12px;padding:3px;gap:2px}
+.rpSeg button{flex:1;border:0;background:transparent;border-radius:9px;padding:9px;font:inherit;font-weight:800;font-size:13.5px;color:#6a7382;cursor:pointer}
+.rpSeg button.on{background:#fff;color:#13171d;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.rpKpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.rpKpis>div{background:#f5f6f8;border-radius:13px;padding:10px 11px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.rpKpis small{font-size:11.5px;font-weight:700;color:#6a7382}
+.rpKpis b{font-size:19px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.rpKpis span{font-size:11.5px;color:#6a7382}
+.rpKpis .gan{background:#e7f6ee;grid-column:1/-1}.rpKpis .gan b{color:#1d9a5b}
+.rpCaja .v{color:#1d9a5b}.rpCaja .r{color:#cf4b37}
+.rpLista{display:flex;flex-direction:column;gap:6px}
+.rpFila{display:flex;align-items:center;gap:10px;background:#f5f6f8;border-radius:12px;padding:8px 10px}
+.rpFoto{width:36px;height:36px;border-radius:10px;background:#fff;display:grid;place-items:center;font-size:17px;flex:none;overflow:hidden}
+.rpFoto img{width:100%;height:100%;object-fit:cover}
+.rpFila>div{flex:1;min-width:0}
+.rpFila b{display:block;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rpFila small{font-size:12px;color:#6a7382}
+.rpFila em{font-style:normal;font-weight:800;font-variant-numeric:tabular-nums;text-align:right;font-size:13px;white-space:nowrap}
+.rpFila em small{display:block;font-weight:700}
+.rpMas{border:0;background:transparent;color:#e0701a;font:inherit;font-weight:800;font-size:13px;cursor:pointer;align-self:flex-start;padding:2px 0}
+.rpNota{margin:0;font-size:12.5px;color:#6a7382}
+.rpAlerta{margin:0;font-size:12.5px;color:#b85a10;background:#fff2e5;border-radius:10px;padding:7px 9px}
