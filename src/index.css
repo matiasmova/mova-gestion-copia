@@ -12,9 +12,9 @@ body,
 
 body {
   min-width: 320px;
-  background: #f3f4f6;
-  color: #202225;
-  font-family: Inter, Arial, sans-serif;
+  background: #f3f5f8;
+  color: #141a24;
+  font-family: 'Figtree', 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
 }
 
 button {
