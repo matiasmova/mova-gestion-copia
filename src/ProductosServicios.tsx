@@ -442,6 +442,26 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
     void cargarCatalogo()
   }
 
+  // Eliminar un producto o servicio del catálogo (de a uno). Si está en la tienda
+  // web, se ofrece quitarlo también de ahí. Si no se puede borrar, se ofrece desactivarlo.
+  async function eliminarUno(el: ProductoServicio) {
+    if (!confirmarEliminacion(`¿Eliminar "${el.nombre}" del catálogo?\n\nSe borra junto con su historial de precios. Los presupuestos donde ya se usó no cambian.`)) return false
+    if (el.tn_variant_id && window.confirm(`"${el.nombre}" está publicado en la tienda web.\n\n¿Lo quito también de la web?\n\nAceptar: se borra de la web.\nCancelar: queda en la web, sin vínculo con la app.`)) {
+      const { data, error: e } = await supabase.functions.invoke('tiendanube', { body: { accion: 'eliminar', id: el.id } })
+      if (e || data?.error) {
+        if (!window.confirm('No se pudo quitar de la tienda web (revisá la conexión o actualizá la función "tiendanube" en Supabase).\n\n¿Lo elimino igual del catálogo? En la web va a quedar publicado.')) return false
+      }
+    }
+    const { error: err } = await supabase.from('productos_servicios').delete().eq('id', el.id)
+    if (err) {
+      console.error(err)
+      if (window.confirm(`No se pudo eliminar "${el.nombre}" (está usado en otros registros). ¿Lo desactivo en su lugar? Deja de aparecer para elegir en los presupuestos.`)) await aplicarEstadoMasivoIds([el.id], false)
+      return false
+    }
+    setElementos((arr) => arr.filter((x) => x.id !== el.id))
+    return true
+  }
+
   async function cambiarEstado(el: ProductoServicio) {
     const accion = el.activo ? 'desactivar' : 'activar'
     if (!window.confirm(`¿Querés ${accion} "${el.nombre}"?`)) return
@@ -631,7 +651,8 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
           <button type="button" className="editButton" title="Cambios de precio de este producto" onClick={() => setHistorial({ id: el.id, nombre: el.nombre })}>🕑 Precios</button>
           {el.tipo === 'producto' && !el.tn_variant_id && el.activo && <button type="button" className="editButton prodPublicar" title="Publicar en la tienda web" disabled={publicandoId === el.id} onClick={() => void publicarUno(el)}>{publicandoId === el.id ? 'Publicando…' : '🛒 Publicar'}</button>}
           {el.link_compra && <a className="editButton" href={el.link_compra} target="_blank" rel="noreferrer">Ver en web</a>}
-          <button className={el.activo ? 'deactivateButton' : 'activateButton'} onClick={() => cambiarEstado(el)}>{el.activo ? 'Desactivar' : 'Activar'}</button>
+          <button className={el.activo ? 'deactivateButton' : 'activateButton'} title={el.activo ? 'Lo oculta para elegir en los presupuestos, sin borrarlo' : undefined} onClick={() => cambiarEstado(el)}>{el.activo ? 'Desactivar' : 'Activar'}</button>
+          <button type="button" className="deactivateButton prodEliminar" onClick={() => void eliminarUno(el)}>🗑 Eliminar</button>
         </div>
       </article>
     )
@@ -815,7 +836,8 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                     <td>{mostrar(final)}{el.moneda === 'USD' && <><br /><small className="prodUsdMini">US$ {formatoDolar(el.precio_usd ?? 0).replace('$', '').trim()}</small></>}</td>
                     <td>{mostrar(final - el.costo_unitario)}</td>
                     <td>{el.tipo === 'producto' ? <span className={`crmBadge ${nivel === 'sin' ? 'est-rechazado' : nivel === 'bajo' ? 'est-observacion' : 'est-aceptado'}`}>{el.stock}</span> : '—'}</td>
-                    <td>{el.tipo === 'producto' && <button type="button" className="editButton" title="Comparar con precios del mercado" onClick={(e) => { e.stopPropagation(); compararUno(el) }}>💲</button>}</td>
+                    <td className="prodListaAcc">{el.tipo === 'producto' && <button type="button" className="editButton" title="Comparar con precios del mercado" onClick={(e) => { e.stopPropagation(); compararUno(el) }}>💲</button>}
+                      <button type="button" className="deactivateButton" title="Eliminar" aria-label={`Eliminar ${el.nombre}`} onClick={(e) => { e.stopPropagation(); void eliminarUno(el) }}>🗑</button></td>
                   </tr>
                 )
               })}
@@ -1041,6 +1063,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
 
               {errorFormulario && <p className="loginError">{errorFormulario}</p>}
               <div className="modalActions formActions">
+                {editando && <button type="button" className="deactivateButton prodEliminarFicha" onClick={() => { const el = editando; void eliminarUno(el).then((ok) => { if (ok) cerrarFormulario() }) }}>🗑 Eliminar</button>}
                 <button type="button" className="cancelButton" onClick={cerrarFormulario}>Cancelar</button>
                 <button type="submit" className="newButton" disabled={guardando || subiendoFoto}>{guardando ? 'Guardando...' : editando ? 'Guardar cambios' : 'Agregar a la lista'}</button>
               </div>
