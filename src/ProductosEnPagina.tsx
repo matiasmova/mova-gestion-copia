@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from './supabase'
 import CampoNumero from './CampoNumero'
+import { pedirAsistente } from './asistenteIA'
 import { ImportarDeWeb, llamarTienda, OPCIONES_DEF, type Opciones, type ProductoWeb } from './Tiendanube'
 import type { ProductoServicio } from './ProductosServicios'
 
@@ -26,13 +27,14 @@ function precioWeb(p: ProductoServicio, o: Opciones) {
 
 const pesos = (n: number) => `$ ${Math.round(n).toLocaleString('es-AR')}`
 
-export default function ProductosEnPagina({ elementos, mostrar, onCampo, onRecargar, onEditar }: {
+export default function ProductosEnPagina({ elementos, mostrar, onCampo, onRecargar, onEditar, onComparar }: {
   elementos: ProductoServicio[]
   mostrar: (ars: number) => string
   // guardar=false: solo en pantalla (mientras escribe); true: se guarda en la base.
   onCampo: (id: number, cambios: Partial<ProductoServicio>, guardar: boolean) => Promise<void> | void
   onRecargar: () => void
   onEditar: (el: ProductoServicio) => void
+  onComparar: (el: ProductoServicio) => void
 }) {
   const [web, setWeb] = useState<Map<number, ProductoWeb> | null>(null)
   const [todosWeb, setTodosWeb] = useState<ProductoWeb[]>([])
@@ -50,6 +52,7 @@ export default function ProductosEnPagina({ elementos, mostrar, onCampo, onRecar
   const [elegidos, setElegidos] = useState<Set<number>>(new Set())
   const [buscarPub, setBuscarPub] = useState('')
   const [importando, setImportando] = useState(false)
+  const [escribiendoIA, setEscribiendoIA] = useState<number | null>(null)
   // Lo que se está guardando en la base: "Subir" espera a que termine (la función lee de ahí).
   const guardando = useRef(new Set<Promise<void>>())
   function guardar(id: number, cambios: Partial<ProductoServicio>) {
@@ -140,6 +143,25 @@ export default function ProductosEnPagina({ elementos, mostrar, onCampo, onRecar
       setMensajes((m) => ({ ...m, [el.id]: visible ? '✓ Ahora se ve en la tienda' : '✓ Oculto en la tienda (sigue vinculado)' }))
     } catch (e) { setMensajes((m) => ({ ...m, [el.id]: `⚠ ${(e as Error).message}` })) }
     setTrabajando(null)
+  }
+
+  // ✨ La IA escribe (o mejora) la descripción de la web; queda como cambio sin subir.
+  async function descripcionIA(el: ProductoServicio) {
+    const w = web?.get(el.tn_variant_id!)
+    const b = borradores[el.id]
+    setEscribiendoIA(el.id); setMensajes((m) => ({ ...m, [el.id]: '' }))
+    try {
+      const r = await pedirAsistente<{ descripcion: string }>({
+        accion: 'descripcion_web', nombre: b?.nombre?.trim() || nombreWeb(w) || el.nombre, nombre_catalogo: el.nombre,
+        marca: el.proveedor, codigo: el.codigo, categoria: el.categoria, actual: b?.descripcion ?? w?.descripcion ?? '', notas: el.descripcion,
+      })
+      setBorradores((s) => ({ ...s, [el.id]: { ...s[el.id], descripcion: r.descripcion } }))
+      setMensajes((m) => ({ ...m, [el.id]: '✨ Descripción lista: revisala y tocá "⬆ Actualizar en la web".' }))
+    } catch (e) {
+      const msg = (e as Error).message
+      setMensajes((m) => ({ ...m, [el.id]: `⚠ ${/desconocida/i.test(msg) ? 'Falta actualizar la función "asistente-ia" en Supabase para usar esto.' : msg}` }))
+    }
+    setEscribiendoIA(null)
   }
 
   // Lo borra de la tienda web; en el catálogo queda igual (vuelve a "sin publicar").
@@ -248,7 +270,7 @@ export default function ProductosEnPagina({ elementos, mostrar, onCampo, onRecar
             <div className="pwChips">
               {web && !w && <span className="pwChip gris">No se encontró en la web</span>}
               {w && (w.publicado ? <span className="pwChip verde">👁 Visible</span> : <span className="pwChip gris">🙈 Oculto</span>)}
-              {el.tn_sincronizar === false && <span className="pwChip gris" title="No se actualiza solo: solo cuando tocás Subir">⏸ No se actualiza solo</span>}
+              {el.tn_sincronizar === false && <span className="pwChip gris" title="No se actualiza solo: solo cuando tocás Actualizar en la web">⏸ No se actualiza solo</span>}
               {falta.length ? <span className="pwChip naranja">Falta subir: {falta.join(', ')}</span> : w && <span className="pwChip verde">✓ Al día</span>}
             </div>
           </div>
@@ -265,15 +287,20 @@ export default function ProductosEnPagina({ elementos, mostrar, onCampo, onRecar
             <small>{w ? (w.stock == null ? 'en la web: ilimitado' : `en la web: ${w.stock}`) : ''}</small>
           </div>
           <div className="pwBotones">
-            <button type="button" className="newButton" disabled={ocupado || (!!web && falta.length === 0)} onClick={() => void subir([el], el.id)}>{estaTrabajando ? 'Subiendo…' : '⬆ Subir'}</button>
+            {(falta.length > 0 || !web) && <button type="button" className="newButton" disabled={ocupado} onClick={() => void subir([el], el.id)}>{estaTrabajando ? 'Subiendo…' : '⬆ Actualizar en la web'}</button>}
             {w && <button type="button" className="editButton" disabled={ocupado} onClick={() => void cambiarVisible(el, !w.publicado)}>{w.publicado ? '🙈 Ocultar' : '👁 Mostrar'}</button>}
-            <button type="button" className="editButton" onClick={() => setAbierto((a) => (a === el.id ? null : el.id))}>{abierto === el.id ? '▲ Menos' : '✏️ Más'}</button>
+            <button type="button" className="editButton" title="Comparar el precio con el mercado (IA)" onClick={() => onComparar(el)}>💲 Mercado</button>
+            <button type="button" className="editButton" onClick={() => setAbierto((a) => (a === el.id ? null : el.id))}>{abierto === el.id ? '▲ Menos' : '✏️ Descripción'}</button>
             <button type="button" className="editButton pwQuitar" disabled={ocupado} onClick={() => void quitar(el)}>🗑 Quitar de la web</button>
           </div>
           {msg && <small className={`pwMsg ${msg.startsWith('⚠') ? 'error' : ''}`}>{msg}</small>}
           {abierto === el.id && <div className="pwMas">
-            <label>Descripción en la web
-              <textarea rows={5} value={b.descripcion ?? w?.descripcion ?? ''} placeholder="Lo que lee el cliente en la tienda…"
+            <div className="pwDescCab">
+              <span>Descripción en la web</span>
+              <button type="button" className="bcNombreIA" disabled={escribiendoIA !== null} onClick={() => void descripcionIA(el)}>{escribiendoIA === el.id ? '✨ Escribiendo…' : (b.descripcion ?? w?.descripcion ?? '').trim() ? '✨ Mejorar con IA' : '✨ Escribir con IA'}</button>
+            </div>
+            <label className="pwDescTxt">
+              <textarea rows={8} aria-label="Descripción en la web" value={b.descripcion ?? w?.descripcion ?? ''} placeholder="Lo que lee el cliente en la tienda…"
                 onChange={(e) => setBorradores((s) => ({ ...s, [el.id]: { ...s[el.id], descripcion: e.target.value } }))} />
             </label>
             <div className="pwMasPie">
@@ -285,7 +312,7 @@ export default function ProductosEnPagina({ elementos, mostrar, onCampo, onRecar
       })}
     </div>}
 
-    <p className="gestionAyuda">El precio y el stock que cambiás acá también quedan en tu catálogo. El nombre y la descripción son solo de la página. Nada llega a la web hasta que tocás <b>⬆ Subir</b> (o la sincronización automática, si está prendida).</p>
+    <p className="gestionAyuda">El precio y el stock que cambiás acá también quedan en tu catálogo. El nombre y la descripción son solo de la página. Nada llega a la web hasta que tocás <b>⬆ Actualizar en la web</b> (o la sincronización automática, si está prendida).</p>
 
     {importando && <ImportarDeWeb opciones={opciones} onCerrar={(m) => { setImportando(false); if (m) { setAviso(m); onRecargar(); void leerWeb() } }} />}
   </div>

@@ -710,6 +710,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
           }}
           onRecargar={() => void cargarCatalogo()}
           onEditar={(el) => void abrirEdicion(el)}
+          onComparar={compararUno}
         />
       )}
 
