@@ -38,4 +38,15 @@ export const ERROR_LINK_AUTH: string | null = (() => {
   } catch { return null }
 })()
 
-export const supabase = createClient(supabaseUrl, supabaseKey)
+// Se anota cuándo ESTE dispositivo guardó algo, para que la actualización
+// automática no se dispare con los cambios propios (solo con los de otro
+// celular o computadora).
+let ultimaEscritura = 0
+export const msDesdeUltimaEscritura = () => Date.now() - ultimaEscritura
+const fetchConMarca: typeof fetch = (entrada, init) => {
+  const metodo = (init?.method ?? (entrada instanceof Request ? entrada.method : 'GET')).toUpperCase()
+  if (metodo !== 'GET' && metodo !== 'HEAD') ultimaEscritura = Date.now()
+  return fetch(entrada, init)
+}
+
+export const supabase = createClient(supabaseUrl, supabaseKey, { global: { fetch: fetchConMarca } })

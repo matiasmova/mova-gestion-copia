@@ -317,3 +317,16 @@ body:has(.modalOverlay) .bmWrap,body:has(.modalOverlay) .fase2BuscarMovil,body:h
   outline: 2px solid #e47b00;
   outline-offset: 2px;
 }
+/* Actualizar datos (a mano) y aviso de cambios de otro dispositivo */
+.fase2App .menuRecargar{display:flex;align-items:center;gap:8px;width:calc(100% - 24px);margin:-4px 12px 10px;padding:7px 12px;border:0;border-radius:10px;background:transparent;color:#697382;font:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left}
+.fase2App .menuRecargar:hover{background:#f7f8fa;color:#1d2430}
+.fase2App .menuRecargar span:first-child{font-size:16px;width:18px;text-align:center}
+.fase2RecargarMovil{display:none}
+.avisoCambios{position:fixed;z-index:1300;top:14px;left:50%;transform:translateX(-50%);border:0;border-radius:999px;padding:10px 16px;background:#13171d;color:#fff;font:inherit;font-size:13.5px;box-shadow:0 12px 30px -10px rgba(0,0,0,.45);cursor:pointer;max-width:calc(100vw - 24px)}
+.avisoCambios b{color:#7fe0a8}
+@media (max-width:900px){
+  .fase2App .fase2BuscarMovil{right:62px}
+  .fase2App .fase2RecargarMovil{position:fixed;z-index:1150;top:12px;right:12px;width:42px;height:42px;display:grid;place-items:center;border:1px solid #eceef2;border-radius:12px;background:#fff;color:#4b525c;font:inherit;font-size:20px;font-weight:700;box-shadow:0 8px 20px -12px rgba(16,19,24,.35);cursor:pointer}
+  .avisoCambios{top:62px}
+}
+body:has(.modalOverlay) .fase2RecargarMovil{display:none}
