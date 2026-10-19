@@ -47,15 +47,31 @@ export function cuentaTrabajo(items: ItemCuenta[], total: number, empleados: num
   }
 }
 
-// Lo acordado con el personal asignado a una obra (costo total previsto).
+// Empleados de una obra: por cada persona asignada, lo acordado (o lo ya
+// pagado, si es más); y además todo lo pagado a gente que no está asignada
+// (o mano de obra cargada sin persona). Así ningún pago queda afuera.
+export type FilaEmpleado = { personal_id: number | null; total: number; pagado: number; asignado: boolean; sinJornales: boolean }
 export function empleadosDeObra(
   asignaciones: AsignacionCalc[], personas: PersonaCalc[], pagos: { personal_id: number | null; monto: number }[], jornales: JornalCalc[], valorObra: number,
-) {
-  return asignaciones.map((a) => {
+): FilaEmpleado[] {
+  const filas: FilaEmpleado[] = asignaciones.map((a) => {
     const c = calcularPersona(a, personas.find((p) => p.id === a.personal_id), pagos, jornales, valorObra, 0)
-    return { personal_id: a.personal_id, total: c.proyectado, pagado: c.pagado }
+    const porTiempo = c.modalidad === 'por_dia' || c.modalidad === 'por_hora'
+    return { personal_id: a.personal_id, total: c.proyectado, pagado: c.pagado, asignado: true, sinJornales: porTiempo && c.devengado === 0 }
   })
+  const asignados = new Set(asignaciones.map((a) => a.personal_id))
+  const otros: Record<string, FilaEmpleado> = {}
+  pagos.filter((p) => p.personal_id == null || !asignados.has(p.personal_id)).forEach((p) => {
+    const k = String(p.personal_id)
+    const f = (otros[k] ??= { personal_id: p.personal_id, total: 0, pagado: 0, asignado: false, sinJornales: false })
+    f.total += Number(p.monto) || 0
+    f.pagado += Number(p.monto) || 0
+  })
+  return [...filas, ...Object.values(otros)]
 }
+
+// Pagos de empleados: los que tienen persona o son mano de obra.
+export const esPagoEmpleado = (c: { personal_id: number | null; tipo?: string | null }) => c.personal_id != null || c.tipo === 'mano_obra'
 
 // Extras de la obra: gastos cargados que no son personal, materiales ni Gasto extra (que devuelve el cliente).
 export const esExtraDeObra = (c: { personal_id: number | null; tipo?: string | null }) =>

@@ -151,7 +151,8 @@ export default function InicioSimple(p: Props) {
         let emp = 0
         if (x.obra_id == null) { emp = Number(x.pago_empleados_estimado) || 0; if (emp) conEstimado++ }
         else if (deObra) {
-          if (p.empleadosObra[x.obra_id] != null) emp = p.empleadosObra[x.obra_id]
+          // Lo real (acordado o pagado); si todavía es $ 0, el estimado del presupuesto.
+          if ((p.empleadosObra[x.obra_id] ?? 0) > 0) emp = p.empleadosObra[x.obra_id]
           else { emp = estimadoObra[x.obra_id] ?? 0; if (emp) conEstimado++ }
         }
         const ext = deObra ? p.costos.filter((c) => c.obra_id === x.obra_id && esExtraDeObra(c)).reduce((s2, c) => s2 + c.monto, 0) : 0
