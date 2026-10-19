@@ -10,7 +10,6 @@ import Finanzas from './Finanzas'
 import Gastos from './Gastos'
 import Compras from './Compras'
 import Personal from './Personal.tsx'
-import Agenda from './Agenda'
 import { cargarConfig } from './config'
 import Configuracion from './Configuracion'
 import Usuarios from './Usuarios'
@@ -50,7 +49,7 @@ export default function AppFase2() {
   // Entró con un link de invitación o de recuperar contraseña: primero crea su contraseña.
   const [crearClave, setCrearClave] = useState<'invite' | 'recovery' | null>(TIPO_LINK_AUTH)
   // Al volver de conectar la tienda web (Tiendanube) se abre Configuración.
-  const [vista, setVista] = useState<Vista>(() => (window.location.search.includes('tiendanube=') ? 'configuracion' : 'dashboard'))
+  const [vista, setVista] = useState<Vista>(() => (window.location.search.includes('tiendanube=') ? 'configuracion' : 'agenda'))
   const [obraAbrirId, setObraAbrirId] = useState<number | null>(null)
   const [presupuestoAbrirId, setPresupuestoAbrirId] = useState<number | null>(null)
   const [menuAbierto, setMenuAbierto] = useState(false)
@@ -147,7 +146,7 @@ export default function AppFase2() {
   const pedidoPara = (v: Vista) => (pedido?.vista === v ? pedido : null)
   const pedidoAtendido = () => setPedido(null)
 
-  async function salir() { await supabase.auth.signOut(); setVista('dashboard') }
+  async function salir() { await supabase.auth.signOut(); setVista('agenda') }
   function navegar(destino: Vista) { setVista(destino); setMenuAbierto(false) }
 
   if (verificando) return <div className="loading">Cargando MOVA Gestión...</div>
@@ -220,7 +219,7 @@ export default function AppFase2() {
     gastos: <Gastos />,
     finanzas: <Finanzas pedido={pedidoPara('finanzas')} onPedidoAtendido={pedidoAtendido} onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} />,
     compras: <Compras pedido={pedidoPara('compras')} onPedidoAtendido={pedidoAtendido} />,
-    personal: <Personal pedido={pedidoPara('personal')} onPedidoAtendido={pedidoAtendido} />, agenda: <Agenda pedido={pedidoPara('agenda')} onPedidoAtendido={pedidoAtendido} />, usuarios: <Usuarios />, configuracion: <Configuracion />,
+    personal: <Personal pedido={pedidoPara('personal')} onPedidoAtendido={pedidoAtendido} />, agenda: <HomeResumen modo="tareas" pedido={pedidoPara('agenda')} onPedidoAtendido={pedidoAtendido} nombre={nombreUsuario} rol={rol} rolEtiqueta={ROLES[rol]} onNavegar={navegar} onSalir={salir} onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} onAbrirPresupuesto={puedeVer(rol, 'presupuestos') ? (id) => { setPresupuestoAbrirId(id); navegar('presupuestos') } : undefined} />, usuarios: <Usuarios />, configuracion: <Configuracion />,
   }
 
   return <div className="fase2App">

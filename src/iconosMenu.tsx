@@ -1,7 +1,7 @@
 // Íconos del menú lateral (estilo lineal, se pintan con el color del texto).
 
 const TRAZOS: Record<string, string[]> = {
-  dashboard: ['M3 10.5 12 3l9 7.5', 'M5 9.5V21h14V9.5', 'M9 21v-6h6v6'],
+  dashboard: ['M3 3v18h18', 'M8 17v-5', 'M13 17V8', 'M18 17v-9'],
   tablero: ['M3 3v18h18', 'M8 17v-5', 'M13 17V8', 'M18 17v-9'],
   clientes: ['M13 8a4 4 0 1 1-8 0 4 4 0 0 1 8 0', 'M2 21a7 7 0 0 1 14 0', 'M16 3.5a4 4 0 0 1 0 7.5', 'M22 21a6 6 0 0 0-4-5.6'],
   presupuestos: ['M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z', 'M14 3v6h6', 'M8 13h8', 'M8 17h5'],
@@ -12,7 +12,7 @@ const TRAZOS: Record<string, string[]> = {
   compras: ['M10.5 20a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0', 'M19.5 20a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0', 'M2 3h3l2.6 12.2a2 2 0 0 0 2 1.6h8.2a2 2 0 0 0 2-1.5L21 8H6'],
   personal: ['M4 18h16', 'M5 18v-3a7 7 0 0 1 14 0v3', 'M10 8V5h4v3', 'M3 21h18'],
   finanzas: ['M7 7h13', 'M17 4l3 3-3 3', 'M17 17H4', 'M7 14l-3 3 3 3'],
-  agenda: ['M8 2v4', 'M16 2v4', 'M3 9h18', 'M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2', 'M8 13h.01', 'M12 13h.01', 'M16 13h.01', 'M8 17h.01', 'M12 17h.01'],
+  agenda: ['M10 6h10', 'M10 12h10', 'M10 18h10', 'm3.5 6 1.5 1.5L8 4.5', 'm3.5 12 1.5 1.5L8 10.5', 'm3.5 18 1.5 1.5L8 16.5'],
   notificaciones: ['M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9', 'M10.3 21a2 2 0 0 0 3.4 0'],
   usuarios: ['M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z', 'm9 12 2 2 4-4'],
   configuracion: ['M4 6h10', 'M18 6h2', 'M4 12h4', 'M12 12h8', 'M4 18h12', 'M20 18h0', 'M16 4v4', 'M10 10v4', 'M18 16v4'],
