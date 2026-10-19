@@ -8,7 +8,7 @@ import { calcularPersona, type AsignacionCalc, type JornalCalc, type PersonaCalc
 //  · …menos los extras de la obra (nafta, tercerizados, otros).
 // Comprar stock NO es un gasto: es plata invertida (se ve en Productos).
 
-export type ItemCuenta = { tipo: string; cantidad: number; precio_unitario: number; costo_unitario: number; descuento_pct?: number | null }
+export type ItemCuenta = { tipo: string; cantidad: number; precio_unitario: number; costo_unitario: number; descuento_pct?: number | null; catalogo_id?: number | null }
 
 export const esProducto = (tipo: string) => { const t = (tipo || '').trim().toLowerCase(); return t === 'producto' || t === 'material' }
 
@@ -31,7 +31,10 @@ export function cuentaTrabajo(items: ItemCuenta[], total: number, empleados: num
   let ventaProductos = 0, costoProductos = 0, servicios = 0, sinCosto = 0
   for (const it of items) {
     const n = importeNeto(it)
-    if (esProducto(it.tipo)) {
+    // Un "producto" escrito a mano (no viene de tu lista) y sin costo es en la
+    // práctica mano de obra o algo que el cliente paga aparte: cuenta como servicio.
+    const deLista = it.catalogo_id != null || Number(it.costo_unitario) > 0
+    if (esProducto(it.tipo) && deLista) {
       ventaProductos += n
       costoProductos += (Number(it.cantidad) || 0) * (Number(it.costo_unitario) || 0)
       if (!(Number(it.costo_unitario) > 0) && n > 0) sinCosto++

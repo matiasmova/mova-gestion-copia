@@ -348,7 +348,9 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
             {/* Ganancia del producto (interno: solo al editar, no lo ve el cliente) */}
             {ed && it.tipo !== 'servicio' && it.descripcion.trim() && (Number(it.costo_unitario) > 0
               ? (() => { const g = gananciaItem(it); return <small className={`pvGan${g < 0 ? ' neg' : ''}`}>💰 Ganás {moneda(g)}{importeNeto(it) > 0 ? ` (${Math.round((g / importeNeto(it)) * 100)}%)` : ''} · costo {moneda(Number(it.costo_unitario))} c/u</small> })()
-              : <small className="pvGan sin">⚠ Sin costo cargado · tocá para cargarlo</small>)}
+              : it.catalogo_id != null
+                ? <small className="pvGan sin">⚠ Sin costo cargado · tocá para cargarlo</small>
+                : <small className="pvGan sin">Escrito a mano y sin costo: se cuenta como mano de obra. Si lo compraste vos, cargá el costo.</small>)}
           </div>
           <div className="pvImp">{moneda(importeNeto(it))}{pct > 0 && <s>{moneda(importeBruto(it))}</s>}</div>
         </div>
@@ -472,7 +474,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
                   const conTexto = its.filter((it) => it.descripcion.trim())
                   const g = conTexto.reduce((s, it) => s + gananciaItem(it), 0)
                   const venta = conTexto.reduce((s, it) => s + importeNeto(it), 0)
-                  const sinCosto = conTexto.filter((it) => !(Number(it.costo_unitario) > 0)).length
+                  const sinCosto = conTexto.filter((it) => it.catalogo_id != null && !(Number(it.costo_unitario) > 0)).length
                   return <div className="pvGanTotal"><span>💰 Ganancia en productos <small>interno</small></span><b>{moneda(g)}{venta > 0 ? <em> · {Math.round((g / venta) * 100)}%</em> : null}</b>{sinCosto > 0 && <small className="pvGanAviso">⚠ {sinCosto} sin costo: se cuentan como ganancia completa</small>}</div>
                 })()}
                 {res && partes.map((p) => (

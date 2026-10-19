@@ -17,13 +17,14 @@ type Props = {
   items: ItemCuenta[]
   total: number
   adicionales?: number
+  reintegros?: number // Gasto extra que devuelve el cliente: no suma ni resta
 }
 type Gente = { id: number; nombre: string | null; apellido: string | null; costo_dia: unknown; modalidad_pago: string | null; activo: boolean | null }
 type FilaVista = FilaEmpleado & { nombre: string; asigId: number | null; modalidad: string | null; valor: number }
 
 const nombreDe = (g?: Gente) => (g ? `${g.nombre ?? ''} ${g.apellido ?? ''}`.trim() || 'Persona' : 'Mano de obra sin persona')
 
-export default function GananciaTrabajo({ presupuestoIds, obraId, items, total, adicionales = 0 }: Props) {
+export default function GananciaTrabajo({ presupuestoIds, obraId, items, total, adicionales = 0, reintegros = 0 }: Props) {
   const [estimado, setEstimado] = useState(0)
   const [faltaSql, setFaltaSql] = useState(false)
   const [personal, setPersonal] = useState<FilaVista[]>([])
@@ -142,12 +143,13 @@ export default function GananciaTrabajo({ presupuestoIds, obraId, items, total, 
     {!abierta && empleados === 0 && <button type="button" className="gtAviso" onClick={() => setAbierta(true)}>👷 Sumá el personal de este trabajo para ver la ganancia real ›</button>}
     {abierta && <>
       <div className="gtLineas">
-        <div><span><i style={{ background: '#e0701a' }} />Ganancia en productos<small>Vendés {moneda(c.ventaProductos)} · te cuestan {moneda(c.costoProductos)}</small></span><b>{moneda(c.ganProductos)}</b></div>
-        <div><span><i style={{ background: '#2f63b8' }} />Servicios<small>100% tuyo</small></span><b>{moneda(c.servicios)}</b></div>
+        <div><span><i style={{ background: '#e0701a' }} />Ganancia en productos<small>{c.ventaProductos > 0 ? `Vendés ${moneda(c.ventaProductos)} · te cuestan ${moneda(c.costoProductos)}` : 'No hay productos de tu lista en este trabajo'}</small></span><b>{moneda(c.ganProductos)}</b></div>
+        <div><span><i style={{ background: '#2f63b8' }} />Mano de obra y servicios<small>100% tuyo (antes de pagar al personal)</small></span><b>{moneda(c.servicios)}</b></div>
         {c.adicionales !== 0 && <div><span><i style={{ background: '#2f63b8' }} />Cambios y adicionales<small>aprobados en la obra</small></span><b>{moneda(c.adicionales)}</b></div>}
         {c.bonificacion > 0.5 && <div><span><i style={{ background: '#b7bdc6' }} />Bonificación general</span><b className="r">− {moneda(c.bonificacion)}</b></div>}
         <div><span><i style={{ background: '#a1530f' }} />Empleados<small>{t.hayAsignados ? 'Lo de cada persona del trabajo (abajo)' : 'Estimado (cargalo abajo)'}</small></span><b className="r">− {moneda(c.empleados)}</b></div>
         <div><span><i style={{ background: '#cf4b37' }} />Extras de la obra<small>{obraId == null ? 'Se cargan cuando es obra' : c.extras ? 'Nafta, tercerizados y otros cargados en la obra' : 'Todavía no hay gastos cargados'}</small></span><b className="r">− {moneda(c.extras)}</b></div>
+        {reintegros > 0.5 && <div className="gtSub"><span>Gastos extra que te devuelve el cliente<small>compras en otros locales: no suman ni restan a tu ganancia</small></span><b>{moneda(reintegros)}</b></div>}
         <div className="tot"><span>= Vas a ganar</span><b className={c.ganancia < 0 ? 'r' : 'v'}>{moneda(c.ganancia)}</b></div>
       </div>
 

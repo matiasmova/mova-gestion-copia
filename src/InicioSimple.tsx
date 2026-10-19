@@ -16,7 +16,7 @@ type Pres = { id: number; cliente_id: number; obra_id: number | null; titulo: st
 type Costo = { monto: number; fecha: string; tipo?: string | null; personal_id: number | null; obra_id: number | null }
 type Gasto = { id: number; fecha: string; categoria: string | null; descripcion: string | null; monto: number }
 type Adicional = { obra_id: number; importe: number; estado: string; tipo: string }
-type Item = { presupuesto_id: number; tipo: string; cantidad: number; precio_unitario: number; costo_unitario: number; descuento_pct: number }
+type Item = { presupuesto_id: number; catalogo_id: number | null; tipo: string; cantidad: number; precio_unitario: number; costo_unitario: number; descuento_pct: number }
 type Fila = { pres: Pres; ganancia: number }
 type ObraAct = { id: number; nombre_obra: string; cliente_id: number; porcentaje_avance: number | null }
 type Deuda = { obra: ObraAct; saldo: number; faltaAvance: number; extras: number; situacion: 'rojo' | 'naranja' | 'verde' }
@@ -97,6 +97,7 @@ export default function InicioSimple(p: Props) {
       if (!vigente) return
       setItems(filas.map((f) => ({
         presupuesto_id: Number(f.presupuesto_id),
+        catalogo_id: f.catalogo_id == null ? null : Number(f.catalogo_id),
         tipo: String(f.tipo ?? '').trim().toLowerCase(),
         cantidad: Number(f.cantidad) || 0,
         precio_unitario: Number(f.precio_unitario) || 0,

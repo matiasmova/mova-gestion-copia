@@ -76,7 +76,7 @@ export function LineaAvances({ avances, cargando, terminada, onTocar, onNuevo, o
 // Presupuesto en vivo de la obra (cada cambio = modificación)
 // ---------------------------------------------------------------------------
 
-type Item = { id: number; presupuesto_id: number; descripcion: string; cantidad: number; precio_unitario: number; descuento_pct: number; tipo?: string | null; costo_unitario?: number | null }
+type Item = { id: number; presupuesto_id: number; catalogo_id?: number | null; descripcion: string; cantidad: number; precio_unitario: number; descuento_pct: number; tipo?: string | null; costo_unitario?: number | null }
 type Adicional = {
   id: number; tipo: string; descripcion: string; motivo: string | null; importe: number; estado: string; fecha: string
   presupuesto_id: number | null; item_id: number | null; cambio_tipo: CambioTipo | null
@@ -135,7 +135,7 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obra
       const aceptados = (rPres.data ?? []).filter((p) => p.activo !== false && p.estado === 'aceptado').map((p) => ({ id: p.id, titulo: p.titulo, total: Number(p.total || 0) }))
       let filas: Item[] = []
       if (aceptados.length) {
-        const rItems = await supabase.from('presupuesto_items').select('id, presupuesto_id, descripcion, cantidad, precio_unitario, descuento_pct, tipo, costo_unitario').in('presupuesto_id', aceptados.map((p) => p.id)).order('orden', { ascending: true })
+        const rItems = await supabase.from('presupuesto_items').select('id, presupuesto_id, catalogo_id, descripcion, cantidad, precio_unitario, descuento_pct, tipo, costo_unitario').in('presupuesto_id', aceptados.map((p) => p.id)).order('orden', { ascending: true })
         if (!vigente) return
         if (rItems.error) console.error(rItems.error)
         filas = (rItems.data ?? []).map((it) => ({ ...it, cantidad: Number(it.cantidad), precio_unitario: Number(it.precio_unitario), descuento_pct: Number(it.descuento_pct ?? 0) })) as Item[]
@@ -391,7 +391,8 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obra
       <div className="total"><small>TOTAL HOY</small><b>{plata(original + aprobados)}</b></div>
     </div>
     <GananciaTrabajo presupuestoIds={presus.map((p) => p.id)} obraId={obraId} total={original} adicionales={aprobados}
-      items={items.map((it) => ({ tipo: it.tipo ?? '', cantidad: it.cantidad, precio_unitario: it.precio_unitario, costo_unitario: Number(it.costo_unitario) || 0, descuento_pct: it.descuento_pct }))} />
+      items={items.map((it) => ({ tipo: it.tipo ?? '', catalogo_id: it.catalogo_id ?? null, cantidad: it.cantidad, precio_unitario: it.precio_unitario, costo_unitario: Number(it.costo_unitario) || 0, descuento_pct: it.descuento_pct }))}
+      reintegros={adicionales.filter((a) => a.tipo === 'gasto_extra' && a.estado !== 'rechazado').reduce((s, a) => s + a.importe, 0)} />
     {huerfanos.length > 0 && !verCambios && <button type="button" className="oeAviso pend oeAvisoBtn" onClick={() => setVerCambios(true)}>⚠ {huerfanos.length === 1 ? 'Hay 1 cambio' : `Hay ${huerfanos.length} cambios`} de ítems que ya no están en el presupuesto (se editó después). Tocá para verlos ›</button>}
     {verCambios && <div className="oeCambios">
       <div className="oeCambiosCab"><b>De dónde salen los cambios</b><button type="button" className="oeLink" onClick={() => setVerCambios(false)}>Cerrar</button></div>
