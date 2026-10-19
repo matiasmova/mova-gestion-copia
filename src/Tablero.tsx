@@ -45,9 +45,7 @@ const PERIODOS: [Periodo, string][] = [['mes', 'Este mes'], ['3', 'Últimos 3 me
 const monedaCorta = (v: number) => {
   const signo = v < 0 ? '-' : ''
   const abs = Math.abs(v)
-  if (abs >= 1_000_000) return `${signo}$${(abs / 1_000_000).toFixed(1).replace('.0', '')}M`
-  if (abs >= 1_000) return `${signo}$${Math.round(abs / 1000)}k`
-  return `${signo}${moneda(abs)}`
+  return `${signo}$ ${Math.round(abs).toLocaleString('es-AR')}`
 }
 const MODALIDADES: Record<string, string> = {
   por_dia: 'Por día', por_hora: 'Por hora', por_obra: 'Por obra', porcentaje: 'Por porcentaje', por_etapa: 'Por etapa',

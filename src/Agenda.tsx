@@ -274,7 +274,7 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
         {([['atr', 'Atrasado', cuenta('atr'), 'se pasó la fecha'], ['hoy', 'Hoy', cuenta('hoy'), `${eventos.filter((e) => !e.completado && e.fecha === hoyStr).length} en la agenda`], ['sem', 'Esta semana', cuenta('sem'), 'próximos 7 días']] as const).map(([g, t, n, sub]) => (
           <button key={g} type="button" className={`phNum g-${g}${foco === g ? ' on' : ''}`} onClick={() => setFoco((f) => (f === g ? null : g))}><span>{t}</span><b>{cargandoTareas ? '…' : n}</b><small>{sub}</small></button>
         ))}
-        {porCobrar != null && <button type="button" className={`phNum g-plata${foco === 'plata' ? ' on' : ''}`} onClick={() => setFoco((f) => (f === 'plata' ? null : 'plata'))}><span>Te deben</span><b>{porCobrar >= 1e6 ? `$ ${(porCobrar / 1e6).toLocaleString('es-AR', { maximumFractionDigits: 2 })} M` : `$ ${Math.round(porCobrar / 1000).toLocaleString('es-AR')} k`}</b><small>{items.filter((x) => x.tipo === 'cobro').length} para cobrar</small></button>}
+        {porCobrar != null && <button type="button" className={`phNum g-plata${foco === 'plata' ? ' on' : ''}`} onClick={() => setFoco((f) => (f === 'plata' ? null : 'plata'))}><span>Te deben</span><b>$ {Math.round(porCobrar).toLocaleString('es-AR')}</b><small>{items.filter((x) => x.tipo === 'cobro').length} para cobrar</small></button>}
       </div>
 
       {/* ---- Semana / mes ---- */}

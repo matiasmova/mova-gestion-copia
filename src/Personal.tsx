@@ -648,7 +648,7 @@ function Movimientos({ datos, onCambio }: { datos: Datos; onCambio: () => void }
       <div className="liHead"><div><h3>Mano de obra por mes</h3><small>Pagos al personal y terceros (últimos 6 meses{fObra || fPersona ? ', con el filtro elegido' : ''})</small></div></div>
       <div className="mvBarras">
         {porMes.map((x) => <div key={x.m} className="mvBarra" title={`${x.m}: ${moneda(x.v)}`}>
-          <b>{x.v > 0 ? `$${x.v >= 1e6 ? `${(x.v / 1e6).toLocaleString('es-AR', { maximumFractionDigits: 1 })}M` : `${Math.round(x.v / 1e3)}k`}` : ''}</b>
+          <b>{x.v > 0 ? `$ ${Math.round(x.v).toLocaleString('es-AR')}` : ''}</b>
           <div><span style={{ height: `${(x.v / maxMes) * 100}%` }} /></div>
           <small>{new Date(`${x.m}-01T12:00:00`).toLocaleDateString('es-AR', { month: 'short' }).replace('.', '')}</small>
         </div>)}

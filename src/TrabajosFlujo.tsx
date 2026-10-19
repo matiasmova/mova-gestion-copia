@@ -26,7 +26,8 @@ export const ETAPAS: Record<EtapaFlujo, { t: string; i: string; ayuda: string }>
 const ORDEN: EtapaFlujo[] = ['arm', 'env', 'obr', 'ter']
 const num = (x: unknown) => Number(x) || 0
 const pesos = (n: number) => `$ ${Math.round(n).toLocaleString('es-AR')}`
-const corto = (n: number) => { const a = Math.abs(n), s = n < 0 ? '− ' : ''; return a >= 1e6 ? `${s}$ ${(a / 1e6).toLocaleString('es-AR', { maximumFractionDigits: 1 })} M` : a >= 1e3 ? `${s}$ ${Math.round(a / 1e3).toLocaleString('es-AR')} k` : `${s}$ ${Math.round(a)}` }
+// Montos siempre con el número completo (sin abreviar en k o M).
+const corto = (n: number) => `${n < 0 ? '− ' : ''}$ ${Math.round(Math.abs(n)).toLocaleString('es-AR')}`
 const diasDesde = (f: string | null | undefined) => (f ? Math.max(0, Math.floor((Date.now() - new Date(f.length <= 10 ? `${f}T12:00:00` : f).getTime()) / 86400000)) : 0)
 const haceDias = (d: number) => (d === 0 ? 'hoy' : d === 1 ? 'ayer' : `hace ${d} días`)
 const terminada = (o: { estado: string | null; porcentaje_avance: unknown }) => o.estado === 'finalizada' || o.estado === 'observacion' || num(o.porcentaje_avance) >= 100
