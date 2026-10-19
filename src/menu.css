@@ -330,3 +330,43 @@ body:has(.modalOverlay) .bmWrap,body:has(.modalOverlay) .fase2BuscarMovil,body:h
   .avisoCambios{top:62px}
 }
 body:has(.modalOverlay) .fase2RecargarMovil{display:none}
+
+/* =====================================================================
+   Menú lateral grafito con el naranja de MOVA (mismos efectos de
+   movimiento). Los colores van en variables --sidebar-*: el modo oscuro
+   automático no las convierte, así que el menú queda oscuro en los dos modos.
+   ===================================================================== */
+.fase2App .fase2Sidebar{--sidebar-c1:#121823;--sidebar-c2:#1c2432;--sidebar-c3:#c3cad6;--sidebar-c4:#7f8a9c;--sidebar-c5:#ffffff;--sidebar-c6:#262f3f;--sidebar-c7:#e47b00;--sidebar-c8:#f59a2e;
+  background:var(--sidebar-c1);border-right:1px solid var(--sidebar-c2);box-shadow:none;color:var(--sidebar-c3)}
+html[data-tema="oscuro"] .fase2App .fase2Sidebar{--sidebar-c1:#0b0f15;--sidebar-c2:#161c26;--sidebar-c6:#1f2734}
+.fase2App .fase2Sidebar .fase2Logo{border-bottom-color:var(--sidebar-c2)}
+.fase2App .fase2Sidebar .menuGrupo{color:var(--sidebar-c4)}
+.fase2App .fase2Sidebar nav{scrollbar-color:var(--sidebar-c6) transparent}
+.fase2App .fase2Sidebar nav::-webkit-scrollbar-thumb{background:var(--sidebar-c6)}
+.fase2App .fase2Sidebar nav button.menuItem{color:var(--sidebar-c3)}
+.fase2App .fase2Sidebar nav button.menuItem .menuIcono{background:var(--sidebar-c2);color:var(--sidebar-c3)}
+.fase2App .fase2Sidebar nav button.menuItem:hover{background:var(--sidebar-c2);color:var(--sidebar-c5)}
+.fase2App .fase2Sidebar nav button.menuItem:hover .menuIcono{background:rgba(228,123,0,.18);color:var(--sidebar-c8)}
+/* Seleccionada: la misma píldora en movimiento con halo, ahora en naranja MOVA */
+.fase2App .fase2Sidebar nav button.menuItem.active{
+  background:linear-gradient(120deg,#c25f00 0%,#e47b00 35%,#ffa448 55%,#e47b00 75%,#c25f00 100%);background-size:250% 100%;color:#fff;
+  box-shadow:0 12px 26px -12px rgba(228,123,0,.8),inset 0 1px 0 rgba(255,255,255,.25);
+  animation:menuVerdeFluye 4s ease-in-out infinite,menuNaranjaLate 2.2s ease-in-out infinite}
+@keyframes menuNaranjaLate{
+  0%,100%{box-shadow:0 12px 26px -12px rgba(228,123,0,.8),0 0 0 0 rgba(255,164,72,0),inset 0 1px 0 rgba(255,255,255,.25)}
+  50%{box-shadow:0 14px 30px -10px rgba(228,123,0,.95),0 0 0 5px rgba(255,164,72,.18),inset 0 1px 0 rgba(255,255,255,.25)}}
+.fase2App .fase2Sidebar nav button.menuItem:focus-visible{outline-color:rgba(228,123,0,.7)}
+.fase2App .fase2Sidebar .fase2Usuario{background:var(--sidebar-c2);border-color:var(--sidebar-c6);color:var(--sidebar-c5)}
+.fase2App .fase2Sidebar .fase2Usuario strong{color:var(--sidebar-c5)}
+.fase2App .fase2Sidebar .fase2Usuario small{color:var(--sidebar-c4)}
+.fase2App .fase2Sidebar .fase2Usuario > div{background:linear-gradient(135deg,#ff8a2e 0%,#e47b00 100%)}
+.fase2App .fase2Sidebar .fase2Usuario button{background:var(--sidebar-c1);border-color:var(--sidebar-c6);color:var(--sidebar-c3)}
+.fase2App .fase2Sidebar .fase2Usuario button:hover{background:rgba(228,123,0,.16);border-color:rgba(228,123,0,.5);color:var(--sidebar-c8)}
+.fase2App .fase2Sidebar .menuTema{background:var(--sidebar-c2)}
+.fase2App .fase2Sidebar .menuTema button{color:var(--sidebar-c4)}
+.fase2App .fase2Sidebar .menuTema button.on{background:var(--sidebar-c6);color:var(--sidebar-c5);box-shadow:none}
+.fase2App .fase2Sidebar .menuBuscar{background:var(--sidebar-c2);border-color:var(--sidebar-c6);color:var(--sidebar-c4)}
+.fase2App .fase2Sidebar .menuBuscar kbd{background:var(--sidebar-c1);border-color:var(--sidebar-c6);color:var(--sidebar-c4)}
+.fase2App .fase2Sidebar .menuBuscar:hover{border-color:var(--sidebar-c7);color:var(--sidebar-c5)}
+.fase2App .fase2Sidebar .menuRecargar{color:var(--sidebar-c4)}
+.fase2App .fase2Sidebar .menuRecargar:hover{background:var(--sidebar-c2);color:var(--sidebar-c5)}

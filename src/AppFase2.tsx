@@ -16,6 +16,7 @@ import Configuracion from './Configuracion'
 import Usuarios from './Usuarios'
 import HomeResumen from './HomeResumen'
 import logo from './assets/mova-logo.png'
+import logoClaro from './assets/mova-logo-claro.png'
 import './fase2.css'
 import './menu.css'
 import { aplicarTema, temaGuardado, type Tema } from './temaOscuro'
@@ -225,7 +226,7 @@ export default function AppFase2() {
   return <div className="fase2App">
     <button className="fase2MenuButton" aria-label="Abrir menú" onClick={() => setMenuAbierto((v) => !v)}><IconoMenu nombre="menu" tamano={22} /></button>
     <aside className={`fase2Sidebar ${menuAbierto ? 'abierto' : ''}`}>
-      <div className="fase2Logo"><img src={logo} alt="MOVA Tecnología Smart" /></div>
+      <div className="fase2Logo"><img src={logoClaro} alt="MOVA Tecnología Smart" /></div>
       <button type="button" className="menuBuscar" onClick={() => { setMenuAbierto(false); setBuscadorAbierto(true) }}>
         <IconoMenu nombre="buscar" /><span>Buscar…</span><kbd>Ctrl K</kbd>
       </button>

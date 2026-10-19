@@ -46,32 +46,35 @@ type Props = {
   acciones?: ReactNode
 }
 
-type Rango = 6 | 12 | 0 // 0 = este año
+// Período: un mes (con flechas), últimos 3 o 12 meses, este año o personalizado.
+type TipoPeriodo = 'mes' | '3' | '12' | 'anio' | 'pers'
 type Clave = 'vendido' | 'productos' | 'servicios' | 'gastos' | 'impuestos' | 'ganancia'
 type Hoja = Clave | 'cobrar' | 'obras' | 'hoy' | 'stock'
 
-const SERIES: { k: Clave; t: string; c: string }[] = [
-  { k: 'vendido', t: 'Aceptados', c: '#475569' },
-  { k: 'productos', t: 'Ganancia productos', c: '#e0701a' },
-  { k: 'servicios', t: 'Ganancia servicios', c: '#2f63b8' },
-  { k: 'gastos', t: 'Gastos empresa', c: '#cf4b37' },
-  { k: 'impuestos', t: 'Impuestos', c: '#7c3aed' },
-  { k: 'ganancia', t: 'Ganancia final', c: '#1d9a5b' },
-]
+const COLOR: Record<Clave, string> = { vendido: '#3d6fd8', productos: '#e0701a', servicios: '#2f63b8', gastos: '#d9534a', impuestos: '#7c3aed', ganancia: '#14a06a' }
 const pesos = (n: number) => `${n < 0 ? '− ' : ''}$ ${Math.round(Math.abs(n)).toLocaleString('es-AR')}`
 const corto = (n: number) => { const a = Math.abs(n); const s = n < 0 ? '− ' : ''; return a >= 1e6 ? `${s}$ ${(a / 1e6).toLocaleString('es-AR', { maximumFractionDigits: 2 })} M` : a >= 1e3 ? `${s}$ ${Math.round(a / 1e3).toLocaleString('es-AR')} k` : `${s}$ ${Math.round(a)}` }
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 const ymDe = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 const mesNombre = (ym: string, f: 'long' | 'short') => new Date(`${ym}-01T12:00:00`).toLocaleDateString('es-AR', { month: f }).replace('.', '')
+const mesAnio = (ym: string) => `${mesNombre(ym, 'long')} ${ym.slice(0, 4)}`
+const sumarMeses = (ym: string, n: number) => { const [a, m] = ym.split('-').map(Number); return ymDe(new Date(a, m - 1 + n, 1)) }
+function mesesEntre(desde: string, hasta: string) {
+  const [a, b] = desde <= hasta ? [desde, hasta] : [hasta, desde]
+  const out: string[] = []
+  for (let ym = a; ym <= b && out.length < 36; ym = sumarMeses(ym, 1)) out.push(ym)
+  return out
+}
 const esImpuesto = (g: Gasto) => (g.categoria ?? '').trim().toLowerCase() === 'impuestos'
 const esInvProductos = (g: Gasto) => (g.categoria ?? '').trim().toLowerCase() === 'inversión en productos'
 
 export default function InicioSimple(p: Props) {
   const hoy = new Date()
   const ymHoy = ymDe(hoy)
-  const [rango, setRango] = useState<Rango>(12)
-  const [sel, setSel] = useState(ymHoy)
-  const [ocultas, setOcultas] = useState<Set<Clave>>(new Set())
+  const [tipo, setTipo] = useState<TipoPeriodo>('12')
+  const [mesUno, setMesUno] = useState(ymHoy)
+  const [pers, setPers] = useState({ desde: sumarMeses(ymHoy, -5), hasta: ymHoy })
+  const [foco, setFoco] = useState<string | null>(null) // un mes elegido en el gráfico
   const [hoja, setHoja] = useState<Hoja | null>(null)
 
   // Ítems de los presupuestos aceptados (para separar productos de servicios).
@@ -109,12 +112,13 @@ export default function InicioSimple(p: Props) {
     return () => { vigente = false }
   }, [aceptados, p.verFinanzas])
 
-  // Meses que muestra el gráfico.
+  // Meses del período elegido.
   const meses = useMemo(() => {
-    const n = rango === 0 ? hoy.getMonth() + 1 : rango
-    return Array.from({ length: Math.max(n, 2) }, (_, i) => ymDe(new Date(hoy.getFullYear(), hoy.getMonth() - (Math.max(n, 2) - 1 - i), 1)))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rango, ymHoy])
+    if (tipo === 'mes') return [mesUno] // (el gráfico igual muestra los 6 meses anteriores, para comparar)
+    if (tipo === 'pers') return mesesEntre(pers.desde, pers.hasta)
+    const n = tipo === '3' ? 3 : tipo === '12' ? 12 : Number(ymHoy.slice(5, 7))
+    return mesesEntre(sumarMeses(ymHoy, -(n - 1)), ymHoy)
+  }, [tipo, mesUno, pers, ymHoy])
 
   // Stock: plata invertida y lo que ganarías vendiéndolo.
   const [stock, setStock] = useState<{ invertido: number; ganarias: number } | null>(null)
@@ -142,8 +146,9 @@ export default function InicioSimple(p: Props) {
       const pr = primero[x.obra_id]
       if (!pr || (x.fecha ?? '') < (pr.fecha ?? '')) primero[x.obra_id] = x
     })
-    return (ym: string) => {
-      const en = (f: string | null | undefined) => (f ?? '').slice(0, 7) === ym
+    return (yms: string[]) => {
+      const set = new Set(yms)
+      const en = (f: string | null | undefined) => set.has((f ?? '').slice(0, 7))
       let ventaProductos = 0, costoProductos = 0, servicios = 0, bonificacion = 0, adicionales = 0, empleados = 0, extras = 0, sinCosto = 0, conEstimado = 0
       const filas: Fila[] = aceptados.filter((x) => en(x.fecha)).map((x) => {
         const deObra = x.obra_id != null && primero[x.obra_id]?.id === x.id
@@ -164,7 +169,8 @@ export default function InicioSimple(p: Props) {
       }).sort((a2, b2) => b2.pres.total - a2.pres.total)
       const vendido = filas.reduce((s2, f2) => s2 + f2.pres.total, 0) + adicionales
       const ganProductos = ventaProductos - costoProductos
-      const ganServicios = servicios + adicionales - bonificacion - empleados - extras
+      // Servicios: todo lo vendido que no es producto (con la bonificación ya descontada).
+      const ganServicios = vendido - ventaProductos - empleados - extras
 
       // Gastos de la empresa: todo menos impuestos (van aparte) e inversión en productos (es stock, no gasto).
       const gastosEmp = p.gastos.filter((g) => !esImpuesto(g) && !esInvProductos(g) && en(g.fecha))
@@ -185,19 +191,20 @@ export default function InicioSimple(p: Props) {
     }
   }, [aceptados, items, p.costos, p.gastos, p.adicionales, p.empleadosObra])
 
-  const serie = useMemo(() => meses.map((ym) => ({ ym, ...calcular(ym) })), [meses, calcular])
-  const d = useMemo(() => calcular(sel), [calcular, sel])
+  const mesesGrafico = useMemo(() => (tipo === 'mes' ? mesesEntre(sumarMeses(mesUno, -5), mesUno) : meses), [tipo, mesUno, meses])
+  const serie = useMemo(() => mesesGrafico.map((ym) => ({ ym, ...calcular([ym]) })), [mesesGrafico, calcular])
+  const focoValido = foco && meses.includes(foco) ? foco : null
+  const d = useMemo(() => calcular(focoValido ? [focoValido] : meses), [calcular, focoValido, meses])
+  // Comparación con el mes anterior (cuando se mira un solo mes).
+  const unMes = focoValido ?? (meses.length === 1 ? meses[0] : null)
+  const previo = useMemo(() => (unMes ? calcular([sumarMeses(unMes, -1)]) : null), [calcular, unMes])
 
-  // ---- Gráfico de barras por mes ----
-  const colores = Object.fromEntries(SERIES.map((x) => [x.k, x.c])) as Record<Clave, string>
-  const alternar = (k: Clave) => setOcultas((o) => {
-    const n = new Set(o)
-    if (n.has(k)) n.delete(k)
-    else if (n.size < SERIES.length - 1) n.add(k)
-    return n
-  })
   const margen = d.vendido > 0 ? Math.round((d.ganancia / d.vendido) * 100) : null
-  const nombreMes = mesNombre(sel, 'long')
+  const etiquetaPeriodo = tipo === 'mes' ? mesAnio(mesUno) : tipo === '3' ? 'últimos 3 meses' : tipo === '12' ? 'últimos 12 meses' : tipo === 'anio' ? `${ymHoy.slice(0, 4)} hasta hoy` : meses.length === 1 ? mesAnio(meses[0]) : `${mesNombre(meses[0], 'short')} ${meses[0].slice(0, 4)} – ${mesNombre(meses[meses.length - 1], 'short')} ${meses[meses.length - 1].slice(0, 4)}`
+  const nombreMes = focoValido ? mesAnio(focoValido) : etiquetaPeriodo
+  const enCurso = unMes === ymHoy
+  const cambio = previo && unMes && Math.abs(previo.ganancia) > 0.5 ? Math.round(((d.ganancia - previo.ganancia) / Math.abs(previo.ganancia)) * 100) : null
+  const elegirTipo = (t: TipoPeriodo) => { setTipo(t); setFoco(null); if (t === 'mes') setMesUno(ymHoy) }
 
   const lista = (filas: [string, string, number, (() => void)?][], color: string) => {
     const tot = filas.reduce((s, f) => s + Math.max(0, f[2]), 0)
@@ -209,7 +216,7 @@ export default function InicioSimple(p: Props) {
   const ir = (texto: string, destino: DestinoInicio) => <button type="button" className="isIr" onClick={() => p.onIr(destino)}>{texto} ›</button>
 
   const contenidoHoja = (h: Hoja): [string, ReactNode, string, ReactNode] => {
-    const s = SERIES.find((x) => x.k === h)
+    const s = (h in COLOR) ? { c: COLOR[h as Clave] } : null
     if (h === 'vendido') return [`Presupuestos aceptados · ${nombreMes}`, pesos(d.vendido), s!.c, <>
       {d.filas.length === 0 ? <p className="isVacio">No hay presupuestos aceptados en {nombreMes}.</p>
         : lista(d.filas.map((f) => [f.pres.titulo, `${p.nombreCli(f.pres.cliente_id)} · ganancia ${corto(f.ganancia)}`, f.pres.total, () => (p.onAbrirPresupuesto ? p.onAbrirPresupuesto(f.pres.id) : p.onIr('presupuestos'))]), s!.c)}
@@ -305,59 +312,159 @@ export default function InicioSimple(p: Props) {
 
   const abierta = hoja ? contenidoHoja(hoja) : null
 
-  return <div className="ip is">
+  // Cascada "¿De dónde sale tu ganancia?": de lo vendido a lo que te queda.
+  const pasos: { k: string; t: string; sub: string; v: number; hoja: Hoja; tipo: 'base' | 'resta' | 'final' }[] = [
+    { k: 'v', t: 'Vendido', sub: `${d.filas.length} presupuesto${d.filas.length === 1 ? '' : 's'} aceptado${d.filas.length === 1 ? '' : 's'}`, v: d.vendido, hoja: 'vendido', tipo: 'base' },
+    { k: 'c', t: 'Productos', sub: 'lo que te costaron', v: d.costoProductos, hoja: 'productos', tipo: 'resta' },
+    { k: 'e', t: 'Empleados', sub: d.extras > 0.5 ? `y ${corto(d.extras)} de extras` : 'pagos y acuerdos', v: d.empleados + d.extras, hoja: 'servicios', tipo: 'resta' },
+    { k: 'g', t: 'Gastos', sub: 'de la empresa', v: d.gastos, hoja: 'gastos', tipo: 'resta' },
+    { k: 'i', t: 'Impuestos', sub: '', v: d.impuestos, hoja: 'impuestos', tipo: 'resta' },
+  ]
+  const escala = Math.max(1, d.vendido, d.ganancia, ...pasos.map((x) => x.v))
+  let corre = d.vendido
+  const barras = pasos.map((x) => {
+    if (x.tipo === 'base') return { ...x, desde: 0, ancho: x.v }
+    corre -= x.v
+    return { ...x, desde: Math.max(0, corre), ancho: Math.min(x.v, corre + x.v) }
+  })
+  const pct = (n: number) => `${Math.max(0, Math.min(100, (n / escala) * 100))}%`
+
+  // Tarjetas de abajo.
+  const vencido = p.deudas.filter((x) => x.situacion === 'rojo').reduce((s2, x) => s2 + x.saldo, 0)
+  const avance = p.obrasActivas.length ? Math.round(p.obrasActivas.reduce((s2, o) => s2 + Math.max(0, Math.min(100, Number(o.porcentaje_avance) || 0)), 0) / p.obrasActivas.length) : 0
+  const urgentes = p.tareas.filter((t) => t.tono === 'r').length
+  const borradores = p.presupuestos.filter((x) => x.estado === 'borrador')
+  const enviados = p.presupuestos.filter((x) => x.estado === 'enviado').sort((a2, b2) => (b2.fecha ?? '').localeCompare(a2.fecha ?? ''))
+  const [etapa, setEtapa] = useState<'arm' | 'env' | 'obr' | null>(null)
+  const filasTrabajo = [
+    ...p.obrasActivas.map((o) => ({ k: `o${o.id}`, et: 'obr' as const, t: o.nombre_obra, sub: `${p.nombreCli(o.cliente_id)} · ${Math.round(Number(o.porcentaje_avance) || 0)}% de avance`, pct: Math.max(0, Math.min(100, Number(o.porcentaje_avance) || 0)), total: null as number | null, abrir: () => p.onAbrirObra(o.id) })),
+    ...enviados.map((x) => ({ k: `e${x.id}`, et: 'env' as const, t: x.titulo, sub: `${p.nombreCli(x.cliente_id)} · esperando respuesta`, pct: null, total: x.total, abrir: () => (p.onAbrirPresupuesto ? p.onAbrirPresupuesto(x.id) : p.onIr('presupuestos')) })),
+    ...borradores.map((x) => ({ k: `b${x.id}`, et: 'arm' as const, t: x.titulo, sub: `${p.nombreCli(x.cliente_id)} · falta enviarlo`, pct: null, total: x.total, abrir: () => (p.onAbrirPresupuesto ? p.onAbrirPresupuesto(x.id) : p.onIr('presupuestos')) })),
+  ].filter((f) => !etapa || f.et === etapa).slice(0, 6)
+
+  const periodos: [TipoPeriodo, string][] = [['mes', '1 mes'], ['3', '3 meses'], ['12', '12 meses'], ['anio', 'Este año'], ['pers', 'Elegir…']]
+
+  return <div className="ip is is2">
     <div className="ipCab">
       <span className="ipAvatar" aria-hidden>{(p.nombre[0] ?? 'M').toUpperCase()}</span>
       <div><small>{capital(hoy.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }))}</small><h2>Hola{p.nombre ? `, ${p.nombre}` : ''}</h2></div>
       {p.acciones}
     </div>
 
-    {p.verFinanzas && <section className="isCard" aria-label="Resumen de la plata">
-      <div className="isIzq">
-      <div className="ipPeriodo" role="tablist" aria-label="Período">
-        {([[6, '6 meses'], [12, '12 meses'], [0, 'Este año']] as [Rango, string][]).map(([v, t]) => (
-          <button key={v} type="button" role="tab" aria-selected={rango === v} className={rango === v ? 'on' : ''} onClick={() => { setRango(v); setSel(ymHoy) }}>{t}</button>
-        ))}
+    {p.verFinanzas && <>
+      <div className="is2Periodo">
+        <div className="ipPeriodo" role="tablist" aria-label="Período">
+          {periodos.map(([v, t]) => <button key={v} type="button" role="tab" aria-selected={tipo === v} className={tipo === v ? 'on' : ''} onClick={() => elegirTipo(v)}>{t}</button>)}
+        </div>
+        {tipo === 'mes' && <div className="is2Mes">
+          <button type="button" aria-label="Mes anterior" onClick={() => setMesUno((m) => sumarMeses(m, -1))}>‹</button>
+          <b>{capital(mesAnio(mesUno))}</b>
+          <button type="button" aria-label="Mes siguiente" disabled={mesUno >= ymHoy} onClick={() => setMesUno((m) => sumarMeses(m, 1))}>›</button>
+        </div>}
+        {tipo === 'pers' && <div className="is2Pers">
+          <label>Desde<input type="month" value={pers.desde} max={ymHoy} onChange={(e) => e.target.value && setPers((x) => ({ ...x, desde: e.target.value }))} /></label>
+          <label>Hasta<input type="month" value={pers.hasta} max={ymHoy} onChange={(e) => e.target.value && setPers((x) => ({ ...x, hasta: e.target.value }))} /></label>
+        </div>}
       </div>
 
-      <div className="isHero2">
-        <div><small>GANANCIA FINAL · {nombreMes.toUpperCase()}{sel === ymHoy ? ' (EN CURSO)' : ''}</small><b className={d.ganancia < 0 ? 'r' : 'v'}>{pesos(d.ganancia)}</b></div>
-        {margen != null && <em className={d.ganancia < 0 ? 'neg' : ''}>{margen}% de lo vendido</em>}
-      </div>
+      <section className="is2Hero" aria-label="Resumen de la plata">
+        <div className="is2Graf">
+          <div className="is2GCab">
+            <div>
+              <small className="is2Ojo">Ganancia final · {nombreMes}{enCurso ? ' (en curso)' : ''}</small>
+              <b className={`is2Big${d.ganancia < 0 ? ' neg' : ''}`}>{pesos(d.ganancia)}</b>
+              <div className="is2Sub">
+                {cambio != null && <span className={`is2Pill ${cambio >= 0 ? 'up' : 'down'}`}>{cambio >= 0 ? '▲' : '▼'} {Math.abs(cambio)}% vs {mesNombre(sumarMeses(unMes!, -1), 'long')}</span>}
+                {margen != null && <span>{margen}% de lo vendido te queda</span>}
+                {focoValido && meses.length > 1 && <button type="button" className="is2Volver" onClick={() => setFoco(null)}>Ver todo el período ✕</button>}
+              </div>
+            </div>
+            <div className="is2Ley"><span><i className="v" />Vendido</span><span><i className="g" />Ganancia final</span></div>
+          </div>
+          <GraficoMeses serie={serie} foco={tipo === 'mes' ? mesUno : focoValido} onFoco={(ym) => (tipo === 'mes' ? ym && setMesUno(ym) : setFoco(ym))} />
+          <p className="is2Ayuda">Pasá el mouse por un mes para ver el detalle · tocalo para verlo solo</p>
+        </div>
 
-      <GraficoMeses serie={serie} sel={sel} onSel={setSel} ocultas={ocultas} colores={colores} />
+        <div className="is2Casc">
+          <small className="is2Ojo">{capital(nombreMes)}</small>
+          <h3>¿De dónde sale tu ganancia?</h3>
+          <p className="is2Ayuda">Tocá un renglón para ver el detalle</p>
+          <div className="is2Pasos">
+            {barras.map((x) => <button key={x.k} type="button" className={`is2Paso ${x.tipo}`} onClick={() => setHoja(x.hoja)}>
+              <span className="n">{x.t}{x.sub && <small>{x.sub}</small>}</span>
+              <span className="track"><i style={{ left: pct(x.desde), width: x.ancho > 0 ? `max(3px, ${pct(x.ancho)})` : '0' }} /></span>
+              <span className="v">{x.tipo === 'resta' && x.v > 0.5 ? '− ' : ''}{pesos(x.v)}</span>
+            </button>)}
+            <button type="button" className={`is2Paso final${d.ganancia < 0 ? ' neg' : ''}`} onClick={() => setHoja('ganancia')}>
+              <span className="n">Te queda<small>ganancia final</small></span>
+              <span className="track"><i style={{ left: 0, width: d.ganancia > 0 ? `max(3px, ${pct(d.ganancia)})` : '0' }} /></span>
+              <span className="v">{pesos(d.ganancia)}</span>
+            </button>
+          </div>
+          {d.sinCosto > 0 && <button type="button" className="is2Aviso" onClick={() => setHoja('productos')}><span aria-hidden>⚠</span><span><b>{d.sinCosto} producto{d.sinCosto === 1 ? '' : 's'} sin costo</b> en los presupuestos de este período: la ganancia de productos puede aparecer de más.</span></button>}
+          {d.conEstimado > 0 && <p className="is2Ayuda">Empleados: en {d.conEstimado} trabajo{d.conEstimado === 1 ? '' : 's'} se usa lo estimado en el presupuesto.</p>}
+        </div>
+      </section>
+    </>}
 
-      <div className="isLey">
-        {SERIES.filter((s) => s.k !== 'vendido').map((s) => <button key={s.k} type="button" aria-pressed={!ocultas.has(s.k)} className={ocultas.has(s.k) ? 'off' : ''} onClick={() => alternar(s.k)}><i style={{ background: s.c }} />{s.t}</button>)}
-      </div>
+    <section className="is2Kpis">
+      {p.verFinanzas && <button type="button" className="is2Kpi" onClick={() => setHoja('cobrar')}>
+        <span className="k">Te deben <em>{p.deudas.length} obra{p.deudas.length === 1 ? '' : 's'}</em></span>
+        <b>{corto(p.porCobrar)}</b>
+        <span className="is2Barra">{p.porCobrar > 0 && <><i className="r" style={{ width: `${(vencido / p.porCobrar) * 100}%` }} /><i className="n" style={{ width: `${100 - (vencido / p.porCobrar) * 100}%` }} /></>}</span>
+        <small>{p.porCobrar > 0.5 ? `${corto(vencido)} para cobrar ya · ${corto(p.porCobrar - vencido)} con el avance` : '✓ Nadie te debe'}</small>
+      </button>}
+      {p.verFinanzas && <button type="button" className="is2Kpi" onClick={() => setHoja('stock')}>
+        <span className="k">En stock <em>invertido</em></span>
+        <b>{stock ? corto(stock.invertido) : '…'}</b>
+        <span className="is2Barra">{stock && stock.invertido + stock.ganarias > 0 && <><i className="b" style={{ width: `${(stock.invertido / (stock.invertido + Math.max(0, stock.ganarias))) * 100}%` }} /><i className="g" style={{ width: `${(Math.max(0, stock.ganarias) / (stock.invertido + Math.max(0, stock.ganarias))) * 100}%` }} /></>}</span>
+        <small>{stock ? <>Si lo vendés todo ganás <strong className="v">{corto(stock.ganarias)}</strong></> : 'Calculando…'}</small>
+      </button>}
+      <button type="button" className="is2Kpi" onClick={() => setHoja('obras')}>
+        <span className="k">Obras en curso <em>{p.obrasActivas.length}</em></span>
+        <b>{p.obrasActivas.length ? `${avance}%` : '—'}</b>
+        <span className="is2Barra"><i className="o" style={{ width: `${avance}%` }} /></span>
+        <small>{p.obrasActivas.length ? 'avance promedio' : 'No hay obras en curso'}</small>
+      </button>
+      <button type="button" className="is2Kpi" onClick={() => setHoja('hoy')}>
+        <span className="k">Para hoy <em>{p.tareas.length} tarea{p.tareas.length === 1 ? '' : 's'}</em></span>
+        <b className={urgentes ? 'naranja' : 'v'}>{p.tareas.length === 0 ? '✓ Al día' : urgentes ? `${urgentes} urgente${urgentes === 1 ? '' : 's'}` : p.tareas.length}</b>
+        <span className="is2Barra">{p.tareas.length > 0 && <><i className="r" style={{ width: `${(urgentes / p.tareas.length) * 100}%` }} /><i className="gr" style={{ width: `${100 - (urgentes / p.tareas.length) * 100}%` }} /></>}</span>
+        <small>{p.tareas.length ? 'tocá para verlas' : 'Nada pendiente'}</small>
+      </button>
+    </section>
 
+    <section className="is2Duo">
+      <div className="is2Box">
+        <h3>Trabajos <button type="button" onClick={() => p.onIr('presupuestos')}>Ver todos →</button></h3>
+        <div className="is2Etapas">
+          {([['arm', 'Armando', borradores.length], ['env', 'Enviados', enviados.length], ['obr', 'En obra', p.obrasActivas.length]] as const).map(([k, t, n]) => (
+            <button key={k} type="button" className={`is2Et et-${k}${etapa === k ? ' on' : ''}`} aria-pressed={etapa === k} onClick={() => setEtapa((e) => (e === k ? null : k))}><b>{n}</b><span>{t}</span></button>
+          ))}
+        </div>
+        {filasTrabajo.length === 0 ? <p className="isVacio">No hay trabajos {etapa === 'arm' ? 'armándose' : etapa === 'env' ? 'enviados' : etapa === 'obr' ? 'en obra' : 'en marcha'}.</p> : <div className="is2Trab">
+          {filasTrabajo.map((f) => <button key={f.k} type="button" className={`is2Tr et-${f.et}`} onClick={f.abrir}>
+            <i aria-hidden />
+            <div><strong>{f.t}</strong><small>{f.sub}</small>{f.pct != null && <span className="is2Mini"><span style={{ width: `${f.pct}%` }} /></span>}</div>
+            <span className="m">{f.total != null ? corto(f.total) : '›'}</span>
+          </button>)}
+        </div>}
       </div>
-      <div className="isDer">
-      <p className="isSub">Números de {nombreMes} · tocá uno para ver el detalle</p>
-      <div className="isNums">
-        {SERIES.map((s) => {
-          const v = d[s.k]
-          const sub = s.k === 'vendido' ? `${d.filas.length} presupuesto${d.filas.length === 1 ? '' : 's'} aceptado${d.filas.length === 1 ? '' : 's'}`
-            : s.k === 'ganancia' ? 'Te queda'
-              : s.k === 'productos' && d.sinCosto > 0 ? '⚠️ hay productos sin costo'
-                : s.k === 'productos' && d.ventaProductos > 0 ? `${Math.round((v / d.ventaProductos) * 100)}% de margen`
-                  : s.k === 'servicios' ? 'menos empleados y extras'
-                    : d.vendido > 0 ? `${Math.round((v / d.vendido) * 100)}% de lo vendido` : '—'
-          const resta = s.k === 'gastos' || s.k === 'impuestos'
-          return <button key={s.k} type="button" className={`isNum${s.k === 'ganancia' ? ' gan' : s.k === 'vendido' ? ' ancho' : ''}`} style={{ borderLeftColor: s.c }} onClick={() => setHoja(s.k)}>
-            <small>{s.t}</small><b className={s.k === 'ganancia' ? (v < 0 ? 'r' : 'v') : v < 0 ? 'r' : ''}>{resta ? '− ' : ''}{pesos(v)}</b><span>{sub}</span>
-          </button>
-        })}
+      <div className="is2Box">
+        <h3>Para hacer hoy {p.tareas.length > 0 && <span className="is2Cuenta">{p.tareas.length}</span>}</h3>
+        {p.tareas.length === 0 ? <p className="isVacio">✓ Todo al día.</p> : <div className="ipTareas">
+          {p.tareas.slice(0, 6).map((t) => (
+            <div key={t.clave} className="ipTarea">
+              <span className={`ipIco ${t.tono}`} aria-hidden>{t.icono}</span>
+              <div><b>{t.titulo}</b><small>{t.detalle}</small></div>
+              <button type="button" className={t.principal ? 'prim' : ''} onClick={t.accion}>{t.boton}</button>
+            </div>
+          ))}
+          {p.tareas.length > 6 && <button type="button" className="isIr" onClick={() => setHoja('hoy')}>Ver las {p.tareas.length} ›</button>}
+        </div>}
+        {p.verFinanzas && p.ia}
       </div>
-      </div>
-    </section>}
-
-    <div className="isChips">
-      {p.verFinanzas && <button type="button" className="isChip" onClick={() => setHoja('cobrar')}><small>Te deben</small><b>{corto(p.porCobrar)}</b></button>}
-      {p.verFinanzas && <button type="button" className="isChip" onClick={() => setHoja('stock')}><small>En stock</small><b>{stock ? corto(stock.invertido) : '…'}</b></button>}
-      <button type="button" className="isChip" onClick={() => setHoja('obras')}><small>Obras</small><b>{p.obrasActivas.length}</b></button>
-      <button type="button" className="isChip" onClick={() => setHoja('hoy')}><small>Hoy</small><b className={p.tareas.length ? 'r' : 'v'}>{p.tareas.length || '✓'}</b></button>
-    </div>
+    </section>
 
     {abierta && <div className="isVelo" onClick={(e) => { if (e.target === e.currentTarget) setHoja(null) }}>
       <div className="isHoja" role="dialog" aria-modal="true" aria-label={abierta[0]}>
