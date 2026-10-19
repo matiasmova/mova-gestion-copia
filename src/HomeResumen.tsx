@@ -7,6 +7,7 @@ import { TIPOS_EVENTO } from './Agenda'
 import { moneda } from './gestionFormat'
 import { calcularPersona } from './personalCalculos'
 import { avanceEfectivo, cuentasPorObra } from './cuentaObra'
+import { empleadosDeObra } from './gananciaTrabajo'
 
 // Pantalla de Inicio: resumen rápido de la empresa y, en pestañas, el detalle
 // que antes estaba en Tablero (balance, cobranzas, personal, gastos, inventario).
@@ -17,11 +18,11 @@ import { avanceEfectivo, cuentasPorObra } from './cuentaObra'
 //  · Obras: todos.
 
 type Rol = 'admin' | 'encargado' | 'auxiliar' | 'contable'
-type Destino = 'obras' | 'presupuestos' | 'clientes' | 'agenda' | 'gastos'
+type Destino = 'obras' | 'presupuestos' | 'clientes' | 'agenda' | 'gastos' | 'catalogo'
 
 type Obra = { id: number; cliente_id: number; nombre_obra: string; localidad: string | null; estado: string | null; porcentaje_avance: number | null; activo: boolean }
 type Cliente = { id: number; nombre: string; apellido: string | null }
-type Presupuesto = { id: number; cliente_id: number; obra_id: number | null; titulo: string; estado: string; total: number; activo: boolean; fecha: string | null }
+type Presupuesto = { id: number; cliente_id: number; obra_id: number | null; titulo: string; estado: string; total: number; activo: boolean; fecha: string | null; pago_empleados_estimado?: number | null }
 type Pago = { monto: number; fecha: string; obra_id: number | null; presupuesto_id: number | null }
 type Costo = { monto: number; fecha: string; tipo?: string | null; personal_id: number | null; obra_id: number | null }
 type Gasto = { id: number; fecha: string; categoria: string | null; descripcion: string | null; monto: number; recurrente: boolean }
@@ -81,8 +82,6 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
   const [personas, setPersonas] = useState<Persona[]>([])
   // Compras a proveedores ya pagadas (salen de la caja como los demás costos).
   const [compras, setCompras] = useState<{ fecha: string; monto: number }[]>([])
-  // Todas las compras de materiales (pagadas o no): son costo de productos en el Inicio.
-  const [comprasTodas, setComprasTodas] = useState<{ fecha: string; monto: number }[]>([])
   const [jornales, setJornales] = useState<Jornal[]>([])
 
   useEffect(() => {
@@ -92,7 +91,9 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
       const [rO, rC, rP, rPa, rCo, rG, rAd, rAs, rPe, rJ, rM] = await Promise.all([
         supabase.from('obras').select('id,cliente_id,nombre_obra,localidad,estado,porcentaje_avance,activo').eq('activo', true).order('created_at', { ascending: false }),
         supabase.from('Clientes').select('id,nombre,apellido'),
-        supabase.from('presupuestos').select('id,cliente_id,obra_id,titulo,estado,total,activo,fecha').eq('activo', true),
+        // Con el pago estimado a empleados (fase 33); si falta la columna, sin él.
+        supabase.from('presupuestos').select('id,cliente_id,obra_id,titulo,estado,total,activo,fecha,pago_empleados_estimado').eq('activo', true)
+          .then(async (r) => (r.error ? await supabase.from('presupuestos').select('id,cliente_id,obra_id,titulo,estado,total,activo,fecha').eq('activo', true) : r)),
         supabase.from('pagos').select('monto,fecha,obra_id,presupuesto_id'),
         supabase.from('costos').select('monto,fecha,tipo,personal_id,obra_id'),
         supabase.from('gastos_generales').select('id,fecha,categoria,descripcion,monto,recurrente'),
@@ -105,7 +106,7 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
       if (!vigente) return
       setObras(rO.error ? [] : (rO.data ?? []) as Obra[])
       setClientes(rC.error ? [] : (rC.data ?? []) as Cliente[])
-      setPresupuestos(rP.error ? [] : (rP.data ?? []).map((p) => ({ ...p, total: num(p.total) })) as Presupuesto[])
+      setPresupuestos(rP.error ? [] : ((rP.data ?? []) as Record<string, unknown>[]).map((p) => ({ ...p, total: num(p.total), pago_empleados_estimado: num(p.pago_empleados_estimado) })) as unknown as Presupuesto[])
       setPagos(rPa.error ? [] : (rPa.data ?? []).map((p) => ({ ...p, monto: num(p.monto) })) as Pago[])
       setCostos(rCo.error ? [] : (rCo.data ?? []).map((c) => ({ ...c, monto: num(c.monto) })) as Costo[])
       setGastos(rG.error ? [] : (rG.data ?? []).map((g) => ({ ...g, monto: num(g.monto) })) as Gasto[])
@@ -114,7 +115,6 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
       setPersonas(rPe.error ? [] : (rPe.data ?? []).map((p) => ({ ...p, costo_dia: p.costo_dia == null ? null : num(p.costo_dia) })) as Persona[])
       setJornales(rJ.error ? [] : (rJ.data ?? []).map((j) => ({ ...j, jornada: num(j.jornada), horas: j.horas == null ? null : num(j.horas) })) as Jornal[])
       setCompras(rM.error ? [] : ((rM.data ?? []) as { cantidad: unknown; precio_unitario: unknown; fecha: string; pagado: boolean | null }[]).filter((m) => m.pagado !== false).map((m) => ({ fecha: m.fecha, monto: num(m.cantidad) * num(m.precio_unitario) })))
-      setComprasTodas(rM.error ? [] : ((rM.data ?? []) as { cantidad: unknown; precio_unitario: unknown; fecha: string }[]).map((m) => ({ fecha: m.fecha, monto: num(m.cantidad) * num(m.precio_unitario) })))
       setCargando(false)
     }
     void cargar()
@@ -191,6 +191,22 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
       adelantado: filas.reduce((s, f) => s + f.adelantado, 0),
     }
   }, [asignaciones, personas, obras, costos, jornales, presupuestos, adicionales])
+
+  // ---- Lo acordado con el personal de cada obra (para la ganancia del Inicio) ----
+  const empleadosObra = useMemo(() => {
+    const m: Record<number, number> = {}
+    const valorObra = (obraId: number) =>
+      presupuestos.filter((p) => p.obra_id === obraId && p.estado === 'aceptado').reduce((s, p) => s + p.total, 0) +
+      adicionales.filter((a) => a.obra_id === obraId && a.estado === 'aprobado' && a.tipo !== 'gasto_extra').reduce((s, a) => s + a.importe, 0)
+    const obrasCon = Array.from(new Set(asignaciones.map((a) => a.obra_id)))
+    obrasCon.forEach((obraId) => {
+      m[obraId] = empleadosDeObra(
+        asignaciones.filter((a) => a.obra_id === obraId), personas,
+        costos.filter((c) => c.obra_id === obraId && c.personal_id != null), jornales.filter((j) => j.obra_id === obraId), valorObra(obraId),
+      ).reduce((s, f) => s + f.total, 0)
+    })
+    return m
+  }, [asignaciones, personas, costos, jornales, presupuestos, adicionales])
 
   // ---- Plata del mes: neto real y neto si pagás lo pendiente ----
   const mes = useMemo(() => {
@@ -280,9 +296,8 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
       presupuestos={presupuestos}
       costos={costos}
       gastos={gastos}
-      compras={comprasTodas}
       adicionales={adicionales}
-      personas={personas}
+      empleadosObra={empleadosObra}
       deudas={verFinanzas ? obrasInfo.deudas : []}
       porCobrar={obrasInfo.porCobrar}
       obrasActivas={obrasInfo.activas}

@@ -1,3 +1,4 @@
+import ResumenProductos from './ResumenProductos'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import type { Pedido } from './BuscadorGlobal'
 import { supabase } from './supabase'
@@ -272,7 +273,6 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [elementos, busqueda, tipoFiltro, estadoFiltro, soloStockBajo, fCategoria, fProveedor, fMoneda, fStock, fFoto, fRotacion, fDatos, orden, ventas, diasVendidos, diasParado])
 
-  const inversionStock = elementos.filter((el) => el.tipo === 'producto' && el.activo).reduce((s, el) => s + el.costo_unitario * el.stock, 0)
   const bajos = elementos.filter((el) => el.activo && (nivelStock(el) === 'bajo' || nivelStock(el) === 'sin'))
   const sinPrecio = elementos.filter((el) => el.activo && !(el.precio_venta > 0)).length
   const sinCosto = elementos.filter((el) => el.activo && el.tipo === 'producto' && !(el.costo_unitario > 0)).length
@@ -661,9 +661,9 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
       )}
 
       {pestana === 'catalogo' && <>
+      {!cargando && !error && <ResumenProductos elementos={elementos} mostrar={mostrar} onTipo={setTipoFiltro} />}
       {!cargando && !error && (
         <div className="prodKpis">
-          <div><span>INVERSIÓN EN STOCK</span><strong>{mostrar(inversionStock)}</strong><small>Precio de compra × stock</small></div>
           <div><span>PRODUCTOS ACTIVOS</span><strong>{elementos.filter((e) => e.tipo === 'producto' && e.activo).length}</strong><small>En catálogo</small></div>
           <button type="button" className={`prodKpiBtn ${bajos.length ? 'alertaStock' : ''} ${soloStockBajo ? 'activo' : ''}`} onClick={() => setSoloStockBajo((v) => !v)}>
             <span>STOCK BAJO</span><strong>{bajos.length}</strong><small>{soloStockBajo ? 'Mostrando solo estos ✓' : 'Tocá para filtrar'}</small>

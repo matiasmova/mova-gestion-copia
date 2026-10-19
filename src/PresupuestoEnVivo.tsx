@@ -12,6 +12,7 @@ import { PARTE_UNICA, cargarResumenDoc, incluyeDe, partesConItems, resumenVacio,
 import { pedirAsistente } from './asistenteIA'
 import { codigoPresupuesto } from './codigoPresupuesto'
 import logo from './assets/mova-logo.jpg'
+import GananciaTrabajo from './GananciaTrabajo'
 
 // Presupuesto "en vivo": se arma sobre el mismo documento que recibe el cliente.
 // Se toca un ítem y se cambia ahí (cantidad, precio, descuento); el total se
@@ -34,6 +35,8 @@ type Props = {
   menu?: (cerrar: () => void) => ReactNode
   extra?: ReactNode
   onGuardado?: () => void
+  // Obra vinculada: para la cuenta de "Vas a ganar" (personal asignado y extras).
+  obraId?: number | null
 }
 
 const SECCIONES: { tipo: 'producto' | 'servicio'; titulo: string }[] = [
@@ -59,7 +62,7 @@ export function Texto({ value, onChange, placeholder, className }: { value: stri
   return <textarea ref={ref} rows={1} className={className} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
 }
 
-export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar, onEditorCompleto, modoInicial = 'edit', estado, acciones, menu, extra, onGuardado }: Props) {
+export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar, onEditorCompleto, modoInicial = 'edit', estado, acciones, menu, extra, onGuardado, obraId = null }: Props) {
   const [menuAbierto, setMenuAbierto] = useState(false)
   const [modo, setModo] = useState<'edit' | 'ver'>(modoInicial)
   const [titulo, setTitulo] = useState(presupuesto.titulo)
@@ -447,6 +450,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
             <div><small>TOTAL DEL PRESUPUESTO</small><b>{moneda(total)}</b>{bonificacion > 0.5 && <span>Incluye bonificación de {moneda(Math.min(bonificacion, sumaNeta))}</span>}</div>
             <div className="der"><small>SEÑA 70%</small><b>{moneda(sena)}</b></div>
           </div>
+          {ed && <GananciaTrabajo presupuestoIds={[presupuesto.id]} obraId={obraId} items={validos} total={total} />}
 
           {SECCIONES.map(({ tipo, titulo: tSec }) => {
             const its = items.filter((it) => (it.tipo === 'servicio' ? 'servicio' : 'producto') === tipo)

@@ -1,3 +1,4 @@
+import GananciaTrabajo from './GananciaTrabajo'
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase'
 import { avisoGuardado } from './Animados'
@@ -389,6 +390,8 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obra
       <button type="button" className={`cambio${verCambios ? ' on' : ''}`} aria-expanded={verCambios} onClick={() => setVerCambios((v) => !v)}><small>CAMBIOS {verCambios ? '▴' : '▾'}</small><b>{conSigno(aprobados)}</b></button>
       <div className="total"><small>TOTAL HOY</small><b>{plata(original + aprobados)}</b></div>
     </div>
+    <GananciaTrabajo presupuestoIds={presus.map((p) => p.id)} obraId={obraId} total={original} adicionales={aprobados}
+      items={items.map((it) => ({ tipo: it.tipo ?? '', cantidad: it.cantidad, precio_unitario: it.precio_unitario, costo_unitario: Number(it.costo_unitario) || 0, descuento_pct: it.descuento_pct }))} />
     {huerfanos.length > 0 && !verCambios && <button type="button" className="oeAviso pend oeAvisoBtn" onClick={() => setVerCambios(true)}>⚠ {huerfanos.length === 1 ? 'Hay 1 cambio' : `Hay ${huerfanos.length} cambios`} de ítems que ya no están en el presupuesto (se editó después). Tocá para verlos ›</button>}
     {verCambios && <div className="oeCambios">
       <div className="oeCambiosCab"><b>De dónde salen los cambios</b><button type="button" className="oeLink" onClick={() => setVerCambios(false)}>Cerrar</button></div>

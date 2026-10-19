@@ -1,32 +1,28 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { supabase } from './supabase'
-import { importeNeto } from './presupuestoCalculos'
+import { cuentaTrabajo, esExtraDeObra } from './gananciaTrabajo'
 
-// Inicio en una sola pantalla: un gráfico con una curva por mes para cada
-// número (aceptados, costo de productos, empleados, gastos extras, impuestos y
-// ganancia final), los seis números del mes elegido y, al tocar cualquiera, su
-// resumen en una hoja que sube desde abajo. No hay más pestañas aparte.
-//  · Ganancia de cada presupuesto: los servicios quedan al 100%; los productos
-//    dejan venta − costo. La bonificación general ya está en el total.
-//  · Después se restan lo pagado a empleados, los gastos extras y los impuestos.
-//  · Costo de productos: lo que compraste en el mes (compras de materiales,
-//    gastos de obra de materiales e "Inversión en productos"). Si el costo
-//    cargado en los presupuestos de ese mes es mayor, se usa ese (así no se
-//    cuenta dos veces ni queda en $ 0 cuando falta cargar costos).
-//  · El Gasto extra que el cliente devuelve no cuenta.
+// Inicio en una sola pantalla, con la misma cuenta que el presupuesto:
+//  · Ganancia en productos: venta − costo de cada producto vendido.
+//  · Ganancia en servicios: servicios (100% tuyos) − empleados − extras de la obra.
+//  · Menos los gastos de la empresa y los impuestos = ganancia final.
+// Cada trabajo cuenta en el mes en que se aceptó su presupuesto. Los empleados
+// son lo acordado con el personal de la obra (o el pago estimado del
+// presupuesto si todavía no hay personal). Comprar stock NO resta: es plata
+// invertida, que se ve en "Invertido en stock".
 
-type Pres = { id: number; cliente_id: number; obra_id: number | null; titulo: string; estado: string; total: number; fecha: string | null }
+type Pres = { id: number; cliente_id: number; obra_id: number | null; titulo: string; estado: string; total: number; fecha: string | null; pago_empleados_estimado?: number | null }
 type Costo = { monto: number; fecha: string; tipo?: string | null; personal_id: number | null; obra_id: number | null }
 type Gasto = { id: number; fecha: string; categoria: string | null; descripcion: string | null; monto: number }
 type Adicional = { obra_id: number; importe: number; estado: string; tipo: string }
-type Persona = { id: number; nombre: string; apellido: string | null }
 type Item = { presupuesto_id: number; tipo: string; cantidad: number; precio_unitario: number; costo_unitario: number; descuento_pct: number }
+type Fila = { pres: Pres; ganancia: number }
 type ObraAct = { id: number; nombre_obra: string; cliente_id: number; porcentaje_avance: number | null }
 type Deuda = { obra: ObraAct; saldo: number; faltaAvance: number; extras: number; situacion: 'rojo' | 'naranja' | 'verde' }
 type DebePersonal = { clave: string; obraId: number; nombre: string; obra: string; debe: number }
 
 export type Tarea = { clave: string; icono: string; tono: 'r' | 'n' | 'a' | 'v'; titulo: string; detalle: string; boton: string; principal?: boolean; accion: () => void }
-export type DestinoInicio = 'obras' | 'presupuestos' | 'gastos'
+export type DestinoInicio = 'obras' | 'presupuestos' | 'gastos' | 'catalogo'
 
 type Props = {
   nombre: string
@@ -34,9 +30,8 @@ type Props = {
   presupuestos: Pres[]
   costos: Costo[]
   gastos: Gasto[]
-  compras: { fecha: string; monto: number }[]
   adicionales: Adicional[]
-  personas: Persona[]
+  empleadosObra: Record<number, number> // lo acordado con el personal de cada obra
   deudas: Deuda[]
   porCobrar: number
   obrasActivas: ObraAct[]
@@ -51,14 +46,14 @@ type Props = {
 }
 
 type Rango = 6 | 12 | 0 // 0 = este año
-type Clave = 'vendido' | 'productos' | 'empleados' | 'gastos' | 'impuestos' | 'ganancia'
-type Hoja = Clave | 'cobrar' | 'obras' | 'hoy'
+type Clave = 'vendido' | 'productos' | 'servicios' | 'gastos' | 'impuestos' | 'ganancia'
+type Hoja = Clave | 'cobrar' | 'obras' | 'hoy' | 'stock'
 
 const SERIES: { k: Clave; t: string; c: string }[] = [
   { k: 'vendido', t: 'Aceptados', c: '#2f63b8' },
-  { k: 'productos', t: 'Costo productos', c: '#e0701a' },
-  { k: 'empleados', t: 'Empleados', c: '#a1530f' },
-  { k: 'gastos', t: 'Gastos extras', c: '#cf4b37' },
+  { k: 'productos', t: 'Ganancia productos', c: '#e0701a' },
+  { k: 'servicios', t: 'Ganancia servicios', c: '#a1530f' },
+  { k: 'gastos', t: 'Gastos empresa', c: '#cf4b37' },
   { k: 'impuestos', t: 'Impuestos', c: '#7c3aed' },
   { k: 'ganancia', t: 'Ganancia final', c: '#1d9a5b' },
 ]
@@ -69,10 +64,6 @@ const ymDe = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStar
 const mesNombre = (ym: string, f: 'long' | 'short') => new Date(`${ym}-01T12:00:00`).toLocaleDateString('es-AR', { month: f }).replace('.', '')
 const esImpuesto = (g: Gasto) => (g.categoria ?? '').trim().toLowerCase() === 'impuestos'
 const esInvProductos = (g: Gasto) => (g.categoria ?? '').trim().toLowerCase() === 'inversión en productos'
-const esSueldo = (g: Gasto) => (g.categoria ?? '').trim().toLowerCase() === 'sueldos fijos'
-const esEmpleado = (c: Costo) => c.personal_id != null || c.tipo === 'mano_obra'
-const esProducto = (tipo: string) => tipo === 'producto' || tipo === 'material'
-const ETQ_COSTO: Record<string, string> = { terciarizado: 'Tercerizados en obra', otro: 'Otros gastos de obra' }
 
 export default function InicioSimple(p: Props) {
   const hoy = new Date()
@@ -125,75 +116,72 @@ export default function InicioSimple(p: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rango, ymHoy])
 
+  // Stock: plata invertida y lo que ganarías vendiéndolo.
+  const [stock, setStock] = useState<{ invertido: number; ganarias: number } | null>(null)
+  useEffect(() => {
+    if (!p.verFinanzas) return
+    void supabase.from('productos_servicios').select('tipo, activo, stock, costo_unitario, precio_venta').then(({ data, error }) => {
+      if (error) return
+      const prods = ((data ?? []) as { tipo: string; activo: boolean | null; stock: unknown; costo_unitario: unknown; precio_venta: unknown }[]).filter((x) => x.tipo === 'producto' && x.activo !== false && Number(x.stock) > 0)
+      const invertido = prods.reduce((s2, x) => s2 + Number(x.costo_unitario || 0) * Number(x.stock), 0)
+      const valor = prods.reduce((s2, x) => s2 + Number(x.precio_venta || 0) * Number(x.stock), 0)
+      setStock({ invertido, ganarias: valor - invertido })
+    })
+  }, [p.verFinanzas])
+
   // Cuentas de un mes (mismas reglas para la curva y para el detalle).
   const calcular = useMemo(() => {
     const itemsPor: Record<number, Item[]> = {}
     ;(items ?? []).forEach((it) => { (itemsPor[it.presupuesto_id] ??= []).push(it) })
-    // Los adicionales de una obra se cuentan en el mes de su primer presupuesto aceptado.
-    const primera: Record<number, string> = {}
-    aceptados.forEach((x) => { if (x.obra_id != null && (!primera[x.obra_id] || (x.fecha ?? '') < primera[x.obra_id])) primera[x.obra_id] = x.fecha ?? '' })
+    // Lo que es de toda la obra (personal, extras, cambios) va con su primer presupuesto aceptado.
+    const primero: Record<number, Pres> = {}
+    const estimadoObra: Record<number, number> = {}
+    aceptados.forEach((x) => {
+      if (x.obra_id == null) return
+      estimadoObra[x.obra_id] = (estimadoObra[x.obra_id] ?? 0) + (Number(x.pago_empleados_estimado) || 0)
+      const pr = primero[x.obra_id]
+      if (!pr || (x.fecha ?? '') < (pr.fecha ?? '')) primero[x.obra_id] = x
+    })
     return (ym: string) => {
       const en = (f: string | null | undefined) => (f ?? '').slice(0, 7) === ym
-      const adic = p.adicionales.filter((a) => a.estado === 'aprobado' && a.tipo !== 'gasto_extra' && en(primera[a.obra_id]))
-      const adicionales = adic.reduce((s, a) => s + a.importe, 0)
-      let ventaProductos = 0, costoProductos = 0, ventaServicios = 0, sinDetalle = 0, bonificacion = 0, productosSinCosto = 0
-      const filas = aceptados.filter((x) => en(x.fecha)).map((x) => {
-        const suyos = itemsPor[x.id] ?? []
-        let costo = 0, neto = 0
-        if (!suyos.length) sinDetalle += x.total
-        for (const it of suyos) {
-          const n = importeNeto(it)
-          neto += n
-          if (esProducto(it.tipo)) {
-            ventaProductos += n
-            const c = it.cantidad * it.costo_unitario
-            costoProductos += c
-            costo += c
-            if (it.costo_unitario <= 0 && n > 0) productosSinCosto++
-          } else ventaServicios += n
+      let ventaProductos = 0, costoProductos = 0, servicios = 0, bonificacion = 0, adicionales = 0, empleados = 0, extras = 0, sinCosto = 0, conEstimado = 0
+      const filas: Fila[] = aceptados.filter((x) => en(x.fecha)).map((x) => {
+        const deObra = x.obra_id != null && primero[x.obra_id]?.id === x.id
+        const adic = deObra ? p.adicionales.filter((a) => a.obra_id === x.obra_id && a.estado === 'aprobado' && a.tipo !== 'gasto_extra').reduce((s2, a) => s2 + a.importe, 0) : 0
+        let emp = 0
+        if (x.obra_id == null) { emp = Number(x.pago_empleados_estimado) || 0; if (emp) conEstimado++ }
+        else if (deObra) {
+          if (p.empleadosObra[x.obra_id] != null) emp = p.empleadosObra[x.obra_id]
+          else { emp = estimadoObra[x.obra_id] ?? 0; if (emp) conEstimado++ }
         }
-        if (suyos.length) bonificacion += Math.max(neto - x.total, 0)
-        return { pres: x, ganancia: x.total - costo }
-      }).sort((a, b) => b.pres.total - a.pres.total)
-      const vendido = filas.reduce((s, f) => s + f.pres.total, 0) + adicionales
+        const ext = deObra ? p.costos.filter((c) => c.obra_id === x.obra_id && esExtraDeObra(c)).reduce((s2, c) => s2 + c.monto, 0) : 0
+        const c = cuentaTrabajo(itemsPor[x.id] ?? [], x.total, emp, ext, adic)
+        ventaProductos += c.ventaProductos; costoProductos += c.costoProductos; servicios += c.servicios; bonificacion += c.bonificacion
+        adicionales += adic; empleados += emp; extras += ext; sinCosto += c.sinCosto
+        return { pres: x, ganancia: c.ganancia }
+      }).sort((a2, b2) => b2.pres.total - a2.pres.total)
+      const vendido = filas.reduce((s2, f2) => s2 + f2.pres.total, 0) + adicionales
+      const ganProductos = ventaProductos - costoProductos
+      const ganServicios = servicios + adicionales - bonificacion - empleados - extras
 
-      // Lo que realmente compraste para vender e instalar.
-      const compraMateriales = p.compras.filter((c) => en(c.fecha)).reduce((s, c) => s + c.monto, 0)
-      const materialObra = p.costos.filter((c) => !esEmpleado(c) && c.tipo === 'material' && en(c.fecha)).reduce((s, c) => s + c.monto, 0)
-      const invProductos = p.gastos.filter((g) => esInvProductos(g) && en(g.fecha)).reduce((s, g) => s + g.monto, 0)
-      const comprado = compraMateriales + materialObra + invProductos
-      const productos = Math.max(costoProductos, comprado)
-      const reintegrar = p.costos.filter((c) => c.tipo === 'gasto_extra' && en(c.fecha)).reduce((s, c) => s + c.monto, 0)
-
-      const pagosEmp = p.costos.filter((c) => esEmpleado(c) && en(c.fecha))
-      const sueldos = p.gastos.filter((g) => esSueldo(g) && en(g.fecha))
-      const porPersona: Record<string, number> = {}
-      pagosEmp.forEach((c) => {
-        const pe = p.personas.find((x) => x.id === c.personal_id)
-        const k = pe ? `${pe.nombre} ${pe.apellido ?? ''}`.trim() : 'Mano de obra sin asignar'
-        porPersona[k] = (porPersona[k] || 0) + c.monto
-      })
-      sueldos.forEach((g) => { const k = g.descripcion?.trim() || 'Sueldos fijos'; porPersona[k] = (porPersona[k] || 0) + g.monto })
-      const empleados = pagosEmp.reduce((s, c) => s + c.monto, 0) + sueldos.reduce((s, g) => s + g.monto, 0)
-
-      const gastosEmp = p.gastos.filter((g) => !esImpuesto(g) && !esSueldo(g) && !esInvProductos(g) && en(g.fecha))
-      const gastosObra = p.costos.filter((c) => !esEmpleado(c) && c.tipo !== 'material' && c.tipo !== 'gasto_extra' && en(c.fecha))
+      // Gastos de la empresa: todo menos impuestos (van aparte) e inversión en productos (es stock, no gasto).
+      const gastosEmp = p.gastos.filter((g) => !esImpuesto(g) && !esInvProductos(g) && en(g.fecha))
       const porCat: Record<string, number> = {}
       gastosEmp.forEach((g) => { const k = g.categoria || 'Otros'; porCat[k] = (porCat[k] || 0) + g.monto })
-      gastosObra.forEach((c) => { const k = ETQ_COSTO[c.tipo ?? ''] ?? 'Otros gastos de obra'; porCat[k] = (porCat[k] || 0) + c.monto })
-      const gastos = gastosEmp.reduce((s, g) => s + g.monto, 0) + gastosObra.reduce((s, c) => s + c.monto, 0)
-
-      const impuestosLista = p.gastos.filter((g) => esImpuesto(g) && en(g.fecha)).sort((a, b) => b.fecha.localeCompare(a.fecha))
-      const impuestos = impuestosLista.reduce((s, g) => s + g.monto, 0)
+      const gastos = gastosEmp.reduce((s2, g) => s2 + g.monto, 0)
+      const invProductos = p.gastos.filter((g) => esInvProductos(g) && en(g.fecha)).reduce((s2, g) => s2 + g.monto, 0)
+      const impuestosLista = p.gastos.filter((g) => esImpuesto(g) && en(g.fecha)).sort((a2, b2) => b2.fecha.localeCompare(a2.fecha))
+      const impuestos = impuestosLista.reduce((s2, g) => s2 + g.monto, 0)
+      const reintegrar = p.costos.filter((c) => c.tipo === 'gasto_extra' && en(c.fecha)).reduce((s2, c) => s2 + c.monto, 0)
       return {
-        filas, vendido, adicionales, ventaProductos, productos, costoCargado: costoProductos, compraMateriales, materialObra, invProductos, reintegrar, ventaServicios, sinDetalle, bonificacion, productosSinCosto,
-        empleados, porPersona: Object.entries(porPersona).sort((a, b) => b[1] - a[1]),
-        gastos, porCat: Object.entries(porCat).sort((a, b) => b[1] - a[1]),
+        filas, vendido, ventaProductos, costoProductos, productos: ganProductos, sinCosto,
+        serviciosVendidos: servicios, adicionales, bonificacion, empleados, extras, conEstimado, servicios: ganServicios,
+        gastos, porCat: Object.entries(porCat).sort((a2, b2) => b2[1] - a2[1]), invProductos, reintegrar,
         impuestos, impuestosLista,
-        ganancia: vendido - productos - empleados - gastos - impuestos,
+        ganancia: ganProductos + ganServicios - gastos - impuestos,
       }
     }
-  }, [aceptados, items, p.costos, p.gastos, p.compras, p.adicionales, p.personas])
+  }, [aceptados, items, p.costos, p.gastos, p.adicionales, p.empleadosObra])
 
   const serie = useMemo(() => meses.map((ym) => ({ ym, ...calcular(ym) })), [meses, calcular])
   const d = useMemo(() => calcular(sel), [calcular, sel])
@@ -246,34 +234,34 @@ export default function InicioSimple(p: Props) {
       {d.adicionales > 0.5 && <p className="isNota">Incluye {pesos(d.adicionales)} de cambios y adicionales aprobados.</p>}
       {ir('Ir a Presupuestos', 'presupuestos')}
     </>]
-    if (h === 'productos') return [`Costo de productos · ${nombreMes}`, `− ${pesos(d.productos)}`, s!.c, <>
-      {lista([
-        ['Compras de materiales', 'Cargadas en las obras', d.compraMateriales],
-        ['Materiales en gastos de obra', '', d.materialObra],
-        ['Inversión en productos', 'Stock y mercadería (Gastos)', d.invProductos],
-      ].filter((f) => (f[2] as number) > 0.5) as [string, string, number][], s!.c)}
+    if (h === 'productos') return [`Ganancia en productos · ${nombreMes}`, pesos(d.productos), s!.c, <>
       <div className="isMini">
-        <div><small>Lo que compraste</small><b>{pesos(d.compraMateriales + d.materialObra + d.invProductos)}</b></div>
-        <div><small>Costo cargado en presupuestos</small><b>{pesos(d.costoCargado)}</b></div>
         <div><small>Vendiste en productos</small><b>{pesos(d.ventaProductos)}</b></div>
-        <div><small>Servicios (100%)</small><b className="v">{pesos(d.ventaServicios + d.sinDetalle)}</b></div>
+        <div><small>Te costaron</small><b>{pesos(d.costoProductos)}</b></div>
       </div>
-      <p className="isNota">Se resta lo que compraste en el mes. Si el costo cargado en los presupuestos es mayor, se usa ese.</p>
-      {d.bonificacion > 0.5 && <p className="isNota">Bonificaciones generales: − {pesos(d.bonificacion)} (ya descontadas del total).</p>}
-      {d.productosSinCosto > 0 && <p className="isAviso">⚠️ {d.productosSinCosto} producto{d.productosSinCosto === 1 ? '' : 's'} de los presupuestos sin costo cargado. Cargales el costo en Productos para ver el margen real.</p>}
+      <p className="isNota">Venta menos costo de cada producto vendido en los presupuestos aceptados del mes.</p>
+      {d.sinCosto > 0 && <p className="isAviso">⚠️ {d.sinCosto} producto{d.sinCosto === 1 ? '' : 's'} sin costo cargado: se toman como ganancia completa. Cargales el costo en Productos.</p>}
       {items == null && <p className="isNota">Calculando…</p>}
+      {ir('Ir a Productos', 'catalogo')}
     </>]
-    if (h === 'empleados') return [`Empleados · ${nombreMes}`, `− ${pesos(d.empleados)}`, s!.c, <>
-      {d.porPersona.length === 0 ? <p className="isVacio">No hay pagos a empleados en {nombreMes}.</p> : lista(d.porPersona.map(([k, v]) => [k, '', v]), s!.c)}
+    if (h === 'servicios') return [`Ganancia en servicios · ${nombreMes}`, pesos(d.servicios), s!.c, <>
+      <div className="isLista2">
+        <div className="isFila2"><div><b>Servicios vendidos</b><small>100% tuyos</small></div><em>{pesos(d.serviciosVendidos)}</em></div>
+        {d.adicionales !== 0 && <div className="isFila2"><div><b>Cambios y adicionales</b><small>aprobados en las obras</small></div><em>{pesos(d.adicionales)}</em></div>}
+        {d.bonificacion > 0.5 && <div className="isFila2"><div><b>Bonificaciones</b></div><em className="r">− {pesos(d.bonificacion)}</em></div>}
+        <div className="isFila2"><div><b>Empleados</b><small>{d.conEstimado ? 'lo acordado en las obras y el estimado de los presupuestos' : 'lo acordado con el personal de las obras'}</small></div><em className="r">− {pesos(d.empleados)}</em></div>
+        <div className="isFila2"><div><b>Extras de las obras</b><small>nafta, tercerizados y otros</small></div><em className="r">− {pesos(d.extras)}</em></div>
+        <div className="isFila2 tot"><div><b>= Ganancia en servicios</b></div><em className={d.servicios < 0 ? 'r' : 'v'}>{pesos(d.servicios)}</em></div>
+      </div>
       {p.debePersonal.length > 0 && <>
-        <p className="isSub">Pendiente de pagar (según avance)</p>
+        <p className="isSub">Pendiente de pagar al personal (según avance)</p>
         {lista(p.debePersonal.map((f) => [f.nombre, `${f.obra} · tocá para pagar`, f.debe, () => p.onAbrirObra(f.obraId)]), '#e0701a')}
       </>}
     </>]
-    if (h === 'gastos') return [`Gastos extras · ${nombreMes}`, `− ${pesos(d.gastos)}`, s!.c, <>
+    if (h === 'gastos') return [`Gastos de la empresa · ${nombreMes}`, `− ${pesos(d.gastos)}`, s!.c, <>
       {d.porCat.length === 0 ? <p className="isVacio">No hay gastos cargados en {nombreMes}.</p> : lista(d.porCat.map(([k, v]) => [k, '', v]), s!.c)}
-      <p className="isNota">Gastos de la empresa (sin impuestos ni inversión en productos) y gastos de obra que no son materiales ni personal.</p>
-      {d.reintegrar > 0.5 && <p className="isNota">Además adelantaste {pesos(d.reintegrar)} en gastos extra que te devuelve el cliente: no se restan.</p>}
+      {d.invProductos > 0.5 && <p className="isNota">📦 Inversión en productos ({pesos(d.invProductos)}) no resta: es stock, se vuelve ganancia cuando lo vendés.</p>}
+      {d.reintegrar > 0.5 && <p className="isNota">Adelantaste {pesos(d.reintegrar)} en gastos extra que te devuelve el cliente: no se restan.</p>}
       {ir('Cargar o ver gastos', 'gastos')}
     </>]
     if (h === 'impuestos') return [`Impuestos · ${nombreMes}`, `− ${pesos(d.impuestos)}`, s!.c, <>
@@ -283,10 +271,21 @@ export default function InicioSimple(p: Props) {
     </>]
     if (h === 'ganancia') return [`Ganancia final · ${nombreMes}`, pesos(d.ganancia), d.ganancia < 0 ? '#cf4b37' : s!.c, <>
       <div className="isLista2">
-        {SERIES.slice(0, 5).map((x) => <div key={x.k} className="isFila2"><div><b>{x.t}</b></div><em style={{ color: x.c }}>{x.k === 'vendido' ? '' : '− '}{pesos(d[x.k])}</em></div>)}
+        <div className="isFila2"><div><b>Ganancia en productos</b></div><em>{pesos(d.productos)}</em></div>
+        <div className="isFila2"><div><b>Ganancia en servicios</b><small>ya descontados empleados y extras</small></div><em>{pesos(d.servicios)}</em></div>
+        <div className="isFila2"><div><b>Gastos de la empresa</b></div><em className="r">− {pesos(d.gastos)}</em></div>
+        <div className="isFila2"><div><b>Impuestos</b></div><em className="r">− {pesos(d.impuestos)}</em></div>
         <div className="isFila2 tot"><div><b>= Te queda</b></div><em className={d.ganancia < 0 ? 'r' : 'v'}>{pesos(d.ganancia)}</em></div>
       </div>
-      <p className="isNota">Los servicios quedan al 100% y los productos dejan su diferencia entre venta y costo.</p>
+      <p className="isNota">Es la misma cuenta del cuadro “Vas a ganar” de cada presupuesto, sumada por mes, menos los gastos de la empresa y los impuestos.</p>
+    </>]
+    if (h === 'stock') return ['Invertido en stock', stock ? pesos(stock.invertido) : '…', 'inherit', <>
+      <div className="isMini">
+        <div><small>Plata invertida</small><b>{stock ? pesos(stock.invertido) : '…'}</b></div>
+        <div><small>Ganarías vendiéndolo</small><b className="v">{stock ? pesos(stock.ganarias) : '…'}</b></div>
+      </div>
+      <p className="isNota">Comprar stock no es un gasto: la plata pasa a la estantería y se vuelve ganancia cuando lo vendés.</p>
+      {ir('Ver producto por producto', 'catalogo')}
     </>]
     if (h === 'cobrar') return ['Te deben', pesos(p.porCobrar), 'inherit', <>
       {p.deudas.length === 0 ? <p className="isVacio">✓ Nadie te debe.</p>
@@ -371,11 +370,15 @@ export default function InicioSimple(p: Props) {
       <div className="isNums">
         {SERIES.map((s) => {
           const v = d[s.k]
-          const sub = s.k === 'vendido' ? `${d.filas.length} presupuesto${d.filas.length === 1 ? '' : 's'}`
+          const sub = s.k === 'vendido' ? `${d.filas.length} presupuesto${d.filas.length === 1 ? '' : 's'} aceptado${d.filas.length === 1 ? '' : 's'}`
             : s.k === 'ganancia' ? 'Te queda'
-              : d.vendido > 0 ? `${Math.round((v / d.vendido) * 100)}% de lo vendido` : '—'
+              : s.k === 'productos' && d.sinCosto > 0 ? '⚠️ hay productos sin costo'
+                : s.k === 'productos' && d.ventaProductos > 0 ? `${Math.round((v / d.ventaProductos) * 100)}% de margen`
+                  : s.k === 'servicios' ? 'menos empleados y extras'
+                    : d.vendido > 0 ? `${Math.round((v / d.vendido) * 100)}% de lo vendido` : '—'
+          const resta = s.k === 'gastos' || s.k === 'impuestos'
           return <button key={s.k} type="button" className={`isNum${s.k === 'ganancia' ? ' gan' : s.k === 'vendido' ? ' ancho' : ''}`} style={{ borderLeftColor: s.c }} onClick={() => setHoja(s.k)}>
-            <small>{s.t}</small><b className={s.k === 'ganancia' ? (v < 0 ? 'r' : 'v') : ''}>{s.k === 'vendido' || s.k === 'ganancia' ? '' : '− '}{pesos(v)}</b><span>{sub}</span>
+            <small>{s.t}</small><b className={s.k === 'ganancia' ? (v < 0 ? 'r' : 'v') : v < 0 ? 'r' : ''}>{resta ? '− ' : ''}{pesos(v)}</b><span>{sub}</span>
           </button>
         })}
       </div>
@@ -383,6 +386,7 @@ export default function InicioSimple(p: Props) {
 
     <div className="isChips">
       {p.verFinanzas && <button type="button" className="isChip" onClick={() => setHoja('cobrar')}><small>Te deben</small><b>{corto(p.porCobrar)}</b></button>}
+      {p.verFinanzas && <button type="button" className="isChip" onClick={() => setHoja('stock')}><small>En stock</small><b>{stock ? corto(stock.invertido) : '…'}</b></button>}
       <button type="button" className="isChip" onClick={() => setHoja('obras')}><small>Obras</small><b>{p.obrasActivas.length}</b></button>
       <button type="button" className="isChip" onClick={() => setHoja('hoy')}><small>Hoy</small><b className={p.tareas.length ? 'r' : 'v'}>{p.tareas.length || '✓'}</b></button>
     </div>
