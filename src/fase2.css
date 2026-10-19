@@ -3043,3 +3043,15 @@ button.isFila2:focus-visible{outline:2px solid #e0701a}
   .agColIzq>.agSug,.agColIzq>.agProx{order:0}
   .obraSeguimientoModal{width:min(1240px,calc(100vw - 48px));max-width:1240px}
 }
+/* PC: sin tope de ancho, la pantalla completa */
+@media (min-width:1100px){
+  .fase2Main>.gestionPage,.fase2Dashboard{max-width:none}
+  .ip.is,.agNueva{max-width:none}
+  .is .isGraf svg{height:max(320px,calc(100vh - 430px))}
+  .is .isNums{gap:10px}
+  .is .isNum{padding:14px 16px}
+  .is .isNum b{font-size:22px}
+  .is .isNum.gan b{font-size:30px}
+  .ipIcono{display:grid;place-items:center}
+}
+.ipIcono svg{display:block;margin:auto}

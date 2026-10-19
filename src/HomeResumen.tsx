@@ -308,7 +308,10 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
       onAbrirPresupuesto={onAbrirPresupuesto}
       onIr={(dd) => onNavegar(dd)}
       acciones={<div className="ipAcc">
-        <button type="button" className="ipIcono" title="Cerrar sesión" aria-label="Cerrar sesión" onClick={onSalir}>⏻</button>
+        <button type="button" className="ipIcono" title="Cerrar sesión" aria-label="Cerrar sesión" onClick={onSalir}>
+          {/* Ícono dibujado: el símbolo ⏻ no existe en todas las fuentes de Windows */}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 3v9" /><path d="M6.4 6.4a8 8 0 1 0 11.2 0" /></svg>
+        </button>
       </div>}
       ia={verFinanzas ? (verIA
         ? <QueMirarHoy hechos={hechosHoy} nombreCli={nombreCli} onIr={irDesdeHoy} />
