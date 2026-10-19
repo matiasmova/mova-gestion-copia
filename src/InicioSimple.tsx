@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { supabase } from './supabase'
+import GraficoMeses from './GraficoMeses'
 import { cuentaTrabajo, esExtraDeObra } from './gananciaTrabajo'
 
 // Inicio en una sola pantalla, con la misma cuenta que el presupuesto:
@@ -50,9 +51,9 @@ type Clave = 'vendido' | 'productos' | 'servicios' | 'gastos' | 'impuestos' | 'g
 type Hoja = Clave | 'cobrar' | 'obras' | 'hoy' | 'stock'
 
 const SERIES: { k: Clave; t: string; c: string }[] = [
-  { k: 'vendido', t: 'Aceptados', c: '#2f63b8' },
+  { k: 'vendido', t: 'Aceptados', c: '#475569' },
   { k: 'productos', t: 'Ganancia productos', c: '#e0701a' },
-  { k: 'servicios', t: 'Ganancia servicios', c: '#a1530f' },
+  { k: 'servicios', t: 'Ganancia servicios', c: '#2f63b8' },
   { k: 'gastos', t: 'Gastos empresa', c: '#cf4b37' },
   { k: 'impuestos', t: 'Impuestos', c: '#7c3aed' },
   { k: 'ganancia', t: 'Ganancia final', c: '#1d9a5b' },
@@ -72,8 +73,6 @@ export default function InicioSimple(p: Props) {
   const [sel, setSel] = useState(ymHoy)
   const [ocultas, setOcultas] = useState<Set<Clave>>(new Set())
   const [hoja, setHoja] = useState<Hoja | null>(null)
-  const [tocando, setTocando] = useState(false)
-  const svgRef = useRef<SVGSVGElement>(null)
 
   // Ítems de los presupuestos aceptados (para separar productos de servicios).
   const aceptados = useMemo(() => p.presupuestos.filter((x) => x.estado === 'aceptado'), [p.presupuestos])
@@ -187,28 +186,8 @@ export default function InicioSimple(p: Props) {
   const serie = useMemo(() => meses.map((ym) => ({ ym, ...calcular(ym) })), [meses, calcular])
   const d = useMemo(() => calcular(sel), [calcular, sel])
 
-  // ---- Gráfico de curvas ----
-  const W = 340, H = 200, PAD = 12
-  const visibles = SERIES.filter((s) => !ocultas.has(s.k))
-  const valores = visibles.flatMap((s) => serie.map((m) => m[s.k]))
-  const max = Math.max(1, ...valores)
-  const min = Math.min(0, ...valores)
-  const X = (j: number) => PAD + (j / (serie.length - 1)) * (W - 2 * PAD)
-  const Y = (v: number) => H - 8 - ((v - min) / (max - min)) * (H - 22)
-  const curva = (k: Clave) => {
-    const pts = serie.map((m, j) => [X(j), Y(m[k])])
-    let path = `M${pts[0][0]} ${pts[0][1]}`
-    for (let q = 1; q < pts.length; q++) { const [x0, y0] = pts[q - 1], [x1, y1] = pts[q]; const cx = (x0 + x1) / 2; path += ` C${cx} ${y0} ${cx} ${y1} ${x1} ${y1}` }
-    return path
-  }
-  const jSel = Math.max(0, serie.findIndex((m) => m.ym === sel))
-  const tocar = (clientX: number) => {
-    const r = svgRef.current?.getBoundingClientRect()
-    if (!r) return
-    const f = ((clientX - r.left) / r.width * W - PAD) / (W - 2 * PAD)
-    const j = Math.round(Math.min(1, Math.max(0, f)) * (serie.length - 1))
-    setSel(serie[j].ym)
-  }
+  // ---- Gráfico de barras por mes ----
+  const colores = Object.fromEntries(SERIES.map((x) => [x.k, x.c])) as Record<Clave, string>
   const alternar = (k: Clave) => setOcultas((o) => {
     const n = new Set(o)
     if (n.has(k)) n.delete(k)
@@ -344,28 +323,10 @@ export default function InicioSimple(p: Props) {
         {margen != null && <em className={d.ganancia < 0 ? 'neg' : ''}>{margen}% de lo vendido</em>}
       </div>
 
-      <div className="isGraf">
-        <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Curvas por mes de cada número. Deslizá para elegir el mes."
-          onPointerDown={(e) => { (e.target as Element).setPointerCapture?.(e.pointerId); setTocando(true); tocar(e.clientX) }}
-          onPointerMove={(e) => { if (e.buttons) tocar(e.clientX) }}
-          onPointerUp={() => setTocando(false)} onPointerCancel={() => setTocando(false)}>
-          {[0.25, 0.5, 0.75].map((f) => <line key={f} x1="0" x2={W} y1={Y(min + (max - min) * f)} y2={Y(min + (max - min) * f)} stroke="#e4e7eb" strokeDasharray="3 4" vectorEffect="non-scaling-stroke" />)}
-          {min < 0 && <line x1="0" x2={W} y1={Y(0)} y2={Y(0)} stroke="#9aa3b1" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />}
-          <line x1={X(jSel)} x2={X(jSel)} y1="2" y2={H} stroke="#9aa3b1" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
-          {!ocultas.has('ganancia') && <path d={`${curva('ganancia')} L${X(serie.length - 1)} ${H} L${X(0)} ${H} Z`} fill="#1d9a5b" fillOpacity=".12" />}
-          {visibles.map((s) => <path key={s.k} d={curva(s.k)} fill="none" stroke={s.c} strokeWidth={s.k === 'ganancia' ? 3.5 : 2} strokeLinecap="round" vectorEffect="non-scaling-stroke" />)}
-        </svg>
-        {/* Los puntos van aparte para que no se deformen cuando el gráfico se estira */}
-        {visibles.map((s) => <span key={s.k} className="isPto" style={{ background: s.c, left: `${(X(jSel) / W) * 100}%`, top: `${(Y(serie[jSel][s.k]) / H) * 100}%` }} aria-hidden />)}
-        {tocando && <div className="isTip" style={{ left: `${Math.min(74, Math.max(26, (X(jSel) / W) * 100))}%` }}>
-          <b>{capital(nombreMes)}</b>
-          {visibles.map((s) => <div key={s.k}><span><i style={{ background: s.c }} />{s.t}</span><span>{corto(serie[jSel][s.k])}</span></div>)}
-        </div>}
-      </div>
-      <div className="ipMeses">{serie.map((m) => <button key={m.ym} type="button" className={m.ym === sel ? 'on' : ''} onClick={() => setSel(m.ym)}>{capital(mesNombre(m.ym, 'short'))}</button>)}</div>
+      <GraficoMeses serie={serie} sel={sel} onSel={setSel} ocultas={ocultas} colores={colores} />
 
       <div className="isLey">
-        {SERIES.map((s) => <button key={s.k} type="button" aria-pressed={!ocultas.has(s.k)} className={ocultas.has(s.k) ? 'off' : ''} onClick={() => alternar(s.k)}><i style={{ background: s.c }} />{s.t}</button>)}
+        {SERIES.filter((s) => s.k !== 'vendido').map((s) => <button key={s.k} type="button" aria-pressed={!ocultas.has(s.k)} className={ocultas.has(s.k) ? 'off' : ''} onClick={() => alternar(s.k)}><i style={{ background: s.c }} />{s.t}</button>)}
       </div>
 
       </div>
