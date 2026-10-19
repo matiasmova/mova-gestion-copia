@@ -34,7 +34,6 @@ export default function Trabajos({ tabInicial, verPresupuestos, conIA, obraAbrir
   const [obraPedida, setObraPedida] = useState<number | null>(null)
   const [presupuestoPedido, setPresupuestoPedido] = useState<number | null>(null)
   const [revision, setRevision] = useState(0)
-  const [buscando, setBuscando] = useState(false)
   const [busqueda, setBusqueda] = useState('')
   const [noSalieron, setNoSalieron] = useState(0)
   useEffect(() => {
@@ -55,11 +54,14 @@ export default function Trabajos({ tabInicial, verPresupuestos, conIA, obraAbrir
   return (
     <div className="trabajosPage tfPage">
       <div className="tfCab">
-        <div><small>Tus trabajos</small><h2>¿Qué hago ahora?</h2></div>
-        <button type="button" className={`trbIcono${buscando ? ' activo' : ''}`} aria-label="Buscar" aria-pressed={buscando} onClick={() => { setBuscando((v) => !v); if (buscando) setBusqueda('') }}>🔍</button>
-        {verPresupuestos && <button type="button" className="tfNuevo" onClick={() => setNuevo({ accion: 'nuevo', n: Date.now() })}>＋ Nuevo presupuesto</button>}
+        <div><small>Trabajos</small><h2>¿Qué hago ahora?</h2></div>
+        {verPresupuestos && <button type="button" className="tfNuevo" onClick={() => setNuevo({ accion: 'nuevo', n: Date.now() })}><span aria-hidden>＋</span> Nuevo<span className="tfNuevoLargo"> presupuesto</span></button>}
       </div>
-      {buscando && <input className="trbBuscar" type="search" autoFocus value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar trabajo, cliente u obra..." />}
+      <label className="tfBuscar">
+        <span aria-hidden>⌕</span>
+        <input type="search" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar trabajo, cliente u obra…" aria-label="Buscar trabajos" />
+        {busqueda && <button type="button" aria-label="Borrar búsqueda" onClick={() => setBusqueda('')}>✕</button>}
+      </label>
 
       <TrabajosFlujo verPlata={verPresupuestos} busqueda={busqueda} revision={revision} onAbrir={abrir} onNuevo={verPresupuestos ? () => setNuevo({ accion: 'nuevo', n: Date.now() }) : undefined} />
 
