@@ -116,6 +116,8 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
   const [docVersion, setDocVersion] = useState(0)
   const [informeIA, setInformeIA] = useState<Obra | null>(null)
   const [seguTab, setSeguTab] = useState<TabSeguimiento>('resumen')
+  // Ganancia de la obra (la calcula el cuadro "Vas a ganar") para el encabezado.
+  const [gananciaObra, setGananciaObra] = useState<number | null>(null)
   // Al entrar o salir de una sección, la ficha vuelve arriba.
   useEffect(() => { document.querySelector('.obraSeguimientoModal')?.scrollTo({ top: 0 }) }, [seguTab])
   // "➕ Registrar": menú único para cargar cosas en la obra.
@@ -435,6 +437,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
 
   function cerrarSeguimiento() {
     onCambio?.()
+    setGananciaObra(null)
     setHojaEnviar(false)
     setObraSeguimiento(null)
     setAvances([])
@@ -1036,34 +1039,51 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
       {obraSeguimiento && (
         <div className="modalOverlay">
           <div className="modalCard obraSeguimientoModal">
-            <div className="fichaHead">
-              <DonaAvance pct={Number(obraSeguimiento.porcentaje_avance || 0)} size={68} />
-              <div className="fichaHeadInfo">
-                <p className="subtitle">SEGUIMIENTO DE OBRA</p>
-                <h2>{obraSeguimiento.nombre_obra}</h2>
-                <p className="fichaHeadCli">
-                  {obtenerCliente(obraSeguimiento.cliente_id)}
-                  <span className={`crmBadge est-${claseEstado(estadoMostrado(obraSeguimiento))}`}>{etiquetaEstado(estadoMostrado(obraSeguimiento))}</span>
-                </p>
-              </div>
-              <div className="fichaHeadAcciones">
-                {puedeInformeIA && <button type="button" className="fichaPdf" title="Mensaje de avance para el cliente, escrito con IA" onClick={() => setInformeIA(obraSeguimiento)}>✨ Informe</button>}
-                <div className="fichaMenuWrap">
-                  <button type="button" className="fichaIcono" aria-label="Más opciones" aria-expanded={menuFicha} onClick={() => setMenuFicha((v) => !v)}>⋯</button>
-                  {menuFicha && <div className="fichaMenu" role="menu">
-                    <button type="button" role="menuitem" onClick={() => { setMenuFicha(false); setObraEditando(obraSeguimiento); setMostrarFormulario(true) }}>✏️ Editar datos de la obra</button>
-                    {onVerPresupuesto && presupuestoAceptado && <button type="button" role="menuitem" onClick={() => { setMenuFicha(false); onVerPresupuesto(presupuestoAceptado.id) }}>📋 Ficha del presupuesto (duplicar, estado, eliminar)</button>}
-                    <button type="button" role="menuitem" className="peligro" disabled={eliminandoObra === obraSeguimiento.id} onClick={() => { setMenuFicha(false); void eliminarObra(obraSeguimiento) }}>{eliminandoObra === obraSeguimiento.id ? 'Revisando...' : '🗑 Eliminar obra'}</button>
-                  </div>}
+            {/* Encabezado del color de la etapa (igual que el editor del presupuesto): dónde está, números clave y pestañas */}
+            {(() => {
+              const fin = obraTerminada(obraSeguimiento)
+              const c = cuentas[obraSeguimiento.id]
+              const av = Math.round(avanceEfectivo(obraSeguimiento.estado, obraSeguimiento.porcentaje_avance))
+              const pestanas: [TabSeguimiento, string][] = [['resumen', '📊 Obra'], ...(presupuestoAceptado ? [['finanzas', '💵 Cobros']] as [TabSeguimiento, string][] : []), ['personal', '👷 Personal'], ['timeline', '🕒 Avances']]
+              return <div className={`oeCab et-${fin ? 'ter' : 'obr'}`}>
+                <div className="oeCabTop">
+                  <span className="oeDona"><DonaAvance pct={av} size={50} /></span>
+                  <div className="oeCabTit">
+                    <small>{fin ? '✅ ' : '🏗️ '}{etiquetaEstado(estadoMostrado(obraSeguimiento)).toUpperCase()} · {av}%</small>
+                    <h2>{obraSeguimiento.nombre_obra}</h2>
+                    <span>{obtenerCliente(obraSeguimiento.cliente_id)}</span>
+                  </div>
+                  <div className="oeCabAcc">
+                    {puedeInformeIA && <button type="button" title="Mensaje de avance para el cliente, escrito con IA" onClick={() => setInformeIA(obraSeguimiento)}>✨ Informe</button>}
+                    <div className="fichaMenuWrap">
+                      <button type="button" aria-label="Más opciones" aria-expanded={menuFicha} onClick={() => setMenuFicha((v) => !v)}>⋯</button>
+                      {menuFicha && <div className="fichaMenu" role="menu">
+                        <button type="button" role="menuitem" onClick={() => { setMenuFicha(false); setObraEditando(obraSeguimiento); setMostrarFormulario(true) }}>✏️ Editar datos de la obra</button>
+                        {onVerPresupuesto && presupuestoAceptado && <button type="button" role="menuitem" onClick={() => { setMenuFicha(false); onVerPresupuesto(presupuestoAceptado.id) }}>📋 Ficha del presupuesto (duplicar, estado, eliminar)</button>}
+                        <button type="button" role="menuitem" className="peligro" disabled={eliminandoObra === obraSeguimiento.id} onClick={() => { setMenuFicha(false); void eliminarObra(obraSeguimiento) }}>{eliminandoObra === obraSeguimiento.id ? 'Revisando...' : '🗑 Eliminar obra'}</button>
+                      </div>}
+                    </div>
+                    <button type="button" aria-label="Cerrar" onClick={cerrarSeguimiento}>×</button>
+                  </div>
                 </div>
-                <button type="button" className="fichaIcono" aria-label="Cerrar" onClick={cerrarSeguimiento}>×</button>
+                <div className="pvPasos">
+                  {[['Armando', 0], ['Enviado', 1], ['En obra', 2], ['Terminado', 3]].map(([t, i]) => { const actual = fin ? 3 : 2; return <span key={t} className={Number(i) < actual ? 'ok' : Number(i) === actual ? 'on' : ''}>{Number(i) < actual ? '✓ ' : ''}{t}</span> })}
+                </div>
+                {presupuestoAceptado && c && <div className="pvNums">
+                  <div><small>VALOR OBRA</small><b>{dineroFicha(c.valor + c.extras)}</b></div>
+                  <button type="button" onClick={() => setSeguTab('resumen')}><small>VAS A GANAR</small><b>{gananciaObra == null ? '…' : dineroFicha(gananciaObra)}</b></button>
+                  <button type="button" onClick={() => setSeguTab('finanzas')}><small>{c.pendienteHoy > 0.5 ? 'COBRAR HOY' : 'TE DEBE'}</small><b>{dineroFicha(c.pendienteHoy > 0.5 ? c.pendienteHoy : c.saldo)}</b></button>
+                </div>}
+                <div className="pvTabs" role="tablist">
+                  {pestanas.map(([v, t]) => <button key={v} type="button" role="tab" aria-selected={seguTab === v} className={seguTab === v ? 'on' : ''} onClick={() => setSeguTab(v)}>{t}</button>)}
+                </div>
               </div>
-            </div>
+            })()}
 
-            {seguTab !== 'resumen' && (
+            {!['resumen', 'finanzas', 'personal', 'timeline'].includes(seguTab) && (
               <div className="fichaVolver">
                 <button type="button" onClick={() => setSeguTab('resumen')}>‹ Volver a la obra</button>
-                <span>{TITULO_SECCION[seguTab]}</span>
+                <span>{TITULO_SECCION[seguTab as Exclude<TabSeguimiento, 'resumen'>]}</span>
               </div>
             )}
 
@@ -1119,7 +1139,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                 return null
               })()}
             >
-              {presupuestoAceptado && <PresupuestoVivoObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} onCambio={() => setActualizacion((v) => v + 1)} onVerHistorial={() => setSeguTab('adicionales')} />}
+              {presupuestoAceptado && <PresupuestoVivoObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} onCambio={() => setActualizacion((v) => v + 1)} onVerHistorial={() => setSeguTab('adicionales')} onGanancia={setGananciaObra} />}
             </ResumenObra>}
 
             {/* Hoja de abajo: enviar el PDF al cliente sin salir de la obra */}

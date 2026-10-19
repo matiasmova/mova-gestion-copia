@@ -3182,3 +3182,38 @@ button.isFila2:focus-visible{outline:2px solid #e0701a}
 .pvDoc.soloGan>:not(.pvGanWrap){display:none}
 .pvDoc.edit .pvTotal{display:none}
 @media (max-width:520px){.pvNums b{font-size:15px}.pvPasos span{font-size:10.5px}}
+
+/* ---------- Obra: encabezado del color de la etapa ---------- */
+.oeCab{background:var(--c);color:#fff;margin:-30px -30px 18px;padding:16px 20px 0;border-radius:18px 18px 0 0;display:flex;flex-direction:column;gap:10px}
+.oeCabTop{display:flex;align-items:center;gap:12px}
+.oeDona{background:#fff;border-radius:50%;padding:3px;display:grid;place-items:center;flex:none;color:#13171d}
+.oeCabTit{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.oeCabTit small{font-size:11px;font-weight:800;letter-spacing:.08em;opacity:.9}
+.oeCabTit h2{margin:0;font-size:22px;color:#fff;line-height:1.15;overflow-wrap:anywhere}
+.oeCabTit span{font-size:13px;opacity:.9}
+.oeCabAcc{display:flex;gap:6px;align-items:center;flex:none}
+.oeCabAcc>button,.oeCabAcc .fichaMenuWrap>button{border:0;background:rgba(255,255,255,.22);color:#fff;border-radius:11px;min-width:38px;height:38px;padding:0 11px;font:inherit;font-weight:800;font-size:15px;cursor:pointer}
+.oeCabAcc button:focus-visible{outline:2px solid #fff}
+.oeCab .fichaMenu{color:#13171d}
+.oeCab .pvTabs{margin-top:2px}
+@media (max-width:720px){
+  .oeCab{margin:-22px -18px 14px;padding:14px 14px 0}
+  .oeCabTit h2{font-size:18px}
+  .oeCabAcc>button:first-child:not(:last-child){display:none}
+}
+
+/* ---------- Pie del presupuesto: total más grande y con aire ---------- */
+.pvPie{padding:14px 20px;padding-bottom:max(16px,env(safe-area-inset-bottom));box-shadow:0 -8px 24px -16px rgba(0,0,0,.25);gap:14px}
+.pvPieTot{display:flex;flex-direction:column;gap:1px}
+.pvPie .pvPieTot small{font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#6b7380}
+.pvPie .pvPieTot b{font-size:26px;line-height:1.1;letter-spacing:-.01em;color:#14181e}
+.pvPieTot span{font-size:13px;color:#4b525c}
+.pvPieTot span strong{font-variant-numeric:tabular-nums}
+.pvPie button{padding:14px 22px;font-size:16px}
+@media (max-width:520px){.pvPie{padding:12px 14px;padding-bottom:max(14px,env(safe-area-inset-bottom))}.pvPie .pvPieTot b{font-size:22px}}
+@media (max-width:520px){
+  .pvNums{gap:6px}
+  .pvNums>div,.pvNums>button{padding:8px 9px}
+  .pvNums small{font-size:9.5px}
+  .pvNums b{font-size:13.5px;overflow-wrap:normal;white-space:nowrap;display:block;overflow:hidden;text-overflow:ellipsis}
+}

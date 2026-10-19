@@ -106,7 +106,7 @@ function estadoDe(item: Item, adicionales: Adicional[]): EstadoItem {
   return { descripcion: ultimo.descripcion, cantidad: ultimo.cantidad_nueva ?? base.cantidad, precio: ultimo.precio_nuevo ?? base.precio, quitado: false, modificado: true, pendiente, cambio: ultimo }
 }
 
-export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obraId: number; onCambio: () => void; onVerHistorial: () => void }) {
+export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGanancia }: { obraId: number; onCambio: () => void; onVerHistorial: () => void; onGanancia?: (g: number) => void }) {
   const [presus, setPresus] = useState<Presu[]>([])
   const [items, setItems] = useState<Item[]>([])
   const [adicionales, setAdicionales] = useState<Adicional[]>([])
@@ -392,7 +392,7 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial }: { obra
     </div>
     <GananciaTrabajo presupuestoIds={presus.map((p) => p.id)} obraId={obraId} total={original} adicionales={aprobados}
       items={items.map((it) => ({ tipo: it.tipo ?? '', catalogo_id: it.catalogo_id ?? null, cantidad: it.cantidad, precio_unitario: it.precio_unitario, costo_unitario: Number(it.costo_unitario) || 0, descuento_pct: it.descuento_pct }))}
-      reintegros={adicionales.filter((a) => a.tipo === 'gasto_extra' && a.estado !== 'rechazado').reduce((s, a) => s + a.importe, 0)} />
+      reintegros={adicionales.filter((a) => a.tipo === 'gasto_extra' && a.estado !== 'rechazado').reduce((s, a) => s + a.importe, 0)} onGanancia={onGanancia} />
     {huerfanos.length > 0 && !verCambios && <button type="button" className="oeAviso pend oeAvisoBtn" onClick={() => setVerCambios(true)}>⚠ {huerfanos.length === 1 ? 'Hay 1 cambio' : `Hay ${huerfanos.length} cambios`} de ítems que ya no están en el presupuesto (se editó después). Tocá para verlos ›</button>}
     {verCambios && <div className="oeCambios">
       <div className="oeCambiosCab"><b>De dónde salen los cambios</b><button type="button" className="oeLink" onClick={() => setVerCambios(false)}>Cerrar</button></div>
