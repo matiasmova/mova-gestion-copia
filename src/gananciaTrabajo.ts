@@ -57,7 +57,9 @@ export function empleadosDeObra(
   const filas: FilaEmpleado[] = asignaciones.map((a) => {
     const c = calcularPersona(a, personas.find((p) => p.id === a.personal_id), pagos, jornales, valorObra, 0)
     const porTiempo = c.modalidad === 'por_dia' || c.modalidad === 'por_hora'
-    return { personal_id: a.personal_id, total: c.proyectado, pagado: c.pagado, asignado: true, sinJornales: porTiempo && c.devengado === 0, acuerdo: c.modalidad !== 'libre' }
+    // "Por pagos": para la ganancia se usa lo estimado a pagarle (o lo ya pagado, si es más).
+    const total = c.modalidad === 'libre' ? Math.max(Number(a.valor_acordado) || 0, c.pagado) : c.proyectado
+    return { personal_id: a.personal_id, total, pagado: c.pagado, asignado: true, sinJornales: porTiempo && c.devengado === 0, acuerdo: c.modalidad !== 'libre' }
   })
   const asignados = new Set(asignaciones.map((a) => a.personal_id))
   const otros: Record<string, FilaEmpleado> = {}
@@ -77,12 +79,11 @@ export const esPagoEmpleado = (c: { personal_id: number | null; tipo?: string | 
 export const esExtraDeObra = (c: { personal_id: number | null; tipo?: string | null }) =>
   c.personal_id == null && !['material', 'mano_obra', 'gasto_extra'].includes(c.tipo ?? '')
 
-// Lo que se resta por empleados en un trabajo:
-//  · lo acordado con el personal "por acuerdo", más
-//  · para los que cobran "por pagos" (ayudantes, sin monto fijo): lo estimado
-//    en el presupuesto, o lo ya pagado si es más.
+// Lo que se resta por empleados en un trabajo: lo de cada persona de la obra
+// (acordado, o estimado para los que cobran por pagos). Si todavía no hay
+// nadie asignado, el estimado general del presupuesto.
 export function totalEmpleados(filas: FilaEmpleado[], estimado: number) {
-  const acuerdo = filas.filter((f) => f.acuerdo).reduce((s, f) => s + f.total, 0)
-  const pagos = filas.filter((f) => !f.acuerdo).reduce((s, f) => s + f.total, 0)
-  return { acuerdo, pagos, total: acuerdo + Math.max(estimado, pagos) }
+  const personas = filas.reduce((s, f) => s + f.total, 0)
+  const hayAsignados = filas.some((f) => f.asignado)
+  return { personas, hayAsignados, total: hayAsignados ? personas : personas + estimado }
 }

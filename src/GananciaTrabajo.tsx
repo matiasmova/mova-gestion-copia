@@ -84,8 +84,9 @@ export default function GananciaTrabajo({ presupuestoIds, obraId, items, total, 
     setErrorPer('')
     if (!nuevo.personaId) { setErrorPer('Elegí una persona.'); return }
     if (nuevo.modalidad === 'por_obra' && !(Number(nuevo.monto) > 0)) { setErrorPer('Ingresá el monto acordado por este trabajo.'); return }
+    if (nuevo.modalidad === 'libre' && !(Number(nuevo.monto) > 0)) { setErrorPer('Ingresá cuánto estimás pagarle por este trabajo.'); return }
     setOcupado(true)
-    const { error } = await supabase.from('obra_asignaciones').insert({ obra_id: obraId, personal_id: Number(nuevo.personaId), modalidad: nuevo.modalidad, valor_acordado: nuevo.modalidad === 'por_obra' ? Number(nuevo.monto) : 0 })
+    const { error } = await supabase.from('obra_asignaciones').insert({ obra_id: obraId, personal_id: Number(nuevo.personaId), modalidad: nuevo.modalidad, valor_acordado: Number(nuevo.monto) || 0 })
     setOcupado(false)
     if (error) { console.error(error); setErrorPer('No se pudo asignar. Probá de nuevo.'); return }
     setNuevo(null)
@@ -145,7 +146,7 @@ export default function GananciaTrabajo({ presupuestoIds, obraId, items, total, 
         <div><span><i style={{ background: '#2f63b8' }} />Servicios<small>100% tuyo</small></span><b>{moneda(c.servicios)}</b></div>
         {c.adicionales !== 0 && <div><span><i style={{ background: '#2f63b8' }} />Cambios y adicionales<small>aprobados en la obra</small></span><b>{moneda(c.adicionales)}</b></div>}
         {c.bonificacion > 0.5 && <div><span><i style={{ background: '#b7bdc6' }} />Bonificación general</span><b className="r">− {moneda(c.bonificacion)}</b></div>}
-        <div><span><i style={{ background: '#a1530f' }} />Empleados<small>Por acuerdo {moneda(t.acuerdo)} · ayudantes por pagos {moneda(Math.max(estimado, t.pagos))}</small></span><b className="r">− {moneda(c.empleados)}</b></div>
+        <div><span><i style={{ background: '#a1530f' }} />Empleados<small>{t.hayAsignados ? 'Lo de cada persona del trabajo (abajo)' : 'Estimado (cargalo abajo)'}</small></span><b className="r">− {moneda(c.empleados)}</b></div>
         <div><span><i style={{ background: '#cf4b37' }} />Extras de la obra<small>{obraId == null ? 'Se cargan cuando es obra' : c.extras ? 'Nafta, tercerizados y otros cargados en la obra' : 'Todavía no hay gastos cargados'}</small></span><b className="r">− {moneda(c.extras)}</b></div>
         <div className="tot"><span>= Vas a ganar</span><b className={c.ganancia < 0 ? 'r' : 'v'}>{moneda(c.ganancia)}</b></div>
       </div>
@@ -156,9 +157,9 @@ export default function GananciaTrabajo({ presupuestoIds, obraId, items, total, 
         {obraId == null && <p className="gtNota">Para asignar personal, primero vinculá una obra a este presupuesto. Mientras tanto, cargá el estimado de abajo.</p>}
         {personal.map((f, i) => (
           <div key={i} className="gtPer">
-            <span className="gtPerNom"><b>{f.nombre}</b><small>{!f.asignado ? `pagado ${moneda(f.pagado)} · no está asignado` : f.acuerdo ? (f.sinJornales ? 'por día · sin jornales cargados' : `por acuerdo${f.pagado > 0.5 ? ` · pagado ${moneda(f.pagado)}` : ''}`) : `por pagos · pagado ${moneda(f.pagado)}`}</small></span>
-            {f.asignado && f.acuerdo && f.modalidad === 'por_obra'
-              ? <CampoNumero className="gtMonto" value={f.valor} onChange={(e) => cambiarMonto(f.asigId!, Math.max(0, Number(e.target.value) || 0))} aria-label={`Monto acordado con ${f.nombre}`} />
+            <span className="gtPerNom"><b>{f.nombre}</b><small>{!f.asignado ? 'pago cargado en la obra' : f.acuerdo ? (f.sinJornales ? 'por día · sin jornales cargados' : 'por acuerdo · monto pactado') : 'por pagos · lo que estimás pagarle'}</small></span>
+            {f.asignado && (f.modalidad === 'por_obra' || f.modalidad === 'libre')
+              ? <CampoNumero className="gtMonto" value={f.valor} onChange={(e) => cambiarMonto(f.asigId!, Math.max(0, Number(e.target.value) || 0))} aria-label={`Monto de ${f.nombre}`} />
               : <em>{moneda(f.total)}</em>}
             {f.asignado && f.pagado < 0.5 && <button type="button" className="gtSacar" aria-label={`Sacar a ${f.nombre} de la obra`} onClick={() => void sacar(f)}>✕</button>}
           </div>
@@ -174,13 +175,13 @@ export default function GananciaTrabajo({ presupuestoIds, obraId, items, total, 
           </div>
           {nuevo.modalidad === 'por_obra'
             ? <label className="gtCampo"><span><b>Monto acordado</b><small>se le paga según el avance</small></span><CampoNumero value={nuevo.monto} onChange={(e) => setNuevo({ ...nuevo, monto: e.target.value })} aria-label="Monto acordado" /></label>
-            : <p className="gtNota">Sin monto fijo: se cuenta lo que le vayas pagando. Para la cuenta de hoy usá el estimado de ayudantes de abajo.</p>}
+            : <label className="gtCampo"><span><b>Cuánto estimás pagarle</b><small>solo para calcular la ganancia aproximada</small></span><CampoNumero value={nuevo.monto} onChange={(e) => setNuevo({ ...nuevo, monto: e.target.value })} aria-label="Estimado a pagarle" /></label>}
           <div className="gtNuevoAcc"><button type="button" onClick={() => setNuevo(null)}>Cancelar</button><button type="button" className="prim" disabled={ocupado} onClick={() => void agregarPersona()}>{ocupado ? 'Asignando…' : 'Asignar a la obra'}</button></div>
           {disponibles.length === 0 && <p className="gtNota">No hay más personas activas para sumar. Cargalas en Personal.</p>}
         </div>}
         {errorPer && <p className="gtAlerta">{errorPer}</p>}
-        {unico != null && <label className="gtCampo">
-          <span><b>Ayudantes por pagos (estimado)</b><small>{guardado === 'guardando' ? 'Guardando…' : guardado === 'error' ? '⚠ No se guardó' : t.pagos > estimado ? `Ya les pagaste ${moneda(t.pagos)}: se usa eso` : 'Lo que pensás pagarles a los que no tienen monto fijo'}</small></span>
+        {unico != null && !t.hayAsignados && <label className="gtCampo">
+          <span><b>Estimado de personal</b><small>{guardado === 'guardando' ? 'Guardando…' : guardado === 'error' ? '⚠ No se guardó' : 'Si todavía no sabés quién va: cuánto pensás pagar en total'}</small></span>
           <CampoNumero value={estimado} onChange={(e) => cambiarEstimado(Math.max(0, Number(e.target.value) || 0))} aria-label="Estimado para ayudantes por pagos" />
         </label>}
       </div>
