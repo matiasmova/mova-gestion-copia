@@ -3101,3 +3101,12 @@ button.isFila2:focus-visible{outline:2px solid #e0701a}
 .gtNuevoAcc{display:flex;justify-content:flex-end;gap:8px}
 .gtNuevoAcc button{border:1px solid #e4e7eb;background:#fff;border-radius:10px;padding:8px 12px;font:inherit;font-weight:700;cursor:pointer}
 .gtNuevoAcc button.prim{background:#1d9a5b;border-color:#1d9a5b;color:#fff}
+.pvTx small.pvGan,.pvGan{display:block;color:#1d9a5b;font-weight:700;font-size:12px;margin-top:2px}
+.pvTx small.pvGan.neg,.pvGan.neg{color:#cf4b37}
+.pvTx small.pvGan.sin,.pvGan.sin{color:#b85a10;font-weight:600}
+.pvGanTotal{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 10px;background:#e7f6ee;border-radius:10px;padding:8px 11px;margin:0 0 8px}
+.pvGanTotal span{font-weight:700;font-size:13px;color:#1b5e3b}
+.pvGanTotal span small{font-weight:600;color:#5f8a73;margin-left:4px}
+.pvGanTotal b{color:#1d9a5b;font-size:15px;font-variant-numeric:tabular-nums}
+.pvGanTotal em{font-style:normal;font-size:12.5px;opacity:.8}
+.pvGanAviso{flex-basis:100%;color:#b85a10;font-size:12px}

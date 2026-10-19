@@ -45,6 +45,8 @@ const SECCIONES: { tipo: 'producto' | 'servicio'; titulo: string }[] = [
 ]
 const DESCUENTOS = [0, 5, 10, 15, 25]
 let claves = 0
+// Ganancia de un producto: lo que paga el cliente (con su descuento) − lo que te cuesta.
+const gananciaItem = (it: ItemPresupuesto) => importeNeto(it) - Number(it.cantidad || 0) * Number(it.costo_unitario || 0)
 const conClave = (it: ItemPresupuesto): Item => ({ ...it, _k: ++claves })
 
 // Cuadro de texto que crece con lo escrito.
@@ -343,6 +345,10 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
             <b>{t || <i className="pvVacio">Sin descripción · tocá para completar</i>}</b>
             {detalle && <small className="pvDet">{detalle}</small>}
             <small>{Number(it.cantidad).toLocaleString('es-AR')} × {moneda(Number(it.precio_unitario))}{pct > 0 && <span className="pvPct">−{pct}%</span>}{pct > 0 && <span className="pvCU">= {moneda(Number(it.precio_unitario) * (1 - pct / 100))} c/u</span>}{marca && <span className={`pvMerc ${marca.c}`}>{marca.t}</span>}</small>
+            {/* Ganancia del producto (interno: solo al editar, no lo ve el cliente) */}
+            {ed && it.tipo !== 'servicio' && it.descripcion.trim() && (Number(it.costo_unitario) > 0
+              ? (() => { const g = gananciaItem(it); return <small className={`pvGan${g < 0 ? ' neg' : ''}`}>💰 Ganás {moneda(g)}{importeNeto(it) > 0 ? ` (${Math.round((g / importeNeto(it)) * 100)}%)` : ''} · costo {moneda(Number(it.costo_unitario))} c/u</small> })()
+              : <small className="pvGan sin">⚠ Sin costo cargado · tocá para cargarlo</small>)}
           </div>
           <div className="pvImp">{moneda(importeNeto(it))}{pct > 0 && <s>{moneda(importeBruto(it))}</s>}</div>
         </div>
@@ -462,6 +468,13 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
             return (
               <section className="pvSec" key={tipo}>
                 <div className="pvSecCab"><b>{tSec.toUpperCase()}</b><span>{moneda(its.reduce((s, it) => s + importeNeto(it), 0))}</span></div>
+                {ed && tipo === 'producto' && its.some((it) => it.descripcion.trim()) && (() => {
+                  const conTexto = its.filter((it) => it.descripcion.trim())
+                  const g = conTexto.reduce((s, it) => s + gananciaItem(it), 0)
+                  const venta = conTexto.reduce((s, it) => s + importeNeto(it), 0)
+                  const sinCosto = conTexto.filter((it) => !(Number(it.costo_unitario) > 0)).length
+                  return <div className="pvGanTotal"><span>💰 Ganancia en productos <small>interno</small></span><b>{moneda(g)}{venta > 0 ? <em> · {Math.round((g / venta) * 100)}%</em> : null}</b>{sinCosto > 0 && <small className="pvGanAviso">⚠ {sinCosto} sin costo: se cuentan como ganancia completa</small>}</div>
+                })()}
                 {res && partes.map((p) => (
                   <div className="pvParte" key={p.id}>
                     {partes.length > 1 && <b className="pvParteNombre">{p.nombre}</b>}
