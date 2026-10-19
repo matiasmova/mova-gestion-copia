@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 // Pasando el mouse (o tocando) un mes se ve de dónde sale su ganancia; con clic
 // se elige ese mes (y otro clic vuelve a todo el período).
 
-export type Mes = { ym: string; vendido: number; costoProductos: number; empleados: number; extras: number; gastos: number; impuestos: number; ganancia: number }
+export type Mes = { ym: string; futuro?: boolean; etiqueta?: string; titulo?: string; sub?: string; vendido: number; costoProductos: number; empleados: number; extras: number; gastos: number; impuestos: number; ganancia: number }
 
 const corto = (n: number) => { const a = Math.abs(n); const s = n < 0 ? '− ' : ''; return a >= 1e6 ? `${s}$ ${(a / 1e6).toLocaleString('es-AR', { maximumFractionDigits: 1 })} M` : a >= 1e3 ? `${s}$ ${Math.round(a / 1e3).toLocaleString('es-AR')} k` : `${s}$ ${Math.round(a)}` }
 const pesos = (n: number) => `${n < 0 ? '− ' : ''}$ ${Math.round(Math.abs(n)).toLocaleString('es-AR')}`
@@ -26,7 +26,8 @@ function marcas(min: number, max: number) {
   return out
 }
 
-export default function GraficoMeses({ serie, foco, onFoco }: { serie: Mes[]; foco: string | null; onFoco: (ym: string | null) => void }) {
+// Sin onFoco (semanas de un mes) no se elige nada al tocar: solo se ve el detalle.
+export default function GraficoMeses({ serie, foco, onFoco }: { serie: Mes[]; foco: string | null; onFoco?: (ym: string | null) => void }) {
   const caja = useRef<HTMLDivElement>(null)
   const [tam, setTam] = useState({ w: 600, h: 280 })
   const [hover, setHover] = useState<number | null>(null)
@@ -45,10 +46,13 @@ export default function GraficoMeses({ serie, foco, onFoco }: { serie: Mes[]; fo
   const ticks = marcas(minV, maxV)
   const top = ticks[ticks.length - 1], bot = ticks[0]
 
-  const IZQ = 56, DER = 8, ARR = 24, ABA = 26
+    const IZQ = 56, DER = 8, ARR = 24
   const W = tam.w, H = tam.h
-  const ancho = W - IZQ - DER, alto = H - ARR - ABA
-  const col = ancho / serie.length
+  const col = (W - IZQ - DER) / serie.length
+  // Debajo del nombre de la semana van sus días, si entran.
+  const conSub = col >= 64 && serie.some((x) => x.sub)
+  const ABA = conSub ? 42 : 26
+  const alto = H - ARR - ABA
   const Y = (v: number) => ARR + ((top - v) / (top - bot || 1)) * alto
   const cx = (i: number) => IZQ + col * i + col / 2
   const barra = Math.min(44, col * 0.56)
@@ -57,7 +61,8 @@ export default function GraficoMeses({ serie, foco, onFoco }: { serie: Mes[]; fo
   // Con muchos meses en poco lugar, se escribe un mes sí y otro no.
   const salteo = col < 30
 
-  const puntos = serie.map((m, i) => [cx(i), Y(m.ganancia)] as const)
+  // Las semanas que todavía no llegaron no llevan punto (la línea termina en hoy).
+  const puntos = serie.map((m, i) => [cx(i), Y(m.ganancia)] as const).filter((_, i) => !serie[i].futuro)
   const linea = puntos.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ')
   const area = puntos.length ? `${linea} L${puntos[puntos.length - 1][0].toFixed(1)} ${Y(0).toFixed(1)} L${puntos[0][0].toFixed(1)} ${Y(0).toFixed(1)} Z` : ''
   const m = hover != null ? serie[hover] : null
@@ -79,21 +84,22 @@ export default function GraficoMeses({ serie, foco, onFoco }: { serie: Mes[]; fo
       {serie.map((mm, i) => <rect key={mm.ym} x={cx(i) - barra / 2} y={Y(Math.max(0, mm.vendido))} width={barra} height={Math.max(0, Y(0) - Y(Math.max(0, mm.vendido)))} rx={5} className={`gmVenta${i === resalta ? ' on' : ''}`} />)}
       <path d={area} fill="url(#gmArea)" />
       <path d={linea} fill="none" className="gmLinea" />
-      {puntos.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={i === resalta ? 6.5 : 4} className={`gmPunto${i === resalta ? ' on' : ''}${serie[i].ganancia < 0 ? ' neg' : ''}`} />)}
-      {resalta >= 0 && <text x={cx(resalta)} y={Math.max(14, Y(serie[resalta].ganancia) - 13)} textAnchor="middle" className={`gmValor${serie[resalta].ganancia < 0 ? ' neg' : ''}`}>{corto(serie[resalta].ganancia)}</text>}
-      {serie.map((mm, i) => <text key={mm.ym} x={cx(i)} y={H - 8} textAnchor="middle" className={`gmMes${i === jSel ? ' on' : ''}`}>{salteo && i % 2 && i !== jSel ? '' : mesCorto(mm.ym)}</text>)}
+      {serie.map((mm, i) => (mm.futuro ? null : [cx(i), Y(mm.ganancia)] as const)).map((pt, i) => pt && <circle key={i} cx={pt[0]} cy={pt[1]} r={i === resalta ? 6.5 : 4} className={`gmPunto${i === resalta ? ' on' : ''}${serie[i].ganancia < 0 ? ' neg' : ''}`} />)}
+      {resalta >= 0 && !serie[resalta].futuro && <text x={cx(resalta)} y={Math.max(14, Y(serie[resalta].ganancia) - 13)} textAnchor="middle" className={`gmValor${serie[resalta].ganancia < 0 ? ' neg' : ''}`}>{corto(serie[resalta].ganancia)}</text>}
+      {serie.map((mm, i) => <text key={mm.ym} x={cx(i)} y={H - (conSub ? 24 : 8)} textAnchor="middle" className={`gmMes${i === jSel ? ' on' : ''}`}>{salteo && i % 2 && i !== jSel ? '' : mm.etiqueta ?? mesCorto(mm.ym)}</text>)}
+      {conSub && serie.map((mm, i) => mm.sub ? <text key={`s${mm.ym}`} x={cx(i)} y={H - 8} textAnchor="middle" className="gmEje">{mm.sub}</text> : null)}
       {/* Zonas para pasar el mouse / tocar: toda la columna de cada mes */}
-      {serie.map((mm, i) => <rect key={mm.ym} x={IZQ + col * i} y={0} width={col} height={H} fill="transparent" style={{ cursor: 'pointer' }}
-        onMouseEnter={() => setHover(i)} onClick={() => { onFoco(mm.ym === foco ? null : mm.ym); setHover(null) }}><title>{mesLargo(mm.ym)}</title></rect>)}
+      {serie.map((mm, i) => <rect key={mm.ym} x={IZQ + col * i} y={0} width={col} height={H} fill="transparent" style={{ cursor: onFoco ? 'pointer' : 'default' }}
+        onMouseEnter={() => setHover(i)} onClick={() => { if (!onFoco) { setHover(i); return } onFoco(mm.ym === foco ? null : mm.ym); setHover(null) }}><title>{mm.titulo ?? mesLargo(mm.ym)}</title></rect>)}
     </svg>
     {m && <div className="gmTip" style={{ left: tipIzq, top: 6 }}>
-      <b>{mesLargo(m.ym)}</b>
+      <b>{m.titulo ?? mesLargo(m.ym)}</b>
       <div><span>Vendido</span><span>{pesos(m.vendido)}</span></div>
       <div><span>Costo de productos</span><span>− {pesos(m.costoProductos)}</span></div>
       <div><span>Empleados y extras</span><span>− {pesos(m.empleados + m.extras)}</span></div>
       <div><span>Gastos e impuestos</span><span>− {pesos(m.gastos + m.impuestos)}</span></div>
       <div className="tot"><span>Te queda</span><span>{pesos(m.ganancia)}</span></div>
-      <small>{m.ym === foco ? 'Clic para volver a todo el período' : 'Clic para ver este mes'}</small>
+      {onFoco && <small>{m.ym === foco ? 'Clic para volver a todo el período' : 'Clic para ver este mes'}</small>}
     </div>}
   </div>
 }

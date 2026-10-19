@@ -146,9 +146,13 @@ export default function InicioSimple(p: Props) {
       const pr = primero[x.obra_id]
       if (!pr || (x.fecha ?? '') < (pr.fecha ?? '')) primero[x.obra_id] = x
     })
-    return (yms: string[]) => {
-      const set = new Set(yms)
-      const en = (f: string | null | undefined) => set.has((f ?? '').slice(0, 7))
+    // yms: meses 'AAAA-MM'; o un rango de días ['AAAA-MM-DD', 'AAAA-MM-DD'] (semanas del mes).
+    return (yms: string[] | { desde: string; hasta: string }) => {
+      const set = Array.isArray(yms) ? new Set(yms) : null
+      const en = (f: string | null | undefined) => {
+        const t = (f ?? '').slice(0, 10)
+        return set ? set.has(t.slice(0, 7)) : !Array.isArray(yms) && t >= yms.desde && t <= yms.hasta
+      }
       let ventaProductos = 0, costoProductos = 0, servicios = 0, bonificacion = 0, adicionales = 0, empleados = 0, extras = 0, sinCosto = 0, conEstimado = 0
       const filas: Fila[] = aceptados.filter((x) => en(x.fecha)).map((x) => {
         const deObra = x.obra_id != null && primero[x.obra_id]?.id === x.id
@@ -191,8 +195,19 @@ export default function InicioSimple(p: Props) {
     }
   }, [aceptados, items, p.costos, p.gastos, p.adicionales, p.empleadosObra])
 
-  const mesesGrafico = useMemo(() => (tipo === 'mes' ? mesesEntre(sumarMeses(mesUno, -5), mesUno) : meses), [tipo, mesUno, meses])
-  const serie = useMemo(() => mesesGrafico.map((ym) => ({ ym, ...calcular([ym]) })), [mesesGrafico, calcular])
+  // Gráfico: un mes se ve por semanas (1–7, 8–14, …); los demás períodos, por mes.
+  const serie = useMemo(() => {
+    if (tipo !== 'mes') return meses.map((ym) => ({ ym, ...calcular([ym]) }))
+    const [a, m] = mesUno.split('-').map(Number)
+    const fin = new Date(a, m, 0).getDate()
+    const corto3 = mesNombre(mesUno, 'short').slice(0, 3)
+    return [1, 8, 15, 22, 29].filter((d1) => d1 <= fin).map((d1, i) => {
+      const d2 = Math.min(fin, d1 === 22 && fin - 28 < 1 ? fin : d1 + 6)
+      const desde = `${mesUno}-${String(d1).padStart(2, '0')}`, hasta = `${mesUno}-${String(d2).padStart(2, '0')}`
+      return { ym: desde, futuro: desde > ymDe(hoy) + `-${String(hoy.getDate()).padStart(2, '0')}`, etiqueta: `Sem ${i + 1}`, titulo: `Del ${d1} al ${d2} de ${mesNombre(mesUno, 'long')}`, sub: `${d1}–${d2} ${corto3}`, ...calcular({ desde, hasta }) }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipo, mesUno, meses, calcular])
   const focoValido = foco && meses.includes(foco) ? foco : null
   const d = useMemo(() => calcular(focoValido ? [focoValido] : meses), [calcular, focoValido, meses])
   // Comparación con el mes anterior (cuando se mira un solo mes).
@@ -381,8 +396,8 @@ export default function InicioSimple(p: Props) {
             </div>
             <div className="is2Ley"><span><i className="v" />Vendido</span><span><i className="g" />Ganancia final</span></div>
           </div>
-          <GraficoMeses serie={serie} foco={tipo === 'mes' ? mesUno : focoValido} onFoco={(ym) => (tipo === 'mes' ? ym && setMesUno(ym) : setFoco(ym))} />
-          <p className="is2Ayuda">Pasá el mouse por un mes para ver el detalle · tocalo para verlo solo</p>
+          <GraficoMeses serie={serie} foco={tipo === 'mes' ? null : focoValido} onFoco={tipo === 'mes' ? undefined : setFoco} />
+          <p className="is2Ayuda">{tipo === 'mes' ? 'Semana por semana · pasá el mouse para ver el detalle' : 'Pasá el mouse por un mes para ver el detalle · tocalo para verlo solo'}</p>
         </div>
 
         <div className="is2Casc">
