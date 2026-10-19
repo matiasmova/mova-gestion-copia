@@ -18,19 +18,21 @@ type Props = {
   total: number
   adicionales?: number
   reintegros?: number // Gasto extra que devuelve el cliente: no suma ni resta
+  abiertaInicial?: boolean
+  onGanancia?: (ganancia: number) => void
 }
 type Gente = { id: number; nombre: string | null; apellido: string | null; costo_dia: unknown; modalidad_pago: string | null; activo: boolean | null }
 type FilaVista = FilaEmpleado & { nombre: string; asigId: number | null; modalidad: string | null; valor: number }
 
 const nombreDe = (g?: Gente) => (g ? `${g.nombre ?? ''} ${g.apellido ?? ''}`.trim() || 'Persona' : 'Mano de obra sin persona')
 
-export default function GananciaTrabajo({ presupuestoIds, obraId, items, total, adicionales = 0, reintegros = 0 }: Props) {
+export default function GananciaTrabajo({ presupuestoIds, obraId, items, total, adicionales = 0, reintegros = 0, abiertaInicial = false, onGanancia }: Props) {
   const [estimado, setEstimado] = useState(0)
   const [faltaSql, setFaltaSql] = useState(false)
   const [personal, setPersonal] = useState<FilaVista[]>([])
   const [gente, setGente] = useState<Gente[]>([])
   const [extras, setExtras] = useState(0)
-  const [abierta, setAbierta] = useState(false)
+  const [abierta, setAbierta] = useState(abiertaInicial)
   const [guardado, setGuardado] = useState<'ok' | 'guardando' | 'error'>('ok')
   const [revision, setRevision] = useState(0)
   const [nuevo, setNuevo] = useState<{ personaId: string; modalidad: 'por_obra' | 'libre'; monto: string } | null>(null)
@@ -131,6 +133,7 @@ export default function GananciaTrabajo({ presupuestoIds, obraId, items, total, 
   const disponibles = gente.filter((g) => g.activo !== false && !asignados.has(g.id))
   const c = cuentaTrabajo(items, total, empleados, extras, adicionales)
   const base = total + adicionales
+  useEffect(() => { onGanancia?.(c.ganancia) }, [c.ganancia]) // eslint-disable-line react-hooks/exhaustive-deps
   const pct = base > 0 ? Math.round((c.ganancia / base) * 100) : null
   const partes: [number, string][] = [[c.ganProductos, '#e0701a'], [Math.max(0, c.servicios + c.adicionales - c.bonificacion - c.empleados - c.extras), '#2f63b8'], [c.empleados, '#a1530f'], [c.extras, '#cf4b37'], [c.costoProductos, '#b7bdc6']]
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { cargarFormasPago, guardarFormasPago } from './formasPago'
 import type { Pedido } from './BuscadorGlobal'
 import { supabase } from './supabase'
@@ -56,7 +56,7 @@ export type GrupoPresupuestos = 'armando' | 'enviados' | 'rechazados'
 const enGrupo = (p: { estado: string; obra_id: number | null }, g?: GrupoPresupuestos) =>
   !g ? true : g === 'rechazados' ? p.estado === 'rechazado' : g === 'enviados' ? p.estado === 'enviado' : p.estado === 'borrador' || (p.estado === 'aceptado' && p.obra_id == null)
 
-function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedidoAtendido, onAbrirObra, grupo, embebido = false, busquedaExterna }: { busquedaExterna?: string; presupuestoAbrirId?: number | null; onPresupuestoAbierto?: () => void; pedido?: Pedido | null; onPedidoAtendido?: () => void; onAbrirObra?: (obraId: number) => void; grupo?: GrupoPresupuestos; embebido?: boolean } = {}) {
+function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedidoAtendido, onAbrirObra, grupo, embebido = false, busquedaExterna, soloVentanas = false, onCambio }: { soloVentanas?: boolean; onCambio?: () => void; busquedaExterna?: string; presupuestoAbrirId?: number | null; onPresupuestoAbierto?: () => void; pedido?: Pedido | null; onPedidoAtendido?: () => void; onAbrirObra?: (obraId: number) => void; grupo?: GrupoPresupuestos; embebido?: boolean } = {}) {
   const [presupuestos, setPresupuestos] = useState<PresupuestoCompleto[]>([])
   const [clientes, setClientes] = useState<ClienteOpcion[]>([])
   const [obras, setObras] = useState<ObraOpcion[]>([])
@@ -105,6 +105,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pedido])
 
+  const yaCargo = useRef(false)
   async function cargarDatos(): Promise<PresupuestoCompleto[]> {
     setCargando(true)
     setError('')
@@ -172,6 +173,9 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
     setCargando(false)
     // Si hay una ficha abierta, refrescarla con los datos nuevos
     setFicha((actual) => (actual ? cargados.find((p) => p.id === actual.id) ?? null : null))
+    // Avisa a Trabajos que algo cambió (no en la primera carga).
+    if (yaCargo.current) onCambio?.()
+    yaCargo.current = true
     return cargados
   }
 
@@ -377,6 +381,8 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
 
   return (
     <div className="gestionPage">
+      {/* soloVentanas: la lista la muestra Trabajos; acá solo se abren la ficha y el editor. */}
+      {!soloVentanas && <>
       {!embebido && <div className="pageHeader">
         <div>
           <p className="subtitle">GESTIÓN COMERCIAL</p>
@@ -498,6 +504,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
           </table>
         </div>
       )}
+      </>}
 
       {empezar && (
         <EmpezarPresupuesto clientes={clientes} obras={obras} inicial={inicialNuevo}
