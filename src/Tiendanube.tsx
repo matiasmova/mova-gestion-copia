@@ -8,13 +8,13 @@ import CampoNumero from './CampoNumero'
 // Todo pasa por la Edge Function "tiendanube": el token de la tienda nunca
 // llega al navegador.
 
-type Opciones = { preciosConIva: boolean; redondear: boolean; sincronizarPrecio: boolean; sincronizarStock: boolean; auto: boolean }
-const OPCIONES_DEF: Opciones = { preciosConIva: true, redondear: true, sincronizarPrecio: true, sincronizarStock: true, auto: true }
+export type Opciones = { preciosConIva: boolean; redondear: boolean; sincronizarPrecio: boolean; sincronizarStock: boolean; auto: boolean }
+export const OPCIONES_DEF: Opciones = { preciosConIva: true, redondear: true, sincronizarPrecio: true, sincronizarStock: true, auto: true }
 type Estado = { configurado: boolean; conectado: boolean; tienda: string | null; storeId: string | null; desde: string | null; log: { fecha: string; tipo: string; detalle: string | null; ok: boolean }[] }
-type ProductoWeb = { product_id: number; variant_id: number; nombre: string; sku: string | null; precio: number; precio_promocional: number | null; stock: number | null; foto: string | null; descripcion: string; categoria: string | null; publicado: boolean }
+export type ProductoWeb = { product_id: number; variant_id: number; nombre: string; nombre_web?: string; sku: string | null; precio: number; precio_promocional: number | null; stock: number | null; foto: string | null; descripcion: string; categoria: string | null; publicado: boolean }
 type ProductoApp = { id: number; codigo: string | null; nombre: string; iva_pct: number; stock: number; precio_venta: number; foto_url: string | null; descripcion: string | null; tipo: string; activo: boolean; tn_variant_id: number | null; tn_sincronizar?: boolean }
 
-async function llamar<T>(accion: string, extra: Record<string, unknown> = {}): Promise<T> {
+export async function llamarTienda<T>(accion: string, extra: Record<string, unknown> = {}): Promise<T> {
   const { data, error } = await supabase.functions.invoke('tiendanube', { body: { accion, ...extra } })
   if (error) {
     let msg = error.message
@@ -43,7 +43,7 @@ export default function Tiendanube() {
   async function cargar() {
     setError('')
     try {
-      setEstado(await llamar<Estado>('estado')); setSinFuncion(false)
+      setEstado(await llamarTienda<Estado>('estado')); setSinFuncion(false)
     } catch (e) {
       const m = (e as Error).message
       if (/Failed to send|not found|404|FunctionsFetchError|FunctionsHttpError/i.test(m)) setSinFuncion(true)
@@ -67,20 +67,20 @@ export default function Tiendanube() {
   async function conectar() {
     setTrabajando('conectar'); setError('')
     try {
-      const { url } = await llamar<{ url: string }>('iniciar', { volver: window.location.origin })
+      const { url } = await llamarTienda<{ url: string }>('iniciar', { volver: window.location.origin })
       window.location.href = url
     } catch (e) { setError((e as Error).message); setTrabajando('') }
   }
   async function desconectar() {
     if (!window.confirm('¿Desconectar la tienda? La web deja de actualizarse sola. Los productos quedan como están (en la app y en la web).')) return
     setTrabajando('desconectar')
-    try { await llamar('desconectar'); await cargar() } catch (e) { setError((e as Error).message) }
+    try { await llamarTienda('desconectar'); await cargar() } catch (e) { setError((e as Error).message) }
     setTrabajando('')
   }
   async function sincronizarAhora() {
     setTrabajando('sincronizar'); setError(''); setAviso('')
     try {
-      const r = await llamar<{ actualizados: number; ventasWeb: string[]; quedan: number; errores: string[] }>('sincronizar')
+      const r = await llamarTienda<{ actualizados: number; ventasWeb: string[]; quedan: number; errores: string[] }>('sincronizar')
       setAviso([`✓ ${r.actualizados} producto(s) actualizados en la web.`, r.ventasWeb.length ? `Ventas en la web descontadas del stock: ${r.ventasWeb.join(', ')}.` : '', r.quedan ? `Quedan ${r.quedan}: tocá "Sincronizar ahora" otra vez.` : '', r.errores.length ? `⚠ ${r.errores.join(' · ')}` : ''].filter(Boolean).join(' '))
       await cargar()
     } catch (e) { setError((e as Error).message) }
@@ -152,7 +152,7 @@ export default function Tiendanube() {
 // ---------- Traer productos de la web ----------
 type Fila = { web: ProductoWeb; app: ProductoApp | null; como: 'vinculado' | 'sku' | 'nombre' | 'nuevo' }
 
-function ImportarDeWeb({ opciones, onCerrar }: { opciones: Opciones; onCerrar: (msg?: string) => void }) {
+export function ImportarDeWeb({ opciones, onCerrar }: { opciones: Opciones; onCerrar: (msg?: string) => void }) {
   const [filas, setFilas] = useState<Fila[] | null>(null)
   const [error, setError] = useState('')
   const [traerPrecioStock, setTraerPrecioStock] = useState(true)
@@ -166,7 +166,7 @@ function ImportarDeWeb({ opciones, onCerrar }: { opciones: Opciones; onCerrar: (
     void (async () => {
       try {
         const [{ productos }, rApp] = await Promise.all([
-          llamar<{ productos: ProductoWeb[] }>('leer_productos'),
+          llamarTienda<{ productos: ProductoWeb[] }>('leer_productos'),
           supabase.from('productos_servicios').select('id, codigo, nombre, iva_pct, stock, precio_venta, foto_url, descripcion, tipo, activo, tn_variant_id'),
         ])
         if (rApp.error) throw new Error('Falta correr el SQL de Tiendanube (fase 19) en Supabase.')
@@ -286,7 +286,7 @@ function SubirAWeb({ onCerrar }: { onCerrar: (msg?: string) => void }) {
   async function subir() {
     setTrabajando(true); setError('')
     try {
-      const r = await llamar<{ creados: string[]; errores: string[] }>('crear', { productos: Array.from(elegidos) })
+      const r = await llamarTienda<{ creados: string[]; errores: string[] }>('crear', { productos: Array.from(elegidos) })
       onCerrar(`✓ ${r.creados.length} producto(s) creados en Tiendanube, sin publicar: revisalos y publicalos desde el panel de la tienda.${r.errores.length ? ` ⚠ No se pudieron crear: ${r.errores.join(', ')}` : ''}`)
     } catch (e) { setError((e as Error).message); setTrabajando(false) }
   }

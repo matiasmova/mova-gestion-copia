@@ -15,6 +15,7 @@ import CompararMercado, { type ProductoAComparar } from './CompararMercado'
 import HistorialPrecios, { ListaHistorialPrecios } from './HistorialPrecios'
 import OrdenarCatalogoIA from './OrdenarCatalogoIA'
 import CampoNumero from './CampoNumero'
+import ProductosEnPagina from './ProductosEnPagina'
 
 export type ProductoServicio = {
   id: number
@@ -88,7 +89,8 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoFiltro>('activos')
   const [soloStockBajo, setSoloStockBajo] = useState(false)
   // Pestaña y filtros avanzados
-  const [pestana, setPestana] = useState<'catalogo' | 'stock'>('catalogo')
+  const [publicandoId, setPublicandoId] = useState<number | null>(null)
+  const [pestana, setPestana] = useState<'catalogo' | 'pagina' | 'stock'>('catalogo')
   const [verFiltros, setVerFiltros] = useState(false)
   const [fCategoria, setFCategoria] = useState('todas')
   const [fProveedor, setFProveedor] = useState('todos')
@@ -273,6 +275,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [elementos, busqueda, tipoFiltro, estadoFiltro, soloStockBajo, fCategoria, fProveedor, fMoneda, fStock, fFoto, fRotacion, fDatos, orden, ventas, diasVendidos, diasParado])
 
+  const enPagina = elementos.filter((el) => el.tn_variant_id).length
   const bajos = elementos.filter((el) => el.activo && (nivelStock(el) === 'bajo' || nivelStock(el) === 'sin'))
   const sinPrecio = elementos.filter((el) => el.activo && !(el.precio_venta > 0)).length
   const sinCosto = elementos.filter((el) => el.activo && el.tipo === 'producto' && !(el.costo_unitario > 0)).length
@@ -423,6 +426,20 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
       return
     }
     setGuardando(false); cerrarFormulario(); await cargarCatalogo()
+  }
+
+  // Publicar en la tienda web desde la tarjeta (visible u oculto para revisar).
+  async function publicarUno(el: ProductoServicio) {
+    if (!window.confirm(`¿Publicar "${el.nombre}" en la página, visible para los clientes?`)) return
+    setPublicandoId(el.id)
+    const { data, error: e } = await supabase.functions.invoke('tiendanube', { body: { accion: 'crear', productos: [el.id], visible: true } })
+    setPublicandoId(null)
+    if (e || data?.error || data?.errores?.length) {
+      let msg = data?.error ?? data?.errores?.join(', ') ?? 'No se pudo conectar con la tienda web. Revisá que esté conectada en Configuración → Tienda web.'
+      try { const ctx = (e as { context?: Response } | null)?.context; if (ctx) msg = (await ctx.json()).error ?? msg } catch { /* sin detalle */ }
+      window.alert(`No se pudo publicar: ${msg}`); return
+    }
+    void cargarCatalogo()
   }
 
   async function cambiarEstado(el: ProductoServicio) {
@@ -591,7 +608,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
         </div>
         <h3>{el.nombre}</h3>
         {el.nombre_presupuesto && <small className="prodPres" title="Así aparece en el presupuesto">📄 {el.nombre_presupuesto}</small>}
-        {el.tn_variant_id && <small className={`prodWeb ${el.tn_sincronizar === false ? 'pausa' : ''}`} title="Vinculado con la tienda web (Tiendanube)">🛒 {el.tn_sincronizar === false ? 'En la web · sin sincronizar' : 'En la web · se actualiza solo'}</small>}
+        {el.tn_variant_id && <button type="button" className={`prodWeb ${el.tn_sincronizar === false ? 'pausa' : ''}`} title="Ver en Productos en página" onClick={() => setPestana('pagina')}>🛒 {el.tn_sincronizar === false ? 'En la página · no se actualiza solo' : 'En la página · se actualiza solo'}</button>}
         {el.codigo && <small className="prodCat">Cód. {el.codigo}</small>}
         <small className="prodCat">{el.categoria || el.descripcion || 'Sin categoría'}{el.proveedor ? ` · ${el.proveedor}` : ''}</small>
         <div className="prodPrecio">
@@ -612,6 +629,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
           <button className="editButton" onClick={() => abrirEdicion(el)}>Editar</button>
           {el.tipo === 'producto' && <button type="button" className="editButton" title="Comparar con precios del mercado" onClick={() => compararUno(el)}>💲 Mercado</button>}
           <button type="button" className="editButton" title="Cambios de precio de este producto" onClick={() => setHistorial({ id: el.id, nombre: el.nombre })}>🕑 Precios</button>
+          {el.tipo === 'producto' && !el.tn_variant_id && el.activo && <button type="button" className="editButton prodPublicar" title="Publicar en la tienda web" disabled={publicandoId === el.id} onClick={() => void publicarUno(el)}>{publicandoId === el.id ? 'Publicando…' : '🛒 Publicar'}</button>}
           {el.link_compra && <a className="editButton" href={el.link_compra} target="_blank" rel="noreferrer">Ver en web</a>}
           <button className={el.activo ? 'deactivateButton' : 'activateButton'} onClick={() => cambiarEstado(el)}>{el.activo ? 'Desactivar' : 'Activar'}</button>
         </div>
@@ -638,7 +656,8 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
       </div>
 
       <div className="gestionTabs homeTabs">
-        <button className={pestana === 'catalogo' ? 'active' : ''} onClick={() => setPestana('catalogo')}>📦 Catálogo</button>
+        <button className={pestana === 'catalogo' ? 'active' : ''} onClick={() => setPestana('catalogo')}>📦 Productos y servicios</button>
+        <button className={pestana === 'pagina' ? 'active' : ''} onClick={() => setPestana('pagina')}>🛒 Productos en página{enPagina ? ` · ${enPagina}` : ''}</button>
         <button className={pestana === 'stock' ? 'active' : ''} onClick={() => setPestana('stock')}>📊 Stock y rotación{bajos.length ? ` · ⚠ ${bajos.length}` : ''}</button>
       </div>
       {faltaSqlMoneda && !cargando && <p className="gestionAyuda usFalta">Falta correr el SQL de Productos en Supabase: hasta entonces todo queda en pesos y no se guarda el "nombre en presupuesto".</p>}
@@ -657,6 +676,19 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
           mostrar={mostrar}
           onEditar={(el) => { setPestana('catalogo'); void abrirEdicion(el) }}
           onMinimo={(el, v) => { actualizarCampoLocal(el.id, 'stock_minimo', v); void persistirCampo(el.id, 'stock_minimo', v) }}
+        />
+      )}
+
+      {pestana === 'pagina' && !cargando && !error && (
+        <ProductosEnPagina
+          elementos={elementos}
+          mostrar={mostrar}
+          onCampo={async (id, cambios, guardar) => {
+            setElementos((arr) => arr.map((el) => (el.id === id ? { ...el, ...cambios } : el)))
+            if (guardar) await persistirCampos(id, cambios)
+          }}
+          onRecargar={() => void cargarCatalogo()}
+          onEditar={(el) => void abrirEdicion(el)}
         />
       )}
 
