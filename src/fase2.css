@@ -3601,3 +3601,17 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .is2Mg b{text-align:right;font-size:13px;color:var(--is-ink)}
 @media (max-width:1100px){.is2Bal{grid-template-columns:1fr}.is2Ind{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:520px){.is2Ind{grid-template-columns:1fr}.is2Banda em{display:none}}
+
+/* Presupuesto en vivo: la etapa se toca para abrir la línea de tiempo; el estado va en una línea */
+.pvEtapa button.pvPasos{border:0;background:transparent;padding:0;font:inherit;color:inherit;cursor:pointer;width:100%}
+.pvEtapa button.pvPasos:disabled{cursor:default}
+.pvEtapa button.pvPasos:not(:disabled):hover span{filter:brightness(1.05)}
+.pvEstadoTxt{display:flex;align-items:center;justify-content:space-between;gap:10px;border:0;background:rgba(255,255,255,.14);color:#fff;border-radius:10px;padding:7px 10px;font:inherit;font-size:12.5px;font-weight:700;text-align:left;cursor:pointer;transition:background .2s ease}
+.pvEstadoTxt:hover:not(:disabled){background:rgba(255,255,255,.24)}
+.pvEstadoTxt em{font-style:normal;font-weight:800;white-space:nowrap;opacity:.9}
+/* Como lo ve el cliente = el PDF real */
+.pvDoc.pvPdf{background:#e9ecf1;display:flex;flex-direction:column;gap:12px}
+.pvDoc.pvPdf .vpPaginas{display:flex;flex-direction:column;align-items:center;gap:12px}
+.pvDoc.pvPdf .vpPagina{max-width:100%;height:auto!important;background:#fff;border-radius:4px;box-shadow:0 6px 20px -8px rgba(0,0,0,.35)}
+.pvDoc.pvPdf .vpMensaje{margin:0;text-align:center;font-size:13px;color:#6a7382}
+.pvDoc.pvPdf .vpPaginas{padding:0}

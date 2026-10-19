@@ -13,6 +13,7 @@ import {
   guardarModoComprobantes,
   type ModoComprobantes,
 } from './pdfPresupuesto'
+import { PaginasPdf } from './VistaPreviaPdf'
 import { codigoPresupuesto } from './codigoPresupuesto'
 import { type ObraEtapa } from './VidaEtapas'
 import { estadoTrabajo } from './estadoTrabajo'
@@ -386,6 +387,16 @@ export default function PresupuestoFicha({
         </div>
       </div>
     )
+    // El estado en una línea (va arriba, en la franja de la etapa).
+    const estadoTexto = presupuesto.estado === 'borrador' ? 'Borrador · el cliente todavía no lo vio'
+      : presupuesto.estado === 'enviado' ? `Enviado ${diasEnviado === 0 ? 'hoy' : `hace ${diasEnviado} día${diasEnviado === 1 ? '' : 's'}`} · ${venceEn != null ? (venceEn < 0 ? `venció hace ${-venceEn} día${venceEn === -1 ? '' : 's'}` : venceEn === 0 ? 'vence hoy' : `vence en ${venceEn} día${venceEn === 1 ? '' : 's'}`) : 'esperando respuesta'}`
+        : presupuesto.estado === 'rechazado' ? `No salió${motivoRechazo ? ` · ${motivoRechazo}` : ''}`
+          : presupuesto.estado === 'aceptado' ? 'Aceptado · falta crear la obra' : ''
+    // "Como lo ve el cliente": el PDF real (mientras se actualiza, el anterior).
+    const pdfVer = listo ?? preparado
+    const vistaPdf = pdfVer
+      ? <>{!listo && <p className="vpMensaje" role="status">Actualizando con los últimos cambios…</p>}<PaginasPdf blob={pdfVer.blob} /></>
+      : error ? <p className="vpMensaje" role="alert">{error}</p> : <p className="vpMensaje" role="status">Preparando el PDF…</p>
     const acciones = (
       <div className="pvAcciones">
         {presupuesto.estado === 'borrador' && <button type="button" className="verde" onClick={enviarWhatsApp}>📤 Enviar</button>}
@@ -427,6 +438,9 @@ export default function PresupuestoFicha({
         obraId={presupuesto.obra_id ?? null}
         modoInicial={presupuesto.estado === 'borrador' ? 'edit' : 'ver'}
         estado={estadoVivo}
+        estadoTexto={estadoTexto}
+        onLinea={() => setLineaAbierta(true)}
+        vistaPdf={vistaPdf}
         acciones={acciones}
         menu={menuVivo}
         extra={<RecomendacionesUso presupuestoId={presupuesto.id} titulo={presupuesto.titulo} descripcion={presupuesto.descripcion} items={presupuesto.items} onGuardado={recargarPronto} />}

@@ -12,6 +12,45 @@ type Props = {
   onCerrar: () => void
 }
 
+// Dibuja las páginas de un PDF ya generado (lo usa "Como lo ve el cliente").
+export function PaginasPdf({ blob }: { blob: Blob }) {
+  const caja = useRef<HTMLDivElement>(null)
+  const [error, setError] = useState(false)
+  useEffect(() => {
+    const contenedor = caja.current
+    if (!contenedor) return
+    let vigente = true
+    setError(false)
+    ;(async () => {
+      const pdfjs = await import('pdfjs-dist')
+      pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
+      const doc = await pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()), isEvalSupported: false }).promise
+      const ancho = Math.min(contenedor.clientWidth || 800, 860)
+      const escalaPantalla = window.devicePixelRatio || 1
+      const lienzos: HTMLCanvasElement[] = []
+      for (let n = 1; n <= doc.numPages && vigente; n++) {
+        const pagina = await doc.getPage(n)
+        const base = pagina.getViewport({ scale: 1 })
+        const vista = pagina.getViewport({ scale: (ancho / base.width) * escalaPantalla })
+        const canvas = document.createElement('canvas')
+        canvas.width = vista.width
+        canvas.height = vista.height
+        canvas.style.width = `${ancho}px`
+        canvas.className = 'vpPagina'
+        await pagina.render({ canvasContext: canvas.getContext('2d')!, viewport: vista }).promise
+        lienzos.push(canvas)
+      }
+      // Se reemplazan todas juntas, así no parpadea al actualizarse.
+      if (vigente) contenedor.replaceChildren(...lienzos)
+    })().catch((e) => { console.error(e); if (vigente) setError(true) })
+    return () => { vigente = false }
+  }, [blob])
+  return <>
+    {error && <p className="vpMensaje" role="alert">No se pudo mostrar el PDF. Probá Descargar desde el menú ⋯.</p>}
+    <div className="vpPaginas" ref={caja} />
+  </>
+}
+
 export default function VistaPreviaPdf({ titulo, generar, onCerrar }: Props) {
   const [archivo, setArchivo] = useState<{ blob: Blob; nombre: string } | null>(null)
   const [error, setError] = useState('')
