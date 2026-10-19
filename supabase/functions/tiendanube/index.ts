@@ -94,11 +94,15 @@ function precioWeb(p: { precio_venta: number; aplica_descuento: boolean; descuen
   return o.redondear ? Math.round(final) : Math.round(final * 100) / 100
 }
 
-async function sincronizar(db: SupabaseClient, con: Conexion, soloIds?: number[]) {
-  const o = await leerOpciones(db)
+// forzar: lo pidió el usuario para estos productos ("Subir a la web"): se publican
+// precio y stock aunque estén pausados o la sincronización general esté apagada.
+async function sincronizar(db: SupabaseClient, con: Conexion, soloIds?: number[], forzar = false) {
+  const leidas = await leerOpciones(db)
+  const o = forzar ? { ...leidas, sincronizarPrecio: true, sincronizarStock: true } : leidas
   let consulta = db.from('productos_servicios')
     .select('id, nombre, tipo, stock, precio_venta, aplica_descuento, descuento_pct, descuento_monto, iva_pct, tn_product_id, tn_variant_id, tn_precio_publicado, tn_stock_publicado')
-    .not('tn_variant_id', 'is', null).eq('tn_sincronizar', true).eq('activo', true)
+    .not('tn_variant_id', 'is', null).eq('activo', true)
+  if (!forzar) consulta = consulta.eq('tn_sincronizar', true)
   if (soloIds?.length) consulta = consulta.in('id', soloIds)
   const { data: productos, error } = await consulta
   if (error) throw error
@@ -200,7 +204,7 @@ Deno.serve(async (req) => {
     return responder({ ok: true })
   }
 
-  const cuerpo = await req.json().catch(() => ({})) as { accion?: string; volver?: string; ids?: number[]; productos?: number[]; visible?: boolean; id?: number }
+  const cuerpo = await req.json().catch(() => ({})) as { accion?: string; volver?: string; ids?: number[]; productos?: number[]; visible?: boolean; id?: number; cambios?: { id: number; nombre?: string; descripcion?: string }[] }
 
   // ---- Cron: sincronización automática ----
   const secretoCron = Deno.env.get('CRON_SECRET')
@@ -246,7 +250,7 @@ Deno.serve(async (req) => {
             const variante = (v.values ?? []).map((x) => x.es).filter(Boolean).join(' / ')
             return {
               product_id: p.id, variant_id: v.id,
-              nombre: texto(p.name) + (variante ? ` (${variante})` : ''),
+              nombre: texto(p.name) + (variante ? ` (${variante})` : ''), nombre_web: texto(p.name),
               sku: v.sku || null, precio: num(v.price), precio_promocional: v.promotional_price ? num(v.promotional_price) : null,
               stock: v.stock_management ? v.stock : null,
               foto: [...(p.images ?? [])].sort((a, b) => a.position - b.position)[0]?.src ?? null,
@@ -292,6 +296,29 @@ Deno.serve(async (req) => {
         if (!r.ok) return responder({ error: `La web respondió ${r.status}.` }, 502)
         await registrar(db, 'visibilidad', `${p.nombre}: ${cuerpo.visible ? 'visible' : 'oculto'} en la web`)
         return responder({ ok: true })
+      }
+      case 'editar': {
+        // "Productos en página": cambia nombre y descripción en la web y sube
+        // precio y stock de la app de esos productos (aunque estén pausados).
+        if (!con) return responder({ error: 'Tiendanube no está conectado.' }, 400)
+        const cambios = (cuerpo.cambios ?? []).filter((c) => Number(c.id)).slice(0, 100)
+        const ids = cambios.map((c) => Number(c.id))
+        const { data: lista } = ids.length ? await db.from('productos_servicios').select('id, nombre, tn_product_id').in('id', ids) : { data: [] }
+        const errores: string[] = []
+        for (const c of cambios) {
+          const p = (lista ?? []).find((x) => x.id === Number(c.id))
+          if (!p?.tn_product_id) { errores.push(`${p?.nombre ?? c.id}: no está en la web`); continue }
+          const datos: Record<string, unknown> = {}
+          if (typeof c.nombre === 'string' && c.nombre.trim()) datos.name = { es: c.nombre.trim() }
+          if (typeof c.descripcion === 'string') datos.description = { es: c.descripcion.trim().split(/\n{2,}/).map((par) => `<p>${par.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</p>`).join('') }
+          if (!Object.keys(datos).length) continue
+          const r = await tn(con, `/products/${p.tn_product_id}`, { method: 'PUT', body: JSON.stringify(datos) })
+          if (!r.ok) errores.push(`${p.nombre}: la web respondió ${r.status}`)
+          await esperar(450)
+        }
+        const res = await sincronizar(db, con, ids, true)
+        if (cambios.some((c) => c.nombre !== undefined || c.descripcion !== undefined)) await registrar(db, 'editar', `${cambios.length} producto(s) editados desde "Productos en página"${errores.length ? ` · errores: ${errores.join(', ')}` : ''}`, errores.length === 0)
+        return responder({ ok: true, ...res, errores: [...errores, ...res.errores] })
       }
       case 'sincronizar': {
         if (!con) return responder({ error: 'Tiendanube no está conectado.' }, 400)
