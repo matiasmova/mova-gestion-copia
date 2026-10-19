@@ -17,6 +17,8 @@ export type TareaPH = {
   monto?: number
   // Texto para agendarla (si se pasa a la agenda).
   agendar?: string
+  // Qué es y qué conviene hacer (se ve al tocar la tarjeta).
+  explica?: string
   obra_id?: number | null
 }
 
@@ -42,6 +44,21 @@ export function leerOcultas(): Set<string> {
     return new Set(Object.entries(m).filter(([, f]) => f === hoyISO()).map(([k]) => k))
   } catch { return new Set() }
 }
+export function mostrarDeNuevo(clave: string) {
+  try {
+    const m = JSON.parse(localStorage.getItem(CLAVE_OCULTAS) ?? '{}') as Record<string, string>
+    delete m[clave]
+    localStorage.setItem(CLAVE_OCULTAS, JSON.stringify(m))
+  } catch { /* sin almacenamiento */ }
+}
+
+// Un evento de la agenda que salió de una tarea de Para hacer lleva su marca en
+// la nota ("[ph:clave]"): así la tarea no se repite mientras esté agendada y se
+// puede devolver a la lista ("Volver a pendientes").
+export const marcaPH = (clave: string) => `[ph:${clave}]`
+export const claveDeNota = (nota: string | null | undefined) => /\[ph:([^\]]+)\]/.exec(nota ?? '')?.[1] ?? null
+export const notaSinMarca = (nota: string | null | undefined) => (nota ?? '').replace(/\s*\[ph:[^\]]+\]\s*/g, ' ').trim()
+
 export function ocultarPorHoy(clave: string) {
   try {
     const m = JSON.parse(localStorage.getItem(CLAVE_OCULTAS) ?? '{}') as Record<string, string>
