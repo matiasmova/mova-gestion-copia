@@ -15,6 +15,7 @@ import CompararMercado, { type ProductoAComparar } from './CompararMercado'
 import HistorialPrecios, { ListaHistorialPrecios } from './HistorialPrecios'
 import OrdenarCatalogoIA from './OrdenarCatalogoIA'
 import CampoNumero from './CampoNumero'
+import { CATEGORIAS_PRODUCTO, COLORES, esCategoriaApp, hexColor, iconoCategoria, sugerirCategoria, sugerirColor } from './categoriasApp'
 import ProductosEnPagina from './ProductosEnPagina'
 
 export type ProductoServicio = {
@@ -48,6 +49,8 @@ export type ProductoServicio = {
   // Vínculo con la tienda web (Tiendanube); si falta el SQL quedan vacíos.
   tn_variant_id?: number | null
   tn_sincronizar?: boolean
+  // Color (opcional; si falta el SQL de la fase 36 queda vacío).
+  color?: string | null
   fotoView?: string | null
 }
 
@@ -110,6 +113,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
   const [mostrarImportar, setMostrarImportar] = useState(false)
   const [mostrarCotizacion, setMostrarCotizacion] = useState(false)
   const [mostrarOrdenar, setMostrarOrdenar] = useState(false)
+  const [ordenarCategorias, setOrdenarCategorias] = useState(false)
   const [historial, setHistorial] = useState<{ id: number; nombre: string } | null>(null)
   const [mercado, setMercado] = useState<{ titulo: string; productos: ProductoAComparar[] } | null>(null)
   const [editando, setEditando] = useState<ProductoServicio | null>(null)
@@ -120,6 +124,9 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
   const [monedaProd, setMonedaProd] = useState<'ARS' | 'USD'>('ARS')
   const [nombrePresupuesto, setNombrePresupuesto] = useState('')
   const [tnSincronizar, setTnSincronizar] = useState(true)
+  const [color, setColor] = useState('')
+  const [colorDisponible, setColorDisponible] = useState(false)
+  const [fColor, setFColor] = useState('todos')
   const [faltaSqlMoneda, setFaltaSqlMoneda] = useState(false)
   const [codigo, setCodigo] = useState('')
   const [nombre, setNombre] = useState('')
@@ -197,6 +204,13 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
     setCargando(false)
     void cargarVentas()
     // Vínculo con la tienda web (si ya se corrió el SQL de Tiendanube).
+    // Color de cada producto (si ya se corrió el SQL de la fase 36).
+    void supabase.from('productos_servicios').select('id, color').not('color', 'is', null).then(({ data: cs, error: e }) => {
+      setColorDisponible(!e)
+      if (e || !cs?.length) return
+      const mapa = new Map((cs as { id: number; color: string }[]).map((x) => [x.id, x.color]))
+      setElementos((arr) => arr.map((x) => (mapa.has(x.id) ? { ...x, color: mapa.get(x.id) } : x)))
+    })
     void supabase.from('productos_servicios').select('id, tn_variant_id, tn_sincronizar').not('tn_variant_id', 'is', null)
       .then(({ data: tn, error: e }) => {
         if (e || !tn?.length) return
@@ -240,8 +254,8 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
   }
   const categorias = useMemo(() => Array.from(new Set(elementos.map((e) => e.categoria?.trim()).filter((x): x is string => !!x))).sort(), [elementos])
   const proveedoresLista = useMemo(() => Array.from(new Set(elementos.map((e) => e.proveedor?.trim()).filter((x): x is string => !!x))).sort(), [elementos])
-  const filtrosAvanzadosActivos = [fCategoria !== 'todas', fProveedor !== 'todos', fMoneda !== 'todas', fStock !== 'todos', fFoto !== 'todas', fRotacion !== 'todos', fDatos !== 'todos'].filter(Boolean).length
-  function limpiarFiltrosAvanzados() { setFCategoria('todas'); setFProveedor('todos'); setFMoneda('todas'); setFStock('todos'); setFFoto('todas'); setFRotacion('todos'); setFDatos('todos'); setOrden('nombre') }
+  const filtrosAvanzadosActivos = [fCategoria !== 'todas', fColor !== 'todos', fProveedor !== 'todos', fMoneda !== 'todas', fStock !== 'todos', fFoto !== 'todas', fRotacion !== 'todos', fDatos !== 'todos'].filter(Boolean).length
+  function limpiarFiltrosAvanzados() { setFCategoria('todas'); setFColor('todos'); setFProveedor('todos'); setFMoneda('todas'); setFStock('todos'); setFFoto('todas'); setFRotacion('todos'); setFDatos('todos'); setOrden('nombre') }
 
   const elementosFiltrados = useMemo(() => {
     const texto = busqueda.trim().toLowerCase()
@@ -251,8 +265,11 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
       const coincideEstado = estadoFiltro === 'todos' || (estadoFiltro === 'activos' && el.activo) || (estadoFiltro === 'inactivos' && !el.activo)
       const coincideStock = !soloStockBajo || nivelStock(el) === 'bajo' || nivelStock(el) === 'sin'
       if (!(coincideBusqueda && coincideTipo && coincideEstado && coincideStock)) return false
-      if (fCategoria !== 'todas' && (el.categoria?.trim() || 'Sin categoría') !== fCategoria && (el.categoria?.trim() ?? '') !== fCategoria) return false
+      // '__sinApp' = productos que todavía no tienen una categoría de la app.
+      if (fCategoria === '__sinApp') { if (el.tipo !== 'producto' || esCategoriaApp(el.categoria)) return false }
+      else if (fCategoria !== 'todas' && (el.categoria?.trim() || 'Sin categoría') !== fCategoria && (el.categoria?.trim() ?? '') !== fCategoria) return false
       if (fProveedor !== 'todos' && (el.proveedor?.trim() ?? '') !== fProveedor) return false
+      if (fColor !== 'todos' && (el.color ?? '').trim().toLowerCase() !== fColor.toLowerCase()) return false
       if (fMoneda !== 'todas' && el.moneda !== fMoneda) return false
       if (fStock !== 'todos' && nivelStock(el) !== fStock) return false
       if (fFoto === 'con' && !el.foto_url) return false
@@ -273,18 +290,26 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
     }
     return lista.sort(cmp[orden])
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [elementos, busqueda, tipoFiltro, estadoFiltro, soloStockBajo, fCategoria, fProveedor, fMoneda, fStock, fFoto, fRotacion, fDatos, orden, ventas, diasVendidos, diasParado])
+  }, [elementos, busqueda, tipoFiltro, estadoFiltro, soloStockBajo, fCategoria, fColor, fProveedor, fMoneda, fStock, fFoto, fRotacion, fDatos, orden, ventas, diasVendidos, diasParado])
 
   const enPagina = elementos.filter((el) => el.tn_variant_id).length
   const bajos = elementos.filter((el) => el.activo && (nivelStock(el) === 'bajo' || nivelStock(el) === 'sin'))
   const sinPrecio = elementos.filter((el) => el.activo && !(el.precio_venta > 0)).length
   const sinCosto = elementos.filter((el) => el.activo && el.tipo === 'producto' && !(el.costo_unitario > 0)).length
-  // Categorías con cantidad, para los botones rápidos de la vista de tarjetas.
-  const chipsCategoria = useMemo(() => {
+  // Botones rápidos de categoría: los productos con las categorías de la app;
+  // los servicios, aparte, con las suyas.
+  const enEstado = useMemo(() => elementos.filter((el) => estadoFiltro === 'todos' || (estadoFiltro === 'activos') === el.activo), [elementos, estadoFiltro])
+  const prodsEstado = enEstado.filter((el) => el.tipo === 'producto')
+  const servsEstado = enEstado.filter((el) => el.tipo === 'servicio')
+  const sinCategoriaApp = prodsEstado.filter((el) => !esCategoriaApp(el.categoria)).length
+  const chipsServicios = useMemo(() => {
     const m = new Map<string, number>()
-    elementos.filter((el) => estadoFiltro === 'todos' || (estadoFiltro === 'activos') === el.activo).forEach((el) => { const c = el.categoria?.trim() || 'Sin categoría'; m.set(c, (m.get(c) ?? 0) + 1) })
+    servsEstado.forEach((el) => { const c = el.categoria?.trim() || 'Sin categoría'; m.set(c, (m.get(c) ?? 0) + 1) })
     return Array.from(m.entries()).sort((a, b) => b[1] - a[1])
-  }, [elementos, estadoFiltro])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enEstado])
+  const categoriasServicios = chipsServicios.map(([c]) => c).filter((c) => c !== 'Sin categoría')
+  const elegirCategoria = (c: string, tipoCat: TipoFiltro) => { setTipoFiltro(tipoCat); setFCategoria(fCategoria === c && tipoFiltro === tipoCat ? 'todas' : c) }
 
   // Muestra un valor guardado en pesos según la moneda elegida (solo visual).
   const mostrar = (valorArs: number) => (moneda === 'USD' && cotizacion > 0 ? formatoDolar(valorArs / cotizacion) : formatoDinero(valorArs))
@@ -301,7 +326,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
 
   function limpiarFormulario() {
     setMonedaProd('ARS'); setNombrePresupuesto('')
-    setTipo('producto'); setCodigo(''); setNombre(''); setDescripcion(''); setCategoria(''); setProveedor(''); setLinkCompra('')
+    setTipo('producto'); setCodigo(''); setNombre(''); setDescripcion(''); setCategoria(''); setColor(''); setProveedor(''); setLinkCompra('')
     setUnidad('unidad'); setPrecioCompra(''); setGananciaPct(''); setPrecioLista(''); setStock(''); setStockMinimo('5'); setIvaPct('21')
     setAplicaDescuento(false); setDescuentoTipo('porcentaje'); setDescuentoValor('')
     setFotoUrl(null); setFotoPreview(''); setErrorFormulario('')
@@ -324,7 +349,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
     setEditando(el)
     setTipo(el.tipo); setCodigo(el.codigo ?? ''); setNombre(el.nombre); setDescripcion(el.descripcion ?? ''); setCategoria(el.categoria ?? '')
     setProveedor(el.proveedor ?? ''); setLinkCompra(el.link_compra ?? ''); setUnidad(el.unidad)
-    setMonedaProd(el.moneda); setNombrePresupuesto(el.nombre_presupuesto ?? ''); setTnSincronizar(el.tn_sincronizar !== false)
+    setMonedaProd(el.moneda); setNombrePresupuesto(el.nombre_presupuesto ?? ''); setTnSincronizar(el.tn_sincronizar !== false); setColor(el.color ?? '')
     // En un producto en dólares, los precios del formulario son en dólares.
     const compra = el.moneda === 'USD' ? el.costo_usd ?? 0 : el.costo_unitario
     const lista = el.moneda === 'USD' ? el.precio_usd ?? 0 : el.precio_venta
@@ -412,6 +437,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
       ...(faltaSqlMoneda ? {} : { moneda: monedaProd, costo_usd: enUsd ? compraNum : null, precio_usd: enUsd ? listaNum : null, nombre_presupuesto: nombrePresupuesto.trim() || null }),
       stock: Number(stock || 0), stock_minimo: Number(stockMinimo || 0), iva_pct: Number(ivaPct || 21),
       foto_url: fotoUrl, aplica_descuento: aplicaDescuento, descuento_pct: descuentoPct, descuento_monto: descuentoMonto,
+      ...(colorDisponible ? { color: tipo === 'producto' ? color.trim() || null : null } : {}),
     }
     const resultado = editando
       ? await supabase.from('productos_servicios').update(datos).eq('id', editando.id)
@@ -630,7 +656,8 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
         {el.nombre_presupuesto && <small className="prodPres" title="Así aparece en el presupuesto">📄 {el.nombre_presupuesto}</small>}
         {el.tn_variant_id && <button type="button" className={`prodWeb ${el.tn_sincronizar === false ? 'pausa' : ''}`} title="Ver en Productos en página" onClick={() => setPestana('pagina')}>🛒 {el.tn_sincronizar === false ? 'En la página · no se actualiza solo' : 'En la página · se actualiza solo'}</button>}
         {el.codigo && <small className="prodCat">Cód. {el.codigo}</small>}
-        <small className="prodCat">{el.categoria || el.descripcion || 'Sin categoría'}{el.proveedor ? ` · ${el.proveedor}` : ''}</small>
+        {el.color && <small className="prodColor"><i style={{ background: hexColor(el.color) ?? '#cfd5de' }} />{el.color}</small>}
+        <small className="prodCat">{el.tipo === 'producto' && esCategoriaApp(el.categoria) ? `${iconoCategoria(el.categoria)} ${el.categoria}` : el.categoria || 'Sin categoría'}{el.proveedor ? ` · ${el.proveedor}` : ''}</small>
         <div className="prodPrecio">
           {tieneDesc ? (<>
             <strong>{mostrar(final)}</strong><s>{mostrar(el.precio_venta)}</s>
@@ -789,6 +816,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
       {!modoEdicion && verFiltros && (
         <div className="prFiltros">
           <label>Categoría<select value={fCategoria} onChange={(e) => setFCategoria(e.target.value)}><option value="todas">Todas</option>{categorias.map((c) => <option key={c} value={c}>{c}</option>)}</select></label>
+          {colorDisponible && <label>Color<select value={fColor} onChange={(e) => setFColor(e.target.value)}><option value="todos">Todos</option>{Array.from(new Set(elementos.map((e) => e.color?.trim()).filter((x): x is string => !!x))).sort().map((c) => <option key={c} value={c}>{c}</option>)}</select></label>}
           <label>Proveedor / marca<select value={fProveedor} onChange={(e) => setFProveedor(e.target.value)}><option value="todos">Todos</option>{proveedoresLista.map((c) => <option key={c} value={c}>{c}</option>)}</select></label>
           <label>Moneda<select value={fMoneda} onChange={(e) => setFMoneda(e.target.value as typeof fMoneda)}><option value="todas">Pesos y dólares</option><option value="ARS">Solo en pesos</option><option value="USD">Solo en dólares</option></select></label>
           <label>Stock<select value={fStock} onChange={(e) => setFStock(e.target.value as typeof fStock)}><option value="todos">Todos</option><option value="sin">Sin stock</option><option value="bajo">Stock bajo</option><option value="ok">Stock OK</option></select></label>
@@ -808,10 +836,20 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
         <div className="empty"><span>📦</span><h3>Sin resultados</h3><p>Probá con otra búsqueda o filtro.</p></div>
       )}
 
-      {!cargando && !error && !modoEdicion && vista === 'kanban' && chipsCategoria.length > 1 && (
-        <div className="prodChips" role="tablist" aria-label="Categorías">
-          <button type="button" className={fCategoria === 'todas' ? 'active' : ''} onClick={() => setFCategoria('todas')}>Todas <b>{chipsCategoria.reduce((x, [, n]) => x + n, 0)}</b></button>
-          {chipsCategoria.map(([c, n]) => <button type="button" key={c} className={fCategoria === c ? 'active' : ''} onClick={() => setFCategoria(fCategoria === c ? 'todas' : c)}>{c} <b>{n}</b></button>)}
+      {!cargando && !error && !modoEdicion && (
+        <div className="catApp">
+          <div className="prodChips" role="tablist" aria-label="Categorías">
+            <button type="button" className={fCategoria === 'todas' && tipoFiltro === 'todos' ? 'active' : ''} onClick={() => { setTipoFiltro('todos'); setFCategoria('todas') }}>Todo <b>{enEstado.length}</b></button>
+            <button type="button" className={`catTipo${fCategoria === 'todas' && tipoFiltro === 'producto' ? ' active' : ''}`} onClick={() => { setTipoFiltro('producto'); setFCategoria('todas') }}>📦 Productos <b>{prodsEstado.length}</b></button>
+            <button type="button" className={`catTipo${tipoFiltro === 'servicio' && fCategoria === 'todas' ? ' active' : ''}`} onClick={() => { setTipoFiltro('servicio'); setFCategoria('todas') }}>🛠️ Servicios <b>{servsEstado.length}</b></button>
+          </div>
+          {tipoFiltro !== 'servicio' ? <div className="prodChips catSub" aria-label="Categorías de productos">
+            {CATEGORIAS_PRODUCTO.map((c) => { const n = prodsEstado.filter((el) => el.categoria?.trim() === c.nombre).length; return <button type="button" key={c.nombre} className={`${fCategoria === c.nombre ? 'active' : ''}${n ? '' : ' vacia'}`} onClick={() => elegirCategoria(c.nombre, 'producto')}>{c.icono} {c.nombre} <b>{n}</b></button> })}
+            {sinCategoriaApp > 0 && <button type="button" className={`catSin${fCategoria === '__sinApp' ? ' active' : ''}`} onClick={() => elegirCategoria('__sinApp', 'producto')}>🏷️ Sin categoría <b>{sinCategoriaApp}</b></button>}
+            {sinCategoriaApp > 0 && <button type="button" className="catOrdenar" onClick={() => setOrdenarCategorias(true)}>✨ Ordenar {sinCategoriaApp} en categorías</button>}
+          </div> : chipsServicios.length > 1 && <div className="prodChips catSub" aria-label="Categorías de servicios">
+            {chipsServicios.map(([c, n]) => <button type="button" key={c} className={fCategoria === c ? 'active' : ''} onClick={() => elegirCategoria(c, 'servicio')}>{c} <b>{n}</b></button>)}
+          </div>}
         </div>
       )}
       {!cargando && !error && elementosFiltrados.length > 0 && !modoEdicion && vista === 'kanban' && (
@@ -894,7 +932,13 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                       <option value="producto">Producto</option><option value="servicio">Servicio</option>
                     </select>
                   </td>
-                  <td><input value={el.categoria ?? ''} onChange={(e) => actualizarCampoLocal(el.id, 'categoria', e.target.value)} onBlur={(e) => persistirCampo(el.id, 'categoria', e.target.value.trim() || null)} style={{ width: '120px' }} /></td>
+                  <td>{el.tipo === 'producto'
+                    ? <select value={el.categoria ?? ''} onChange={(e) => { const v = e.target.value || null; actualizarCampoLocal(el.id, 'categoria', v); void persistirCampo(el.id, 'categoria', v) }} style={{ width: '140px' }}>
+                        <option value="">Sin categoría</option>
+                        {CATEGORIAS_PRODUCTO.map((c) => <option key={c.nombre} value={c.nombre}>{c.icono} {c.nombre}</option>)}
+                        {el.categoria && !esCategoriaApp(el.categoria) && <option value={el.categoria}>{el.categoria} (vieja)</option>}
+                      </select>
+                    : <input value={el.categoria ?? ''} onChange={(e) => actualizarCampoLocal(el.id, 'categoria', e.target.value)} onBlur={(e) => persistirCampo(el.id, 'categoria', e.target.value.trim() || null)} style={{ width: '120px' }} list="catServicios" />}</td>
                   <td><input value={el.proveedor ?? ''} onChange={(e) => actualizarCampoLocal(el.id, 'proveedor', e.target.value)} onBlur={(e) => persistirCampo(el.id, 'proveedor', e.target.value.trim() || null)} style={{ width: '110px' }} /></td>
                   <td>
                     <select value={el.unidad} onChange={(e) => { actualizarCampoLocal(el.id, 'unidad', e.target.value); void persistirCampo(el.id, 'unidad', e.target.value) }}>
@@ -941,6 +985,11 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
 
       {mercado && <CompararMercado titulo={mercado.titulo} productos={mercado.productos} onCerrar={() => setMercado(null)} onCambioCatalogo={() => void cargarCatalogo()} />}
       {historial && <HistorialPrecios producto={historial} onCerrar={() => setHistorial(null)} />}
+      {ordenarCategorias && <OrdenarCategorias
+        productos={elementos.filter((el) => el.tipo === 'producto' && !esCategoriaApp(el.categoria))}
+        conColor={colorDisponible}
+        onCerrar={() => setOrdenarCategorias(false)}
+        onGuardado={(cambios, cols) => { setElementos((arr) => arr.map((el) => ({ ...el, ...(cambios[el.id] ? { categoria: cambios[el.id] } : {}), ...(cols[el.id] ? { color: cols[el.id] } : {}) }))); setOrdenarCategorias(false) }} />}
       {mostrarOrdenar && (
         <OrdenarCatalogoIA
           productos={elementos}
@@ -976,7 +1025,27 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                 <label>Código / SKU<input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="Ej.: QS-1234 (para importar desde hoja)" /></label>
                 <label>Nombre interno *<input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej.: TP-Link Deco X20 AX1800 (pack x3)" required /></label>
                 <label><span className="bcNombreCab">Cómo aparece en el presupuesto{nombreIA.boton}</span><input value={nombrePresupuesto} onChange={(e) => setNombrePresupuesto(e.target.value)} placeholder="Ej.: Red mesh WiFi 6 · Domótica de iluminación" />{nombreIA.elegir(nombrePresupuesto)}<small className="npAyuda">El cliente ve solo esto (sin marca, modelo, foto ni detalle). Si lo dejás vacío, sale el nombre interno.</small></label>
-                <label>Categoría<input value={categoria} onChange={(e) => setCategoria(e.target.value)} placeholder="Ej.: Domótica" /></label>
+                {tipo === 'producto'
+                  ? <label>Categoría<select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
+                      <option value="">Sin categoría</option>
+                      {CATEGORIAS_PRODUCTO.map((c) => <option key={c.nombre} value={c.nombre}>{c.icono} {c.nombre}</option>)}
+                      {categoria && !esCategoriaApp(categoria) && <option value={categoria}>{categoria} (vieja)</option>}
+                    </select>
+                    {!esCategoriaApp(categoria) && sugerirCategoria(nombre, categoria) && <button type="button" className="catSugerida" onClick={() => setCategoria(sugerirCategoria(nombre, categoria)!)}>Sugerida: {iconoCategoria(sugerirCategoria(nombre, categoria))} {sugerirCategoria(nombre, categoria)} · usar</button>}</label>
+                  : null}
+                {tipo === 'producto' && <label>Color <small className="npAyuda">si corresponde</small>
+                  {colorDisponible ? <>
+                    <div className="colChips">
+                      <button type="button" className={!color ? 'on' : ''} onClick={() => setColor('')}>Sin color</button>
+                      {COLORES.map(([n, hex]) => <button type="button" key={n} className={color === n ? 'on' : ''} onClick={() => setColor(n)}><i style={{ background: hex }} />{n}</button>)}
+                    </div>
+                    <input value={color} onChange={(e) => setColor(e.target.value)} placeholder="U otro: Champagne, Gris oscuro…" />
+                    {!color && sugerirColor(nombre) && <button type="button" className="catSugerida" onClick={() => setColor(sugerirColor(nombre)!)}>Del nombre: {sugerirColor(nombre)} · usar</button>}
+                  </> : <small className="npAyuda">Para guardar el color falta correr en Supabase el SQL supabase-productos-color-fase-36.sql.</small>}
+                </label>}
+                {tipo === 'producto' ? null
+                  : <label>Categoría del servicio<input value={categoria} onChange={(e) => setCategoria(e.target.value)} placeholder="Ej.: Instalación, Mano de obra" list="catServicios" />
+                      <datalist id="catServicios">{categoriasServicios.map((c) => <option key={c} value={c} />)}</datalist></label>}
                 <label>Proveedor<input value={proveedor} onChange={(e) => setProveedor(e.target.value)} placeholder="Ej.: Tuya / Sonoff" /></label>
 
                 <div className="formFull" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px 14px' }}>
@@ -1193,5 +1262,57 @@ function StockRotacion({ elementos, ventas, diasVendidos, diasParado, onDiasVend
       })}
       {parados.length > 0 && <p className="gestionAyuda">Ideas: ofrecerlos en los próximos presupuestos, armar un combo o aplicarles un descuento desde la ficha del producto.</p>}
     </section>
+  </div>
+}
+
+// Pasar los productos a las categorías de la app: propone una según el nombre
+// (y la categoría vieja) y se puede cambiar antes de guardar.
+function OrdenarCategorias({ productos, conColor, onCerrar, onGuardado }: { productos: ProductoServicio[]; conColor: boolean; onCerrar: () => void; onGuardado: (cambios: Record<number, string>, colores: Record<number, string>) => void }) {
+  // El color (si corresponde) también se propone según el nombre.
+  const [colores, setColores] = useState<Record<number, string>>(() => Object.fromEntries(productos.map((p) => [p.id, p.color ?? sugerirColor(p.nombre) ?? ''])))
+  const [elegidas, setElegidas] = useState<Record<number, string>>(() => Object.fromEntries(productos.map((p) => [p.id, sugerirCategoria(p.nombre, p.categoria ?? '') ?? ''])))
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState('')
+  const aGuardar = Object.entries(elegidas).filter(([, c]) => c)
+  async function guardar() {
+    setGuardando(true); setError('')
+    const porCat = new Map<string, number[]>()
+    aGuardar.forEach(([id, c]) => porCat.set(c, [...(porCat.get(c) ?? []), Number(id)]))
+    for (const [c, ids] of porCat) {
+      const { error: e } = await supabase.from('productos_servicios').update({ categoria: c }).in('id', ids)
+      if (e) { setError('No se pudieron guardar todas. Probá de nuevo.'); setGuardando(false); return }
+    }
+    const colGuardar = conColor ? Object.entries(colores).filter(([id, c]) => c && c !== (productos.find((p) => p.id === Number(id))?.color ?? '')) : []
+    const porColor = new Map<string, number[]>()
+    colGuardar.forEach(([id, c]) => porColor.set(c, [...(porColor.get(c) ?? []), Number(id)]))
+    for (const [c, ids] of porColor) await supabase.from('productos_servicios').update({ color: c }).in('id', ids)
+    onGuardado(Object.fromEntries(aGuardar.map(([id, c]) => [Number(id), c])), Object.fromEntries(colGuardar.map(([id, c]) => [Number(id), c])))
+  }
+  return <div className="modalOverlay" onClick={(e) => { if (e.target === e.currentTarget && !guardando) onCerrar() }}>
+    <div className="modalCard catModal" role="dialog" aria-modal="true" aria-label="Ordenar en categorías">
+      <div className="modalHeader"><div><p className="subtitle">PRODUCTOS</p><h2>✨ Ordenar en categorías</h2></div><button type="button" className="closeButton" disabled={guardando} onClick={onCerrar} aria-label="Cerrar">×</button></div>
+      <div className="catCuerpo">
+        <p className="gestionAyuda">Te propongo una categoría según el nombre de cada producto. Revisalas, cambiá las que no van y tocá Guardar. Las que dejes en “Sin categoría” quedan como están.</p>
+        <div className="catLista">
+          {productos.map((p) => <div key={p.id} className="catFila">
+            <div><b>{p.nombre}</b><small>{p.categoria ? `Antes: ${p.categoria}` : 'Sin categoría'}</small></div>
+            <select value={elegidas[p.id] ?? ''} onChange={(e) => setElegidas((m) => ({ ...m, [p.id]: e.target.value }))} aria-label={`Categoría de ${p.nombre}`}>
+              <option value="">Sin categoría</option>
+              {CATEGORIAS_PRODUCTO.map((c) => <option key={c.nombre} value={c.nombre}>{c.icono} {c.nombre}</option>)}
+            </select>
+            {conColor && <select className="catColor" value={colores[p.id] ?? ''} onChange={(e) => setColores((m) => ({ ...m, [p.id]: e.target.value }))} aria-label={`Color de ${p.nombre}`}>
+              <option value="">Sin color</option>
+              {COLORES.map(([n]) => <option key={n} value={n}>{n}</option>)}
+              {colores[p.id] && !COLORES.some(([n]) => n === colores[p.id]) && <option value={colores[p.id]}>{colores[p.id]}</option>}
+            </select>}
+          </div>)}
+        </div>
+        {error && <p className="loginError">{error}</p>}
+        <div className="formActions">
+          <button type="button" className="cancelButton" disabled={guardando} onClick={onCerrar}>Cancelar</button>
+          <button type="button" className="newButton" disabled={guardando || !aGuardar.length} onClick={() => void guardar()}>{guardando ? 'Guardando…' : `Guardar ${aGuardar.length} producto${aGuardar.length === 1 ? '' : 's'}`}</button>
+        </div>
+      </div>
+    </div>
   </div>
 }
