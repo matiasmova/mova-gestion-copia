@@ -61,7 +61,8 @@ type Hoja = Clave | 'cobrar' | 'obras' | 'hoy' | 'stock'
 
 const COLOR: Record<Clave, string> = { vendido: '#3d6fd8', productos: '#e0701a', servicios: '#2f63b8', gastos: '#d9534a', impuestos: '#7c3aed', ganancia: '#14a06a' }
 const pesos = (n: number) => `${n < 0 ? '− ' : ''}$ ${Math.round(Math.abs(n)).toLocaleString('es-AR')}`
-const corto = (n: number) => { const a = Math.abs(n); const s = n < 0 ? '− ' : ''; return a >= 1e6 ? `${s}$ ${(a / 1e6).toLocaleString('es-AR', { maximumFractionDigits: 2 })} M` : a >= 1e3 ? `${s}$ ${Math.round(a / 1e3).toLocaleString('es-AR')} k` : `${s}$ ${Math.round(a)}` }
+// Montos siempre con el número completo (sin abreviar en k o M).
+const corto = (n: number) => `${n < 0 ? '− ' : ''}$ ${Math.round(Math.abs(n)).toLocaleString('es-AR')}`
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 const ymDe = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 const mesNombre = (ym: string, f: 'long' | 'short') => new Date(`${ym}-01T12:00:00`).toLocaleDateString('es-AR', { month: f }).replace('.', '')

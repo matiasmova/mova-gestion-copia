@@ -3655,3 +3655,5 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
   .tfPaso b{font-size:18px}
   .tfPaso .t{font-size:12.5px}
 }
+.tfFlujoCab b,.tfFlujoCab span{white-space:nowrap}
+@media (max-width:420px){.tfFlujoCab b{font-size:11px;letter-spacing:.04em}.tfFlujoCab span{font-size:12.5px}.tfPaso small.gan{font-size:12px}}

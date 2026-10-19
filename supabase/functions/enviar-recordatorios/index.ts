@@ -112,7 +112,7 @@ Deno.serve(async (req) => {
 type Sub = { id: number; endpoint: string; p256dh: string; auth: string; user_id: string | null }
 type Cliente = ReturnType<typeof createClient>
 const pesos = (n: number) => `$ ${Math.round(n).toLocaleString('es-AR')}`
-const cortoP = (n: number) => (n >= 1e6 ? `$ ${(n / 1e6).toLocaleString('es-AR', { maximumFractionDigits: 2 })} M` : n >= 1e3 ? `$ ${Math.round(n / 1e3)} k` : pesos(n))
+const cortoP = pesos // montos con el número completo
 
 async function resumenes(db: Cliente, subs: Sub[], enviar: (payload: string, lista?: Sub[]) => Promise<void>) {
   const { data: cfgRow } = await db.from('configuracion').select('valor').eq('clave', 'avisos').maybeSingle()

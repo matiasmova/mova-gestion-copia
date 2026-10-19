@@ -8,7 +8,8 @@ import { useEffect, useRef, useState } from 'react'
 
 export type Mes = { ym: string; futuro?: boolean; etiqueta?: string; titulo?: string; sub?: string; vendido: number; costoProductos: number; empleados: number; extras: number; gastos: number; impuestos: number; ganancia: number }
 
-const corto = (n: number) => { const a = Math.abs(n); const s = n < 0 ? '− ' : ''; return a >= 1e6 ? `${s}$ ${(a / 1e6).toLocaleString('es-AR', { maximumFractionDigits: 1 })} M` : a >= 1e3 ? `${s}$ ${Math.round(a / 1e3).toLocaleString('es-AR')} k` : `${s}$ ${Math.round(a)}` }
+// Montos siempre con el número completo (sin abreviar en k o M).
+const corto = (n: number) => `${n < 0 ? '− ' : ''}$ ${Math.round(Math.abs(n)).toLocaleString('es-AR')}`
 const pesos = (n: number) => `${n < 0 ? '− ' : ''}$ ${Math.round(Math.abs(n)).toLocaleString('es-AR')}`
 const mesCorto = (ym: string) => { const t = new Date(`${ym}-01T12:00:00`).toLocaleDateString('es-AR', { month: 'short' }).replace('.', '').slice(0, 3); return t.charAt(0).toUpperCase() + t.slice(1) }
 const mesLargo = (ym: string) => { const t = new Date(`${ym}-01T12:00:00`).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }); return t.charAt(0).toUpperCase() + t.slice(1) }
@@ -46,7 +47,7 @@ export default function GraficoMeses({ serie, foco, onFoco }: { serie: Mes[]; fo
   const ticks = marcas(minV, maxV)
   const top = ticks[ticks.length - 1], bot = ticks[0]
 
-    const IZQ = 56, DER = 8, ARR = 24
+    const IZQ = 84, DER = 8, ARR = 24
   const W = tam.w, H = tam.h
   const col = (W - IZQ - DER) / serie.length
   // Debajo del nombre de la semana van sus días, si entran.
