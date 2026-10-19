@@ -7,6 +7,7 @@ import { TIPOS_EVENTO } from './Agenda'
 import { moneda } from './gestionFormat'
 import { calcularPersona } from './personalCalculos'
 import { avanceEfectivo, cuentasPorObra } from './cuentaObra'
+import { diasDesdeUltimaCopia } from './copiaSeguridad'
 import { empleadosDeObra, esPagoEmpleado, type FilaEmpleado } from './gananciaTrabajo'
 
 // Pantalla de Inicio: resumen rápido de la empresa y, en pestañas, el detalle
@@ -18,7 +19,7 @@ import { empleadosDeObra, esPagoEmpleado, type FilaEmpleado } from './gananciaTr
 //  · Obras: todos.
 
 type Rol = 'admin' | 'encargado' | 'auxiliar' | 'contable'
-type Destino = 'obras' | 'presupuestos' | 'clientes' | 'agenda' | 'gastos' | 'catalogo'
+type Destino = 'obras' | 'presupuestos' | 'clientes' | 'agenda' | 'gastos' | 'catalogo' | 'configuracion'
 
 type Obra = { id: number; cliente_id: number; nombre_obra: string; localidad: string | null; estado: string | null; porcentaje_avance: number | null; activo: boolean }
 type Cliente = { id: number; nombre: string; apellido: string | null }
@@ -270,7 +271,10 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
   }
 
   // ---- "Hoy": todo lo que hay que hacer, cada cosa con su botón ----
+  // Copia de seguridad en la compu: se recuerda si pasó más de una semana (solo admin).
+  const diasCopia = diasDesdeUltimaCopia()
   const tareas: Tarea[] = [
+    ...(rol === 'admin' && (diasCopia == null || diasCopia > 7) ? [{ clave: 'copia', icono: '💾', tono: 'a' as const, titulo: 'Descargar la copia de seguridad', detalle: diasCopia == null ? 'Todavía no guardaste ninguna copia en esta computadora' : `La última copia es de hace ${diasCopia} días`, boton: 'Ir', accion: () => onNavegar('configuracion') }] : []),
     ...compNuevos.map((c): Tarea => ({ clave: `cp-${c.id}`, icono: '🧾', tono: 'v', titulo: 'Revisar comprobante de pago', detalle: `${c.cliente ?? 'Cliente'}${c.titulo ? ` · ${c.titulo}` : ''}`, boton: 'Ver', accion: () => (c.obra_id ? onAbrirObra(c.obra_id) : onNavegar('presupuestos')) })),
     ...agendaHoy.map((e): Tarea => ({ clave: `ag-${e.id}`, icono: (TIPOS_EVENTO[e.tipo ?? ''] ?? TIPOS_EVENTO.recordatorio).icono, tono: 'a', titulo: e.titulo, detalle: `Hoy en la agenda${e.hora ? ` · ${e.hora.slice(0, 5)}` : ''}`, boton: 'Ver', accion: () => onNavegar('agenda') })),
     ...(verFinanzas ? obrasInfo.deudas.filter((dd) => dd.situacion === 'rojo' || dd.faltaAvance + dd.extras > 0.5).map((dd): Tarea => ({

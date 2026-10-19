@@ -3217,3 +3217,10 @@ button.isFila2:focus-visible{outline:2px solid #e0701a}
   .pvNums small{font-size:9.5px}
   .pvNums b{font-size:13.5px;overflow-wrap:normal;white-space:nowrap;display:block;overflow:hidden;text-overflow:ellipsis}
 }
+/* Copia de seguridad */
+.cfgUltima{border-radius:12px;padding:10px 12px;font-weight:700;font-size:13.5px;background:#e7f6ee;color:#1b6b43}
+.cfgUltima.alerta{background:#fff2e5;color:#9a4a0c}
+.cfgRespaldos{display:flex;flex-direction:column;gap:6px;margin:-4px 0 4px}
+.cfgRespaldo{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#fff;border:1px solid var(--mova-border,#e4e7eb);border-radius:12px;padding:8px 12px;font-size:13.5px}
+.cfgRespaldo small{color:#6a7382;margin-left:6px}
+.cfgRespaldo a{text-decoration:none;white-space:nowrap}
