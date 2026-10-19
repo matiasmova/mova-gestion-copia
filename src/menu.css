@@ -370,3 +370,6 @@ html[data-tema="oscuro"] .fase2App .fase2Sidebar{--sidebar-c1:#0b0f15;--sidebar-
 .fase2App .fase2Sidebar .menuBuscar:hover{border-color:var(--sidebar-c7);color:var(--sidebar-c5)}
 .fase2App .fase2Sidebar .menuRecargar{color:var(--sidebar-c4)}
 .fase2App .fase2Sidebar .menuRecargar:hover{background:var(--sidebar-c2);color:var(--sidebar-c5)}
+/* La opción elegida mantiene su ícono blanco aunque el mouse (o el dedo) quede encima */
+.fase2App .fase2Sidebar nav button.menuItem.active:hover{color:#fff}
+.fase2App .fase2Sidebar nav button.menuItem.active:hover .menuIcono{background:rgba(255,255,255,.22);color:#fff}

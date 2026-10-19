@@ -162,6 +162,7 @@ export default function TrabajosFlujo({ verPlata, busqueda, revision, onAbrir, o
 
   return <div className="tf">
     {verPlata && <section className="tfFlujo" aria-label="Plata en cada etapa">
+      <div className="tfFlujoCab"><b>Plata en cada etapa</b><span>{corto(totalCinta)} en total</span></div>
       <div className="tfCinta" aria-hidden>
         {ORDEN.map((e) => { const v = porEtapa(e).reduce((s, f) => s + f.total, 0); return v > 0 ? <i key={e} className={`et-${e}`} style={{ flex: v / (totalCinta || 1) }} /> : null })}
       </div>
@@ -170,9 +171,9 @@ export default function TrabajosFlujo({ verPlata, busqueda, revision, onAbrir, o
           const l = porEtapa(e)
           const gan = l.reduce((s, f) => s + (f.ganancia ?? 0), 0)
           return <button key={e} type="button" className={`tfPaso et-${e}${filtro === e ? ' on' : ''}`} aria-pressed={filtro === e} onClick={() => setFiltro(filtro === e ? null : e)}>
-            <span className="t"><i />{ETAPAS[e].i} {ETAPAS[e].t} · {l.length}</span>
+            <span className="t"><span className="ic" aria-hidden>{ETAPAS[e].i}</span>{ETAPAS[e].t}<em>{l.length}</em></span>
             <b>{corto(l.reduce((s, f) => s + f.total, 0))}</b>
-            <small>{gan ? `ganás ${corto(gan)}` : ETAPAS[e].ayuda}</small>
+            <small className={gan ? 'gan' : ''}>{gan ? `ganás ${corto(gan)}` : ETAPAS[e].ayuda}</small>
           </button>
         })}
       </div>
