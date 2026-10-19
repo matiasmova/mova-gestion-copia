@@ -3309,3 +3309,6 @@ button.prodWeb:hover{text-decoration:underline}
 .pwWrap input.pwNombre:hover,.pwWrap input.pwNombre:focus{border-color:var(--mova-border);background:#fff}
 .pwBotones .pwQuitar{color:#b23b32;border-color:#f0c9c5;background:#fff}
 .pwBotones .pwQuitar:hover:not(:disabled){background:#fdf0ef}
+.prodListaAcc{white-space:nowrap}
+.prodListaAcc button+button{margin-left:6px}
+.prodEliminarFicha{margin-right:auto}
