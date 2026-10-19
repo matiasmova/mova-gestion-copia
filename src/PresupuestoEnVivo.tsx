@@ -545,7 +545,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
         </div>
 
         <div className="pvPie">
-          <div><small>Total · seña 70% {moneda(sena)}</small><b>{moneda(total)}</b></div>
+          <div className="pvPieTot"><small>TOTAL DEL PRESUPUESTO</small><b>{moneda(total)}</b><span>Seña 70%: <strong>{moneda(sena)}</strong></span></div>
           {acciones ?? <button type="button" onClick={() => { if (estadoGuardado === 'guardando') void guardarAhora(); onCerrar() }}>✓ Listo</button>}
         </div>
       </div>
