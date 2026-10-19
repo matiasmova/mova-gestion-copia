@@ -6,7 +6,12 @@
 //  · accion 'listar' (administrador): los respaldos guardados, con link de descarga.
 //  · accion 'archivos' (administrador): todas las fotos y archivos (comprobantes,
 //    obras, productos…) con link de descarga, para bajarlos en un ZIP desde la app.
-// Secrets: CRON_SECRET (el mismo de los recordatorios).
+//  · accion 'exportar' (Google Drive, con DRIVE_TOKEN): guarda el respaldo igual
+//    que 'respaldar' y además devuelve todos los datos, para que el script de
+//    Google (google-drive-respaldo.gs) los guarde en una carpeta de tu Drive.
+// Secrets: CRON_SECRET (el mismo de los recordatorios) y DRIVE_TOKEN (una clave
+// que elegís vos y ponés también en el script de Google).
+// El script de Drive solo puede usar 'exportar' y 'archivos'.
 // SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY los inyecta Supabase.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
@@ -33,7 +38,8 @@ Deno.serve(async (req) => {
 
   // ¿Quién llama? El cron (con el secreto) o un administrador activo.
   const esCron = !!Deno.env.get('CRON_SECRET') && req.headers.get('x-cron-secret') === Deno.env.get('CRON_SECRET')
-  if (!esCron) {
+  const esDrive = !!Deno.env.get('DRIVE_TOKEN') && req.headers.get('x-drive-token') === Deno.env.get('DRIVE_TOKEN')
+  if (!esCron && !esDrive) {
     const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
     const { data: quien } = await admin.auth.getUser(token)
     if (!quien?.user) return responder({ error: 'No autorizado' }, 401)
@@ -41,12 +47,13 @@ Deno.serve(async (req) => {
     if (!perfil || perfil.rol !== 'admin' || perfil.activo === false) return responder({ error: 'Solo un administrador puede ver los respaldos.' }, 403)
   }
   const { accion = 'respaldar' } = await req.json().catch(() => ({})) as { accion?: string }
+  if (esDrive && !esCron && accion !== 'exportar' && accion !== 'archivos') return responder({ error: 'No autorizado' }, 401)
 
   // El bucket privado de los respaldos (se crea la primera vez).
   const { data: buckets } = await admin.storage.listBuckets()
   if (!buckets?.some((b) => b.name === BUCKET)) await admin.storage.createBucket(BUCKET, { public: false })
 
-  if (accion === 'respaldar') {
+  if (accion === 'respaldar' || accion === 'exportar') {
     const datos: Record<string, unknown[]> = {}
     const conteo: Record<string, number> = {}
     for (const tabla of TABLAS) {
@@ -69,6 +76,7 @@ Deno.serve(async (req) => {
     const { data: lista } = await admin.storage.from(BUCKET).list('datos', { limit: 1000, sortBy: { column: 'name', order: 'desc' } })
     const viejos = (lista ?? []).filter((f) => f.name.endsWith('.json')).slice(GUARDAR).map((f) => `datos/${f.name}`)
     if (viejos.length) await admin.storage.from(BUCKET).remove(viejos)
+    if (accion === 'exportar') return new Response(contenido, { headers: { ...CORS, 'Content-Type': 'application/json' } })
     return responder({ ok: true, archivo, tablas: conteo, bytes: contenido.length })
   }
 

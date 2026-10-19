@@ -275,6 +275,17 @@ function CopiaSeguridad() {
     </div>}
     {respaldos && respaldos.length === 0 && !errorAuto && <p className="gestionAyuda">Todavía no hay respaldos automáticos. Tocá "💾 Respaldar ahora" para hacer el primero.</p>}
 
+    <details className="cfgDrive">
+      <summary><span className="configIcono">☁️</span><span><b>Copia automática en Google Drive</b><small>Cada domingo se guardan solos los datos, una planilla y las fotos en tu Drive (carpeta "MOVA Respaldos"). Se activa una sola vez: tocá para ver cómo.</small></span></summary>
+      <ol>
+        <li>En Supabase → Edge Functions → <b>Secrets</b>, creá uno nuevo llamado <code>DRIVE_TOKEN</code> con una clave que inventes (por ejemplo, una frase larga sin espacios). Anotala, no la compartas.</li>
+        <li>Volvé a desplegar la función <code>respaldo-semanal</code> con el código actualizado.</li>
+        <li>Entrá a <a href="https://script.google.com" target="_blank" rel="noreferrer">script.google.com</a> con tu cuenta de Google → <b>Nuevo proyecto</b>.</li>
+        <li>Borrá lo que aparece y pegá el código de <a href="https://raw.githubusercontent.com/matiasmova/mova-gestion-copia/main/google-drive-respaldo.gs" target="_blank" rel="noreferrer">este link</a>. En la línea <code>CLAVE</code> poné la misma clave del paso 1. Guardá (💾).</li>
+        <li>Arriba elegí la función <b>activar</b> y tocá <b>▶ Ejecutar</b>. Google te pide permiso para usar tu Drive: aceptá. Listo: hace el primer respaldo y queda programado todos los domingos.</li>
+      </ol>
+    </details>
+
     <div className="cfgBackup">
       <div className="configIcono">📊</div>
       <div>
