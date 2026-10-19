@@ -50,20 +50,20 @@ export function cuentaTrabajo(items: ItemCuenta[], total: number, empleados: num
 // Empleados de una obra: por cada persona asignada, lo acordado (o lo ya
 // pagado, si es más); y además todo lo pagado a gente que no está asignada
 // (o mano de obra cargada sin persona). Así ningún pago queda afuera.
-export type FilaEmpleado = { personal_id: number | null; total: number; pagado: number; asignado: boolean; sinJornales: boolean }
+export type FilaEmpleado = { personal_id: number | null; total: number; pagado: number; asignado: boolean; sinJornales: boolean; acuerdo: boolean }
 export function empleadosDeObra(
   asignaciones: AsignacionCalc[], personas: PersonaCalc[], pagos: { personal_id: number | null; monto: number }[], jornales: JornalCalc[], valorObra: number,
 ): FilaEmpleado[] {
   const filas: FilaEmpleado[] = asignaciones.map((a) => {
     const c = calcularPersona(a, personas.find((p) => p.id === a.personal_id), pagos, jornales, valorObra, 0)
     const porTiempo = c.modalidad === 'por_dia' || c.modalidad === 'por_hora'
-    return { personal_id: a.personal_id, total: c.proyectado, pagado: c.pagado, asignado: true, sinJornales: porTiempo && c.devengado === 0 }
+    return { personal_id: a.personal_id, total: c.proyectado, pagado: c.pagado, asignado: true, sinJornales: porTiempo && c.devengado === 0, acuerdo: c.modalidad !== 'libre' }
   })
   const asignados = new Set(asignaciones.map((a) => a.personal_id))
   const otros: Record<string, FilaEmpleado> = {}
   pagos.filter((p) => p.personal_id == null || !asignados.has(p.personal_id)).forEach((p) => {
     const k = String(p.personal_id)
-    const f = (otros[k] ??= { personal_id: p.personal_id, total: 0, pagado: 0, asignado: false, sinJornales: false })
+    const f = (otros[k] ??= { personal_id: p.personal_id, total: 0, pagado: 0, asignado: false, sinJornales: false, acuerdo: false })
     f.total += Number(p.monto) || 0
     f.pagado += Number(p.monto) || 0
   })
@@ -76,3 +76,13 @@ export const esPagoEmpleado = (c: { personal_id: number | null; tipo?: string | 
 // Extras de la obra: gastos cargados que no son personal, materiales ni Gasto extra (que devuelve el cliente).
 export const esExtraDeObra = (c: { personal_id: number | null; tipo?: string | null }) =>
   c.personal_id == null && !['material', 'mano_obra', 'gasto_extra'].includes(c.tipo ?? '')
+
+// Lo que se resta por empleados en un trabajo:
+//  · lo acordado con el personal "por acuerdo", más
+//  · para los que cobran "por pagos" (ayudantes, sin monto fijo): lo estimado
+//    en el presupuesto, o lo ya pagado si es más.
+export function totalEmpleados(filas: FilaEmpleado[], estimado: number) {
+  const acuerdo = filas.filter((f) => f.acuerdo).reduce((s, f) => s + f.total, 0)
+  const pagos = filas.filter((f) => !f.acuerdo).reduce((s, f) => s + f.total, 0)
+  return { acuerdo, pagos, total: acuerdo + Math.max(estimado, pagos) }
+}
