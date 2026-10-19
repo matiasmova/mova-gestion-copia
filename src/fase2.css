@@ -3022,3 +3022,24 @@ button.isFila2:focus-visible{outline:2px solid #e0701a}
 .rpAlerta{margin:0;font-size:12.5px;color:#b85a10;background:#fff2e5;border-radius:10px;padding:7px 9px}
 .gtLineas>div.gtSub{padding:3px 0 3px 18px;font-size:12.5px;color:#4b525c}
 .gtLineas>div.gtSub small{padding-left:0}
+
+/* ---------- PC: vistas a lo ancho (Inicio, Agenda, Obra) ---------- */
+.agCols,.agColIzq,.agColDer{display:contents}
+.agColIzq>.agSug,.agColIzq>.agProx{order:5}
+.isIzq,.isDer{display:flex;flex-direction:column;gap:12px;min-width:0}
+@media (min-width:1100px){
+  .ip.is{max-width:1280px}
+  .is .isCard{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(320px,1fr);gap:24px;padding:20px 22px;align-items:start}
+  .is .isGraf svg{height:320px}
+  .is .isHero2 b{font-size:40px}
+  .is .isDer{position:sticky;top:16px}
+  .is .isChips{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .is .isChip{padding:14px 16px}
+  .is .isChip b{font-size:22px}
+  .agNueva{max-width:1280px}
+  .agCols{display:grid;grid-template-columns:minmax(360px,1fr) minmax(0,1.4fr);gap:20px;align-items:start}
+  .agColIzq,.agColDer{display:flex;flex-direction:column;gap:12px;min-width:0}
+  .agColIzq{position:sticky;top:16px}
+  .agColIzq>.agSug,.agColIzq>.agProx{order:0}
+  .obraSeguimientoModal{width:min(1240px,calc(100vw - 48px));max-width:1240px}
+}

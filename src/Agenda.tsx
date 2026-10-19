@@ -206,6 +206,8 @@ export default function Agenda({ pedido, onPedidoAtendido }: { pedido?: Pedido |
       </div>
 
       {/* ---- Semana / mes ---- */}
+      {/* En la PC: calendario y carga a la izquierda, el día a la derecha. En el celular, una sola columna. */}
+      <div className="agCols"><div className="agColIzq">
       <section className="agSemana" aria-label="Calendario">
         <div className="agSemCab">
           <b>{capital((verMes ? new Date(`${sel}T12:00:00`) : new Date(`${inicioSem}T12:00:00`)).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }))}</b>
@@ -261,6 +263,31 @@ export default function Agenda({ pedido, onPedidoAtendido }: { pedido?: Pedido |
         </div>
       </div>}
 
+      {!cargando && <>
+        {/* ---- Para agendar (antes: Alertas) ---- */}
+        {sugerencias.length > 0 && <section className="agSug">
+          <div className="agSugCab"><b>Para agendar</b><small>Se arman solas</small></div>
+          {sugerencias.map((s) => <div key={s.clave} className="agSugItem">
+            <span className={`agSugIco ${s.tono}`} aria-hidden>{s.icono}</span>
+            <div><b>{s.titulo}</b><small>{s.detalle}</small></div>
+            <button type="button" onClick={() => void guardarFrase({ titulo: s.agendar, fecha: sumarDias(hoyStr, 1), hora: '10:00', tipo: s.tipo, cliente_id: null, obra_id: s.obra_id ?? null })}>Agendar</button>
+          </div>)}
+        </section>}
+
+        {/* ---- Lo que viene ---- */}
+        {proximos.length > 0 && <section className="agProx">
+          <h3>Lo que viene</h3>
+          {proximos.map((e, i) => <div key={e.id}>
+            {(i === 0 || proximos[i - 1].fecha !== e.fecha) && <small className="agProxDia">{capital(diaSemana(e.fecha))}</small>}
+            <button type="button" className="agProxFila" onClick={() => irA(e.fecha)}>
+              <span aria-hidden>{tipoDe(e.tipo).icono}</span>
+              <div><b>{e.titulo}</b><small>{tipoDe(e.tipo).texto}{cliente(e.cliente_id) ? ` · ${cliente(e.cliente_id)!.nombre}` : ''}</small></div>
+              <em>{e.hora ? e.hora.slice(0, 5) : ''}</em>
+            </button>
+          </div>)}
+        </section>}
+      </>}
+      </div><div className="agColDer">
       {aviso && <p className="agAvisoTxt ok" role="status">{aviso}</p>}
       {error && <p className="loginError">{error}</p>}
       {cargando ? <p>Cargando agenda…</p> : <>
@@ -291,29 +318,8 @@ export default function Agenda({ pedido, onPedidoAtendido }: { pedido?: Pedido |
             })()}
         </div>
 
-        {/* ---- Para agendar (antes: Alertas) ---- */}
-        {sugerencias.length > 0 && <section className="agSug">
-          <div className="agSugCab"><b>Para agendar</b><small>Se arman solas</small></div>
-          {sugerencias.map((s) => <div key={s.clave} className="agSugItem">
-            <span className={`agSugIco ${s.tono}`} aria-hidden>{s.icono}</span>
-            <div><b>{s.titulo}</b><small>{s.detalle}</small></div>
-            <button type="button" onClick={() => void guardarFrase({ titulo: s.agendar, fecha: sumarDias(hoyStr, 1), hora: '10:00', tipo: s.tipo, cliente_id: null, obra_id: s.obra_id ?? null })}>Agendar</button>
-          </div>)}
-        </section>}
-
-        {/* ---- Lo que viene ---- */}
-        {proximos.length > 0 && <section className="agProx">
-          <h3>Lo que viene</h3>
-          {proximos.map((e, i) => <div key={e.id}>
-            {(i === 0 || proximos[i - 1].fecha !== e.fecha) && <small className="agProxDia">{capital(diaSemana(e.fecha))}</small>}
-            <button type="button" className="agProxFila" onClick={() => irA(e.fecha)}>
-              <span aria-hidden>{tipoDe(e.tipo).icono}</span>
-              <div><b>{e.titulo}</b><small>{tipoDe(e.tipo).texto}{cliente(e.cliente_id) ? ` · ${cliente(e.cliente_id)!.nombre}` : ''}</small></div>
-              <em>{e.hora ? e.hora.slice(0, 5) : ''}</em>
-            </button>
-          </div>)}
-        </section>}
       </>}
+      </div></div>
 
       {form && (
         <FormEvento
