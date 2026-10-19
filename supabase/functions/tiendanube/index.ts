@@ -320,6 +320,21 @@ Deno.serve(async (req) => {
         if (cambios.some((c) => c.nombre !== undefined || c.descripcion !== undefined)) await registrar(db, 'editar', `${cambios.length} producto(s) editados desde "Productos en página"${errores.length ? ` · errores: ${errores.join(', ')}` : ''}`, errores.length === 0)
         return responder({ ok: true, ...res, errores: [...errores, ...res.errores] })
       }
+      case 'eliminar': {
+        // Quitar un producto de la tienda web (se borra en Tiendanube). En la app
+        // queda igual, solo se desvincula. Si otros productos de la app usan otras
+        // variantes del mismo producto de la web, se borra solo esta variante.
+        if (!con) return responder({ error: 'Tiendanube no está conectado.' }, 400)
+        const { data: p } = await db.from('productos_servicios').select('id, nombre, tn_product_id, tn_variant_id').eq('id', Number(cuerpo.id)).maybeSingle()
+        if (!p?.tn_product_id) return responder({ error: 'Ese producto no está en la web.' }, 400)
+        const { count } = await db.from('productos_servicios').select('id', { count: 'exact', head: true }).eq('tn_product_id', p.tn_product_id).neq('id', p.id)
+        const ruta = count && p.tn_variant_id ? `/products/${p.tn_product_id}/variants/${p.tn_variant_id}` : `/products/${p.tn_product_id}`
+        const r = await tn(con, ruta, { method: 'DELETE' })
+        if (!r.ok && r.status !== 404) return responder({ error: `La web respondió ${r.status}.` }, 502)
+        await db.from('productos_servicios').update({ tn_product_id: null, tn_variant_id: null, tn_precio_publicado: null, tn_stock_publicado: null, tn_sincronizado_at: null }).eq('id', p.id)
+        await registrar(db, 'eliminar', `${p.nombre}: quitado de la web`)
+        return responder({ ok: true })
+      }
       case 'sincronizar': {
         if (!con) return responder({ error: 'Tiendanube no está conectado.' }, 400)
         return responder({ ok: true, ...(await sincronizar(db, con, cuerpo.ids)) })

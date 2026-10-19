@@ -3307,3 +3307,5 @@ button.prodWeb:hover{text-decoration:underline}
 .pwWrap input:not([type=checkbox]),.pwWrap textarea{border:1px solid var(--mova-border);border-radius:9px;padding:8px 10px;font:inherit;font-size:14px;background:#fff;box-sizing:border-box}
 .pwWrap input.pwNombre{border-color:transparent;background:transparent;font-weight:700}
 .pwWrap input.pwNombre:hover,.pwWrap input.pwNombre:focus{border-color:var(--mova-border);background:#fff}
+.pwBotones .pwQuitar{color:#b23b32;border-color:#f0c9c5;background:#fff}
+.pwBotones .pwQuitar:hover:not(:disabled){background:#fdf0ef}

@@ -679,7 +679,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
         />
       )}
 
-      {pestana === 'pagina' && !cargando && !error && (
+      {pestana === 'pagina' && (!cargando || elementos.length > 0) && !error && (
         <ProductosEnPagina
           elementos={elementos}
           mostrar={mostrar}

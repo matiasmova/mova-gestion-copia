@@ -142,6 +142,21 @@ export default function ProductosEnPagina({ elementos, mostrar, onCampo, onRecar
     setTrabajando(null)
   }
 
+  // Lo borra de la tienda web; en el catálogo queda igual (vuelve a "sin publicar").
+  async function quitar(el: ProductoServicio) {
+    if (!window.confirm(`¿Quitar "${el.nombre}" de la tienda web?\n\nSe borra de la página (con su descripción y fotos de la web). En tu catálogo queda igual y lo podés volver a publicar cuando quieras.\n\nSi solo querés que no se vea por un tiempo, usá "Ocultar".`)) return
+    setTrabajando(el.id); setAviso('')
+    try {
+      await llamarTienda('eliminar', { id: el.id })
+      setAviso(`✓ "${el.nombre}" se quitó de la tienda web. Sigue en tu catálogo.`)
+      onRecargar(); await leerWeb()
+    } catch (e) {
+      const msg = (e as Error).message
+      setMensajes((m) => ({ ...m, [el.id]: `⚠ ${/desconocida/i.test(msg) ? 'Falta actualizar la función "tiendanube" en Supabase (pegá de nuevo el código y Deploy).' : msg}` }))
+    }
+    setTrabajando(null)
+  }
+
   async function publicar(visible: boolean) {
     const ids = Array.from(elegidos)
     if (!ids.length) return
@@ -253,6 +268,7 @@ export default function ProductosEnPagina({ elementos, mostrar, onCampo, onRecar
             <button type="button" className="newButton" disabled={ocupado || (!!web && falta.length === 0)} onClick={() => void subir([el], el.id)}>{estaTrabajando ? 'Subiendo…' : '⬆ Subir'}</button>
             {w && <button type="button" className="editButton" disabled={ocupado} onClick={() => void cambiarVisible(el, !w.publicado)}>{w.publicado ? '🙈 Ocultar' : '👁 Mostrar'}</button>}
             <button type="button" className="editButton" onClick={() => setAbierto((a) => (a === el.id ? null : el.id))}>{abierto === el.id ? '▲ Menos' : '✏️ Más'}</button>
+            <button type="button" className="editButton pwQuitar" disabled={ocupado} onClick={() => void quitar(el)}>🗑 Quitar de la web</button>
           </div>
           {msg && <small className={`pwMsg ${msg.startsWith('⚠') ? 'error' : ''}`}>{msg}</small>}
           {abierto === el.id && <div className="pwMas">
