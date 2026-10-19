@@ -6,7 +6,7 @@ import { linkWhatsApp } from './whatsapp'
 import { entenderFrase, isoLocal } from './agendaFrase'
 import { estadoPush, activarPush, desactivarPush, type EstadoPush } from './push'
 import { confirmarEliminacion } from './confirmar'
-import { GRUPOS_PH, TIPOS_PH, leerOcultas, ocultarPorHoy, type GrupoPH, type TareaPH, type TipoPH } from './paraHacer'
+import { GRUPOS_PH, TIPOS_PH, claveDeNota, leerOcultas, marcaPH, mostrarDeNuevo, notaSinMarca, ocultarPorHoy, type GrupoPH, type TareaPH, type TipoPH } from './paraHacer'
 import AvisosDiarios from './AvisosDiarios'
 
 // Para hacer (antes Agenda): todo lo pendiente en una sola lista (lo que agendás
@@ -68,9 +68,9 @@ const textoAviso = (e: Evento) =>
   e.aviso_min == null ? 'Sin aviso' : AVISOS.find(([v]) => v === String(e.aviso_min))?.[1] ?? `${e.aviso_min} min antes`
 
 // Un renglón de la lista: una tarea automática, una sugerencia para agendar o un evento de la agenda.
-type ItemPH = { clave: string; tipo: TipoPH; grupo: GrupoPH; icono: string; titulo: string; detalle: string; monto?: number; tarea?: TareaPH; sugerencia?: Sugerencia; evento?: Evento }
+type ItemPH = { clave: string; tipo: TipoPH; grupo: GrupoPH; icono: string; titulo: string; detalle: string; explica?: string; monto?: number; tarea?: TareaPH; sugerencia?: Sugerencia; evento?: Evento }
 
-export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargandoTareas = false, porCobrar = null }: { pedido?: Pedido | null; onPedidoAtendido?: () => void; tareas?: TareaPH[]; cargandoTareas?: boolean; porCobrar?: number | null } = {}) {
+export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargandoTareas = false, porCobrar = null, onAbrirObra, onAbrirPresupuesto }: { pedido?: Pedido | null; onPedidoAtendido?: () => void; tareas?: TareaPH[]; cargandoTareas?: boolean; porCobrar?: number | null; onAbrirObra?: (id: number) => void; onAbrirPresupuesto?: (id: number) => void } = {}) {
   const hoyStr = isoLocal(new Date())
   const [eventos, setEventos] = useState<Evento[]>([])
   const [obras, setObras] = useState<Opcion[]>([])
@@ -90,6 +90,14 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
   const [ocultas, setOcultas] = useState<Set<string>>(() => leerOcultas())
   const [menuDe, setMenuDe] = useState<string | null>(null)
   const [verAvisos, setVerAvisos] = useState(false)
+  // Tarjeta abierta (muestra qué es) y el "Deshacer" de lo último que se hizo.
+  const [abiertoPH, setAbiertoPH] = useState<string | null>(null)
+  const [deshacer, setDeshacer] = useState<{ texto: string; hacer: () => void | Promise<void> } | null>(null)
+  useEffect(() => {
+    if (!deshacer) return
+    const t = window.setTimeout(() => setDeshacer(null), 8000)
+    return () => window.clearTimeout(t)
+  }, [deshacer])
   useEffect(() => {
     if (!menuDe) return
     const cerrar = () => setMenuDe(null)
@@ -161,7 +169,7 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
   // ---------- Carga rápida (dictada o escrita) ----------
   const entendida = useMemo(() => (frase.trim().length > 2 ? entenderFrase(frase, clientes, obras) : null), [frase, clientes, obras])
   const dictado = useDictado((t, final) => { setFrase(t); if (final) setTimeout(() => document.getElementById('agFraseOk')?.focus(), 50) })
-  async function guardarFrase(datos: { titulo: string; fecha: string; hora: string | null; tipo: string; cliente_id: number | null; obra_id: number | null }) {
+  async function guardarFrase(datos: { titulo: string; fecha: string; hora: string | null; tipo: string; cliente_id: number | null; obra_id: number | null; detalle?: string | null }) {
     setGuardandoFrase(true)
     const r = await crearEvento({ ...datos, aviso_min: 60 })
     setGuardandoFrase(false)
@@ -186,26 +194,66 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
 
   // ---------- Lista unificada ----------
   const enSemana = sumarDias(hoyStr, 7)
+  // Tareas automáticas que ya pasaste a la agenda (no se repiten mientras sigan pendientes).
+  const agendadas = new Set(eventos.filter((e) => !e.completado).map((e) => claveDeNota(e.detalle)).filter((k): k is string => !!k))
   const items: ItemPH[] = [
-    ...tareas.map((t): ItemPH => ({ clave: t.clave, tipo: t.tipo, grupo: t.grupo, icono: t.icono ?? TIPOS_PH[t.tipo].icono, titulo: t.titulo, detalle: t.detalle, monto: t.monto, tarea: t })),
-    ...sugerencias.map((x): ItemPH => ({ clave: `sug-${x.clave}`, tipo: x.clave.startsWith('p') ? 'pres' : x.clave.startsWith('s') ? 'personal' : 'obra', grupo: x.tono === 'r' || x.clave.startsWith('p') ? 'atr' : 'sem', icono: x.icono, titulo: x.titulo, detalle: x.detalle, sugerencia: x })),
+    ...tareas.map((t): ItemPH => ({ clave: t.clave, tipo: t.tipo, grupo: t.grupo, icono: t.icono ?? TIPOS_PH[t.tipo].icono, titulo: t.titulo, detalle: t.detalle, explica: t.explica, monto: t.monto, tarea: t })),
+    ...sugerencias.map((x): ItemPH => ({ clave: `sug-${x.clave}`, tipo: x.clave.startsWith('p') ? 'pres' : x.clave.startsWith('s') ? 'personal' : 'obra', grupo: x.tono === 'r' || x.clave.startsWith('p') ? 'atr' : 'sem', icono: x.icono, titulo: x.titulo, detalle: x.detalle, explica: x.explica, sugerencia: x })),
     ...eventos.filter((e) => !e.completado && e.fecha <= enSemana).map((e): ItemPH => {
       const c = cliente(e.cliente_id)
       const cuando = e.fecha === hoyStr ? (e.hora ? `Hoy ${e.hora.slice(0, 5)}` : 'Hoy') : `${capital(diaSemana(e.fecha))}${e.hora ? ` · ${e.hora.slice(0, 5)}` : ''}`
-      return { clave: `ev-${e.id}`, tipo: 'visita', grupo: e.fecha < hoyStr ? 'atr' : e.fecha === hoyStr ? 'hoy' : 'sem', icono: tipoDe(e.tipo).icono, titulo: e.titulo, detalle: [cuando, e.lugar, c?.nombre].filter(Boolean).join(' · '), evento: e }
+      return { clave: `ev-${e.id}`, tipo: 'visita', grupo: e.fecha < hoyStr ? 'atr' : e.fecha === hoyStr ? 'hoy' : 'sem', icono: tipoDe(e.tipo).icono, titulo: e.titulo, detalle: [cuando, e.lugar, c?.nombre].filter(Boolean).join(' · '), explica: notaSinMarca(e.detalle) || undefined, evento: e }
     }),
-  ].filter((x) => !ocultas.has(x.clave))
+  ].filter((x) => !ocultas.has(x.clave) && !agendadas.has(x.clave))
   const visibles = items.filter((x) => (filtro === 'todo' || x.tipo === filtro) && (!foco || (foco === 'plata' ? x.tipo === 'cobro' : x.grupo === foco)))
   const cuenta = (g: GrupoPH) => items.filter((x) => x.grupo === g).length
   const tiposConItems = (Object.keys(TIPOS_PH) as TipoPH[]).filter((t) => items.some((x) => x.tipo === t))
   const manana = sumarDias(hoyStr, 1)
   const lunesProx = sumarDias(lunesDe(hoyStr), 7)
 
-  function ocultar(clave: string) { ocultarPorHoy(clave); setOcultas(leerOcultas()) }
+  function ocultar(x: ItemPH) {
+    ocultarPorHoy(x.clave); setOcultas(leerOcultas())
+    setDeshacer({ texto: `"${x.titulo}" quedó listo por hoy`, hacer: () => { mostrarDeNuevo(x.clave); setOcultas(leerOcultas()) } })
+  }
+  const notaDe = (x: ItemPH) => `${x.explica ?? x.detalle}\n${marcaPH(x.clave)}`
   async function agendarTarea(x: ItemPH, fecha: string) {
     const titulo = x.tarea?.agendar ?? x.sugerencia?.agendar ?? x.titulo
-    const ok = await guardarFrase({ titulo, fecha, hora: '10:00', tipo: x.sugerencia?.tipo ?? 'recordatorio', cliente_id: null, obra_id: x.tarea?.obra_id ?? x.sugerencia?.obra_id ?? null })
-    if (ok) ocultar(x.clave)
+    const ok = await guardarFrase({ titulo, fecha, hora: '10:00', tipo: x.sugerencia?.tipo ?? 'recordatorio', cliente_id: null, obra_id: x.tarea?.obra_id ?? x.sugerencia?.obra_id ?? null, detalle: notaDe(x) })
+    if (ok) setDeshacer({ texto: `Agendado para ${fecha === hoyStr ? 'hoy' : diaSemana(fecha)}`, hacer: () => volverAPendientes(x.clave) })
+  }
+  // Borra de la agenda lo que salió de una tarea automática y la tarea vuelve a la lista.
+  async function volverAPendientes(clave: string) {
+    const ids = eventos.filter((e) => claveDeNota(e.detalle) === clave).map((e) => e.id)
+    const { data } = ids.length ? { data: null } : await supabase.from('recordatorios').select('id,detalle').like('detalle', `%${marcaPH(clave)}%`)
+    const todos = ids.length ? ids : ((data ?? []) as { id: number }[]).map((e) => e.id)
+    if (todos.length) {
+      const { error: fallo } = await supabase.from('recordatorios').delete().in('id', todos)
+      if (fallo) { setError('No se pudo devolver a pendientes.'); return }
+    }
+    mostrarDeNuevo(clave); setOcultas(leerOcultas())
+    setEventos((arr) => arr.filter((e) => !todos.includes(e.id)))
+    setDeshacer(null)
+    mostrar('Volvió a la lista de Para hacer')
+  }
+  // Eventos que salieron de la lista (con la marca, o agendados antes con el texto de una tarea automática).
+  const AGENDADOS_VIEJOS = /^(Revisar plazo de |Renovar |Seguimiento presupuesto |Cobrar |Enviar presupuesto |Pagarle a |Mandar informe de avance de |Comprar productos para reponer stock)/
+  const claveOrigen = (e: Evento) => claveDeNota(e.detalle) ?? tareas.find((t) => t.agendar === e.titulo)?.clave ?? (AGENDADOS_VIEJOS.test(e.titulo) ? `viejo-${e.id}` : null)
+  async function volverEvento(e: Evento) {
+    const clave = claveOrigen(e)
+    if (!clave) return
+    if (!clave.startsWith('viejo-')) { await volverAPendientes(clave); return }
+    const { error: fallo } = await supabase.from('recordatorios').delete().eq('id', e.id)
+    if (fallo) { setError('No se pudo devolver a pendientes.'); return }
+    setEventos((arr) => arr.filter((x) => x.id !== e.id))
+    setTick((t) => t + 1) // las sugerencias se vuelven a armar sin este evento
+    mostrar('Volvió a la lista de Para hacer')
+  }
+  // Qué se puede abrir desde una sugerencia (obra o presupuesto).
+  const abrirSug = (x: Sugerencia) => {
+    const id = Number(x.clave.slice(1))
+    if (x.clave.startsWith('o') && onAbrirObra) return { t: 'Ver la obra', f: () => onAbrirObra(id) }
+    if (x.clave.startsWith('p') && onAbrirPresupuesto) return { t: 'Ver el presupuesto', f: () => onAbrirPresupuesto(id) }
+    return null
   }
   const renglon = (x: ItemPH) => {
     const e = x.evento
@@ -213,9 +261,31 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
       : x.sugerencia ? <button type="button" className="phPrim" onClick={() => void agendarTarea(x, manana)}>Agendar</button>
         : e?.lugar ? <a className="phPrim" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.lugar)}`} target="_blank" rel="noreferrer">Cómo llegar</a>
           : e ? <button type="button" className="phPrim" onClick={() => irA(e.fecha)}>Ver</button> : null
-    return <div key={x.clave} className={`phItem t-${x.tipo}`}>
+    const abierto = abiertoPH === x.clave
+    const origen = e ? claveOrigen(e) : null
+    const sug = x.sugerencia ? abrirSug(x.sugerencia) : null
+    return <div key={x.clave} className={`phItem t-${x.tipo}${abierto ? ' abierto' : ''}`}>
       <span className="phIco" aria-hidden>{x.icono}</span>
-      <div className="phTxt"><strong>{x.titulo}<span className="phTag">{e ? 'AGENDADO' : 'AUTOMÁTICO'}</span></strong><small>{x.detalle}</small></div>
+      <button type="button" className="phTxt" aria-expanded={abierto} onClick={() => setAbiertoPH(abierto ? null : x.clave)} title="Tocá para ver qué es">
+        <strong>{x.titulo}<span className="phTag">{e ? (origen ? 'AGENDADO DE LA LISTA' : 'AGENDADO') : 'AUTOMÁTICO'}</span></strong><small>{x.detalle}</small>
+      </button>
+      {abierto && <div className="phDet">
+        <b className="phDetTit">{x.titulo}</b>
+        <p>{x.explica ?? (e ? 'Lo agendaste en la agenda.' : x.detalle)}</p>
+        {e && <ul>
+          <li>📅 {capital(diaSemana(e.fecha))}{e.hora ? ` · ${e.hora.slice(0, 5)}` : ''}</li>
+          {e.lugar && <li>📍 {e.lugar}</li>}
+          {cliente(e.cliente_id) && <li>👤 {cliente(e.cliente_id)!.nombre}</li>}
+          {nombreObra(e.obra_id) && <li>🏗️ {nombreObra(e.obra_id)}</li>}
+        </ul>}
+        <div className="phDetAcc">
+          {sug && <button type="button" onClick={sug.f}>{sug.t} →</button>}
+          {e && e.obra_id != null && onAbrirObra && <button type="button" onClick={() => onAbrirObra(e.obra_id!)}>Ver la obra →</button>}
+          {e && <button type="button" onClick={() => irA(e.fecha)}>Ver en el día</button>}
+          {e && <button type="button" onClick={() => setForm({ evento: e })}>✏️ Editar</button>}
+          {e && origen && <button type="button" className="volver" onClick={() => void volverEvento(e)}>↩ Volver a pendientes</button>}
+        </div>
+      </div>}
       <div className="phAcc">
         {principal}
         <span className="phMenuWrap">
@@ -224,10 +294,10 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
             {(e ? [['Hoy', hoyStr], ['Mañana', manana], ['El lunes que viene', lunesProx]] : [['Mañana', manana], ['El lunes que viene', lunesProx]]).filter(([, f]) => !e || f !== e.fecha).map(([t, f]) => (
               <button key={t} type="button" onClick={() => { setMenuDe(null); if (e) void mover(e, f); else void agendarTarea(x, f) }}>{t}</button>
             ))}
-            <button type="button" onClick={() => { setMenuDe(null); if (e) setForm({ evento: e }); else setForm({ evento: { id: 0, titulo: x.tarea?.agendar ?? x.sugerencia?.agendar ?? x.titulo, detalle: null, fecha: manana, hora: '10:00', tipo: x.sugerencia?.tipo ?? 'recordatorio', lugar: null, obra_id: x.tarea?.obra_id ?? x.sugerencia?.obra_id ?? null, cliente_id: null, completado: false, aviso_min: 60 } }) }}>Elegir día y hora…</button>
+            <button type="button" onClick={() => { setMenuDe(null); if (e) setForm({ evento: e }); else setForm({ evento: { id: 0, titulo: x.tarea?.agendar ?? x.sugerencia?.agendar ?? x.titulo, detalle: notaDe(x), fecha: manana, hora: '10:00', tipo: x.sugerencia?.tipo ?? 'recordatorio', lugar: null, obra_id: x.tarea?.obra_id ?? x.sugerencia?.obra_id ?? null, cliente_id: null, completado: false, aviso_min: 60 } }) }}>Elegir día y hora…</button>
           </div>}
         </span>
-        <button type="button" className="phSec ok" title={e ? 'Hecho' : 'Listo por hoy (vuelve mañana si sigue pendiente)'} aria-label="Hecho" onClick={() => (e ? void completar(e) : ocultar(x.clave))}>✓</button>
+        <button type="button" className="phSec ok" title={e ? 'Hecho' : 'Listo por hoy (vuelve mañana si sigue pendiente)'} aria-label="Hecho" onClick={() => { if (e) { void completar(e); setDeshacer({ texto: `"${e.titulo}" marcado como hecho`, hacer: () => void completar({ ...e, completado: true }) }) } else ocultar(x) }}>✓</button>
       </div>
     </div>
   }
@@ -246,13 +316,14 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
           <div><b>{e.titulo}</b><small>{t.texto}{e.lugar ? ` · ${e.lugar}` : ''}{e.aviso_min != null && !e.completado ? ` · 🔔 ${textoAviso(e).toLowerCase()}` : ''}</small></div>
         </div>
         {(c || obra) && <div className="agEtiq">{c && <span>👤 {c.nombre}</span>}{obra && <span>🏗️ {obra}</span>}</div>}
-        {e.detalle && <p className="agNota">{e.detalle}</p>}
+        {notaSinMarca(e.detalle) && <p className="agNota">{notaSinMarca(e.detalle)}</p>}
         <div className="agAcc">
           <button type="button" className="ok" onClick={() => void completar(e)}>{e.completado ? '↩️ Deshacer' : '✓ Hecho'}</button>
           {wa && <a href={wa} target="_blank" rel="noreferrer">💬 WhatsApp</a>}
           {mapa && <a href={mapa} target="_blank" rel="noreferrer">📍 Cómo llegar</a>}
           {!e.completado && <button type="button" onClick={() => void mover(e, sumarDias(e.fecha < hoyStr ? hoyStr : e.fecha, 1))}>⏰ Posponer</button>}
           <button type="button" aria-label="Editar" onClick={() => setForm({ evento: e })}>✏️</button>
+          {claveOrigen(e) && !e.completado && <button type="button" title="La saca de la agenda y vuelve a la lista de Para hacer" onClick={() => void volverEvento(e)}>↩ Volver a pendientes</button>}
           <button type="button" aria-label="Eliminar" onClick={() => void eliminar(e)}>🗑</button>
         </div>
       </div>
@@ -351,6 +422,7 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
           </div>}
       </div><div className="agColDer">
       {aviso && <p className="agAvisoTxt ok" role="status">{aviso}</p>}
+      {deshacer && <div className="phDeshacer" role="status"><span>{deshacer.texto}</span><button type="button" onClick={() => { const d = deshacer; setDeshacer(null); void d.hacer() }}>Deshacer</button></div>}
       {error && <p className="loginError">{error}</p>}
       {cargando ? <p>Cargando agenda…</p> : <>
         {/* ---- El día ---- */}
@@ -432,7 +504,7 @@ function useDictado(alTexto: (texto: string, final: boolean) => void) {
 }
 
 // "Para agendar": se arman solas con plazos de obra, seguros del personal y presupuestos sin respuesta.
-type Sugerencia = { clave: string; icono: string; tono: 'r' | 'n' | 'a'; titulo: string; detalle: string; agendar: string; tipo: string; obra_id?: number }
+type Sugerencia = { clave: string; icono: string; tono: 'r' | 'n' | 'a'; titulo: string; detalle: string; agendar: string; tipo: string; obra_id?: number; explica?: string }
 function useSugerencias(tick: number): Sugerencia[] {
   const [lista, setLista] = useState<Sugerencia[]>([])
   useEffect(() => {
@@ -451,18 +523,18 @@ function useSugerencias(tick: number): Sugerencia[] {
       for (const ob of (o.data ?? []) as { id: number; nombre_obra: string; fecha_fin_estimada: string | null }[]) {
         if (!ob.fecha_fin_estimada || ob.fecha_fin_estimada > sumarDias(hoyStr, 7)) continue
         const vencido = ob.fecha_fin_estimada < hoyStr
-        out.push({ clave: `o${ob.id}`, icono: '⏰', tono: vencido ? 'r' : 'n', titulo: `${ob.nombre_obra} · ${vencido ? 'plazo vencido' : 'vence pronto'}`, detalle: `Fin estimado ${fechaCorta(ob.fecha_fin_estimada)}`, agendar: `Revisar plazo de ${ob.nombre_obra}`, tipo: 'recordatorio', obra_id: ob.id })
+        out.push({ clave: `o${ob.id}`, icono: '⏰', tono: vencido ? 'r' : 'n', titulo: `${ob.nombre_obra} · ${vencido ? 'plazo vencido' : 'vence pronto'}`, detalle: `Fin estimado ${fechaCorta(ob.fecha_fin_estimada)}`, agendar: `Revisar plazo de ${ob.nombre_obra}`, tipo: 'recordatorio', obra_id: ob.id, explica: vencido ? `La obra tenía que terminar el ${fechaCorta(ob.fecha_fin_estimada)} y sigue en proceso. Actualizá el avance, cambiá la fecha estimada o marcala terminada.` : `La obra tiene fin estimado el ${fechaCorta(ob.fecha_fin_estimada)}. Revisá si llegás o avisale al cliente.` })
       }
       if (!s.error) for (const pe of (s.data ?? []) as { id: number; nombre: string; apellido: string | null; seguro: string | null; seguro_vencimiento: string | null }[]) {
         if (!pe.seguro_vencimiento || pe.seguro_vencimiento > sumarDias(hoyStr, 15)) continue
         const nom = `${pe.nombre} ${pe.apellido ?? ''}`.trim()
-        out.push({ clave: `s${pe.id}`, icono: '🦺', tono: pe.seguro_vencimiento < hoyStr ? 'r' : 'n', titulo: `${pe.seguro || 'Seguro / ART'} de ${nom} ${pe.seguro_vencimiento < hoyStr ? 'vencido' : 'por vencer'}`, detalle: `Vence ${fechaCorta(pe.seguro_vencimiento)}`, agendar: `Renovar ${pe.seguro || 'seguro / ART'} de ${nom}`, tipo: 'recordatorio' })
+        out.push({ clave: `s${pe.id}`, icono: '🦺', tono: pe.seguro_vencimiento < hoyStr ? 'r' : 'n', titulo: `${pe.seguro || 'Seguro / ART'} de ${nom} ${pe.seguro_vencimiento < hoyStr ? 'vencido' : 'por vencer'}`, detalle: `Vence ${fechaCorta(pe.seguro_vencimiento)}`, agendar: `Renovar ${pe.seguro || 'seguro / ART'} de ${nom}`, tipo: 'recordatorio', explica: `El ${pe.seguro || 'seguro / ART'} de ${nom} ${pe.seguro_vencimiento < hoyStr ? 'venció' : 'vence'} el ${fechaCorta(pe.seguro_vencimiento)}. Sin cobertura no conviene que trabaje en obra.` })
       }
       for (const pr of (p.data ?? []) as { id: number; titulo: string; enviado_at?: string | null; fecha: string | null }[]) {
         const desde = (pr.enviado_at ?? pr.fecha ?? '').slice(0, 10)
         if (!desde || desde > sumarDias(hoyStr, -5)) continue
         const dias = Math.round((Date.parse(hoyStr) - Date.parse(desde)) / 86400000)
-        out.push({ clave: `p${pr.id}`, icono: '💬', tono: 'a', titulo: `Seguir presupuesto ${pr.titulo}`, detalle: `Enviado hace ${dias} días · sin respuesta`, agendar: `Seguimiento presupuesto ${pr.titulo}`, tipo: 'llamada' })
+        out.push({ clave: `p${pr.id}`, icono: '💬', tono: 'a', titulo: `Seguir presupuesto ${pr.titulo}`, detalle: `Enviado hace ${dias} días · sin respuesta`, agendar: `Seguimiento presupuesto ${pr.titulo}`, tipo: 'llamada', explica: `Le mandaste el presupuesto hace ${dias} días y el cliente no respondió. Conviene escribirle para saber si tiene dudas o quiere ajustar algo.` })
       }
       setLista(out.filter((x) => !yaAgendado.has(x.agendar)).slice(0, 6))
     })()
