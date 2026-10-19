@@ -106,7 +106,7 @@ export type GrupoObras = 'en_obra' | 'terminadas'
 const estadoMostrado = (o: { estado: string | null; porcentaje_avance?: number | string | null }) => (Number(o.porcentaje_avance) >= 100 && (o.estado ?? 'en_proceso') === 'en_proceso' ? 'finalizada' : o.estado) as EstadoObra | null
 const obraTerminada = (o: { estado: string | null; porcentaje_avance?: number | string | null }) => o.estado === 'finalizada' || o.estado === 'observacion' || Number(o.porcentaje_avance) >= 100
 
-function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, grupo, embebido = false, busquedaExterna, onNuevoPresupuesto }: { onNuevoPresupuesto?: (obra: { id: number; cliente_id: number }) => void; busquedaExterna?: string; obraAbrirId?: number | null; onObraAbierta?: () => void; onVerPresupuesto?: (presupuestoId: number) => void; conIA?: boolean; grupo?: GrupoObras; embebido?: boolean } = {}) {
+function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, grupo, embebido = false, busquedaExterna, onNuevoPresupuesto, soloVentanas = false, onCambio }: { soloVentanas?: boolean; onCambio?: () => void; onNuevoPresupuesto?: (obra: { id: number; cliente_id: number }) => void; busquedaExterna?: string; obraAbrirId?: number | null; onObraAbierta?: () => void; onVerPresupuesto?: (presupuestoId: number) => void; conIA?: boolean; grupo?: GrupoObras; embebido?: boolean } = {}) {
   const puedeInformeIA = conIA
   const [obras, setObras] = useState<Obra[]>([])
   const [presupuestosObra, setPresupuestosObra] = useState<{ id: number; obra_id: number | null; total: number | string; estado: string; activo: boolean; titulo: string }[]>([])
@@ -434,6 +434,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
   }
 
   function cerrarSeguimiento() {
+    onCambio?.()
     setHojaEnviar(false)
     setObraSeguimiento(null)
     setAvances([])
@@ -832,6 +833,8 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
 
   return (
     <div className="obrasPage">
+      {/* soloVentanas: la lista la muestra Trabajos; acá solo se abre la ficha de la obra. */}
+      {!soloVentanas && <>
       {!embebido && <div className="pageHeader">
         <div>
           <p className="subtitle">GESTIÓN DE TRABAJOS</p>
@@ -1028,6 +1031,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
           </table>
         </div>
       )}
+      </>}
 
       {obraSeguimiento && (
         <div className="modalOverlay">

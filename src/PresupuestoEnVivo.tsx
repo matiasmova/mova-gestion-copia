@@ -45,6 +45,9 @@ const SECCIONES: { tipo: 'producto' | 'servicio'; titulo: string }[] = [
 ]
 const DESCUENTOS = [0, 5, 10, 15, 25]
 let claves = 0
+// Etapa del trabajo según el estado del presupuesto (mismos colores que Trabajos).
+const ETAPA_DE: Record<string, string> = { borrador: 'arm', enviado: 'env', aceptado: 'obr' }
+const PASOS: [string, string][] = [['arm', 'Armando'], ['env', 'Enviado'], ['obr', 'En obra'], ['ter', 'Terminado']]
 // Ganancia de un producto: lo que paga el cliente (con su descuento) − lo que te cuesta.
 const gananciaItem = (it: ItemPresupuesto) => importeNeto(it) - Number(it.cantidad || 0) * Number(it.costo_unitario || 0)
 const conClave = (it: ItemPresupuesto): Item => ({ ...it, _k: ++claves })
@@ -66,6 +69,9 @@ export function Texto({ value, onChange, placeholder, className }: { value: stri
 
 export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar, onEditorCompleto, modoInicial = 'edit', estado, acciones, menu, extra, onGuardado, obraId = null }: Props) {
   const [menuAbierto, setMenuAbierto] = useState(false)
+  // Pestañas del editor (solo al editar) y la ganancia para el encabezado.
+  const [pestana, setPestana] = useState<'doc' | 'gan'>('doc')
+  const [ganancia, setGanancia] = useState<number | null>(null)
   const [modo, setModo] = useState<'edit' | 'ver'>(modoInicial)
   const [titulo, setTitulo] = useState(presupuesto.titulo)
   const [items, setItems] = useState<Item[]>(() => presupuesto.items.map(conClave))
@@ -431,7 +437,24 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
           {menu && menuAbierto && <div className="pfMas pvMenu" role="menu">{menu(() => setMenuAbierto(false))}</div>}
         </div>
 
-        <div className={`pvDoc ${ed ? 'edit' : 'ver'}`}>
+        {/* Encabezado del color de la etapa: dónde está, los números clave y las pestañas */}
+        {ed && <div className={`pvEtapa et-${ETAPA_DE[presupuesto.estado] ?? 'arm'}`}>
+          <div className="pvPasos">
+            {presupuesto.estado === 'rechazado'
+              ? <span className="on">❌ No salió</span>
+              : PASOS.map(([k, t], i) => { const actual = PASOS.findIndex(([x]) => x === (ETAPA_DE[presupuesto.estado] ?? 'arm')); return <span key={k} className={i < actual ? 'ok' : i === actual ? 'on' : ''}>{i < actual ? '✓ ' : ''}{t}</span> })}
+          </div>
+          <div className="pvNums">
+            <div><small>TOTAL</small><b>{moneda(total)}</b></div>
+            <button type="button" onClick={() => setPestana('gan')}><small>VAS A GANAR ›</small><b>{ganancia == null ? '…' : moneda(ganancia)}</b></button>
+            <div><small>SEÑA 70%</small><b>{moneda(sena)}</b></div>
+          </div>
+          <div className="pvTabs" role="tablist">
+            <button type="button" role="tab" aria-selected={pestana === 'doc'} className={pestana === 'doc' ? 'on' : ''} onClick={() => setPestana('doc')}>📄 Presupuesto</button>
+            <button type="button" role="tab" aria-selected={pestana === 'gan'} className={pestana === 'gan' ? 'on' : ''} onClick={() => setPestana('gan')}>💰 Ganancia y personal</button>
+          </div>
+        </div>}
+        <div className={`pvDoc ${ed ? 'edit' : 'ver'}${ed && pestana === 'gan' ? ' soloGan' : ''}`}>
           <div className="pvCab">
             <img src={logo} alt="MOVA Tecnología Smart" />
             <div className="pvCod"><small>PRESUPUESTO</small><b>{codigo}</b><span>Válido hasta {vence}</span></div>
@@ -458,7 +481,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
             <div><small>TOTAL DEL PRESUPUESTO</small><b>{moneda(total)}</b>{bonificacion > 0.5 && <span>Incluye bonificación de {moneda(Math.min(bonificacion, sumaNeta))}</span>}</div>
             <div className="der"><small>SEÑA 70%</small><b>{moneda(sena)}</b></div>
           </div>
-          {ed && <GananciaTrabajo presupuestoIds={[presupuesto.id]} obraId={obraId} items={validos} total={total} />}
+          {ed && <div className="pvGanWrap" hidden={pestana !== 'gan'}><GananciaTrabajo presupuestoIds={[presupuesto.id]} obraId={obraId} items={validos} total={total} abiertaInicial onGanancia={setGanancia} /></div>}
 
           {SECCIONES.map(({ tipo, titulo: tSec }) => {
             const its = items.filter((it) => (it.tipo === 'servicio' ? 'servicio' : 'producto') === tipo)
