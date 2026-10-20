@@ -62,6 +62,8 @@ export type EstadoPresupuesto = {
   avances: AvanceEstado[]
   linea: PasoLinea[]
   ultimaActualizacion: string
+  // Avance de cada ítem (por id), si la obra se lleva por ítems (fase 40).
+  avanceItems: Record<number, number> | null
 }
 
 const num = (x: unknown) => (x == null || x === '' ? null : Number(x))
@@ -77,12 +79,14 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
   const obraId = pres.obra_id != null ? Number(pres.obra_id) : null
 
   const vacio = Promise.resolve({ data: [] as unknown[], error: null })
-  const [rObra, rAdic, rPagos, rPres, rAv] = await Promise.all([
+  const [rObra, rAdic, rPagos, rPres, rAv, rIt] = await Promise.all([
     obraId != null ? supabase.from('obras').select('id, estado, porcentaje_avance').eq('id', obraId).maybeSingle() : Promise.resolve({ data: null, error: null }),
     obraId != null ? supabase.from('adicionales').select('*').eq('obra_id', obraId).order('fecha', { ascending: true }).order('id', { ascending: true }) : vacio,
     supabase.from('pagos').select('id, monto, fecha, medio_pago, referencia, notas, presupuesto_id, obra_id').or(obraId != null ? `presupuesto_id.eq.${presupuestoId},obra_id.eq.${obraId}` : `presupuesto_id.eq.${presupuestoId}`).order('fecha', { ascending: true }),
     obraId != null ? supabase.from('presupuestos').select('id').eq('obra_id', obraId).eq('estado', 'aceptado').eq('activo', true) : Promise.resolve({ data: [{ id: presupuestoId }], error: null }),
     obraId != null ? supabase.from('obra_avances').select('id, fecha, titulo, descripcion, porcentaje, created_at').eq('obra_id', obraId).order('fecha', { ascending: true }).order('id', { ascending: true }) : vacio,
+    // Sin la columna "avance" (falta el SQL de la fase 40) esto falla y se sigue con el avance de la obra.
+    supabase.from('presupuesto_items').select('id, cantidad, precio_unitario, descuento_pct, avance').eq('presupuesto_id', presupuestoId),
   ])
   for (const r of [rObra, rAdic, rPagos, rAv]) if (r.error) throw r.error
 
@@ -117,7 +121,14 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
   const obra = rObra.data as { estado?: string | null; porcentaje_avance?: number | null } | null
   const obraEstado = obra?.estado ?? null
   const terminada = obraEstado === 'finalizada' || obraEstado === 'observacion'
-  const avance = terminada ? 100 : Math.min(100, Math.max(0, Number(obra?.porcentaje_avance ?? 0)))
+  // Avance por ítems: cada ítem suma según lo que vale (cantidad × precio con descuento).
+  const filasIt = rIt.error ? [] : ((rIt.data ?? []) as { id: number; cantidad: number; precio_unitario: number; descuento_pct: number | null; avance: number | null }[])
+  const porItems = filasIt.some((x) => Number(x.avance) > 0)
+  const pesoIt = (x: (typeof filasIt)[number]) => Math.max(0, Number(x.cantidad) * Number(x.precio_unitario) * (1 - (Number(x.descuento_pct) || 0) / 100))
+  const pesoTot = filasIt.reduce((s, x) => s + pesoIt(x), 0)
+  const avanceItemsExacto = porItems && pesoTot > 0 ? filasIt.reduce((s, x) => s + pesoIt(x) * Math.min(100, Math.max(0, Number(x.avance) || 0)), 0) / pesoTot : null
+  const avanceItems = porItems ? Object.fromEntries(filasIt.map((x) => [x.id, Math.min(100, Math.max(0, Number(x.avance) || 0))])) : null
+  const avance = terminada ? 100 : avanceItemsExacto != null ? avanceItemsExacto : Math.min(100, Math.max(0, Number(obra?.porcentaje_avance ?? 0)))
   const obraIniciada = avances.length > 0 || avance > 0
 
   const totalCambios = r2(modificaciones.reduce((s, m) => s + (Number(m.importe) || 0), 0))
@@ -157,6 +168,12 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
     maxVisto = pct
     return true
   })
+  // Llevada por ítems: un solo paso con el avance de hoy (la suma de lo que avanzó cada ítem).
+  if (avanceItemsExacto != null && !terminada) {
+    avancesPago.length = 0
+    const ult = avances[avances.length - 1]
+    if (avance > 0) avancesPago.push({ id: ult?.id ?? 0, fecha: ult?.fecha ?? dia(new Date().toISOString()), titulo: 'Avance por ítems', descripcion: null, porcentaje: avance })
+  }
   for (const a of avancesPago) {
     const pct = Math.min(100, Math.max(0, a.porcentaje))
     const acumulado = correspondePorAvance(anticipo, totalActualizado, pct)
@@ -185,8 +202,9 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
   const ultimaActualizacion = fechas.sort().pop() ?? dia(pres.fecha)
 
   return {
-    enObra: obraId != null, obraEstado, terminada, avance, obraIniciada,
+    enObra: obraId != null, obraEstado, terminada, avance: Math.round(avance), obraIniciada,
     modificaciones, totalOriginal, totalCambios, totalActualizado,
+    avanceItems,
     anticipo, anticipoCubierto, faltaAnticipo, resto, corresponde, pendienteHoy, adelanto, saldoTotal,
     gastosExtra, gastoExtraPendiente, pagos, cobrado, avances, linea, ultimaActualizacion,
   }
