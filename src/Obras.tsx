@@ -1162,6 +1162,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                 onInforme={puedeInformeIA ? () => setInformeIA(obraSeguimiento) : undefined}
                 onVerTodo={() => setSeguTab('timeline')}
                 porItems={avanceItems}
+                plata={cuenta ? { corresponde: cuenta.corresponde, cobrado: cuenta.cobrado, falta: Math.max(0, cuenta.pendienteHoy) + Math.max(0, cuenta.gastoExtraPendiente) } : null}
               />}
               presupuestoSinAceptar={(() => {
                 if (presupuestoAceptado) return null
