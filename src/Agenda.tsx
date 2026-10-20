@@ -8,6 +8,7 @@ import { estadoPush, activarPush, desactivarPush, type EstadoPush } from './push
 import { confirmarEliminacion } from './confirmar'
 import { GRUPOS_PH, TIPOS_PH, claveDeNota, leerOcultas, marcaPH, mostrarDeNuevo, notaSinMarca, ocultarPorHoy, type GrupoPH, type TareaPH, type TipoPH } from './paraHacer'
 import AvisosDiarios from './AvisosDiarios'
+import NotasPH from './NotasPH'
 
 // Para hacer (antes Agenda): todo lo pendiente en una sola lista (lo que agendás
 // vos y lo que el sistema detecta solo: cobros, presupuestos, obras, stock,
@@ -443,6 +444,7 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
         </div>
 
       </>}
+      <NotasPH />
       </div></div>
 
       {form && (
