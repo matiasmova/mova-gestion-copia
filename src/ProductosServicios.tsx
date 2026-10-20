@@ -15,7 +15,7 @@ import CompararMercado, { type ProductoAComparar } from './CompararMercado'
 import HistorialPrecios, { ListaHistorialPrecios } from './HistorialPrecios'
 import OrdenarCatalogoIA from './OrdenarCatalogoIA'
 import CampoNumero from './CampoNumero'
-import { CATEGORIAS_PRODUCTO, COLORES, esCategoriaApp, hexColor, sugerirCategoria, sugerirColor } from './categoriasApp'
+import { CATEGORIAS_PRODUCTO, COLORES, esCategoriaApp, hexColor, leerColores, sugerirCategoria, sugerirColor, type ColorStock } from './categoriasApp'
 import IconoCategoria from './IconoCategoria'
 import ProductosEnPagina from './ProductosEnPagina'
 
@@ -52,6 +52,8 @@ export type ProductoServicio = {
   tn_sincronizar?: boolean
   // Color (opcional; si falta el SQL de la fase 36 queda vacío).
   color?: string | null
+  // Colores disponibles con su stock (fase 38). El stock total es la suma.
+  colores?: ColorStock[] | null
   // Orden propio ("Mi orden"; si falta el SQL de la fase 37 queda vacío).
   orden?: number | null
   fotoView?: string | null
@@ -132,6 +134,9 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
   const [nombrePresupuesto, setNombrePresupuesto] = useState('')
   const [tnSincronizar, setTnSincronizar] = useState(true)
   const [color, setColor] = useState('')
+  const [colores, setColores] = useState<ColorStock[]>([])
+  const [otroColor, setOtroColor] = useState('')
+  const [coloresDisponible, setColoresDisponible] = useState(false)
   const [colorDisponible, setColorDisponible] = useState(false)
   const [fColor, setFColor] = useState('todos')
   const [faltaSqlMoneda, setFaltaSqlMoneda] = useState(false)
@@ -218,6 +223,13 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
       const mapa = new Map((os as { id: number; orden: number }[]).map((x) => [x.id, x.orden]))
       setElementos((arr) => arr.map((x) => (mapa.has(x.id) ? { ...x, orden: mapa.get(x.id) } : x)))
     })
+    // Colores disponibles con stock (si ya se corrió el SQL de la fase 38).
+    void supabase.from('productos_servicios').select('id, colores').not('colores', 'is', null).then(({ data: cs, error: e }) => {
+      setColoresDisponible(!e)
+      if (e || !cs?.length) return
+      const mapa = new Map((cs as { id: number; colores: unknown }[]).map((x) => [x.id, leerColores(x.colores)]))
+      setElementos((arr) => arr.map((x) => (mapa.has(x.id) ? { ...x, colores: mapa.get(x.id) } : x)))
+    })
     // Color de cada producto (si ya se corrió el SQL de la fase 36).
     void supabase.from('productos_servicios').select('id, color').not('color', 'is', null).then(({ data: cs, error: e }) => {
       setColorDisponible(!e)
@@ -283,7 +295,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
       if (fCategoria === '__sinApp') { if (el.tipo !== 'producto' || esCategoriaApp(el.categoria)) return false }
       else if (fCategoria !== 'todas' && (el.categoria?.trim() || 'Sin categoría') !== fCategoria && (el.categoria?.trim() ?? '') !== fCategoria) return false
       if (fProveedor !== 'todos' && (el.proveedor?.trim() ?? '') !== fProveedor) return false
-      if (fColor !== 'todos' && (el.color ?? '').trim().toLowerCase() !== fColor.toLowerCase()) return false
+      if (fColor !== 'todos' && (el.color ?? '').trim().toLowerCase() !== fColor.toLowerCase() && !(el.colores ?? []).some((c) => c.color.toLowerCase() === fColor.toLowerCase())) return false
       if (fMoneda !== 'todas' && el.moneda !== fMoneda) return false
       if (fStock !== 'todos' && nivelStock(el) !== fStock) return false
       if (fFoto === 'con' && !el.foto_url) return false
@@ -341,7 +353,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
 
   function limpiarFormulario() {
     setMonedaProd('ARS'); setNombrePresupuesto('')
-    setTipo('producto'); setCodigo(''); setNombre(''); setDescripcion(''); setCategoria(''); setColor(''); setProveedor(''); setLinkCompra('')
+    setTipo('producto'); setCodigo(''); setNombre(''); setDescripcion(''); setCategoria(''); setColor(''); setColores([]); setOtroColor(''); setProveedor(''); setLinkCompra('')
     setUnidad('unidad'); setPrecioCompra(''); setGananciaPct(''); setPrecioLista(''); setStock(''); setStockMinimo('5'); setIvaPct('21')
     setAplicaDescuento(false); setDescuentoTipo('porcentaje'); setDescuentoValor('')
     setFotoUrl(null); setFotoPreview(''); setErrorFormulario('')
@@ -364,7 +376,9 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
     setEditando(el)
     setTipo(el.tipo); setCodigo(el.codigo ?? ''); setNombre(el.nombre); setDescripcion(el.descripcion ?? ''); setCategoria(el.categoria ?? '')
     setProveedor(el.proveedor ?? ''); setLinkCompra(el.link_compra ?? ''); setUnidad(el.unidad)
-    setMonedaProd(el.moneda); setNombrePresupuesto(el.nombre_presupuesto ?? ''); setTnSincronizar(el.tn_sincronizar !== false); setColor(el.color ?? '')
+    setMonedaProd(el.moneda); setNombrePresupuesto(el.nombre_presupuesto ?? ''); setTnSincronizar(el.tn_sincronizar !== false); setColor(el.color ?? ''); setOtroColor('')
+    // Si tenía un solo color (antes), pasa a ser el primero de la lista con todo el stock.
+    setColores(el.colores?.length ? el.colores : el.color ? [{ color: el.color, stock: Number(el.stock) || 0 }] : [])
     // En un producto en dólares, los precios del formulario son en dólares.
     const compra = el.moneda === 'USD' ? el.costo_usd ?? 0 : el.costo_unitario
     const lista = el.moneda === 'USD' ? el.precio_usd ?? 0 : el.precio_venta
@@ -452,7 +466,9 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
       ...(faltaSqlMoneda ? {} : { moneda: monedaProd, costo_usd: enUsd ? compraNum : null, precio_usd: enUsd ? listaNum : null, nombre_presupuesto: nombrePresupuesto.trim() || null }),
       stock: Number(stock || 0), stock_minimo: Number(stockMinimo || 0), iva_pct: Number(ivaPct || 21),
       foto_url: fotoUrl, aplica_descuento: aplicaDescuento, descuento_pct: descuentoPct, descuento_monto: descuentoMonto,
-      ...(colorDisponible ? { color: tipo === 'producto' ? color.trim() || null : null } : {}),
+      ...(coloresDisponible && tipo === 'producto'
+        ? { colores: colores.length ? colores : null, ...(colores.length ? { stock: colores.reduce((t, c) => t + (Number(c.stock) || 0), 0) } : {}), ...(colorDisponible ? { color: colores.length === 1 ? colores[0].color : null } : {}) }
+        : colorDisponible ? { color: tipo === 'producto' ? color.trim() || null : null } : {}),
     }
     const resultado = editando
       ? await supabase.from('productos_servicios').update(datos).eq('id', editando.id)
@@ -678,7 +694,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
     const nivel = nivelStock(el)
     return (
       <article className={`prodCard ${el.activo ? '' : 'inactivo'}`} key={el.id}>
-        <div className="prodCardFoto">
+        <div className="prodCardFoto" role="button" tabIndex={0} title="Editar" onClick={() => abrirEdicion(el)} onKeyDown={(e) => { if (e.key === 'Enter') abrirEdicion(el) }}>
           {el.fotoView ? <img src={el.fotoView} alt={el.nombre} loading="lazy" /> : <span className="prodSinFoto"><IconoCategoria nombre={el.tipo === 'servicio' ? 'Servicios' : esCategoriaApp(el.categoria) ? el.categoria : 'Productos'} tamano={30} conFondo /></span>}
         </div>
         <div className="prodCardTop">
@@ -693,7 +709,8 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
         {el.nombre_presupuesto && <small className="prodPres" title="Así aparece en el presupuesto">📄 {el.nombre_presupuesto}</small>}
         {el.tn_variant_id && <button type="button" className={`prodWeb ${el.tn_sincronizar === false ? 'pausa' : ''}`} title="Ver en Productos en página" onClick={() => setPestana('pagina')}>{el.tn_sincronizar === false ? 'En la página · no se actualiza solo' : 'En la página · se actualiza solo'}</button>}
         {el.codigo && <small className="prodCat">Cód. {el.codigo}</small>}
-        {el.color && <small className="prodColor"><i style={{ background: hexColor(el.color) ?? '#cfd5de' }} />{el.color}</small>}
+        {el.colores?.length ? <div className="prodColores">{el.colores.map((c) => <small key={c.color} className={`prodColor${c.stock > 0 ? '' : ' sin'}`} title={`${c.color}: ${c.stock}`}><i style={{ background: hexColor(c.color) ?? '#cfd5de' }} />{c.color} <b>{c.stock}</b></small>)}</div>
+          : el.color && <small className="prodColor"><i style={{ background: hexColor(el.color) ?? '#cfd5de' }} />{el.color}</small>}
         <small className="prodCat">{el.tipo === 'producto' && esCategoriaApp(el.categoria) ? <><IconoCategoria nombre={el.categoria} tamano={12} conFondo /> {el.categoria}</> : el.categoria || 'Sin categoría'}{el.proveedor ? ` · ${el.proveedor}` : ''}</small>
         <div className="prodPrecio">
           {tieneDesc ? (<>
@@ -855,7 +872,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
       {!modoEdicion && verFiltros && (
         <div className="prFiltros">
           <label>Categoría<select value={fCategoria} onChange={(e) => setFCategoria(e.target.value)}><option value="todas">Todas</option>{categorias.map((c) => <option key={c} value={c}>{c}</option>)}</select></label>
-          {colorDisponible && <label>Color<select value={fColor} onChange={(e) => setFColor(e.target.value)}><option value="todos">Todos</option>{Array.from(new Set(elementos.map((e) => e.color?.trim()).filter((x): x is string => !!x))).sort().map((c) => <option key={c} value={c}>{c}</option>)}</select></label>}
+          {(colorDisponible || coloresDisponible) && <label>Color<select value={fColor} onChange={(e) => setFColor(e.target.value)}><option value="todos">Todos</option>{Array.from(new Set(elementos.flatMap((e) => [e.color?.trim(), ...(e.colores ?? []).map((c) => c.color)]).filter((x): x is string => !!x))).sort().map((c) => <option key={c} value={c}>{c}</option>)}</select></label>}
           <label>Proveedor / marca<select value={fProveedor} onChange={(e) => setFProveedor(e.target.value)}><option value="todos">Todos</option>{proveedoresLista.map((c) => <option key={c} value={c}>{c}</option>)}</select></label>
           <label>Moneda<select value={fMoneda} onChange={(e) => setFMoneda(e.target.value as typeof fMoneda)}><option value="todas">Pesos y dólares</option><option value="ARS">Solo en pesos</option><option value="USD">Solo en dólares</option></select></label>
           <label>Stock<select value={fStock} onChange={(e) => setFStock(e.target.value as typeof fStock)}><option value="todos">Todos</option><option value="sin">Sin stock</option><option value="bajo">Stock bajo</option><option value="ok">Stock OK</option></select></label>
@@ -1022,7 +1039,8 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                       <option value={21}>21%</option><option value={10.5}>10,5%</option><option value={27}>27%</option><option value={0}>0%</option>
                     </select>
                   </td>
-                  <td><CampoNumero min="0" value={el.stock} onChange={(e) => actualizarCampoLocal(el.id, 'stock', Number(e.target.value))} onBlur={(e) => persistirCampo(el.id, 'stock', Number(e.target.value || 0))} style={{ width: '70px' }} /></td>
+                  <td>{el.colores?.length ? <span title="Se cambia por color en la ficha">{el.stock} <small>({el.colores.map((c) => `${c.color} ${c.stock}`).join(' · ')})</small></span>
+                    : <CampoNumero min="0" value={el.stock} onChange={(e) => actualizarCampoLocal(el.id, 'stock', Number(e.target.value))} onBlur={(e) => persistirCampo(el.id, 'stock', Number(e.target.value || 0))} style={{ width: '70px' }} />}</td>
                   <td><CampoNumero min="0" value={el.stock_minimo} onChange={(e) => actualizarCampoLocal(el.id, 'stock_minimo', Number(e.target.value))} onBlur={(e) => persistirCampo(el.id, 'stock_minimo', Number(e.target.value || 0))} style={{ width: '70px' }} /></td>
                   <td><input type="checkbox" checked={el.activo} onChange={(e) => { const v = e.target.checked; actualizarCampoLocal(el.id, 'activo', v); void persistirCampo(el.id, 'activo', v) }} /></td>
                 </tr>
@@ -1098,16 +1116,34 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                     </select>
                     {!esCategoriaApp(categoria) && sugerirCategoria(nombre, categoria) && <button type="button" className="catSugerida" onClick={() => setCategoria(sugerirCategoria(nombre, categoria)!)}>Sugerida: {sugerirCategoria(nombre, categoria)} · usar</button>}</label>
                   : null}
-                {tipo === 'producto' && <label>Color <small className="npAyuda">si corresponde</small>
+                {tipo === 'producto' && (coloresDisponible ? <div className="formFull colEditor">
+                  <span className="colTit">Colores disponibles <small className="npAyuda">si corresponde · cada color con su stock</small></span>
+                  {colores.length > 0 && <div className="colFilas">
+                    {colores.map((c, i) => <div key={c.color} className="colFila">
+                      <span className="colNom"><i style={{ background: hexColor(c.color) ?? '#cfd5de' }} />{c.color}</span>
+                      <label className="colStock">Stock<CampoNumero min="0" value={String(c.stock)} onChange={(e) => setColores((l) => l.map((x, k) => (k === i ? { ...x, stock: Number(e.target.value) || 0 } : x)))} aria-label={`Stock ${c.color}`} /></label>
+                      <button type="button" className="colQuitar" aria-label={`Quitar ${c.color}`} onClick={() => setColores((l) => l.filter((_, k) => k !== i))}>✕</button>
+                    </div>)}
+                    <small className="npAyuda">Stock total: <b>{colores.reduce((t, c) => t + (Number(c.stock) || 0), 0)}</b> (suma de los colores)</small>
+                  </div>}
+                  <div className="colChips">
+                    {COLORES.filter(([n]) => !colores.some((c) => c.color.toLowerCase() === n.toLowerCase())).map(([n, hex]) => <button type="button" key={n} onClick={() => setColores((l) => [...l, { color: n, stock: 0 }])}><i style={{ background: hex }} />＋ {n}</button>)}
+                  </div>
+                  <div className="colOtro">
+                    <input value={otroColor} onChange={(e) => setOtroColor(e.target.value)} placeholder="Otro color (ej.: Champagne, Gris oscuro)" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); const v = otroColor.trim(); if (v && !colores.some((c) => c.color.toLowerCase() === v.toLowerCase())) { setColores((l) => [...l, { color: v, stock: 0 }]); setOtroColor('') } } }} />
+                    <button type="button" className="editButton" disabled={!otroColor.trim()} onClick={() => { const v = otroColor.trim(); if (v && !colores.some((c) => c.color.toLowerCase() === v.toLowerCase())) { setColores((l) => [...l, { color: v, stock: 0 }]); setOtroColor('') } }}>Agregar</button>
+                  </div>
+                  {!colores.length && sugerirColor(nombre) && <button type="button" className="catSugerida" onClick={() => setColores([{ color: sugerirColor(nombre)!, stock: Number(stock) || 0 }])}>Del nombre: {sugerirColor(nombre)} · usar</button>}
+                </div> : <label>Color <small className="npAyuda">si corresponde</small>
                   {colorDisponible ? <>
                     <div className="colChips">
                       <button type="button" className={!color ? 'on' : ''} onClick={() => setColor('')}>Sin color</button>
                       {COLORES.map(([n, hex]) => <button type="button" key={n} className={color === n ? 'on' : ''} onClick={() => setColor(n)}><i style={{ background: hex }} />{n}</button>)}
                     </div>
                     <input value={color} onChange={(e) => setColor(e.target.value)} placeholder="U otro: Champagne, Gris oscuro…" />
-                    {!color && sugerirColor(nombre) && <button type="button" className="catSugerida" onClick={() => setColor(sugerirColor(nombre)!)}>Del nombre: {sugerirColor(nombre)} · usar</button>}
-                  </> : <small className="npAyuda">Para guardar el color falta correr en Supabase el SQL supabase-productos-color-fase-36.sql.</small>}
-                </label>}
+                  </> : null}
+                  <small className="npAyuda">Para cargar varios colores con su stock, corré en Supabase el SQL supabase-productos-colores-fase-38.sql.</small>
+                </label>)}
                 {tipo === 'producto' ? null
                   : <label>Categoría del servicio<input value={categoria} onChange={(e) => setCategoria(e.target.value)} placeholder="Ej.: Instalación, Mano de obra" list="catServicios" />
                       <datalist id="catServicios">{categoriasServicios.map((c) => <option key={c} value={c} />)}</datalist></label>}
@@ -1141,7 +1177,9 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                 <label>Precio de lista sin IVA{monedaProd === 'USD' ? ' (US$)' : ' ($)'}<CampoNumero min="0" value={precioLista} onChange={(e) => cambiarLista(e.target.value)} placeholder="0,00" />{monedaProd === 'USD' && cotizacion > 0 && Number(precioLista) > 0 && <small className="npAyuda">≈ {formatoDinero(Number(precioLista) * cotizacion)} · compra ≈ {formatoDinero(Number(precioCompra || 0) * cotizacion)}</small>}</label>
                 {margenIgualAPct && <p className="loginError formFull">Un margen de 100% o más no es posible: el precio de venta sería infinito. Usá menos de 100%.</p>}
 
-                {tipo === 'producto' && <label>Stock (cantidad)<CampoNumero min="0" value={stock} onChange={(e) => setStock(e.target.value)} placeholder="0" /></label>}
+                {tipo === 'producto' && (colores.length && coloresDisponible
+                  ? <label>Stock (cantidad)<input value={colores.reduce((t, c) => t + (Number(c.stock) || 0), 0)} readOnly title="Es la suma del stock de cada color" /><small className="npAyuda">Suma de los colores (se cambia arriba).</small></label>
+                  : <label>Stock (cantidad)<CampoNumero min="0" value={stock} onChange={(e) => setStock(e.target.value)} placeholder="0" /></label>)}
                 {tipo === 'producto' && <label>Stock mínimo (alerta)<CampoNumero min="0" value={stockMinimo} onChange={(e) => setStockMinimo(e.target.value)} placeholder="5" /></label>}
                 <label>Unidad
                   <select value={unidad} onChange={(e) => setUnidad(e.target.value)}>

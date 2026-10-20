@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { colorDeTexto, hexColor, leerColores, sinColor, type ColorStock } from './categoriasApp'
 import { createPortal } from 'react-dom'
 import { supabase } from './supabase'
 import { moneda } from './gestionFormat'
@@ -19,7 +20,7 @@ import GananciaTrabajo from './GananciaTrabajo'
 // recalcula al instante y todo se guarda solo. Arriba: Detallado/Resumido (con
 // texto de la IA) y Comparar precios con el mercado.
 
-type Producto = { id: number; tipo: string; nombre: string; nombre_presupuesto?: string | null; unidad: string; precio_venta: number; costo_unitario: number; categoria?: string | null; foto_url?: string | null }
+type Producto = { id: number; tipo: string; nombre: string; nombre_presupuesto?: string | null; unidad: string; precio_venta: number; costo_unitario: number; categoria?: string | null; foto_url?: string | null; colores?: ColorStock[] }
 type Item = ItemPresupuesto & { _k: number }
 
 export type PresupuestoVivo = {
@@ -104,6 +105,12 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
       if (r.error) r = await supabase.from('productos_servicios').select(columnas).eq('activo', true).order('nombre') as typeof r
       setCatalogo(((r.data ?? []) as Producto[]).map((p) => ({ ...p, precio_venta: Number(p.precio_venta) || 0, costo_unitario: Number(p.costo_unitario) || 0 })))
       setCargandoCat(false)
+      // Colores disponibles de cada producto (si ya se corrió el SQL de la fase 38).
+      const rc = await supabase.from('productos_servicios').select('id, colores').not('colores', 'is', null)
+      if (!rc.error && rc.data?.length) {
+        const mapa = new Map((rc.data as { id: number; colores: unknown }[]).map((x) => [x.id, leerColores(x.colores)]))
+        setCatalogo((c) => c.map((p) => (mapa.has(p.id) ? { ...p, colores: mapa.get(p.id) } : p)))
+      }
     })()
     void cargarResumenDoc(presupuesto.id).then((r) => { if (r) setResumen(r) })
     void cargarFormasPago(presupuesto.id).then(setFormas)
@@ -406,6 +413,22 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
               {Number(it.cantidad) !== 1 && <span className="der"><small>{Number(it.cantidad).toLocaleString('es-AR')} unidades</small><b>{moneda(importeNeto(it))}</b></span>}
               {pct > 0 && <small className="pvFinalAhorro">Ahorra {moneda(Number(it.precio_unitario) * pct / 100)} por unidad ({pct}%)</small>}
             </div>
+            {(() => {
+              // Color: si el producto tiene colores, se elige acá y queda aclarado en el ítem ("… (Negro)").
+              const prod = it.catalogo_id ? catalogo.find((x) => x.id === it.catalogo_id) : null
+              const cols = prod?.colores ?? []
+              if (!cols.length) return null
+              const elegido = colorDeTexto(it.descripcion, cols)
+              return <div className="pvCtrl pvColores">
+                <label>Color</label>
+                <div className="pvChips">
+                  {cols.map((c) => <button type="button" key={c.color} className={elegido === c.color ? 'on' : ''} onClick={() => cambiarItem(it._k, { descripcion: `${sinColor(it.descripcion, cols)} (${c.color})` })}>
+                    <i className="pvColDot" style={{ background: hexColor(c.color) ?? '#cfd5de' }} />{c.color} <small>{c.stock > 0 ? `${c.stock} en stock` : 'sin stock'}</small>
+                  </button>)}
+                  {elegido && <button type="button" onClick={() => cambiarItem(it._k, { descripcion: sinColor(it.descripcion, cols) })}>Sin aclarar</button>}
+                </div>
+              </div>
+            })()}
             <div className="pvCtrl">
               <label>Tipo</label>
               <div className="pvChips">
