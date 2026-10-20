@@ -15,8 +15,9 @@ import CompararMercado, { type ProductoAComparar } from './CompararMercado'
 import HistorialPrecios, { ListaHistorialPrecios } from './HistorialPrecios'
 import OrdenarCatalogoIA from './OrdenarCatalogoIA'
 import CampoNumero from './CampoNumero'
-import { CATEGORIAS_PRODUCTO, COLORES, esCategoriaApp, hexColor, leerColores, sugerirCategoria, sugerirColor, type ColorStock } from './categoriasApp'
+import { COLORES, esCategoriaApp, fijarCategorias, useCategoriasProducto, hexColor, leerColores, sugerirCategoria, sugerirColor, type ColorStock } from './categoriasApp'
 import IconoCategoria from './IconoCategoria'
+import EditarCategorias from './EditarCategorias'
 import ProductosEnPagina from './ProductosEnPagina'
 
 export type ProductoServicio = {
@@ -119,6 +120,10 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
   const [mostrarCotizacion, setMostrarCotizacion] = useState(false)
   const [mostrarOrdenar, setMostrarOrdenar] = useState(false)
   const [ordenarCategorias, setOrdenarCategorias] = useState(false)
+  // Categorías: lista editable y desplegable (cerrado, para no llenar la pantalla).
+  const cats = useCategoriasProducto()
+  const [catAbierto, setCatAbierto] = useState(false)
+  const [editarCats, setEditarCats] = useState(false)
   const [ordenDisponible, setOrdenDisponible] = useState(false)
   const [reordenando, setReordenando] = useState(false)
   const [arrastrando, setArrastrando] = useState<number | null>(null)
@@ -176,6 +181,10 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
   const [eliminandoMasivo, setEliminandoMasivo] = useState(false)
 
   useEffect(() => { cargarCatalogo() }, [])
+  useEffect(() => {
+    void supabase.from('configuracion').select('valor').eq('clave', 'categorias_producto').maybeSingle()
+      .then(({ data }) => { if (data?.valor) fijarCategorias(data.valor) })
+  }, [])
 
   async function cargarCatalogo() {
     setCargando(true)
@@ -899,10 +908,23 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
             <button type="button" className={`catTipo${fCategoria === 'todas' && tipoFiltro === 'producto' ? ' active' : ''}`} onClick={() => { setTipoFiltro('producto'); setFCategoria('todas') }}>{<IconoCategoria nombre="Productos" tamano={13} conFondo />}Productos <b>{prodsEstado.length}</b></button>
             <button type="button" className={`catTipo${tipoFiltro === 'servicio' && fCategoria === 'todas' ? ' active' : ''}`} onClick={() => { setTipoFiltro('servicio'); setFCategoria('todas') }}>{<IconoCategoria nombre="Servicios" tamano={13} conFondo />}Servicios <b>{servsEstado.length}</b></button>
           </div>
-          {tipoFiltro !== 'servicio' ? <div className="prodChips catSub" aria-label="Categorías de productos">
-            {CATEGORIAS_PRODUCTO.map((c) => { const n = prodsEstado.filter((el) => el.categoria?.trim() === c.nombre).length; return <button type="button" key={c.nombre} className={`${fCategoria === c.nombre ? 'active' : ''}${n ? '' : ' vacia'}`} onClick={() => elegirCategoria(c.nombre, 'producto')}>{<IconoCategoria nombre={c.nombre} tamano={13} conFondo />}{c.nombre} <b>{n}</b></button> })}
-            {sinCategoriaApp > 0 && <button type="button" className={`catSin${fCategoria === '__sinApp' ? ' active' : ''}`} onClick={() => elegirCategoria('__sinApp', 'producto')}>{<IconoCategoria nombre="sin" tamano={13} conFondo />}Sin categoría <b>{sinCategoriaApp}</b></button>}
-            {sinCategoriaApp > 0 && <button type="button" className="catOrdenar" onClick={() => setOrdenarCategorias(true)}>Asignar categoría a {sinCategoriaApp}</button>}
+          {tipoFiltro !== 'servicio' ? <div className="catDesp">
+            <div className="catDespBarra">
+              <button type="button" className={`catDespBtn${catAbierto ? ' on' : ''}${fCategoria !== 'todas' ? ' sel' : ''}`} aria-expanded={catAbierto} onClick={() => setCatAbierto((v) => !v)}>
+                <IconoCategoria nombre={fCategoria === 'todas' ? 'Todo' : fCategoria === '__sinApp' ? 'sin' : fCategoria} tamano={13} conFondo />
+                <span>{fCategoria === 'todas' ? 'Categorías' : fCategoria === '__sinApp' ? 'Sin categoría' : fCategoria}</span>
+                {fCategoria !== 'todas' && <b>{fCategoria === '__sinApp' ? sinCategoriaApp : prodsEstado.filter((el) => el.categoria?.trim() === fCategoria).length}</b>}
+                {fCategoria === 'todas' && sinCategoriaApp > 0 && <em>{sinCategoriaApp} sin categoría</em>}
+                <svg className="catDespFlecha" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+              </button>
+              {fCategoria !== 'todas' && <button type="button" className="catDespQuitar" onClick={() => setFCategoria('todas')} aria-label="Ver todas las categorías">✕</button>}
+              <button type="button" className="catDespEditar" onClick={() => setEditarCats(true)}>✎ Editar categorías</button>
+            </div>
+            {catAbierto && <div className="prodChips catSub" aria-label="Categorías de productos">
+              {cats.map((c) => { const n = prodsEstado.filter((el) => el.categoria?.trim() === c.nombre).length; return <button type="button" key={c.nombre} className={`${fCategoria === c.nombre ? 'active' : ''}${n ? '' : ' vacia'}`} onClick={() => { elegirCategoria(c.nombre, 'producto'); setCatAbierto(false) }}>{<IconoCategoria nombre={c.nombre} tamano={13} conFondo />}{c.nombre} <b>{n}</b></button> })}
+              {sinCategoriaApp > 0 && <button type="button" className={`catSin${fCategoria === '__sinApp' ? ' active' : ''}`} onClick={() => { elegirCategoria('__sinApp', 'producto'); setCatAbierto(false) }}>{<IconoCategoria nombre="sin" tamano={13} conFondo />}Sin categoría <b>{sinCategoriaApp}</b></button>}
+              {sinCategoriaApp > 0 && <button type="button" className="catOrdenar" onClick={() => setOrdenarCategorias(true)}>Asignar categoría a {sinCategoriaApp}</button>}
+            </div>}
           </div> : chipsServicios.length > 1 && <div className="prodChips catSub" aria-label="Categorías de servicios">
             {chipsServicios.map(([c, n]) => <button type="button" key={c} className={fCategoria === c ? 'active' : ''} onClick={() => elegirCategoria(c, 'servicio')}>{c} <b>{n}</b></button>)}
           </div>}
@@ -1017,7 +1039,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                   <td>{el.tipo === 'producto'
                     ? <select value={el.categoria ?? ''} onChange={(e) => { const v = e.target.value || null; actualizarCampoLocal(el.id, 'categoria', v); void persistirCampo(el.id, 'categoria', v) }} style={{ width: '140px' }}>
                         <option value="">Sin categoría</option>
-                        {CATEGORIAS_PRODUCTO.map((c) => <option key={c.nombre} value={c.nombre}>{c.nombre}</option>)}
+                        {cats.map((c) => <option key={c.nombre} value={c.nombre}>{c.nombre}</option>)}
                         {el.categoria && !esCategoriaApp(el.categoria) && <option value={el.categoria}>{el.categoria} (vieja)</option>}
                       </select>
                     : <input value={el.categoria ?? ''} onChange={(e) => actualizarCampoLocal(el.id, 'categoria', e.target.value)} onBlur={(e) => persistirCampo(el.id, 'categoria', e.target.value.trim() || null)} style={{ width: '120px' }} list="catServicios" />}</td>
@@ -1068,6 +1090,10 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
 
       {mercado && <CompararMercado titulo={mercado.titulo} productos={mercado.productos} onCerrar={() => setMercado(null)} onCambioCatalogo={() => void cargarCatalogo()} />}
       {historial && <HistorialPrecios producto={historial} onCerrar={() => setHistorial(null)} />}
+      {editarCats && <EditarCategorias
+        productos={elementos.filter((el) => el.tipo === 'producto')}
+        onCerrar={() => setEditarCats(false)}
+        onGuardado={(cambios) => { setElementos((arr) => arr.map((el) => (el.id in cambios ? { ...el, categoria: cambios[el.id] } : el))); setFCategoria('todas'); setEditarCats(false) }} />}
       {ordenarCategorias && <OrdenarCategorias
         productos={elementos.filter((el) => el.tipo === 'producto' && !esCategoriaApp(el.categoria))}
         conColor={colorDisponible}
@@ -1111,7 +1137,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                 {tipo === 'producto'
                   ? <label>Categoría<select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
                       <option value="">Sin categoría</option>
-                      {CATEGORIAS_PRODUCTO.map((c) => <option key={c.nombre} value={c.nombre}>{c.nombre}</option>)}
+                      {cats.map((c) => <option key={c.nombre} value={c.nombre}>{c.nombre}</option>)}
                       {categoria && !esCategoriaApp(categoria) && <option value={categoria}>{categoria} (vieja)</option>}
                     </select>
                     {!esCategoriaApp(categoria) && sugerirCategoria(nombre, categoria) && <button type="button" className="catSugerida" onClick={() => setCategoria(sugerirCategoria(nombre, categoria)!)}>Sugerida: {sugerirCategoria(nombre, categoria)} · usar</button>}</label>
@@ -1371,6 +1397,7 @@ function StockRotacion({ elementos, ventas, diasVendidos, diasParado, onDiasVend
 // Pasar los productos a las categorías de la app: propone una según el nombre
 // (y la categoría vieja) y se puede cambiar antes de guardar.
 function OrdenarCategorias({ productos, conColor, onCerrar, onGuardado }: { productos: ProductoServicio[]; conColor: boolean; onCerrar: () => void; onGuardado: (cambios: Record<number, string>, colores: Record<number, string>) => void }) {
+  const cats = useCategoriasProducto()
   // El color (si corresponde) también se propone según el nombre.
   const [colores, setColores] = useState<Record<number, string>>(() => Object.fromEntries(productos.map((p) => [p.id, p.color ?? sugerirColor(p.nombre) ?? ''])))
   const [elegidas, setElegidas] = useState<Record<number, string>>(() => Object.fromEntries(productos.map((p) => [p.id, sugerirCategoria(p.nombre, p.categoria ?? '') ?? ''])))
@@ -1401,7 +1428,7 @@ function OrdenarCategorias({ productos, conColor, onCerrar, onGuardado }: { prod
             <div><b>{p.nombre}</b><small>{p.categoria ? `Antes: ${p.categoria}` : 'Sin categoría'}</small></div>
             <select value={elegidas[p.id] ?? ''} onChange={(e) => setElegidas((m) => ({ ...m, [p.id]: e.target.value }))} aria-label={`Categoría de ${p.nombre}`}>
               <option value="">Sin categoría</option>
-              {CATEGORIAS_PRODUCTO.map((c) => <option key={c.nombre} value={c.nombre}>{c.nombre}</option>)}
+              {cats.map((c) => <option key={c.nombre} value={c.nombre}>{c.nombre}</option>)}
             </select>
             {conColor && <select className="catColor" value={colores[p.id] ?? ''} onChange={(e) => setColores((m) => ({ ...m, [p.id]: e.target.value }))} aria-label={`Color de ${p.nombre}`}>
               <option value="">Sin color</option>
