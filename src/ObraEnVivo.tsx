@@ -25,10 +25,19 @@ const fechaChica = (f: string) => new Date(`${f.slice(0, 10)}T00:00:00`).toLocal
 // Línea de avances tocable
 // ---------------------------------------------------------------------------
 
+// Avance por ítem: cada ítem pesa según lo que vale hoy (los quitados no cuentan).
+export type AvanceItems = { porcentaje: number; titulo: string; descripcion: string; tramos: { desc: string; peso: number; av: number }[] }
+const textoAvance = (av: number, cantidad: number) => {
+  if (cantidad > 1 && Number.isInteger(cantidad) && cantidad <= 50) return `${Math.round(cantidad * av / 100)} de ${cantidad}`
+  return av >= 100 ? 'terminado' : av <= 0 ? 'sin empezar' : 'en curso'
+}
+const COLORES_AVANCE = ['#e47b00', '#2f6fd6', '#7c5cff', '#12a06a', '#d9483f', '#0e8fb5', '#d4880f', '#8b5cf6']
+
 type AvanceLinea = { id: number; fecha: string; titulo: string; porcentaje: number; estado: string }
 
-export function LineaAvances({ avances, cargando, terminada, onTocar, onNuevo, onInforme, onVerTodo }: {
+export function LineaAvances({ avances, cargando, terminada, onTocar, onNuevo, onInforme, onVerTodo, porItems }: {
   avances: AvanceLinea[] // más reciente primero
+  porItems?: AvanceItems | null // si se marca el avance de cada ítem, la línea sale de ahí
   cargando: boolean
   terminada: boolean
   onTocar: (id: number) => void
@@ -68,7 +77,16 @@ export function LineaAvances({ avances, cargando, terminada, onTocar, onNuevo, o
         </>}
       </div>
     )}
-    <small className="oeAyuda">Tocá un punto para corregirlo o ＋ para cargar el de hoy.</small>
+    {porItems && <div className="oeAvRes">
+      <div className="oeAvResCab">
+        <b className="oeAvNum">{porItems.porcentaje}<small>%</small></b>
+        <span><b>Avance de la obra, por ítems</b><small>{porItems.tramos.filter((x) => x.av >= 100).length} de {porItems.tramos.length} terminados · cada ítem pesa según lo que vale</small></span>
+      </div>
+      <div className="oeAvBarra" role="img" aria-label={`Avance por ítems: ${porItems.porcentaje}%`}>
+        {porItems.tramos.map((x, i) => <span key={i} style={{ flexGrow: x.peso, ['--c' as string]: COLORES_AVANCE[i % COLORES_AVANCE.length] }} title={`${x.desc} · ${Math.round(x.av)}%`}><i style={{ width: `${x.av}%` }} /></span>)}
+      </div>
+    </div>}
+    <small className="oeAyuda">{porItems ? 'Se actualiza solo al marcar el avance de cada ítem del presupuesto (tocá el ítem). Tocá un punto para corregirlo.' : 'Tocá un punto para corregirlo o ＋ para cargar el de hoy.'}</small>
   </section>
 }
 
@@ -106,15 +124,8 @@ function estadoDe(item: Item, adicionales: Adicional[]): EstadoItem {
   return { descripcion: ultimo.descripcion, cantidad: ultimo.cantidad_nueva ?? base.cantidad, precio: ultimo.precio_nuevo ?? base.precio, quitado: false, modificado: true, pendiente, cambio: ultimo }
 }
 
-// Avance por ítem: cada ítem pesa según lo que vale hoy (los quitados no cuentan).
-export type AvanceItems = { porcentaje: number; titulo: string; descripcion: string }
-const textoAvance = (av: number, cantidad: number) => {
-  if (cantidad > 1 && Number.isInteger(cantidad) && cantidad <= 50) return `${Math.round(cantidad * av / 100)} de ${cantidad}`
-  return av >= 100 ? 'terminado' : av <= 0 ? 'sin empezar' : 'en curso'
-}
-const COLORES_AVANCE = ['#e47b00', '#2f6fd6', '#7c5cff', '#12a06a', '#d9483f', '#0e8fb5', '#d4880f', '#8b5cf6']
-
-export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGanancia, avanceObra, onAvanceItems, onCargarAvance }: { obraId: number; onCambio: () => void; onVerHistorial: () => void; onGanancia?: (g: number) => void; avanceObra?: number; onAvanceItems?: (a: AvanceItems | null) => void; onCargarAvance?: (a: AvanceItems) => void }) {
+// onAvanceItems: el avance calculado (para la línea). onAvanceCambiado: se marcó el avance de un ítem (la obra se actualiza sola).
+export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGanancia, avanceObra, onAvanceItems, onAvanceCambiado }: { obraId: number; onCambio: () => void; onVerHistorial: () => void; onGanancia?: (g: number) => void; avanceObra?: number; onAvanceItems?: (a: AvanceItems | null) => void; onAvanceCambiado?: (a: AvanceItems) => void }) {
   const [presus, setPresus] = useState<Presu[]>([])
   const [items, setItems] = useState<Item[]>([])
   const [adicionales, setAdicionales] = useState<Adicional[]>([])
@@ -188,9 +199,16 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
     porcentaje: Math.round(avanceTotal),
     titulo: 'Avance por ítems',
     descripcion: pesos.filter((x) => x.peso > 0).map((x) => `${x.desc}: ${x.av >= 100 ? 'terminado' : `${Math.round(x.av)}%`}`).join('\n'),
+    tramos: pesos.filter((x) => x.peso > 0).map((x) => ({ desc: x.desc, peso: x.peso, av: x.av })),
   } : null
   const claveResumen = resumenAvance ? `${resumenAvance.porcentaje}|${resumenAvance.descripcion}` : ''
-  useEffect(() => { onAvanceItems?.(resumenAvance) }, [claveResumen]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Solo cuando se cambia un ítem (no al abrir) se actualiza la línea de avances y la obra.
+  const cambioPropio = useRef(false)
+  useEffect(() => {
+    onAvanceItems?.(resumenAvance)
+    if (cambioPropio.current && resumenAvance) onAvanceCambiado?.(resumenAvance)
+    cambioPropio.current = false
+  }, [claveResumen]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => onAvanceItems?.(null), []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function cambiarAvance(itemId: number, valor: number) {
@@ -199,9 +217,18 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
     const nuevo = Math.max(0, Math.min(100, Math.round(valor)))
     if (nuevo === antes) return
     setErrorAv('')
-    setAvances((m) => ({ ...(m ?? {}), [itemId]: nuevo }))
     const { error: fallo } = await supabase.from('presupuesto_items').update({ avance: nuevo }).eq('id', itemId)
-    if (fallo) { console.error(fallo); setErrorAv('No se pudo guardar el avance del ítem. Volvé a intentar.'); setAvances((m) => ({ ...(m ?? {}), [itemId]: antes })) }
+    if (fallo) { console.error(fallo); setErrorAv('No se pudo guardar el avance del ítem. Volvé a intentar.'); return }
+    cambioPropio.current = true
+    setAvances((m) => ({ ...m, [itemId]: nuevo }))
+  }
+  // Para arrancar: todos los ítems con el avance que ya tenía la obra.
+  async function arrancarCon(pct: number) {
+    const ids = items.map((it) => it.id)
+    const { error: fallo } = await supabase.from('presupuesto_items').update({ avance: pct }).in('id', ids)
+    if (fallo) { console.error(fallo); setErrorAv('No se pudo guardar. Volvé a intentar.'); return }
+    cambioPropio.current = true
+    setAvances(Object.fromEntries(ids.map((id) => [id, pct])))
   }
 
   // Control del avance de un ítem (se guarda al tocar, no es una modificación del presupuesto).
@@ -470,17 +497,10 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
         </div>
       ))}
     </div>}
-    {avances && pesoTotal > 0 && <div className="oeAvRes">
-      <div className="oeAvResCab">
-        <b className="oeAvNum">{Math.round(avanceTotal)}<small>%</small></b>
-        <span><b>Avance por ítems</b><small>{pesos.filter((x) => x.peso > 0 && x.av >= 100).length} de {pesos.filter((x) => x.peso > 0).length} terminados · cada ítem pesa según lo que vale</small></span>
-      </div>
-      <div className="oeAvBarra" role="img" aria-label={`Avance por ítems: ${Math.round(avanceTotal)}%`}>
-        {pesos.filter((x) => x.peso > 0).map((x, i) => <span key={x.it.id} style={{ flexGrow: x.peso, ['--c' as string]: COLORES_AVANCE[i % COLORES_AVANCE.length] }} title={`${x.desc} · ${Math.round(x.av)}%`}><i style={{ width: `${x.av}%` }} /></span>)}
-      </div>
-      {!conAvance.length
-        ? <small className="oeAyuda">Tocá cada ítem y marcá cuánto lleva: el avance de la obra sale de acá.</small>
-        : onCargarAvance && resumenAvance && Math.round(avanceTotal) !== Math.round(avanceObra ?? -1) && <button type="button" className="oeAvCargar" onClick={() => onCargarAvance(resumenAvance)}>Cargar {Math.round(avanceTotal)}% en la línea de avances<small>la obra está en {Math.round(avanceObra ?? 0)}%: así se actualiza también lo que falta cobrar</small></button>}
+    {avances && pesoTotal > 0 && !conAvance.length && <div className="oeAvEmpezar">
+      <span><b>Avance por ítem</b><small>Tocá cada ítem y marcá cuánto lleva: el avance de la obra y lo que falta cobrar salen solos de ahí.</small></span>
+      {(avanceObra ?? 0) > 0 && (avanceObra ?? 0) < 100 && <button type="button" onClick={() => void arrancarCon(Math.round(avanceObra ?? 0))}>Arrancar con todos en {Math.round(avanceObra ?? 0)}%<small>y después ajustás cada uno</small></button>}
+      {errorAv && <p role="alert" className="oeError">{errorAv}</p>}
     </div>}
     <small className="oeAyuda">Tocá un ítem para marcar su avance o cambiarlo (el cambio queda como modificación y el total se recalcula).</small>
     {pendientes.length > 0 && <p className="oeAviso pend">⏳ {pendientes.length === 1 ? '1 cambio espera' : `${pendientes.length} cambios esperan`} aprobación del cliente ({conSigno(totalPend)}). Todavía no suman.</p>}
