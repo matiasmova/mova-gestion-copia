@@ -15,7 +15,7 @@ import AdicionalesObra from './AdicionalesObra'
 import PersonalObra from './PersonalObra'
 import RentabilidadObra from './RentabilidadObra'
 import AccesosObra from './AccesosObra'
-import { LineaAvances, PresupuestoVivoObra } from './ObraEnVivo'
+import { LineaAvances, PresupuestoVivoObra, type AvanceItems } from './ObraEnVivo'
 import ResumenObra, { DonaAvance, PresupuestoDocumento, TITULO_SECCION, type TabSeguimiento } from './ResumenObra'
 import VistaToggle, { useVista } from './VistaToggle'
 import './obrasCard.css'
@@ -379,7 +379,9 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
     setImagenes(conUrls)
   }
 
-  function abrirNuevoAvance(porcentaje?: number) {
+  // Avance calculado por ítems (si se cargó en el presupuesto): se propone al cargar el de hoy.
+  const [avanceItems, setAvanceItems] = useState<AvanceItems | null>(null)
+  function abrirNuevoAvance(porcentaje?: number, desdeItems?: AvanceItems | null) {
     setFotoAvance(null)
     setEditandoAvanceId(null)
     setFormularioAvance({
@@ -387,6 +389,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
       fecha: new Date().toISOString().slice(0, 10),
       estado: (obraSeguimiento?.estado as EstadoObra) ?? 'en_proceso',
       porcentaje: porcentaje ?? Number(obraSeguimiento?.porcentaje_avance || 0),
+      ...(desdeItems ? { titulo: desdeItems.titulo, descripcion: desdeItems.descripcion } : {}),
       ...(porcentaje != null && porcentaje >= 100 ? { estado: 'finalizada' as EstadoObra, titulo: 'Obra terminada' } : {}),
     })
     setMostrarNuevoAvance(true)
@@ -1125,7 +1128,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                 cargando={cargandoAvances}
                 terminada={obraTerminada(obraSeguimiento)}
                 onTocar={(id) => { const a = avances.find((x) => x.id === id); if (a) editarAvance(a) }}
-                onNuevo={(pct) => abrirNuevoAvance(pct)}
+                onNuevo={(pct) => (pct == null && avanceItems ? abrirNuevoAvance(avanceItems.porcentaje, avanceItems) : abrirNuevoAvance(pct))}
                 onInforme={puedeInformeIA ? () => setInformeIA(obraSeguimiento) : undefined}
                 onVerTodo={() => setSeguTab('timeline')}
               />}
@@ -1139,7 +1142,8 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                 return null
               })()}
             >
-              {presupuestoAceptado && <PresupuestoVivoObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} onCambio={() => setActualizacion((v) => v + 1)} onVerHistorial={() => setSeguTab('adicionales')} onGanancia={setGananciaObra} />}
+              {presupuestoAceptado && <PresupuestoVivoObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} onCambio={() => setActualizacion((v) => v + 1)} onVerHistorial={() => setSeguTab('adicionales')} onGanancia={setGananciaObra}
+                avanceObra={Number(obraSeguimiento.porcentaje_avance) || 0} onAvanceItems={setAvanceItems} onCargarAvance={(a) => abrirNuevoAvance(a.porcentaje, a)} />}
             </ResumenObra>}
 
             {/* Hoja de abajo: enviar el PDF al cliente sin salir de la obra */}

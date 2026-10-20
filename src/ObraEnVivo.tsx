@@ -106,7 +106,15 @@ function estadoDe(item: Item, adicionales: Adicional[]): EstadoItem {
   return { descripcion: ultimo.descripcion, cantidad: ultimo.cantidad_nueva ?? base.cantidad, precio: ultimo.precio_nuevo ?? base.precio, quitado: false, modificado: true, pendiente, cambio: ultimo }
 }
 
-export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGanancia }: { obraId: number; onCambio: () => void; onVerHistorial: () => void; onGanancia?: (g: number) => void }) {
+// Avance por ítem: cada ítem pesa según lo que vale hoy (los quitados no cuentan).
+export type AvanceItems = { porcentaje: number; titulo: string; descripcion: string }
+const textoAvance = (av: number, cantidad: number) => {
+  if (cantidad > 1 && Number.isInteger(cantidad) && cantidad <= 50) return `${Math.round(cantidad * av / 100)} de ${cantidad}`
+  return av >= 100 ? 'terminado' : av <= 0 ? 'sin empezar' : 'en curso'
+}
+const COLORES_AVANCE = ['#e47b00', '#2f6fd6', '#7c5cff', '#12a06a', '#d9483f', '#0e8fb5', '#d4880f', '#8b5cf6']
+
+export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGanancia, avanceObra, onAvanceItems, onCargarAvance }: { obraId: number; onCambio: () => void; onVerHistorial: () => void; onGanancia?: (g: number) => void; avanceObra?: number; onAvanceItems?: (a: AvanceItems | null) => void; onCargarAvance?: (a: AvanceItems) => void }) {
   const [presus, setPresus] = useState<Presu[]>([])
   const [items, setItems] = useState<Item[]>([])
   const [adicionales, setAdicionales] = useState<Adicional[]>([])
@@ -121,6 +129,9 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
   const [verCambios, setVerCambios] = useState(false)
   // Comparar con el mercado: todo el presupuesto (solo para ver) o el ítem que se está editando.
   const [mercado, setMercado] = useState<{ productos: ProductoAComparar[]; deItem: boolean } | null>(null)
+  // Avance de cada ítem (columna "avance", fase 40). null = falta el SQL.
+  const [avances, setAvances] = useState<Record<number, number> | null>({})
+  const [errorAv, setErrorAv] = useState('')
 
   useEffect(() => {
     let vigente = true
@@ -139,6 +150,9 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
         if (!vigente) return
         if (rItems.error) console.error(rItems.error)
         filas = (rItems.data ?? []).map((it) => ({ ...it, cantidad: Number(it.cantidad), precio_unitario: Number(it.precio_unitario), descuento_pct: Number(it.descuento_pct ?? 0) })) as Item[]
+        const rAv = await supabase.from('presupuesto_items').select('id, avance').in('presupuesto_id', aceptados.map((p) => p.id))
+        if (!vigente) return
+        setAvances(rAv.error ? null : Object.fromEntries(((rAv.data ?? []) as { id: number; avance: number | null }[]).map((x) => [x.id, Number(x.avance) || 0])))
       }
       setPresus(aceptados)
       setItems(filas)
@@ -161,6 +175,54 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
       setCatalogo(((r.data ?? []) as Producto[]).map((p) => ({ ...p, precio_venta: Number(p.precio_venta) || 0 })))
     })()
   }, [edicion, catalogo])
+
+  // Peso de cada ítem: lo que vale hoy con los cambios aprobados.
+  const pesos = items.map((it) => {
+    const v = estadoDe(it, adicionales.filter((a) => a.estado !== 'pendiente'))
+    return { it, peso: v.quitado ? 0 : Math.max(0, v.cantidad * v.precio), av: avances?.[it.id] ?? 0, desc: v.descripcion.split('\n')[0], cantidad: v.cantidad }
+  })
+  const pesoTotal = pesos.reduce((s, x) => s + x.peso, 0)
+  const avanceTotal = pesoTotal > 0 ? pesos.reduce((s, x) => s + x.peso * x.av, 0) / pesoTotal : 0
+  const conAvance = pesos.filter((x) => x.av > 0)
+  const resumenAvance: AvanceItems | null = avances && conAvance.length ? {
+    porcentaje: Math.round(avanceTotal),
+    titulo: 'Avance por ítems',
+    descripcion: pesos.filter((x) => x.peso > 0).map((x) => `${x.desc}: ${x.av >= 100 ? 'terminado' : `${Math.round(x.av)}%`}`).join('\n'),
+  } : null
+  const claveResumen = resumenAvance ? `${resumenAvance.porcentaje}|${resumenAvance.descripcion}` : ''
+  useEffect(() => { onAvanceItems?.(resumenAvance) }, [claveResumen]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => onAvanceItems?.(null), []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function cambiarAvance(itemId: number, valor: number) {
+    if (!avances) return
+    const antes = avances[itemId] ?? 0
+    const nuevo = Math.max(0, Math.min(100, Math.round(valor)))
+    if (nuevo === antes) return
+    setErrorAv('')
+    setAvances((m) => ({ ...(m ?? {}), [itemId]: nuevo }))
+    const { error: fallo } = await supabase.from('presupuesto_items').update({ avance: nuevo }).eq('id', itemId)
+    if (fallo) { console.error(fallo); setErrorAv('No se pudo guardar el avance del ítem. Volvé a intentar.'); setAvances((m) => ({ ...(m ?? {}), [itemId]: antes })) }
+  }
+
+  // Control del avance de un ítem (se guarda al tocar, no es una modificación del presupuesto).
+  function controlAvance(it: Item) {
+    if (!avances) return <div className="oeAvCtrl"><small className="oeAyuda">Para cargar el avance de cada ítem falta correr en Supabase el SQL <b>supabase-avance-items-fase-40.sql</b>.</small></div>
+    const av = avances[it.id] ?? 0
+    const cant = Number(estadoDe(it, adicionales).cantidad) || 0
+    const porUnidad = cant > 1 && Number.isInteger(cant) && cant <= 20
+    return <div className="oeAvCtrl">
+      <div className="oeAvCab"><b>Avance de este ítem</b><span>{Math.round(av)}% · {textoAvance(av, cant)}</span></div>
+      <div className="oeAvChips">
+        {porUnidad
+          ? Array.from({ length: cant + 1 }, (_, k) => { const p = Math.round(k / cant * 100); return <button key={k} type="button" className={`${Math.round(av) === p ? 'on' : ''}${k === cant ? ' fin' : ''}`} onClick={() => void cambiarAvance(it.id, p)}>{k}</button> })
+          : [0, 25, 50, 75, 100].map((p) => <button key={p} type="button" className={`${Math.round(av) === p ? 'on' : ''}${p === 100 ? ' fin' : ''}`} onClick={() => void cambiarAvance(it.id, p)}>{p === 100 ? 'Terminado' : `${p}%`}</button>)}
+        {porUnidad && <small>colocados de {cant}</small>}
+      </div>
+      <input type="range" min={0} max={100} step={5} defaultValue={av} key={av} aria-label="Avance del ítem" onPointerUp={(e) => void cambiarAvance(it.id, Number(e.currentTarget.value))} onKeyUp={(e) => void cambiarAvance(it.id, Number(e.currentTarget.value))}
+        onChange={(e) => { const sp = e.currentTarget.parentElement?.querySelector('.oeAvCab span'); if (sp) sp.textContent = `${e.currentTarget.value}% · arrastrá y soltá` }} />
+      {errorAv && <p role="alert" className="oeError">{errorAv}</p>}
+    </div>
+  }
 
   if (cargando) return <section className="oeDoc"><p className="oeCargando">Cargando presupuesto…</p></section>
   if (error) return <section className="oeDoc"><p role="alert" className="oeError">{error}</p></section>
@@ -408,7 +470,19 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
         </div>
       ))}
     </div>}
-    <small className="oeAyuda">Tocá un ítem para cambiarlo: queda como modificación y el total se recalcula.</small>
+    {avances && pesoTotal > 0 && <div className="oeAvRes">
+      <div className="oeAvResCab">
+        <b className="oeAvNum">{Math.round(avanceTotal)}<small>%</small></b>
+        <span><b>Avance por ítems</b><small>{pesos.filter((x) => x.peso > 0 && x.av >= 100).length} de {pesos.filter((x) => x.peso > 0).length} terminados · cada ítem pesa según lo que vale</small></span>
+      </div>
+      <div className="oeAvBarra" role="img" aria-label={`Avance por ítems: ${Math.round(avanceTotal)}%`}>
+        {pesos.filter((x) => x.peso > 0).map((x, i) => <span key={x.it.id} style={{ flexGrow: x.peso, ['--c' as string]: COLORES_AVANCE[i % COLORES_AVANCE.length] }} title={`${x.desc} · ${Math.round(x.av)}%`}><i style={{ width: `${x.av}%` }} /></span>)}
+      </div>
+      {!conAvance.length
+        ? <small className="oeAyuda">Tocá cada ítem y marcá cuánto lleva: el avance de la obra sale de acá.</small>
+        : onCargarAvance && resumenAvance && Math.round(avanceTotal) !== Math.round(avanceObra ?? -1) && <button type="button" className="oeAvCargar" onClick={() => onCargarAvance(resumenAvance)}>Cargar {Math.round(avanceTotal)}% en la línea de avances<small>la obra está en {Math.round(avanceObra ?? 0)}%: así se actualiza también lo que falta cobrar</small></button>}
+    </div>}
+    <small className="oeAyuda">Tocá un ítem para marcar su avance o cambiarlo (el cambio queda como modificación y el total se recalcula).</small>
     {pendientes.length > 0 && <p className="oeAviso pend">⏳ {pendientes.length === 1 ? '1 cambio espera' : `${pendientes.length} cambios esperan`} aprobación del cliente ({conSigno(totalPend)}). Todavía no suman.</p>}
 
     {presus.map((p) => {
@@ -431,9 +505,11 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
               <span className="oeTx"><b>{e.descripcion}{marca(e)}</b><small>{vigente.quitado ? 'Se quita' : !vigente.modificado && Number(it.descuento_pct) > 0
                   ? <>{Number(it.cantidad).toLocaleString('es-AR')} × {plata(it.precio_unitario)}<span className="pvPct">−{Number(it.descuento_pct)}%</span><span className="pvCU">= {plata(precioNeto(it))} c/u</span></>
                   : `${Number(vigente.cantidad).toLocaleString('es-AR')} × ${plata(vigente.precio)}`}</small>
-                {e.pendiente && <small className="oePropuesto">Propuesto: {e.quitado ? 'quitarlo' : `${Number(e.cantidad).toLocaleString('es-AR')} × ${plata(e.precio)} = ${plata(e.cantidad * e.precio)}`}</small>}</span>
+                {e.pendiente && <small className="oePropuesto">Propuesto: {e.quitado ? 'quitarlo' : `${Number(e.cantidad).toLocaleString('es-AR')} × ${plata(e.precio)} = ${plata(e.cantidad * e.precio)}`}</small>}
+                {avances && !vigente.quitado && (() => { const av = avances[it.id] ?? 0; return <span className={`oeAvFila${av >= 100 ? ' fin' : ''}`}><span className="oeAvMini"><i style={{ width: `${av}%` }} /></span><small>{av >= 100 ? '✓ ' : ''}{Math.round(av)}% · {textoAvance(av, Number(vigente.cantidad) || 0)}</small></span> })()}</span>
               <span className="pvImp">{plata(ahora)}{vigente.modificado && Math.abs(ahora - original) > 0.5 && <s>{plata(original)}</s>}</span>
             </button>
+            {abierto && !pregunta && controlAvance(it)}
             {abierto && panel()}
           </div>
         })}
