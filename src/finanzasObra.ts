@@ -89,7 +89,7 @@ export function useFinanzasObra(obraId: number | null, clave: string | number) {
 
 const redondear = (n: number) => Math.round(n * 100) / 100
 
-// Cobro exigible por acuerdo 70/30. El avance permanece como dato informativo.
+// Cobro exigible por acuerdo 60/40. El avance permanece como dato informativo.
 // Los reintegros pendientes se exigen completos. hastaFecha solo filtra pagos;
 // no reconstruye un estado histórico del contrato.
 export function situacionCobro(

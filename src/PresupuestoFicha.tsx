@@ -508,7 +508,7 @@ export default function PresupuestoFicha({
               <div><small>TOTAL</small><b><Cifra valor={presupuesto.total} formato={moneda} /></b></div>
               {pagos.length
                 ? <div><small>COBRADO</small><b>{moneda(pagos.reduce((s, p) => s + p.monto, 0))}</b></div>
-                : <div><small>SEÑA 70%</small><b>{moneda(Math.round(Number(presupuesto.total) * 70) / 100)}</b></div>}
+                : <div><small>SEÑA 60%</small><b>{moneda(Math.round(Number(presupuesto.total) * 60) / 100)}</b></div>}
             </div>
           )}
 

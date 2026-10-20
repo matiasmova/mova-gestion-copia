@@ -127,7 +127,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
   const validos = items.filter((it) => it.descripcion.trim())
   const sumaNeta = validos.reduce((s, it) => s + importeNeto(it), 0)
   const total = Math.max(0, redondear(sumaNeta - Math.min(bonificacion, sumaNeta)))
-  const sena = Math.round(total * 70) / 100
+  const sena = Math.round(total * 60) / 100
 
   // ---------- Guardado automático (de a uno por vez) ----------
   const ocupado = useRef(false)
@@ -476,7 +476,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
           <div className="pvNums">
             <div><small>TOTAL</small><b>{moneda(total)}</b></div>
             <button type="button" onClick={() => setPestana('gan')}><small>VAS A GANAR ›</small><b>{ganancia == null ? '…' : moneda(ganancia)}</b></button>
-            <div><small>SEÑA 70%</small><b>{moneda(sena)}</b></div>
+            <div><small>SEÑA 60%</small><b>{moneda(sena)}</b></div>
           </div>
           <div className="pvTabs" role="tablist">
             <button type="button" role="tab" aria-selected={pestana === 'doc'} className={pestana === 'doc' ? 'on' : ''} onClick={() => setPestana('doc')}>📄 Presupuesto</button>
@@ -517,7 +517,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
 
           <div className="pvTotal">
             <div><small>TOTAL DEL PRESUPUESTO</small><b>{moneda(total)}</b>{bonificacion > 0.5 && <span>Incluye bonificación de {moneda(Math.min(bonificacion, sumaNeta))}</span>}</div>
-            <div className="der"><small>SEÑA 70%</small><b>{moneda(sena)}</b></div>
+            <div className="der"><small>SEÑA 60%</small><b>{moneda(sena)}</b></div>
           </div>
           {ed && <div className="pvGanWrap" hidden={pestana !== 'gan'}><GananciaTrabajo presupuestoIds={[presupuesto.id]} obraId={obraId} items={validos} total={total} abiertaInicial onGanancia={setGanancia} /></div>}
 
@@ -583,7 +583,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
         </div>}
 
         <div className="pvPie">
-          <div className="pvPieTot"><small>TOTAL DEL PRESUPUESTO</small><b>{moneda(total)}</b><span>Seña 70%: <strong>{moneda(sena)}</strong></span></div>
+          <div className="pvPieTot"><small>TOTAL DEL PRESUPUESTO</small><b>{moneda(total)}</b><span>Seña 60%: <strong>{moneda(sena)}</strong></span></div>
           {acciones ?? <button type="button" onClick={() => { if (estadoGuardado === 'guardando') void guardarAhora(); onCerrar() }}>✓ Listo</button>}
         </div>
       </div>

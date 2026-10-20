@@ -26,15 +26,15 @@ export function seccionesSeguimiento(r: ResumenModificaciones): SeccionSeguimien
     'Los reintegros devueltos se registran por separado; no se vuelven a sumar al saldo ni a los pagos de la obra.',
   ] })
   secciones.push({ titulo: 'Condición de pago y saldo exigible', lineas: [
-    `Acuerdo: 70% al confirmar y 30% al finalizar. Anticipo sobre el original aceptado: ${moneda(r.cuenta.anticipo)}${r.cuenta.anticipo < r.totalOriginal * .7 - .01 ? ' (limitado al valor actualizado por reducción de alcance)' : ''}.`,
+    `Acuerdo: 60% al confirmar y 40% según el avance hasta finalizar. Anticipo sobre el original aceptado: ${moneda(r.cuenta.anticipo)}${r.cuenta.anticipo < r.totalOriginal * .6 - .01 ? ' (limitado al valor actualizado por reducción de alcance)' : ''}.`,
     `Corresponde haber abonado a hoy${fin ? ' (obra finalizada)' : ' (anticipo)'}: ${moneda(r.cuenta.corresponde)}. Incluye reintegros pendientes.`,
     `Pendiente de pago hoy: ${moneda(r.cuenta.pendienteHoy)}.`,
     ...(r.cuenta.diferencia > 0 ? [`Adelanto sobre lo exigible hoy: ${moneda(r.cuenta.diferencia)}.`] : []),
     `Saldo total${r.saldo < 0 ? ' a favor del cliente' : ' para completar la cuenta'}: ${moneda(Math.abs(r.saldo))}.`,
     ...(r.cuenta.anticipoPendiente > 0 && !fin ? [
-      `La obra se encuentra en ejecución y el anticipo del 70% aún no figura cubierto en los pagos registrados. Importe pendiente del anticipo: ${moneda(r.cuenta.anticipoPendiente)}. Solicitamos regularizarlo a la brevedad.`,
+      `La obra se encuentra en ejecución y el anticipo del 60% aún no figura cubierto en los pagos registrados. Importe pendiente del anticipo: ${moneda(r.cuenta.anticipoPendiente)}. Solicitamos regularizarlo a la brevedad.`,
     ] : []),
-    'El avance informa el trabajo realizado. No modifica los vencimientos del acuerdo 70/30.',
+    'El avance informa el trabajo realizado. No modifica los vencimientos del acuerdo 60/40.',
   ] })
   return secciones
 }
