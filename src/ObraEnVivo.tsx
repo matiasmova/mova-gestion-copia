@@ -35,9 +35,11 @@ const COLORES_AVANCE = ['#e47b00', '#2f6fd6', '#7c5cff', '#12a06a', '#d9483f', '
 
 type AvanceLinea = { id: number; fecha: string; titulo: string; porcentaje: number; estado: string }
 
-export function LineaAvances({ avances, cargando, terminada, onTocar, onNuevo, onInforme, onVerTodo, porItems }: {
+export function LineaAvances({ avances, cargando, terminada, onTocar, onNuevo, onInforme, onVerTodo, porItems, plata: cuentaHoy }: {
   avances: AvanceLinea[] // más reciente primero
-  porItems?: AvanceItems | null // si se marca el avance de cada ítem, la línea sale de ahí
+  // Si se marca el avance de cada ítem, se muestra solo la barra por ítems (con la plata) en lugar de la línea de puntos.
+  porItems?: AvanceItems | null
+  plata?: { corresponde: number; cobrado: number; falta: number } | null
   cargando: boolean
   terminada: boolean
   onTocar: (id: number) => void
@@ -58,7 +60,7 @@ export function LineaAvances({ avances, cargando, terminada, onTocar, onNuevo, o
         <button type="button" className="oeLink" onClick={onVerTodo}>Ver todo ›</button>
       </span>
     </div>
-    {cargando ? <p className="oeCargando">Cargando avances…</p> : (
+    {porItems ? null : cargando ? <p className="oeCargando">Cargando avances…</p> : (
       <div className="oeTiempo" ref={tira}>
         <div className="oeNodo ok fijo"><i aria-hidden>✓</i><b>Aceptado</b><small>inicio</small></div>
         {orden.map((a, i) => {
@@ -85,8 +87,18 @@ export function LineaAvances({ avances, cargando, terminada, onTocar, onNuevo, o
       <div className="oeAvBarra" role="img" aria-label={`Avance por ítems: ${porItems.porcentaje}%`}>
         {porItems.tramos.map((x, i) => <span key={i} style={{ flexGrow: x.peso, ['--c' as string]: COLORES_AVANCE[i % COLORES_AVANCE.length] }} title={`${x.desc} · ${Math.round(x.av)}%`}><i style={{ width: `${x.av}%` }} /></span>)}
       </div>
+      <ul className="oeAvLista">
+        {porItems.tramos.map((x, i) => <li key={i} style={{ ['--c' as string]: COLORES_AVANCE[i % COLORES_AVANCE.length] }}>
+          <i aria-hidden /><span>{x.desc}</span><b className={x.av >= 100 ? 'fin' : ''}>{x.av >= 100 ? '✓ 100%' : `${Math.round(x.av)}%`}</b><em>{plata(x.peso * x.av / 100)} <small>de {plata(x.peso)}</small></em>
+        </li>)}
+      </ul>
+      {cuentaHoy && <div className="oeAvPlata">
+        <div><small>Corresponde a hoy</small><b>{plata(cuentaHoy.corresponde)}</b></div>
+        <div><small>Pagó</small><b>{plata(cuentaHoy.cobrado)}</b></div>
+        <div className={cuentaHoy.falta > 0.5 ? 'falta' : 'ok'}><small>{cuentaHoy.falta > 0.5 ? 'Tiene que pagar' : 'Al día'}</small><b>{plata(Math.max(0, cuentaHoy.falta))}</b></div>
+      </div>}
     </div>}
-    <small className="oeAyuda">{porItems ? 'Se actualiza solo al marcar el avance de cada ítem del presupuesto (tocá el ítem). Tocá un punto para corregirlo.' : 'Tocá un punto para corregirlo o ＋ para cargar el de hoy.'}</small>
+    <small className="oeAyuda">{porItems ? 'Se actualiza solo al marcar el avance de cada ítem en el presupuesto (tocá el ítem). Lo que corresponde incluye el anticipo pactado. El historial está en "Ver todo".' : 'Tocá un punto para corregirlo o ＋ para cargar el de hoy.'}</small>
   </section>
 }
 
