@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { colorDeTexto, leerColores } from './categoriasApp'
 import { cargarFormasPago, guardarFormasPago } from './formasPago'
 import type { Pedido } from './BuscadorGlobal'
 import { supabase } from './supabase'
@@ -259,10 +260,16 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
     const eraAceptado = p.estado === 'aceptado'
     const seraAceptado = nuevo === 'aceptado'
     const itemsStock = p.items.filter((it) => it.catalogo_id && it.tipo === 'producto')
-    if (!eraAceptado && seraAceptado) {
-      for (const it of itemsStock) await supabase.rpc('descontar_stock', { p_id: it.catalogo_id, p_cant: Number(it.cantidad) })
-    } else if (eraAceptado && !seraAceptado) {
-      for (const it of itemsStock) await supabase.rpc('descontar_stock', { p_id: it.catalogo_id, p_cant: -Number(it.cantidad) })
+    const signo = !eraAceptado && seraAceptado ? 1 : eraAceptado && !seraAceptado ? -1 : 0
+    if (signo !== 0 && itemsStock.length) {
+      for (const it of itemsStock) await supabase.rpc('descontar_stock', { p_id: it.catalogo_id, p_cant: signo * Number(it.cantidad) })
+      // Stock por color (fase 38): el color elegido va al final de la descripción, "… (Negro)".
+      const { data: conColores } = await supabase.from('productos_servicios').select('id, colores').in('id', itemsStock.map((it) => it.catalogo_id as number))
+      const colores = new Map(((conColores ?? []) as { id: number; colores: unknown }[]).map((x) => [x.id, leerColores(x.colores)]))
+      for (const it of itemsStock) {
+        const color = colorDeTexto(it.descripcion, colores.get(it.catalogo_id as number) ?? [])
+        if (color) await supabase.rpc('descontar_stock_color', { p_id: it.catalogo_id, p_color: color, p_cant: signo * Number(it.cantidad) })
+      }
     }
     const enviado = nuevo === 'enviado' && p.estado !== 'enviado' ? { enviado_at: new Date().toISOString() } : {}
     setPresupuestos((prev) => prev.map((x) => (x.id === p.id ? { ...x, estado: nuevo, ...enviado } : x)))

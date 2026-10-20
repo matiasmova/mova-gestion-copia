@@ -64,3 +64,18 @@ export function sugerirColor(nombre: string): string | null {
   const t = nombre.toLowerCase()
   return REGLAS_COLOR.find(([, re]) => re.test(t))?.[0] ?? null
 }
+
+// Colores disponibles de un producto, cada uno con su stock (columna "colores").
+export type ColorStock = { color: string; stock: number }
+export function leerColores(x: unknown): ColorStock[] {
+  if (!Array.isArray(x)) return []
+  return x.map((e) => ({ color: String((e as ColorStock)?.color ?? '').trim(), stock: Number((e as ColorStock)?.stock) || 0 })).filter((e) => e.color)
+}
+// "Tecla 1 módulo (Negro)" → "Negro", si ese color es uno de los del producto.
+export function colorDeTexto(texto: string, colores: ColorStock[]): string | null {
+  const m = /\(([^()]+)\)\s*$/.exec(texto)
+  if (!m) return null
+  return colores.find((c) => c.color.toLowerCase() === m[1].trim().toLowerCase())?.color ?? null
+}
+// Saca "(Color)" del final si es uno de los colores del producto.
+export const sinColor = (texto: string, colores: ColorStock[]) => (colorDeTexto(texto, colores) ? texto.replace(/\s*\([^()]+\)\s*$/, '') : texto)
