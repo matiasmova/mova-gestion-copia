@@ -1,13 +1,14 @@
 // Regla única del acuerdo comercial, la misma del documento del cliente
-// (estadoObra.ts): 60% de anticipo al confirmar, que cubre el avance de 0 a 60%.
-// Desde ahí corresponde el % de avance sobre el total: 80% → 80%, 100% → todo.
-// Fórmula: anticipo + resto × (avance − 60) / 40. Los gastos extra a reintegrar
+// (estadoObra.ts): 60% de seña al confirmar (para materiales y reservar la fecha)
+// y el 40% restante se suma según el avance de la obra: 50% de avance → seña +
+// la mitad del resto; 100% → todo.
+// Fórmula: anticipo + resto × avance / 100. Los gastos extra a reintegrar
 // se cobran completos, aparte, y no generan un segundo cobro al marcarlos Pagados.
 export const ANTICIPO_PCT = 60
 export const redondearCuenta = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
 // Lo que corresponde haber pagado de la obra con un % de avance.
 export const correspondePorAvance = (anticipo: number, total: number, pct: number) =>
-  redondearCuenta(anticipo + Math.max(0, total - anticipo) * Math.max(0, Math.min(100, pct) - ANTICIPO_PCT) / (100 - ANTICIPO_PCT))
+  redondearCuenta(anticipo + Math.max(0, total - anticipo) * Math.max(0, Math.min(100, pct)) / 100)
 export type MovimientoCuenta = { importe: number | string; tipo: string; estado: string }
 
 export const obraTerminada = (estado: string | null | undefined) => estado === 'finalizada' || estado === 'observacion'

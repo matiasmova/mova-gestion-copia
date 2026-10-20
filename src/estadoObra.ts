@@ -126,7 +126,7 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
   const resto = r2(Math.max(0, totalActualizado - anticipo))
   const cobrado = r2(pagos.reduce((s, p) => s + p.monto, 0))
   const gastoExtraPendiente = r2(gastosExtra.filter((g) => !g.devuelto).reduce((s, g) => s + g.importe, 0))
-  // El anticipo cubre el avance hasta el 60%; desde ahí suma lo que avanza la obra.
+  // La seña se paga al confirmar; el resto se suma según lo que avanza la obra.
   const corresponde = correspondePorAvance(anticipo, totalActualizado, avance)
   const pendienteHoy = r2(Math.max(0, corresponde - cobrado))
   const adelanto = r2(Math.max(0, cobrado - corresponde))
@@ -148,10 +148,9 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
     estado: anticipoCubierto ? 'ok' : 'pendiente', falta: faltaAnticipo,
   }]
   let pctPrevio = 0
-  // En la línea de pagos solo entran los avances que suman algo después del
-  // anticipo, en orden creciente y sin pasar el avance actual de la obra (un
-  // avance que después se corrigió para abajo no se muestra).
-  let maxVisto = PCT_ANTICIPO
+  // En la línea de pagos los avances van en orden creciente y sin pasar el
+  // avance actual de la obra (un avance que después se corrigió para abajo no se muestra).
+  let maxVisto = 0
   const avancesPago = avances.filter((a) => {
     const pct = Math.min(100, Math.max(0, a.porcentaje))
     if (pct <= maxVisto || pct > avance) return false
