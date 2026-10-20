@@ -64,6 +64,15 @@ let tablaOk: boolean | null = null
 export const configActual = () => actual
 export const configTablaDisponible = () => tablaOk
 
+// La seña pasó del 70% al 60%: si la condición guardada todavía tiene el texto
+// viejo de fábrica, se usa el nuevo (un texto escrito a mano no se toca).
+const SENA_VIEJA = 'Se solicita una seña del 70% para confirmar el presupuesto y adquirir los materiales necesarios. El 30% restante deberá abonarse al finalizar los trabajos y antes de la entrega definitiva del sistema.'
+function actualizarSena(p: ConfigApp['presupuestos']): ConfigApp['presupuestos'] {
+  const nueva = CONDICIONES_GENERALES.find((c) => c.texto.startsWith('Se solicita una seña'))?.texto
+  if (!nueva || !Array.isArray(p.condiciones)) return p
+  return { ...p, condiciones: p.condiciones.map((c) => (c.texto?.trim() === SENA_VIEJA ? { ...c, texto: nueva } : c)) }
+}
+
 export async function cargarConfig(): Promise<ConfigApp> {
   const { data, error } = await supabase.from('configuracion').select('clave, valor')
   if (error) { tablaOk = false; return actual }
@@ -71,7 +80,7 @@ export async function cargarConfig(): Promise<ConfigApp> {
   const filas = Object.fromEntries((data ?? []).map((f: { clave: string; valor: unknown }) => [f.clave, f.valor])) as Partial<ConfigApp>
   actual = {
     empresa: { ...DEFAULTS.empresa, ...(filas.empresa ?? {}) },
-    presupuestos: { ...DEFAULTS.presupuestos, ...(filas.presupuestos ?? {}) },
+    presupuestos: actualizarSena({ ...DEFAULTS.presupuestos, ...(filas.presupuestos ?? {}) }),
     accesos: { ...DEFAULTS.accesos, ...(filas.accesos ?? {}) },
     cotizacion: { ...DEFAULTS.cotizacion, ...(filas.cotizacion ?? {}) },
   }

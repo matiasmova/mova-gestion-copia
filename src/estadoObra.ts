@@ -5,8 +5,8 @@ import type { antesYAhora } from './presupuestoModificaciones'
 // =====================================================================
 //  Estado de la obra para el documento único del presupuesto.
 //
-//  Regla de cobro (acuerdo 70 / 30):
-//   · ANTICIPO = 70% del presupuesto original aceptado (si las modificaciones
+//  Regla de cobro (acuerdo 60 / 40):
+//   · ANTICIPO = 60% del presupuesto original aceptado (si las modificaciones
 //     bajan el total, se limita al total actualizado). Los pagos del cliente se
 //     aplican primero al anticipo, aunque la obra ya haya empezado.
 //   · RESTO = total actualizado − anticipo. Se va habilitando según el avance,
@@ -15,7 +15,7 @@ import type { antesYAhora } from './presupuestoModificaciones'
 //     "Pagado" = ya reintegrado. No se mezclan con el total de la obra.
 // =====================================================================
 
-export const PCT_ANTICIPO = 70
+export const PCT_ANTICIPO = 60
 
 type Modificacion = Parameters<typeof antesYAhora>[0]
 
@@ -126,7 +126,7 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
   const resto = r2(Math.max(0, totalActualizado - anticipo))
   const cobrado = r2(pagos.reduce((s, p) => s + p.monto, 0))
   const gastoExtraPendiente = r2(gastosExtra.filter((g) => !g.devuelto).reduce((s, g) => s + g.importe, 0))
-  // El anticipo cubre el avance hasta el 70%; desde ahí suma lo que avanza la obra.
+  // El anticipo cubre el avance hasta el 60%; desde ahí suma lo que avanza la obra.
   const corresponde = correspondePorAvance(anticipo, totalActualizado, avance)
   const pendienteHoy = r2(Math.max(0, corresponde - cobrado))
   const adelanto = r2(Math.max(0, cobrado - corresponde))
@@ -148,8 +148,17 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
     estado: anticipoCubierto ? 'ok' : 'pendiente', falta: faltaAnticipo,
   }]
   let pctPrevio = 0
-  for (const a of avances) {
-    // Cada avance vale lo que dice (puede bajar: por ejemplo, una reforma atrasa la obra).
+  // En la línea de pagos solo entran los avances que suman algo después del
+  // anticipo, en orden creciente y sin pasar el avance actual de la obra (un
+  // avance que después se corrigió para abajo no se muestra).
+  let maxVisto = PCT_ANTICIPO
+  const avancesPago = avances.filter((a) => {
+    const pct = Math.min(100, Math.max(0, a.porcentaje))
+    if (pct <= maxVisto || pct > avance) return false
+    maxVisto = pct
+    return true
+  })
+  for (const a of avancesPago) {
     const pct = Math.min(100, Math.max(0, a.porcentaje))
     const acumulado = correspondePorAvance(anticipo, totalActualizado, pct)
     const pagado = pagadoHasta(a.fecha)

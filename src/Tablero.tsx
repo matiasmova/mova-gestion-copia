@@ -218,7 +218,7 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
 
   // ---- Cobranzas: semáforo por obra ----
   // Misma regla que el documento del cliente (cuentaObra.ts):
-  //   corresponde hoy = 70% de anticipo + el 30% restante según el avance
+  //   corresponde hoy = 60% de anticipo + el 40% restante según el avance
   //   (100% si la obra está terminada) + los gastos extra sin devolver.
   //  🔴 Terminada con saldo: obra finalizada / en observación y todavía hay saldo.
   //  🟠 Atrasada: en proceso y se cobró menos de lo que corresponde hoy.
