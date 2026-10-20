@@ -86,7 +86,7 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
     obraId != null ? supabase.from('presupuestos').select('id').eq('obra_id', obraId).eq('estado', 'aceptado').eq('activo', true) : Promise.resolve({ data: [{ id: presupuestoId }], error: null }),
     obraId != null ? supabase.from('obra_avances').select('id, fecha, titulo, descripcion, porcentaje, created_at').eq('obra_id', obraId).order('fecha', { ascending: true }).order('id', { ascending: true }) : vacio,
     // Sin la columna "avance" (falta el SQL de la fase 40) esto falla y se sigue con el avance de la obra.
-    supabase.from('presupuesto_items').select('id, cantidad, precio_unitario, descuento_pct, avance').eq('presupuesto_id', presupuestoId),
+    supabase.from('presupuesto_items').select('id, avance').eq('presupuesto_id', presupuestoId),
   ])
   for (const r of [rObra, rAdic, rPagos, rAv]) if (r.error) throw r.error
 
@@ -121,14 +121,11 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
   const obra = rObra.data as { estado?: string | null; porcentaje_avance?: number | null } | null
   const obraEstado = obra?.estado ?? null
   const terminada = obraEstado === 'finalizada' || obraEstado === 'observacion'
-  // Avance por ítems: cada ítem suma según lo que vale (cantidad × precio con descuento).
-  const filasIt = rIt.error ? [] : ((rIt.data ?? []) as { id: number; cantidad: number; precio_unitario: number; descuento_pct: number | null; avance: number | null }[])
-  const porItems = filasIt.some((x) => Number(x.avance) > 0)
-  const pesoIt = (x: (typeof filasIt)[number]) => Math.max(0, Number(x.cantidad) * Number(x.precio_unitario) * (1 - (Number(x.descuento_pct) || 0) / 100))
-  const pesoTot = filasIt.reduce((s, x) => s + pesoIt(x), 0)
-  const avanceItemsExacto = porItems && pesoTot > 0 ? filasIt.reduce((s, x) => s + pesoIt(x) * Math.min(100, Math.max(0, Number(x.avance) || 0)), 0) / pesoTot : null
-  const avanceItems = porItems ? Object.fromEntries(filasIt.map((x) => [x.id, Math.min(100, Math.max(0, Number(x.avance) || 0))])) : null
-  const avance = terminada ? 100 : avanceItemsExacto != null ? avanceItemsExacto : Math.min(100, Math.max(0, Number(obra?.porcentaje_avance ?? 0)))
+  // Un solo avance: el de la obra. Si se lleva por ítems, la app lo guarda al
+  // marcar cada ítem (lo que avanzó cada uno, pesado por lo que vale).
+  const filasIt = rIt.error ? [] : ((rIt.data ?? []) as { id: number; avance: number | null }[])
+  const avanceItems = filasIt.length && filasIt.some((x) => Number(x.avance) > 0) ? Object.fromEntries(filasIt.map((x) => [x.id, Math.min(100, Math.max(0, Number(x.avance) || 0))])) : null
+  const avance = terminada ? 100 : Math.min(100, Math.max(0, Number(obra?.porcentaje_avance ?? 0)))
   const obraIniciada = avances.length > 0 || avance > 0
 
   const totalCambios = r2(modificaciones.reduce((s, m) => s + (Number(m.importe) || 0), 0))
@@ -145,7 +142,6 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
   const anticipoCubierto = cobrado >= anticipo - 0.5
   const faltaAnticipo = r2(Math.max(0, anticipo - cobrado))
 
-  const pagadoHasta = (fecha: string | null) => r2(pagos.filter((p) => !fecha || p.fecha <= fecha).reduce((s, p) => s + p.monto, 0))
   // Fecha en que los pagos acumulados cubrieron el anticipo.
   let fechaAnticipo: string | null = null
   let acum = 0
@@ -158,34 +154,18 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
     porcentaje: null, importe: anticipo, acumulado: anticipo, pagadoALaFecha: cobrado,
     estado: anticipoCubierto ? 'ok' : 'pendiente', falta: faltaAnticipo,
   }]
+  // Seña → avance de hoy (un solo paso) → al finalizar.
   let pctPrevio = 0
-  // En la línea de pagos los avances van en orden creciente y sin pasar el
-  // avance actual de la obra (un avance que después se corrigió para abajo no se muestra).
-  let maxVisto = 0
-  const avancesPago = avances.filter((a) => {
-    const pct = Math.min(100, Math.max(0, a.porcentaje))
-    if (pct <= maxVisto || pct > avance) return false
-    maxVisto = pct
-    return true
-  })
-  // Llevada por ítems: un solo paso con el avance de hoy (la suma de lo que avanzó cada ítem).
-  if (avanceItemsExacto != null && !terminada) {
-    avancesPago.length = 0
-    const ult = avances[avances.length - 1]
-    if (avance > 0) avancesPago.push({ id: ult?.id ?? 0, fecha: ult?.fecha ?? dia(new Date().toISOString()), titulo: 'Avance por ítems', descripcion: null, porcentaje: avance })
-  }
-  for (const a of avancesPago) {
-    const pct = Math.min(100, Math.max(0, a.porcentaje))
-    const acumulado = correspondePorAvance(anticipo, totalActualizado, pct)
-    const pagado = pagadoHasta(a.fecha)
-    // Lo pendiente de un paso se evalúa con lo pagado HOY: si ya se pagó después, queda al día.
+  if (avance > 0 && avance < 100) {
+    const acumulado = correspondePorAvance(anticipo, totalActualizado, avance)
     const falta = r2(Math.max(0, acumulado - cobrado))
+    const ult = avances[avances.length - 1]
     linea.push({
-      tipo: 'avance', avanceId: a.id, fecha: a.fecha, titulo: a.titulo, detalle: a.descripcion, porcentaje: pct,
-      importe: r2(acumulado - correspondePorAvance(anticipo, totalActualizado, pctPrevio)), acumulado, pagadoALaFecha: pagado,
+      tipo: 'avance', avanceId: ult?.id, fecha: ult?.fecha ?? null, titulo: 'Avance de la obra', detalle: null, porcentaje: avance,
+      importe: r2(acumulado - anticipo), acumulado, pagadoALaFecha: cobrado,
       estado: falta > 0.5 ? 'pendiente' : 'ok', falta,
     })
-    pctPrevio = pct
+    pctPrevio = avance
   }
   if (pctPrevio < 100 || !terminada) {
     const pctFinal = terminada ? 100 : pctPrevio

@@ -169,7 +169,9 @@ async function resumenes(db: Cliente, subs: Sub[], enviar: (payload: string, lis
       + adic.filter((a) => a.obra_id === o.id && a.estado === 'aprobado' && a.tipo !== 'gasto_extra').reduce((s, a) => s + Number(a.importe || 0), 0)
     const pagado = pagos.filter((x) => x.obra_id === o.id).reduce((s, x) => s + Number(x.monto || 0), 0)
     const avance = o.estado === 'finalizada' || o.estado === 'observacion' ? 100 : Math.max(0, Math.min(100, Number(o.porcentaje_avance) || 0))
-    return { nombre: o.nombre_obra, monto: valor * avance / 100 - pagado }
+    // Misma regla que la app: seña del 60% + el 40% restante según el avance de la obra.
+    const sena = valor * 0.6
+    return { nombre: o.nombre_obra, monto: sena + (valor - sena) * avance / 100 - pagado }
   }).filter((c) => c.monto > 0.5).sort((a, b) => b.monto - a.monto)
   const totalCobros = cobros.reduce((s, c) => s + c.monto, 0)
 

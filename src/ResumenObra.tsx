@@ -211,7 +211,9 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
   if (cuenta && cuenta.gastoExtraPendiente > 0.5) pendientes.push({ tono: 'alerta', texto: `Reintegros de gastos pendientes: ${dinero(cuenta.gastoExtraPendiente)}.`, tab: 'adicionales' })
   if (datos && datos.adic.pendientes > 0) pendientes.push({ tono: 'alerta', texto: datos.adic.pendientes === 1 ? '1 cambio o adicional esperando aprobación.' : `${datos.adic.pendientes} cambios o adicionales esperando aprobación.`, tab: 'adicionales' })
   if (datos && datos.personal === 0 && !terminada) pendientes.push({ tono: 'alerta', texto: 'No hay personal asignado a la obra.', tab: 'personal' })
-  if (!cargandoAvances && avances.length === 0) pendientes.push({ tono: 'alerta', texto: 'Todavía no cargaste ningún avance.', tab: 'timeline' })
+  // Con presupuesto aceptado el avance se marca por ítem; sin presupuesto, con la línea de avances.
+  if (tienePresupuesto) { if (avance <= 0 && !terminada) pendientes.push({ tono: 'alerta', texto: 'Todavía no marcaste el avance de ningún ítem del presupuesto.' }) }
+  else if (!cargandoAvances && avances.length === 0) pendientes.push({ tono: 'alerta', texto: 'Todavía no cargaste ningún avance.', tab: 'timeline' })
   else if (ultimo && !terminada && diasDesde(ultimo.fecha) > 14) pendientes.push({ tono: 'info', texto: `El último avance es de hace ${diasDesde(ultimo.fecha)} días.`, tab: 'timeline' })
   if (datos && datos.accesos === 0 && cerca) pendientes.push({ tono: 'alerta', texto: 'Faltan cargar los accesos y claves para entregar al cliente.', tab: 'accesos' })
   const listo = !!datos && !cargandoAvances && !(tienePresupuesto && cargandoCuenta)

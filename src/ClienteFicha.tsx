@@ -102,10 +102,10 @@ export default function ClienteFicha({ cliente, onCerrar, onEditar, onNuevaObra,
     if (p.estado === 'aceptado') hist.push({ fecha: null, texto: obra ? 'El cliente aceptó y se creó la obra' : 'El cliente aceptó (falta crear la obra)' })
     if (p.estado === 'rechazado') hist.push({ fecha: null, texto: `No salió${p.motivo_rechazo ? `: ${p.motivo_rechazo}` : ''}` })
     for (const pg of [...suyos].sort((a, b) => a.fecha.localeCompare(b.fecha))) hist.push({ fecha: pg.fecha, texto: `Cobro de ${moneda(pg.monto)}` })
-    if (obra && p.estado === 'aceptado') hist.push({ fecha: null, texto: est === 'obra' ? `Avance ${Number(obra.porcentaje_avance || 0)}%` : est === 'cobrado' ? 'Obra terminada y cobrada' : 'Obra terminada · falta cobrar' })
+    if (obra && p.estado === 'aceptado') hist.push({ fecha: null, texto: est === 'obra' ? `Avance ${Math.round(Number(obra.porcentaje_avance || 0))}%` : est === 'cobrado' ? 'Obra terminada y cobrada' : 'Obra terminada · falta cobrar' })
     trabajos.push({
       clave: `p-${p.id}`, titulo: p.titulo, estado: est, monto: p.total, hist,
-      extra: est === 'obra' && obra ? `${Number(obra.porcentaje_avance || 0)}%` : est === 'terminado' ? 'falta cobrar' : undefined,
+      extra: est === 'obra' && obra ? `${Math.round(Number(obra.porcentaje_avance || 0))}%` : est === 'terminado' ? 'falta cobrar' : undefined,
       abrir: p.estado === 'aceptado' && obra && onAbrirObra ? () => onAbrirObra(obra.id) : onAbrirPresupuesto ? () => onAbrirPresupuesto(p.id) : null,
     })
   }

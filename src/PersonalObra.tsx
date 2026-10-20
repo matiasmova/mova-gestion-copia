@@ -187,13 +187,13 @@ function PersonalObra({ obraId, avance = 0, puedeEditar = true, onCambio, abrir 
     } else {
       const falta = Math.max(0, c.devengado - c.pagado)
       resumenPago[f.asig.personal_id] = {
-        texto: `Acordado ${moneda(c.totalContrato)} · Avance ${Math.min(Math.max(avance || 0, 0), 100)}% → corresponde hoy ${moneda(c.devengado)} · Pagado ${moneda(c.pagado)} · ${falta > 0.5 ? `Falta pagar hoy ${moneda(falta)}` : c.pagado - c.devengado > 0.5 ? `Adelantado ${moneda(c.pagado - c.devengado)}` : 'Al día'}`,
+        texto: `Acordado ${moneda(c.totalContrato)} · Avance ${Math.round(Math.min(Math.max(avance || 0, 0), 100))}% → corresponde hoy ${moneda(c.devengado)} · Pagado ${moneda(c.pagado)} · ${falta > 0.5 ? `Falta pagar hoy ${moneda(falta)}` : c.pagado - c.devengado > 0.5 ? `Adelantado ${moneda(c.pagado - c.devengado)}` : 'Al día'}`,
         falta,
       }
     }
   }
   const sinAsignar = personas.filter((p) => !asignaciones.some((a) => a.personal_id === p.id))
-  const avanceOk = Math.min(Math.max(avance || 0, 0), 100)
+  const avanceOk = Math.round(Math.min(Math.max(avance || 0, 0), 100))
 
   return (
     <section className="obraFotosSeccion" aria-label="Personal de la obra">

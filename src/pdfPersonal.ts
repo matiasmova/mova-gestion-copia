@@ -268,7 +268,7 @@ export async function generarPdfCuentaPersona(c: CuentaPersona): Promise<Blob> {
     if (f.debe > 0.5) derecha(`Te debemos ${moneda(f.debe)}`, xSit, y, F_CHICO + 0.5, bold, ROJO)
     else if (f.adelantado > 0.5) derecha(`Adelantado ${moneda(f.adelantado)}`, xSit, y, F_CHICO + 0.5, bold, NARANJA)
     else derecha('Al día', xSit, y, F_CHICO + 0.5, bold, VERDE)
-    const sub = [f.rol, f.calc.totalContrato != null ? `Avance ${f.avance}%` : null, f.calc.faltaValor ? 'Falta cargar el valor' : null].filter(Boolean).join(' · ')
+    const sub = [f.rol, f.calc.totalContrato != null ? `Avance ${Math.round(f.avance)}%` : null, f.calc.faltaValor ? 'Falta cargar el valor' : null].filter(Boolean).join(' · ')
     if (sub) texto(cortar(sub, F_CHICO, xCorr - xObra - 70), xObra, y - 11, F_CHICO, font, GRIS)
     y -= sub ? 20 : 14
     linea(M, y + 6, M + CW)

@@ -8,6 +8,7 @@ import { Texto } from './PresupuestoEnVivo'
 import ComoLoVeCliente from './ComoLoVeCliente'
 import CompararMercado, { type ProductoAComparar } from './CompararMercado'
 import { hoy } from './gestionFormat'
+import { PCT_ANTICIPO as PCT_SENA } from './estadoObra'
 import type { CambioTipo } from './presupuestoModificaciones'
 import { ETIQUETA_ADICIONAL, etiquetaModificacion } from './presupuestoModificaciones'
 
@@ -26,7 +27,7 @@ const fechaChica = (f: string) => new Date(`${f.slice(0, 10)}T00:00:00`).toLocal
 // ---------------------------------------------------------------------------
 
 // Avance por ítem: cada ítem pesa según lo que vale hoy (los quitados no cuentan).
-export type AvanceItems = { porcentaje: number; titulo: string; descripcion: string; tramos: { desc: string; peso: number; av: number }[] }
+export type AvanceItems = { porcentaje: number; tramos: { desc: string; peso: number; av: number }[] }
 const textoAvance = (av: number, cantidad: number) => {
   if (cantidad > 1 && Number.isInteger(cantidad) && cantidad <= 50) return `${Math.round(cantidad * av / 100)} de ${cantidad}`
   return av >= 100 ? 'terminado' : av <= 0 ? 'sin empezar' : 'en curso'
@@ -35,11 +36,9 @@ const COLORES_AVANCE = ['#e47b00', '#2f6fd6', '#7c5cff', '#12a06a', '#d9483f', '
 
 type AvanceLinea = { id: number; fecha: string; titulo: string; porcentaje: number; estado: string }
 
-export function LineaAvances({ avances, cargando, terminada, onTocar, onNuevo, onInforme, onVerTodo, porItems, plata: cuentaHoy }: {
+// Solo para obras sin presupuesto aceptado (las que tienen presupuesto usan AvanceObra).
+export function LineaAvances({ avances, cargando, terminada, onTocar, onNuevo, onInforme, onVerTodo }: {
   avances: AvanceLinea[] // más reciente primero
-  // Si se marca el avance de cada ítem, se muestra solo la barra por ítems (con la plata) en lugar de la línea de puntos.
-  porItems?: AvanceItems | null
-  plata?: { corresponde: number; cobrado: number; falta: number } | null
   cargando: boolean
   terminada: boolean
   onTocar: (id: number) => void
@@ -60,7 +59,7 @@ export function LineaAvances({ avances, cargando, terminada, onTocar, onNuevo, o
         <button type="button" className="oeLink" onClick={onVerTodo}>Ver todo ›</button>
       </span>
     </div>
-    {porItems ? null : cargando ? <p className="oeCargando">Cargando avances…</p> : (
+    {cargando ? <p className="oeCargando">Cargando avances…</p> : (
       <div className="oeTiempo" ref={tira}>
         <div className="oeNodo ok fijo"><i aria-hidden>✓</i><b>Aceptado</b><small>inicio</small></div>
         {orden.map((a, i) => {
@@ -79,26 +78,53 @@ export function LineaAvances({ avances, cargando, terminada, onTocar, onNuevo, o
         </>}
       </div>
     )}
-    {porItems && <div className="oeAvRes">
-      <div className="oeAvResCab">
-        <b className="oeAvNum">{porItems.porcentaje}<small>%</small></b>
-        <span><b>Avance de la obra, por ítems</b><small>{porItems.tramos.filter((x) => x.av >= 100).length} de {porItems.tramos.length} terminados · cada ítem pesa según lo que vale</small></span>
-      </div>
-      <div className="oeAvBarra" role="img" aria-label={`Avance por ítems: ${porItems.porcentaje}%`}>
-        {porItems.tramos.map((x, i) => <span key={i} style={{ flexGrow: x.peso, ['--c' as string]: COLORES_AVANCE[i % COLORES_AVANCE.length] }} title={`${x.desc} · ${Math.round(x.av)}%`}><i style={{ width: `${x.av}%` }} /></span>)}
-      </div>
-      <ul className="oeAvLista">
-        {porItems.tramos.map((x, i) => <li key={i} style={{ ['--c' as string]: COLORES_AVANCE[i % COLORES_AVANCE.length] }}>
-          <i aria-hidden /><span>{x.desc}</span><b className={x.av >= 100 ? 'fin' : ''}>{x.av >= 100 ? '✓ 100%' : `${Math.round(x.av)}%`}</b><em>{plata(x.peso * x.av / 100)} <small>de {plata(x.peso)}</small></em>
-        </li>)}
-      </ul>
-      {cuentaHoy && <div className="oeAvPlata">
-        <div><small>Corresponde a hoy</small><b>{plata(cuentaHoy.corresponde)}</b></div>
-        <div><small>Pagó</small><b>{plata(cuentaHoy.cobrado)}</b></div>
-        <div className={cuentaHoy.falta > 0.5 ? 'falta' : 'ok'}><small>{cuentaHoy.falta > 0.5 ? 'Tiene que pagar' : 'Al día'}</small><b>{plata(Math.max(0, cuentaHoy.falta))}</b></div>
-      </div>}
-    </div>}
-    <small className="oeAyuda">{porItems ? 'Se actualiza solo al marcar el avance de cada ítem en el presupuesto (tocá el ítem). Lo que corresponde incluye el anticipo pactado. El historial está en "Ver todo".' : 'Tocá un punto para corregirlo o ＋ para cargar el de hoy.'}</small>
+    <small className="oeAyuda">Tocá un punto para corregirlo o ＋ para cargar el de hoy.</small>
+  </section>
+}
+
+// ---------------------------------------------------------------------------
+// Avance de la obra (un solo avance): sale de lo que avanzó cada ítem del
+// presupuesto, pesado por lo que vale. Cobro: seña + el resto de cada ítem
+// según su avance (estadoObra / cuentaObra).
+// ---------------------------------------------------------------------------
+
+export function PanelAvance({ porItems, avanceObra, cuenta, onBitacora, onInforme }: {
+  porItems: AvanceItems | null | undefined // undefined = cargando; null = el presupuesto no tiene ítems
+  avanceObra: number
+  cuenta: { anticipo: number; corresponde: number; totalActualizado: number } | null
+  onBitacora: () => void
+  onInforme?: () => void
+}) {
+  const marcados = porItems ? porItems.tramos.some((x) => x.av > 0) : false
+  const pct = porItems && marcados ? porItems.porcentaje : avanceObra
+  return <section className="oeLinea" aria-label="Avance de la obra">
+    <div className="oeTit">
+      <span>AVANCE DE LA OBRA</span>
+      <span className="oeTitBtns">
+        {onInforme && <button type="button" className="oeIA" onClick={onInforme}>✨ Informe IA</button>}
+        <button type="button" className="oeLink" onClick={onBitacora}>Fotos y notas ›</button>
+      </span>
+    </div>
+    {porItems === undefined ? <div className="oeAvRes cargando" aria-busy="true"><span className="oeAvEsq" /><span className="oeAvEsq corto" /></div>
+      : porItems === null ? <p className="oeAyuda">Marcá el avance tocando cada ítem del presupuesto de abajo.</p>
+        : <div className="oeAvRes">
+          <div className="oeAvResCab">
+            <b className="oeAvNum">{Math.round(pct)}<small>%</small></b>
+            <span><b>{porItems.tramos.filter((x) => x.av >= 100).length} de {porItems.tramos.length} ítems terminados</b><small>Cada ítem pesa según lo que vale. Se marca tocando el ítem en el presupuesto.</small></span>
+          </div>
+          <div className="oeAvBarra" role="img" aria-label={`Avance de la obra: ${Math.round(pct)}%`}>
+            {porItems.tramos.map((x, i) => <span key={i} style={{ flexGrow: x.peso, ['--c' as string]: COLORES_AVANCE[i % COLORES_AVANCE.length] }} title={`${x.desc} · ${Math.round(x.av)}%`}><i style={{ width: `${x.av}%` }} /></span>)}
+          </div>
+          <ul className="oeAvLista">
+            {porItems.tramos.map((x, i) => <li key={i} style={{ ['--c' as string]: COLORES_AVANCE[i % COLORES_AVANCE.length] }}>
+              <i aria-hidden /><span>{x.desc}</span><b className={x.av >= 100 ? 'fin' : ''}>{x.av >= 100 ? '✓ 100%' : `${Math.round(x.av)}%`}</b><em>hecho {plata(x.peso * x.av / 100)} <small>de {plata(x.peso)}</small></em>
+            </li>)}
+          </ul>
+          {!marcados && avanceObra > 0 && <p className="oeAyuda">La obra figura en {Math.round(avanceObra)}% (cargado antes). Marcá cada ítem en el presupuesto de abajo, o usá "Arrancar con todos en {Math.round(avanceObra)}%".</p>}
+          {cuenta && cuenta.totalActualizado > 0 && <p className="oeAvCuenta">
+            Con este avance corresponde <b>{plata(cuenta.corresponde)}</b>: seña {PCT_SENA}% {plata(cuenta.anticipo)} + el {100 - PCT_SENA}% de lo hecho {plata(Math.max(0, cuenta.corresponde - cuenta.anticipo))}.
+          </p>}
+        </div>}
   </section>
 }
 
@@ -137,7 +163,7 @@ function estadoDe(item: Item, adicionales: Adicional[]): EstadoItem {
 }
 
 // onAvanceItems: el avance calculado (para la línea). onAvanceCambiado: se marcó el avance de un ítem (la obra se actualiza sola).
-export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGanancia, avanceObra, onAvanceItems, onAvanceCambiado }: { obraId: number; onCambio: () => void; onVerHistorial: () => void; onGanancia?: (g: number) => void; avanceObra?: number; onAvanceItems?: (a: AvanceItems | null) => void; onAvanceCambiado?: (a: AvanceItems) => void }) {
+export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGanancia, avanceObra, onAvanceItems, onAvanceCambiado }: { obraId: number; onCambio: () => void; onVerHistorial: () => void; onGanancia?: (g: number) => void; avanceObra?: number; onAvanceItems?: (a: AvanceItems | null | undefined) => void; onAvanceCambiado?: (a: AvanceItems) => void }) {
   const [presus, setPresus] = useState<Presu[]>([])
   const [items, setItems] = useState<Item[]>([])
   const [adicionales, setAdicionales] = useState<Adicional[]>([])
@@ -207,21 +233,20 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
   const pesoTotal = pesos.reduce((s, x) => s + x.peso, 0)
   const avanceTotal = pesoTotal > 0 ? pesos.reduce((s, x) => s + x.peso * x.av, 0) / pesoTotal : 0
   const conAvance = pesos.filter((x) => x.av > 0)
-  const resumenAvance: AvanceItems | null = avances && conAvance.length ? {
-    porcentaje: Math.round(avanceTotal),
-    titulo: 'Avance por ítems',
-    descripcion: pesos.filter((x) => x.peso > 0).map((x) => `${x.desc}: ${x.av >= 100 ? 'terminado' : `${Math.round(x.av)}%`}`).join('\n'),
+  const resumenAvance: AvanceItems | null = avances && pesoTotal > 0 ? {
+    porcentaje: Math.round(avanceTotal * 1e6) / 1e6,
     tramos: pesos.filter((x) => x.peso > 0).map((x) => ({ desc: x.desc, peso: x.peso, av: x.av })),
   } : null
-  const claveResumen = resumenAvance ? `${resumenAvance.porcentaje}|${resumenAvance.descripcion}` : ''
+  const claveResumen = resumenAvance ? resumenAvance.tramos.map((x) => `${x.peso}:${x.av}`).join('|') : ''
   // Solo cuando se cambia un ítem (no al abrir) se actualiza la línea de avances y la obra.
   const cambioPropio = useRef(false)
   useEffect(() => {
+    if (cargando) return
     onAvanceItems?.(resumenAvance)
     if (cambioPropio.current && resumenAvance) onAvanceCambiado?.(resumenAvance)
     cambioPropio.current = false
-  }, [claveResumen]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => () => onAvanceItems?.(null), []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [claveResumen, cargando]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => onAvanceItems?.(undefined), []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function cambiarAvance(itemId: number, valor: number) {
     if (!avances) return
@@ -535,7 +560,7 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
             <button type="button" className="oeFila" aria-expanded={abierto} onClick={() => abrirItem(it)}>
               <span className="pvN">{String(i + 1).padStart(2, '0')}</span>
               <span className="oeTx"><b>{e.descripcion}{marca(e)}</b><small>{vigente.quitado ? 'Se quita' : !vigente.modificado && Number(it.descuento_pct) > 0
-                  ? <>{Number(it.cantidad).toLocaleString('es-AR')} × {plata(it.precio_unitario)}<span className="pvPct">−{Number(it.descuento_pct)}%</span><span className="pvCU">= {plata(precioNeto(it))} c/u</span></>
+                  ? <>{Number(it.cantidad).toLocaleString('es-AR')} × {plata(it.precio_unitario)}<span className="pvPct">{Number(it.descuento_pct)}% dto.</span><span className="pvCU">= {plata(precioNeto(it))} c/u</span></>
                   : `${Number(vigente.cantidad).toLocaleString('es-AR')} × ${plata(vigente.precio)}`}</small>
                 {e.pendiente && <small className="oePropuesto">Propuesto: {e.quitado ? 'quitarlo' : `${Number(e.cantidad).toLocaleString('es-AR')} × ${plata(e.precio)} = ${plata(e.cantidad * e.precio)}`}</small>}
                 {avances && !vigente.quitado && (() => { const av = avances[it.id] ?? 0; return <span className={`oeAvFila${av >= 100 ? ' fin' : ''}`}><span className="oeAvMini"><i style={{ width: `${av}%` }} /></span><small>{av >= 100 ? '✓ ' : ''}{Math.round(av)}% · {textoAvance(av, Number(vigente.cantidad) || 0)}</small></span> })()}</span>
