@@ -2,28 +2,32 @@
 // Se usan en Productos y servicios para filtrar y ordenar el catálogo.
 // sugerirCategoria propone una a partir del nombre (para ordenar los que ya están cargados).
 
+import { useSyncExternalStore } from 'react'
+
+// "icono" es la clave del dibujo y del color (ver IconoCategoria): así una
+// categoría se puede renombrar sin perder su ícono.
 export type CategoriaApp = { nombre: string; icono: string }
 
-export const CATEGORIAS_PRODUCTO: CategoriaApp[] = [
-  { nombre: 'Teclas', icono: '🎛️' },
-  { nombre: 'Switch', icono: '🔀' },
-  { nombre: 'Sensores', icono: '📡' },
-  { nombre: 'Hub', icono: '🧠' },
-  { nombre: 'Cámaras', icono: '📷' },
-  { nombre: 'WiFi', icono: '📶' },
-  { nombre: 'LED', icono: '💡' },
-  { nombre: 'Accesorios', icono: '🔌' },
-  { nombre: 'Cerraduras', icono: '🔐' },
-  { nombre: 'Iluminación solar', icono: '☀️' },
-  { nombre: 'Protectores de tensión', icono: '⚡' },
-  { nombre: 'Termostatos', icono: '🌡️' },
-  { nombre: 'Pantallas', icono: '📺' },
-  { nombre: 'Alexa', icono: '🔊' },
-]
+export const CATEGORIAS_DEF: CategoriaApp[] = ['Teclas', 'Switch', 'Sensores', 'Hub', 'Cámaras', 'WiFi', 'LED', 'Accesorios', 'Cerraduras',
+  'Iluminación solar', 'Protectores de tensión', 'Termostatos', 'Pantallas', 'Alexa'].map((n) => ({ nombre: n, icono: n }))
 
-const NOMBRES = new Set(CATEGORIAS_PRODUCTO.map((c) => c.nombre))
-export const esCategoriaApp = (c: string | null | undefined) => !!c && NOMBRES.has(c.trim())
-export const iconoCategoria = (c: string | null | undefined) => CATEGORIAS_PRODUCTO.find((x) => x.nombre === c?.trim())?.icono ?? '🏷️'
+// Las categorías son editables (se guardan en configuracion → "categorias_producto").
+// Se guardan acá en memoria para que toda la app use la misma lista.
+let lista: CategoriaApp[] = CATEGORIAS_DEF
+const avisar = new Set<() => void>()
+export const categoriasProducto = () => lista
+export function fijarCategorias(nuevas: unknown) {
+  const ok = Array.isArray(nuevas) ? nuevas.map((c) => ({ nombre: String((c as CategoriaApp)?.nombre ?? '').trim(), icono: String((c as CategoriaApp)?.icono ?? '') })).filter((c) => c.nombre) : []
+  lista = ok.length ? ok : CATEGORIAS_DEF
+  avisar.forEach((f) => f())
+}
+export function useCategoriasProducto() {
+  return useSyncExternalStore((f) => { avisar.add(f); return () => { avisar.delete(f) } }, () => lista)
+}
+
+export const esCategoriaApp = (c: string | null | undefined) => !!c && lista.some((x) => x.nombre === c.trim())
+// Clave del ícono de una categoría por su nombre actual.
+export const iconoDe = (c: string | null | undefined) => lista.find((x) => x.nombre === (c ?? '').trim())?.icono ?? (c ?? '').trim()
 
 // En orden: la primera que coincide gana (por ejemplo "cámara wifi" es Cámaras, no WiFi).
 const REGLAS: [string, RegExp][] = [
@@ -46,7 +50,9 @@ const REGLAS: [string, RegExp][] = [
 export function sugerirCategoria(nombre: string, extra = ''): string | null {
   // Primero por el nombre; la categoría vieja solo si el nombre no alcanza.
   const buscar = (t: string) => REGLAS.find(([, re]) => re.test(t.toLowerCase()))?.[0] ?? null
-  return buscar(nombre) ?? (extra ? buscar(extra) : null)
+  const clave = buscar(nombre) ?? (extra ? buscar(extra) : null)
+  // Las reglas usan los nombres originales: se traduce al nombre actual (si sigue existiendo).
+  return clave ? lista.find((c) => c.icono === clave)?.nombre ?? (esCategoriaApp(clave) ? clave : null) : null
 }
 
 // Color del producto (opcional, si corresponde). El punto se pinta con su color.

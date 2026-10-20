@@ -1,3 +1,5 @@
+import { iconoDe } from './categoriasApp'
+
 // Íconos de línea (sobrios, del color del texto) para las categorías de productos.
 const TRAZOS: Record<string, string[]> = {
   Teclas: ['M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z', 'M10 8h4v8h-4z'],
@@ -26,15 +28,20 @@ const COLOR: Record<string, string> = {
   LED: '#d4880f', Accesorios: '#64748b', Cerraduras: '#475569', 'Iluminación solar': '#e3a008', 'Protectores de tensión': '#d9483f',
   Termostatos: '#e0457b', Pantallas: '#0f8a7e', Alexa: '#1fa2d6', Productos: '#e47b00', Servicios: '#12a06a', Todo: '#141a24', sin: '#8a93a0',
 }
-export const colorCategoria = (nombre: string | null | undefined) => COLOR[(nombre ?? '').trim()] ?? COLOR.sin
+// Íconos para elegir al crear una categoría nueva.
+export const ICONOS_ELEGIBLES = Object.keys(TRAZOS).filter((k) => !['Productos', 'Servicios', 'Todo'].includes(k))
+// Se busca por el nombre (o por la clave del ícono, si la categoría se renombró).
+const clave = (nombre: string | null | undefined) => iconoDe(nombre)
+export const colorCategoria = (nombre: string | null | undefined) => COLOR[clave(nombre)] ?? COLOR.sin
 
 // conFondo: el ícono en su color, dentro de un cuadradito suave del mismo tono.
-export default function IconoCategoria({ nombre, tamano = 15, conFondo = false }: { nombre: string | null | undefined; tamano?: number; conFondo?: boolean }) {
-  const clave = (nombre ?? '').trim()
-  const trazos = TRAZOS[clave] ?? TRAZOS.sin
+// icono: la clave del dibujo directamente (para elegirlo en Editar categorías).
+export default function IconoCategoria({ nombre, icono, tamano = 15, conFondo = false }: { nombre?: string | null; icono?: string; tamano?: number; conFondo?: boolean }) {
+  const k = icono ?? clave(nombre)
+  const trazos = TRAZOS[k] ?? TRAZOS.sin
   const svg = <svg className="icoCat" width={tamano} height={tamano} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     {trazos.map((d) => <path key={d} d={d} />)}
   </svg>
   if (!conFondo) return svg
-  return <span className="icoBadge" style={{ ['--ic' as string]: colorCategoria(clave) }}>{svg}</span>
+  return <span className="icoBadge" style={{ ['--ic' as string]: COLOR[k] ?? COLOR.sin }}>{svg}</span>
 }
