@@ -3882,3 +3882,24 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .ntVerHechas{align-self:flex-start;border:0;background:transparent;font:inherit;font-size:13px;font-weight:700;color:#6a7382;cursor:pointer;padding:2px 0}
 .ntVerHechas:hover{color:#141a24;text-decoration:underline}
 @media (hover:none){.ntBotones{opacity:1}}
+
+/* Reordenar: tarjetas grandes que se arrastran */
+.reordGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
+.reordTarj{position:relative;display:flex;flex-direction:column;gap:8px;background:#fff;border:1px solid #e3e8ef;border-radius:16px;padding:10px;cursor:grab;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:box-shadow .18s ease,transform .18s ease,opacity .18s}
+.reordTarj:hover{box-shadow:0 10px 24px -14px rgba(20,26,36,.35);transform:translateY(-2px)}
+.reordGrid.moviendo .reordTarj{cursor:grabbing}
+.reordGrid.moviendo .reordTarj:not(.arrastra){opacity:.75}
+.reordTarj.arrastra{border-color:#e47b00;box-shadow:0 0 0 3px rgba(228,123,0,.25),0 18px 34px -14px rgba(20,26,36,.45);transform:scale(1.04);z-index:2;opacity:1}
+.reordTarjFoto{position:relative;aspect-ratio:1/1;border-radius:12px;background:#fff;border:1px solid #f0f2f5;display:grid;place-items:center;overflow:hidden}
+.reordTarjFoto img{width:100%;height:100%;object-fit:contain;padding:8px;pointer-events:none}
+.reordPos{position:absolute;top:8px;left:8px;min-width:30px;height:30px;padding:0 8px;border-radius:999px;border:0;background:#14181e;color:#fff;font:inherit;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 4px 10px -4px rgba(0,0,0,.4)}
+.reordPos:hover:not(:disabled){background:#e47b00}
+.reordAgarre{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:9px;background:rgba(255,255,255,.92);border:1px solid #e3e8ef;color:#8a93a0;display:grid;place-items:center}
+.reordTarj.arrastra .reordAgarre{color:#e47b00;border-color:#e47b00}
+.reordTarjNom{font-size:13.5px;line-height:1.3;color:#141a24;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.6em}
+.reordTarjAcc{display:flex;align-items:center;gap:6px}
+.reordTarjAcc small{flex:1;min-width:0;text-align:center;font-size:11.5px;color:#8a93a0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.reordTarjAcc button{flex:0 0 auto;width:36px;height:32px;border-radius:10px;border:1px solid #e3e8ef;background:#fff;color:#2b313a;font-size:20px;line-height:1;cursor:pointer;transition:border-color .15s,background .15s}
+.reordTarjAcc button:hover:not(:disabled){border-color:#141a24;background:#14181e;color:#fff}
+.reordTarjAcc button:disabled{opacity:.3;cursor:default}
+@media (max-width:620px){.reordGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}}

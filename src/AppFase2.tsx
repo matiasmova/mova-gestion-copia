@@ -53,6 +53,9 @@ export default function AppFase2() {
   const [obraAbrirId, setObraAbrirId] = useState<number | null>(null)
   const [presupuestoAbrirId, setPresupuestoAbrirId] = useState<number | null>(null)
   const [menuAbierto, setMenuAbierto] = useState(false)
+  // En la computadora o tablet el menú se puede achicar a solo íconos (se recuerda).
+  const [menuChico, setMenuChico] = useState(() => { try { return localStorage.getItem('mova_menu_chico') === '1' } catch { return false } })
+  useEffect(() => { try { localStorage.setItem('mova_menu_chico', menuChico ? '1' : '') } catch { /* sin almacenamiento */ } }, [menuChico])
   const [tema, setTema] = useState<Tema>(temaGuardado)
   const cambiarTema = (t: Tema) => { setTema(t); aplicarTema(t) }
   const [buscadorAbierto, setBuscadorAbierto] = useState(false)
@@ -222,10 +225,13 @@ export default function AppFase2() {
     personal: <Personal pedido={pedidoPara('personal')} onPedidoAtendido={pedidoAtendido} />, agenda: <HomeResumen modo="tareas" pedido={pedidoPara('agenda')} onPedidoAtendido={pedidoAtendido} nombre={nombreUsuario} rol={rol} rolEtiqueta={ROLES[rol]} onNavegar={navegar} onSalir={salir} onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} onAbrirPresupuesto={puedeVer(rol, 'presupuestos') ? (id) => { setPresupuestoAbrirId(id); navegar('presupuestos') } : undefined} />, usuarios: <Usuarios />, configuracion: <Configuracion />,
   }
 
-  return <div className="fase2App">
+  return <div className={`fase2App${menuChico ? ' menuChico' : ''}`}>
     <button className="fase2MenuButton" aria-label="Abrir menú" onClick={() => setMenuAbierto((v) => !v)}><IconoMenu nombre="menu" tamano={22} /></button>
     <aside className={`fase2Sidebar ${menuAbierto ? 'abierto' : ''}`}>
-      <div className="fase2Logo"><img src={logoClaro} alt="MOVA Tecnología Smart" /></div>
+      <div className="fase2Logo"><img className="logoGrande" src={logoClaro} alt="MOVA Tecnología Smart" /><img className="logoChico" src="/icon-192.png" alt="MOVA" /></div>
+      <button type="button" className="menuAchicar" onClick={() => setMenuChico((v) => !v)} aria-label={menuChico ? 'Mostrar el menú completo' : 'Achicar el menú'} title={menuChico ? 'Mostrar el menú completo' : 'Achicar el menú (más lugar para la pantalla)'}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={menuChico ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'} /></svg>
+      </button>
       <button type="button" className="menuBuscar" onClick={() => { setMenuAbierto(false); setBuscadorAbierto(true) }}>
         <IconoMenu nombre="buscar" /><span>Buscar…</span><kbd>Ctrl K</kbd>
       </button>
@@ -240,7 +246,7 @@ export default function AppFase2() {
             <div key={grupo}>
               <span className="menuGrupo">{etiqueta}</span>
               {delGrupo.map(([clave, , titulo]) => (
-                <button key={clave} className={`menuItem ${activo(clave) ? 'active' : ''}`} aria-current={activo(clave) ? 'page' : undefined} onClick={() => navegar(destinoMenu(clave))}>
+                <button key={clave} className={`menuItem ${activo(clave) ? 'active' : ''}`} title={menuChico ? titulo : undefined} aria-current={activo(clave) ? 'page' : undefined} onClick={() => navegar(destinoMenu(clave))}>
                   <span className="menuIcono"><IconoMenu nombre={clave} /></span>
                   <span className="menuTexto">{titulo}</span>
                 </button>
@@ -250,8 +256,8 @@ export default function AppFase2() {
         })}
       </nav>
       <div className="menuTema" role="group" aria-label="Modo de pantalla">
-        <button type="button" className={tema === 'claro' ? 'on' : ''} aria-pressed={tema === 'claro'} onClick={() => cambiarTema('claro')}>☀️ Claro</button>
-        <button type="button" className={tema === 'oscuro' ? 'on' : ''} aria-pressed={tema === 'oscuro'} onClick={() => cambiarTema('oscuro')}>🌙 Oscuro</button>
+        <button type="button" className={tema === 'claro' ? 'on' : ''} aria-pressed={tema === 'claro'} onClick={() => cambiarTema('claro')} title="Claro">☀️<span className="menuTemaTxt"> Claro</span></button>
+        <button type="button" className={tema === 'oscuro' ? 'on' : ''} aria-pressed={tema === 'oscuro'} onClick={() => cambiarTema('oscuro')} title="Oscuro">🌙<span className="menuTemaTxt"> Oscuro</span></button>
       </div>
       <div className="fase2Usuario"><div>{(nombreUsuario[0] ?? 'M').toUpperCase()}</div><span><strong>{nombreUsuario || 'Usuario'}</strong><small>{ROLES[rol]}</small></span><button title="Cerrar sesión" aria-label="Cerrar sesión" onClick={salir}><IconoMenu nombre="salir" /></button></div>
     </aside>

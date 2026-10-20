@@ -373,3 +373,28 @@ html[data-tema="oscuro"] .fase2App .fase2Sidebar{--sidebar-c1:#0b0f15;--sidebar-
 /* La opción elegida mantiene su ícono blanco aunque el mouse (o el dedo) quede encima */
 .fase2App .fase2Sidebar nav button.menuItem.active:hover{color:#fff}
 .fase2App .fase2Sidebar nav button.menuItem.active:hover .menuIcono{background:rgba(255,255,255,.22);color:#fff}
+
+/* ===== Menú achicado (solo íconos), en computadora y tablet ===== */
+.fase2App .fase2Sidebar .fase2Logo img.logoChico{display:none}
+.fase2App .menuAchicar{display:none}
+@media(min-width:901px){
+  .fase2App{transition:grid-template-columns .25s ease}
+  .fase2App .fase2Sidebar{position:sticky}
+  .fase2App .menuAchicar{display:grid;place-items:center;position:absolute;z-index:5;top:34px;right:-13px;width:26px;height:26px;border-radius:50%;border:1px solid var(--sidebar-c6,#3c4652);background:var(--sidebar-c2,#1d242d);color:var(--sidebar-c5,#fff);cursor:pointer;box-shadow:0 4px 12px -4px rgba(0,0,0,.45);transition:transform .15s,background .15s}
+  .fase2App .menuAchicar:hover{transform:scale(1.1);background:#e47b00;border-color:#e47b00;color:#fff}
+  .fase2App.menuChico{grid-template-columns:76px minmax(0,1fr)}
+  .fase2App.menuChico .fase2Sidebar{padding-left:8px;padding-right:8px}
+  .fase2App.menuChico .fase2Sidebar .fase2Logo{padding:14px 0 12px;display:flex;justify-content:center}
+  .fase2App.menuChico .fase2Sidebar .fase2Logo img.logoGrande{display:none}
+  .fase2App.menuChico .fase2Sidebar .fase2Logo img.logoChico{display:block;width:40px;height:40px;max-width:40px;border-radius:11px;object-fit:cover}
+  .fase2App.menuChico .menuBuscar,.fase2App.menuChico .menuRecargar{width:auto;margin-left:4px;margin-right:4px;justify-content:center;padding-left:0;padding-right:0}
+  .fase2App.menuChico .menuBuscar span,.fase2App.menuChico .menuBuscar kbd,.fase2App.menuChico .menuRecargar span:last-child{display:none}
+  .fase2App.menuChico .fase2Sidebar .menuGrupo{font-size:0;height:1px;margin:10px 10px;padding:0;background:var(--sidebar-c6,#3c4652);overflow:hidden}
+  .fase2App.menuChico .fase2Sidebar nav button.menuItem{justify-content:center;padding-left:0;padding-right:0;gap:0}
+  .fase2App.menuChico .fase2Sidebar nav button.menuItem .menuTexto{display:none}
+  .fase2App.menuChico .fase2Sidebar nav button.menuItem.active::after{display:none}
+  .fase2App.menuChico .fase2Sidebar .menuTema{grid-template-columns:1fr;margin-left:4px;margin-right:4px}
+  .fase2App.menuChico .fase2Sidebar .menuTema .menuTemaTxt{display:none}
+  .fase2App.menuChico .fase2Sidebar .fase2Usuario{flex-direction:column;gap:6px;padding:8px 4px;margin-left:4px;margin-right:4px;justify-content:center}
+  .fase2App.menuChico .fase2Sidebar .fase2Usuario > span{display:none}
+}
