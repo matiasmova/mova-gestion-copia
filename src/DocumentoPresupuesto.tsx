@@ -6,7 +6,7 @@ import { textoMedios } from './formasPago'
 import { COLOR_MARCA_HEX, agruparPorTipo, completarDatosDocumento, lineasRecomendaciones, type DatosPdf } from './pdfPresupuesto'
 import { formatoPct, importeBruto, importeNeto, partirDescripcion, pctItem } from './presupuestoCalculos'
 import { antesYAhora, etiquetaModificacion } from './presupuestoModificaciones'
-import { mensajeEstado, PCT_ANTICIPO, totalAPagarHoy, type EstadoPresupuesto, type PasoLinea } from './estadoObra'
+import { mensajeEstado, PCT_ANTICIPO, totalAPagarHoy, type EstadoPresupuesto } from './estadoObra'
 import { codigoPresupuesto } from './codigoPresupuesto'
 import { incluyeDe, partesConItems, totalItems } from './resumenDocumento'
 import { supabase } from './supabase'
@@ -121,37 +121,71 @@ async function verComprobante(ruta: string) {
 }
 
 const conSigno = (n: number) => (n < 0 ? `− ${moneda(Math.abs(n))}` : `+ ${moneda(n)}`)
-const diaMes = (f: string) => fechaCorta(f).replace(/\/\d{4}$/, '')
 
-// Franja destacada: los pasos de pago unidos de izquierda a derecha.
+// Línea de pagos en plata, de $ 0 al total: seña · por avance (hoy) · al terminar.
 function FranjaLinea({ e }: { e: EstadoPresupuesto }) {
-  // Sin el paso final cuando ya no suma nada (el avance llegó al 100%).
-  const todos = e.linea.filter((p) => !((p.tipo === 'final' || p.tipo === 'avance') && Math.abs(p.importe) <= 0.5 && e.linea.length > 1))
-  const pasos: PasoLinea[] = todos.length > 6 ? [todos[0], ...todos.slice(-5)] : todos
-  const color = (p: PasoLinea) => (p.estado === 'ok' ? VERDE : p.estado === 'pendiente' ? NARANJA : '#DADDE2')
-  const pct = e.totalActualizado > 0 ? Math.min(100, (e.cobrado / e.totalActualizado) * 100) : 0
+  const total = Math.max(1, e.totalActualizado)
+  const porAvance = Math.max(0, e.corresponde - e.anticipo)
+  const restoFinal = Math.max(0, e.totalActualizado - e.corresponde)
+  const faltaSena = Math.max(0, e.anticipo - e.cobrado)
+  const pctDe = (n: number) => `${Math.max(0, Math.min(100, (n / total) * 100))}%`
+  const pasos = [
+    { e: `1 · Seña ${PCT_ANTICIPO}%`, v: moneda(e.anticipo), s: faltaSena > 0.5 ? `Falta ${moneda(faltaSena)}` : 'Pagada', c: NARANJA, t: faltaSena > 0.5 ? NARANJA_OSC : VERDE },
+    { e: '2 · Por avance (hoy)', v: `+ ${moneda(porAvance)}`, s: porAvance > 0.5 ? `obra al ${e.avance}%` : 'todavía sin ítems terminados', c: '#F2A65E', t: GRIS },
+    { e: e.terminada ? '3 · Obra finalizada' : '3 · Al terminar', v: `+ ${moneda(restoFinal)}`, s: e.terminada ? 'Obra terminada' : 'El resto, con la obra al 100%', c: '#DADDE2', t: GRIS },
+  ]
   return (
-    <div style={{ background: AVISO_FONDO, border: `1px solid ${AVISO_BORDE}`, borderRadius: '14px', padding: '16px 10px 12px' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${pasos.length}, minmax(0, 1fr))` }}>
-        {pasos.map((p, i) => (
-          <div key={`${p.tipo}-${i}`} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '0 3px' }}>
-            {i > 0 && <span style={{ position: 'absolute', top: '11px', right: '50%', width: '100%', height: '3px', background: p.estado === 'futuro' ? '#DADDE2' : color(p) }} />}
-            <span style={{ background: '#fff', borderRadius: '50%', padding: '2px', position: 'relative', zIndex: 1, margin: '-2px 0 0' }}><Icono estado={p.estado} tam={22} /></span>
-            <strong style={{ color: OSCURO, fontSize: '12px', marginTop: '8px', lineHeight: 1.2 }}>{p.tipo === 'anticipo' ? `Anticipo ${PCT_ANTICIPO}%` : p.tipo === 'final' ? (e.terminada ? 'Obra finalizada' : 'Al finalizar') : `Avance ${Math.round(p.porcentaje ?? 0)}%`}</strong>
-            <span style={{ fontSize: '10.5px', color: GRIS }}>{p.tipo === 'avance' && p.fecha ? diaMes(p.fecha) : p.tipo === 'anticipo' ? 'Al confirmar' : e.terminada ? '' : 'Saldo final'}</span>
-            <strong style={{ color: OSCURO, fontSize: '11.5px', marginTop: '3px', overflowWrap: 'anywhere' }}>{p.tipo === 'anticipo' ? moneda(p.importe) : p.importe < -0.5 ? `− ${moneda(-p.importe)}` : `+ ${moneda(p.importe)}`}</strong>
-            <span style={{ fontSize: '10.5px', fontWeight: 700, color: p.estado === 'ok' ? VERDE : p.estado === 'futuro' ? GRIS : NARANJA_OSC, overflowWrap: 'anywhere' }}>{p.estado === 'ok' ? (p.tipo === 'anticipo' ? 'Pagado' : 'Al día') : p.estado === 'futuro' ? 'Pendiente' : `Falta ${moneda(p.falta)}`}</span>
+    <div>
+      <div style={{ position: 'relative', paddingTop: '20px' }}>
+        <span style={{ position: 'absolute', top: 0, left: pctDe(e.cobrado), transform: 'translateX(-50%)', fontSize: '10.5px', fontWeight: 800, color: VERDE, whiteSpace: 'nowrap' }}>Pagado {moneda(e.cobrado)}</span>
+        <div style={{ display: 'flex', height: '14px', borderRadius: '8px', overflow: 'hidden', background: '#E8EBEF' }}>
+          <i style={{ width: pctDe(e.anticipo), background: NARANJA }} />
+          <i style={{ width: pctDe(porAvance), background: '#F2A65E' }} />
+        </div>
+        <span style={{ position: 'absolute', left: pctDe(e.cobrado), top: '15px', width: '2px', height: '24px', background: VERDE, transform: 'translateX(-50%)' }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: GRIS, marginTop: '4px' }}><span>$ 0</span><strong>100% = {moneda(e.totalActualizado)}</strong></div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px', marginTop: '10px' }}>
+        {pasos.map((p) => (
+          <div key={p.e} style={{ background: '#F7F8FA', borderRadius: '10px', padding: '10px 12px', boxShadow: `inset 3px 0 0 ${p.c}`, minWidth: 0 }}>
+            <div style={{ fontSize: '9.5px', fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: GRIS }}>{p.e}</div>
+            <strong style={{ display: 'block', color: OSCURO, fontSize: '15px', overflowWrap: 'anywhere' }}>{p.v}</strong>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: p.t }}>{p.s}</span>
           </div>
         ))}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginTop: '14px', padding: '0 4px', fontSize: '12px', fontWeight: 700 }}>
-        <span style={{ color: OSCURO }}>Pagado {moneda(e.cobrado)} de {moneda(e.totalActualizado)}</span>
-        <Barra pct={pct} color={VERDE} />
-        <span style={{ color: e.pendienteHoy > 0.5 ? NARANJA_OSC : VERDE }}>{e.pendienteHoy > 0.5 ? `A pagar hoy (obra): ${moneda(e.pendienteHoy)}` : 'Obra al día'}</span>
-      </div>
-      {todos.length > pasos.length && <div style={{ ...s.chico, fontSize: '10.5px', padding: '4px 4px 0' }}>Se muestran el anticipo y los últimos {pasos.length - 1} avances.</div>}
     </div>
   )
+}
+
+// Detalle por ítem: cuánto avanzó cada uno y lo que suma hoy.
+function DetalleAvance({ e }: { e: EstadoPresupuesto }) {
+  const det = e.detalleAvance ?? []
+  const suma = det.reduce((t, x) => t + x.sumaHoy, 0)
+  const th = { fontSize: '9.5px', fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase' as const, color: GRIS, textAlign: 'left' as const, padding: '0 6px 6px', borderBottom: '1px solid #E8EBEF' }
+  const td = { padding: '8px 6px', borderBottom: '1px solid #F1F3F5', verticalAlign: 'middle' as const }
+  return <>
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+        <thead><tr><th style={th}>Ítem</th><th style={{ ...th, textAlign: 'right' }}>Valor</th><th style={th}>Avance</th><th style={{ ...th, textAlign: 'right' }}>Suma hoy</th></tr></thead>
+        <tbody>
+          {det.map((it) => {
+            const fin = it.avance >= 100
+            const porUnidad = it.cantidad > 1 && Number.isInteger(it.cantidad) && it.cantidad <= 50
+            const tAv = fin ? '✓ Terminado' : porUnidad ? `${Math.round(it.cantidad * it.avance / 100)} de ${it.cantidad}` : `${Math.round(it.avance)}%`
+            return <tr key={it.id}>
+              <td style={{ ...td, fontWeight: 700, color: OSCURO }}>{it.descripcion}</td>
+              <td style={{ ...td, textAlign: 'right', color: GRIS, whiteSpace: 'nowrap' }}>{moneda(it.valor)}</td>
+              <td style={{ ...td, whiteSpace: 'nowrap' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700, fontSize: '11.5px', color: fin ? VERDE : it.avance > 0 ? NARANJA_OSC : GRIS }}><span style={{ display: 'inline-flex', width: '60px', marginRight: '2px' }}><Barra pct={it.avance} color={fin ? VERDE : NARANJA} /></span>{tAv}</span></td>
+              <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: it.sumaHoy > 0.5 ? OSCURO : GRIS, whiteSpace: 'nowrap' }}>{moneda(it.sumaHoy)}</td>
+            </tr>
+          })}
+        </tbody>
+        <tfoot><tr><td style={{ ...td, borderBottom: 0, fontWeight: 800, color: OSCURO }} colSpan={3}>Total por avance</td><td style={{ ...td, borderBottom: 0, textAlign: 'right', fontWeight: 800, color: OSCURO, whiteSpace: 'nowrap' }}>{moneda(suma)}</td></tr></tfoot>
+      </table>
+    </div>
+    <p style={{ ...s.chico, margin: '6px 0 0' }}>Con la seña se cubre el {PCT_ANTICIPO}% de cada ítem. El {100 - PCT_ANTICIPO}% restante de cada uno se paga a medida que se termina, hasta completar el total del trabajo.</p>
+  </>
 }
 
 // Antes de aceptar: cómo se va a pagar (seña hoy, el resto según avance, el final).
@@ -190,21 +224,24 @@ function EstadoCuenta({ e }: { e: EstadoPresupuesto }) {
   const nPend = e.gastosExtra.filter((g) => !g.devuelto).length
   const ok = msg.tono === 'ok'
   return <>
-    <Seccion texto="Estado de cuenta">
+    <Seccion texto="Cuánto corresponde hoy">
       <Tarjetas cifras={[
-        { e: 'Pendiente de la obra', v: moneda(e.pendienteHoy), s: `Según el avance (${e.avance}%)`, color: e.pendienteHoy > 0.5 ? OSCURO : VERDE },
-        { e: 'Gastos a reintegrar', v: moneda(e.gastoExtraPendiente), s: nPend ? `${nPend} ${nPend === 1 ? 'gasto pendiente' : 'gastos pendientes'}` : 'Sin gastos pendientes' },
+        { e: `Seña ${PCT_ANTICIPO}%`, v: moneda(e.anticipo), s: 'Al confirmar el trabajo' },
+        { e: 'Avance de obra', v: `+ ${moneda(Math.max(0, e.corresponde - e.anticipo))}`, s: `${100 - PCT_ANTICIPO}% de lo terminado · obra al ${e.avance}%` },
         hoy > 0.5
-          ? { e: 'Total a pagar hoy', v: moneda(hoy), s: e.gastoExtraPendiente > 0.5 ? 'Obra + gastos' : 'Según el avance', destacada: 'naranja' }
-          : { e: 'Total a pagar hoy', v: moneda(0), s: 'Estás al día', destacada: 'verde' },
+          ? { e: 'A pagar hoy', v: moneda(hoy), s: `Ya pagaste ${moneda(e.cobrado)}`, destacada: 'naranja' }
+          : { e: 'A pagar hoy', v: moneda(0), s: 'Estás al día', destacada: 'verde' },
       ]} />
+      {e.gastoExtraPendiente > 0.5 && <p style={{ ...s.chico, margin: '6px 0 0' }}>Incluye {moneda(e.gastoExtraPendiente)} de gastos a reintegrar ({nPend} {nPend === 1 ? 'gasto' : 'gastos'}, detalle más abajo).</p>}
       <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', background: ok ? VERDE_SUAVE : AVISO_FONDO, border: `1px solid ${ok ? '#C7E3D4' : AVISO_BORDE}`, borderRadius: '11px', padding: '11px 13px', marginTop: '12px', color: ok ? VERDE : '#7A4A07' }}>
         <Icono estado={ok ? 'ok' : 'pendiente'} tam={20} />
         <div><strong style={{ color: ok ? VERDE : NARANJA_OSC }}>{msg.titulo}.</strong> {msg.detalle}</div>
       </div>
     </Seccion>
 
-    <Seccion texto="Línea de tiempo de pagos">
+    {e.detalleAvance && e.detalleAvance.length > 0 && <Seccion texto="Detalle del avance"><DetalleAvance e={e} /></Seccion>}
+
+    <Seccion texto="Línea de pagos">
       <FranjaLinea e={e} />
     </Seccion>
 
