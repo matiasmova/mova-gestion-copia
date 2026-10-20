@@ -3823,3 +3823,62 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .ecNueva{align-self:flex-start;border:1px dashed #b8c0cc;background:#fff;border-radius:10px;padding:8px 14px;font:inherit;font-size:13.5px;font-weight:700;color:#2b313a;cursor:pointer}
 .ecNueva:hover{border-color:#141a24}
 @media (max-width:560px){.ecCant{display:none}}
+
+/* Para hacer → Notas */
+.ntPanel{margin-top:18px;display:flex;flex-direction:column;gap:10px}
+.ntCab{display:flex;align-items:center;gap:8px}
+.ntCab b{font-family:var(--fuente-titulos,inherit);font-size:17px;color:#141a24}
+.ntCab span{font-size:12px;font-weight:800;color:#6a7382;background:#eef1f5;border-radius:999px;padding:2px 8px}
+.ntNueva,.ntNota{--nt:#d6dbe3;--nt-bg:#fff;background:var(--nt-bg);border:1px solid #e3e8ef;border-left:4px solid var(--nt);border-radius:14px;transition:box-shadow .15s,transform .15s}
+.ntNueva{padding:10px 12px;display:flex;flex-direction:column;gap:10px}
+.ntNueva:focus-within{box-shadow:0 6px 18px rgba(20,26,36,.08)}
+.ntNueva textarea,.ntNota textarea{width:100%;border:0;background:transparent;resize:vertical;font:inherit;font-size:14.5px;color:#141a24;outline:none;min-height:24px}
+.c-amarillo{--nt:#e3a008;--nt-bg:#fffaeb}
+.c-verde{--nt:#12a06a;--nt-bg:#effaf4}
+.c-azul{--nt:#2f6fd6;--nt-bg:#f0f5ff}
+.c-rojo{--nt:#d9483f;--nt-bg:#fff2f1}
+.c-violeta{--nt:#7c5cff;--nt-bg:#f5f2ff}
+.ntCuando{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:flex-end}
+.ntCuando label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:#6a7382}
+.ntCuando label small{font-weight:500}
+.ntCuando input[type=date],.ntCuando input[type=time]{border:1px solid #e3e8ef;border-radius:9px;padding:6px 8px;font:inherit;font-size:13.5px;background:#fff;color:#141a24}
+.ntAtajos{display:flex;gap:6px;flex-wrap:wrap}
+.ntAtajos button{border:1px solid #e3e8ef;background:#fff;border-radius:999px;padding:5px 10px;font:inherit;font-size:12.5px;font-weight:700;color:#2b313a;cursor:pointer}
+.ntAtajos button.on{background:#14181e;border-color:#14181e;color:#fff}
+.ntCuando label.ntAviso{flex-direction:row;align-items:center;gap:6px;flex-basis:100%;font-size:12.5px;color:#2b313a}
+.ntColores{display:flex;gap:7px}
+.ntCol{width:20px;height:20px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #d6dbe3;cursor:pointer;background:var(--nt-bg);padding:0;transition:transform .15s}
+.ntCol.c-ninguno{background:#fff}
+.ntCol:not(.c-ninguno){background:var(--nt)}
+.ntCol:hover{transform:scale(1.12)}
+.ntCol.on{box-shadow:0 0 0 2px #141a24}
+.ntAcc{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.ntAcc button{border:1px solid #e3e8ef;background:#fff;border-radius:10px;padding:7px 12px;font:inherit;font-size:13px;font-weight:700;color:#2b313a;cursor:pointer;transition:transform .15s,border-color .15s}
+.ntAcc button:hover{border-color:#141a24;transform:translateY(-1px)}
+.ntAcc button.on{border-color:#141a24}
+.ntAcc button.ok{background:#14181e;border-color:#14181e;color:#fff}
+.ntAcc button:disabled{opacity:.5;cursor:default;transform:none}
+.ntLista{display:flex;flex-direction:column;gap:8px}
+.ntNota{display:flex;align-items:flex-start;gap:10px;padding:10px 10px 10px 12px}
+.ntNota:hover{box-shadow:0 6px 18px rgba(20,26,36,.07)}
+.ntNota.editando{flex-direction:column;align-items:stretch;gap:10px}
+.ntCheck{flex:0 0 auto;width:22px;height:22px;border-radius:50%;border:2px solid #b8c0cc;background:#fff;color:#fff;font-size:12px;font-weight:900;line-height:1;cursor:pointer;margin-top:1px;transition:background .15s,border-color .15s}
+.ntCheck:hover{border-color:#12a06a}
+.ntCheck.on{background:#12a06a;border-color:#12a06a}
+.ntCuerpo{flex:1;min-width:0}
+.ntCuerpo p{margin:0;font-size:14.5px;color:#141a24;white-space:pre-wrap;overflow-wrap:anywhere}
+.ntNota.hecha .ntCuerpo p{text-decoration:line-through;color:#8a93a0}
+.ntMeta{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.ntMeta span{font-size:11.5px;font-weight:700;color:#6a7382;background:#eef1f5;border-radius:999px;padding:2px 8px}
+.ntMeta span.hoy{color:#b26a00;background:#fff4e2}
+.ntMeta span.atr{color:#c2352c;background:#fdeceb}
+.ntMeta span.fija{color:#141a24;background:#e3e8ef}
+.ntBotones{display:flex;gap:2px;opacity:.55;transition:opacity .15s}
+.ntNota:hover .ntBotones,.ntBotones:focus-within{opacity:1}
+.ntBotones button{border:0;background:transparent;width:28px;height:28px;border-radius:8px;color:#6a7382;cursor:pointer;display:grid;place-items:center}
+.ntBotones button:hover{background:#eef1f5;color:#141a24}
+.ntBotones button.on{color:#141a24}
+.ntVacio{margin:0;font-size:13px;color:#8a93a0}
+.ntVerHechas{align-self:flex-start;border:0;background:transparent;font:inherit;font-size:13px;font-weight:700;color:#6a7382;cursor:pointer;padding:2px 0}
+.ntVerHechas:hover{color:#141a24;text-decoration:underline}
+@media (hover:none){.ntBotones{opacity:1}}

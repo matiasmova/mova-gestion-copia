@@ -73,6 +73,22 @@ Deno.serve(async (req) => {
   // ---- Resumen de "Para hacer" (solo a los administradores) ----
   try { await resumenes(supabase, subs ?? [], enviarATodos) } catch (e) { console.error('resumen', e) }
 
+  // Notas (fase 39): se avisa a quien la escribió cuando llega notificar_en.
+  try {
+    const ahoraN = new Date()
+    const { data: notas } = await supabase.from('notas').select('id,texto,fecha,hora,user_id')
+      .eq('hecha', false).eq('notificado', false).not('notificar_en', 'is', null)
+      .lte('notificar_en', ahoraN.toISOString()).gte('notificar_en', new Date(ahoraN.getTime() - 24 * 3600 * 1000).toISOString())
+    for (const n of (notas ?? []) as { id: number; texto: string; fecha: string | null; hora: string | null; user_id: string }[]) {
+      const { data: marcada } = await supabase.from('notas').update({ notificado: true }).eq('id', n.id).eq('notificado', false).select('id')
+      if (!marcada?.length) continue
+      const suyas = (subs ?? []).filter((s) => s.user_id === n.user_id)
+      if (!suyas.length) continue
+      const cuando = n.fecha ? `${String(n.fecha).split('-').reverse().slice(0, 2).join('/')}${n.hora ? ` ${String(n.hora).slice(0, 5)}` : ''}` : ''
+      await enviarATodos(JSON.stringify({ title: '📝 MOVA — Nota', body: [n.texto.slice(0, 180), cuando].filter(Boolean).join(' · '), url: '/', tag: 'nota-' + n.id }), suyas)
+    }
+  } catch (e) { console.error('notas', e) } // sin la tabla (falta el SQL de la fase 39) sigue igual
+
   // Agenda: se avisa cuando llega notificar_en (fecha + hora − anticipación, lo calcula la app).
   // Solo lo de las últimas 24 h, para no mandar de golpe avisos viejos.
   const ahora = new Date()
@@ -159,9 +175,10 @@ async function resumenes(db: Cliente, subs: Sub[], enviar: (payload: string, lis
 
   if (tocaManana) {
     const hace30 = new Date(ar.getTime() - 30 * 86400000).toISOString().slice(0, 10)
-    const [rR, rAt, rS] = await Promise.all([
+    const [rR, rAt, rN, rS] = await Promise.all([
       db.from('recordatorios').select('titulo,hora').eq('fecha', hoy).eq('completado', false).order('hora', { ascending: true, nullsFirst: true }),
       db.from('recordatorios').select('id', { count: 'exact', head: true }).lt('fecha', hoy).gte('fecha', hace30).eq('completado', false),
+      db.from('notas').select('id', { count: 'exact', head: true }).eq('fecha', hoy).eq('hecha', false).in('user_id', [...ids]),
       cfg.stock ? db.from('productos_servicios').select('stock,stock_minimo').eq('tipo', 'producto').eq('activo', true).gt('stock_minimo', 0) : Promise.resolve({ data: [] }),
     ])
     const agenda = (rR.data ?? []) as { titulo: string; hora: string | null }[]
@@ -173,6 +190,7 @@ async function resumenes(db: Cliente, subs: Sub[], enviar: (payload: string, lis
     const lineas = [
       cobros.length ? `💵 Cobrar ${cobros.length === 1 ? `a ${cobros[0].nombre}` : `${cobros.length} obras`}: ${cortoP(totalCobros)}` : '',
       agenda.length ? `📍 ${agenda.length === 1 ? `${agenda[0].hora ? agenda[0].hora.slice(0, 5) + ' ' : ''}${agenda[0].titulo}` : `${agenda.length} cosas en la agenda${agenda[0].hora ? ` (la primera ${agenda[0].hora.slice(0, 5)})` : ''}`}` : '',
+      rN.count ? `📝 ${rN.count} nota${rN.count === 1 ? '' : 's'} para hoy` : '',
       borradores ? `📤 ${borradores} presupuesto${borradores === 1 ? '' : 's'} para enviar` : '',
       sinRespuesta ? `💬 ${sinRespuesta} presupuesto${sinRespuesta === 1 ? '' : 's'} sin respuesta` : '',
       vencidas ? `⏰ ${vencidas} obra${vencidas === 1 ? '' : 's'} con el plazo vencido` : '',
