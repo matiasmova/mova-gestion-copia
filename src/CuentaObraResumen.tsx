@@ -39,7 +39,7 @@ export default function CuentaObraResumen({ cuenta, dinero, lineaTiempo = false 
             <li key={i} className={p.estado}>
               <i>{p.estado === 'ok' ? '✓' : p.estado === 'pendiente' ? '!' : ''}</i>
               <div>
-                <b>{p.fecha && p.tipo !== 'anticipo' ? `${fechaCorta(p.fecha)} · ` : ''}{p.titulo}{p.porcentaje != null && p.tipo === 'avance' ? ` · ${p.porcentaje}%` : ''}</b>
+                <b>{p.fecha && p.tipo !== 'anticipo' ? `${fechaCorta(p.fecha)} · ` : ''}{p.titulo}{p.porcentaje != null && p.tipo === 'avance' ? ` · ${Math.round(p.porcentaje)}%` : ''}</b>
                 <small>{p.tipo === 'anticipo' ? (p.detalle ?? '') : `A pagar hasta acá: ${dinero(p.acumulado)}`}</small>
               </div>
               <div className="m">

@@ -563,12 +563,22 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
       for (const r of renglonesDet) { texto(r, xDescr, yy + 0.5, F_TXT - 0.5, font, GRIS); yy -= 13.5 }
       const cuenta = `${Number(it.cantidad).toLocaleString('es-AR')} × ${moneda(it.precio_unitario)}`
       texto(cuenta, xDescr, yy, F_CHICO, font, GRIS)
+      let xPill = xDescr + ancho(cuenta, F_CHICO) + 5
       if (pct > 0) {
-        const pTxt = `-${formatoPct(pct)}%`
-        const xPill = xDescr + ancho(cuenta, F_CHICO) + 5
+        const pTxt = `${formatoPct(pct)}% de descuento`
         const wPill = ancho(pTxt, F_MINI, bold) + 9
         caja(xPill, yy + 7.3, wPill, 9.6, { fondo: NARANJA_SUAVE, r: 4.8 })
         texto(pTxt, xPill + 4.5, yy - 0.2, F_MINI, bold, NARANJA_OSC)
+        xPill += wPill + 4
+      }
+      // Obra llevada por ítems: cuánto avanzó cada uno.
+      const avIt = estado?.avanceItems && it.id != null ? estado.avanceItems[it.id] : undefined
+      if (avIt != null) {
+        const av = Math.round(avIt)
+        const aTxt = av >= 100 ? 'Terminado' : `Avance ${av}%`
+        const wA = ancho(aTxt, F_MINI, bold) + 9
+        caja(xPill, yy + 7.3, wA, 9.6, { fondo: av >= 100 ? VERDE_SUAVE : NARANJA_SUAVE, r: 4.8 })
+        texto(aTxt, xPill + 4.5, yy - 0.2, F_MINI, bold, av >= 100 ? VERDE : NARANJA_OSC)
       }
       derecha(moneda(neto), xImp, y, F_NORMAL + 0.5, bold, OSCURO)
       if (pct > 0) {
@@ -721,7 +731,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
         const x = xDe(i)
         if (p.estado === 'futuro') page.drawCircle({ x, y: yNodo, size: 10, color: BLANCO, borderColor: GRIS_CAJA, borderWidth: 1.6 })
         else { page.drawCircle({ x, y: yNodo, size: 12.5, color: BLANCO }); icono(x, yNodo, p.estado, 10) }
-        const et = p.tipo === 'anticipo' ? `Anticipo ${PCT_ANTICIPO}%` : p.tipo === 'final' ? (estado.terminada ? 'Obra finalizada' : 'Al finalizar') : `Avance ${p.porcentaje ?? 0}%`
+        const et = p.tipo === 'anticipo' ? `Anticipo ${PCT_ANTICIPO}%` : p.tipo === 'final' ? (estado.terminada ? 'Obra finalizada' : 'Al finalizar') : `Avance ${Math.round(p.porcentaje ?? 0)}%`
         const centro = (t: string, yy: number, size: number, f: PDFFont, color: RGB) => texto(t, x - ancho(t, size, f) / 2, yy, size, f, color)
         let yy = yNodo - 24
         for (const r of partir(et, F_TXT - 0.5, anchoEt, bold).slice(0, 2)) { centro(r, yy, F_TXT - 0.5, bold, OSCURO); yy -= 12.5 }

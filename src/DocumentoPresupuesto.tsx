@@ -137,7 +137,7 @@ function FranjaLinea({ e }: { e: EstadoPresupuesto }) {
           <div key={`${p.tipo}-${i}`} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '0 3px' }}>
             {i > 0 && <span style={{ position: 'absolute', top: '11px', right: '50%', width: '100%', height: '3px', background: p.estado === 'futuro' ? '#DADDE2' : color(p) }} />}
             <span style={{ background: '#fff', borderRadius: '50%', padding: '2px', position: 'relative', zIndex: 1, margin: '-2px 0 0' }}><Icono estado={p.estado} tam={22} /></span>
-            <strong style={{ color: OSCURO, fontSize: '12px', marginTop: '8px', lineHeight: 1.2 }}>{p.tipo === 'anticipo' ? `Anticipo ${PCT_ANTICIPO}%` : p.tipo === 'final' ? (e.terminada ? 'Obra finalizada' : 'Al finalizar') : `Avance ${p.porcentaje ?? 0}%`}</strong>
+            <strong style={{ color: OSCURO, fontSize: '12px', marginTop: '8px', lineHeight: 1.2 }}>{p.tipo === 'anticipo' ? `Anticipo ${PCT_ANTICIPO}%` : p.tipo === 'final' ? (e.terminada ? 'Obra finalizada' : 'Al finalizar') : `Avance ${Math.round(p.porcentaje ?? 0)}%`}</strong>
             <span style={{ fontSize: '10.5px', color: GRIS }}>{p.tipo === 'avance' && p.fecha ? diaMes(p.fecha) : p.tipo === 'anticipo' ? 'Al confirmar' : e.terminada ? '' : 'Saldo final'}</span>
             <strong style={{ color: OSCURO, fontSize: '11.5px', marginTop: '3px', overflowWrap: 'anywhere' }}>{p.tipo === 'anticipo' ? moneda(p.importe) : p.importe < -0.5 ? `− ${moneda(-p.importe)}` : `+ ${moneda(p.importe)}`}</strong>
             <span style={{ fontSize: '10.5px', fontWeight: 700, color: p.estado === 'ok' ? VERDE : p.estado === 'futuro' ? GRIS : NARANJA_OSC, overflowWrap: 'anywhere' }}>{p.estado === 'ok' ? (p.tipo === 'anticipo' ? 'Pagado' : 'Al día') : p.estado === 'futuro' ? 'Pendiente' : `Falta ${moneda(p.falta)}`}</span>
@@ -394,7 +394,8 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
                     {detalle && <div style={{ ...s.chico, whiteSpace: 'pre-line' }}>{detalle}</div>}
                     <div style={{ ...s.chico, marginTop: '2px' }}>
                       {Number(it.cantidad).toLocaleString('es-AR')} × {moneda(it.precio_unitario)}
-                      {pct > 0 && <span style={{ display: 'inline-block', marginLeft: '5px', background: NARANJA_SUAVE, color: NARANJA_OSC, fontWeight: 700, borderRadius: '999px', padding: '0 7px', fontSize: '11px' }}>−{formatoPct(pct)}%</span>}
+                      {pct > 0 && <span style={{ display: 'inline-block', marginLeft: '5px', background: NARANJA_SUAVE, color: NARANJA_OSC, fontWeight: 700, borderRadius: '999px', padding: '0 7px', fontSize: '11px' }}>{formatoPct(pct)}% de descuento</span>}
+                      {e?.avanceItems && it.id != null && e.avanceItems[it.id] != null && (() => { const av = Math.round(e.avanceItems[it.id]); return <span style={{ display: 'inline-block', marginLeft: '5px', background: av >= 100 ? '#E6F4EC' : '#EEF1F5', color: av >= 100 ? VERDE : '#4A5361', fontWeight: 700, borderRadius: '999px', padding: '0 7px', fontSize: '11px' }}>{av >= 100 ? '✓ Terminado' : `Avance ${av}%`}</span> })()}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
