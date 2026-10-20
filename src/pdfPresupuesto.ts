@@ -201,7 +201,6 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     else { modo = 'anexo'; opciones.onAviso?.('Falta instalar la función "comprobante" en Supabase: por ahora los comprobantes van adjuntos al final.') }
   }
   const conComprobante = modo === 'anexo' ? gastosCon : []
-  const diaMes = (f: string) => fechaCorta(f).replace(/\/\d{4}$/, '')
   let page: PDFPage = pdf.addPage([W, H])
   let y = H - M
 
@@ -672,18 +671,20 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
       derecha(`Total pagado  ${moneda(estado.cobrado)}`, xImp, y, F_NORMAL, bold, VERDE); y -= 26
     }
 
-    // ---------- Estado de cuenta ----------
+    // ---------- Cuánto corresponde hoy ----------
+    // Una sola cuenta (la misma que la app): seña + el resto de cada ítem según su avance.
     const msg = mensajeEstado(estado, moneda)
+    const porAvance = Math.max(0, estado.corresponde - estado.anticipo)
     lugar(170)
-    titulo('Estado de cuenta')
-    const nPend = estado.gastosExtra.filter((g) => !g.devuelto).length
+    titulo('Cuánto corresponde hoy')
     tarjetas([
-      { e: 'PENDIENTE DE LA OBRA', v: moneda(estado.pendienteHoy), s: `Según el avance (${estado.avance}%)`, color: estado.pendienteHoy > 0.5 ? OSCURO : VERDE },
-      { e: 'GASTOS A REINTEGRAR', v: moneda(estado.gastoExtraPendiente), s: nPend ? `${nPend} ${nPend === 1 ? 'gasto pendiente' : 'gastos pendientes'}` : 'Sin gastos pendientes' },
+      { e: `SEÑA ${PCT_ANTICIPO}%`, v: moneda(estado.anticipo), s: 'Al confirmar el trabajo' },
+      { e: 'AVANCE DE OBRA', v: `+ ${moneda(porAvance)}`, s: `${100 - PCT_ANTICIPO}% de lo terminado · obra al ${estado.avance}%` },
       aPagarHoy > 0.5
-        ? { e: 'TOTAL A PAGAR HOY', v: moneda(aPagarHoy), s: estado.gastoExtraPendiente > 0.5 ? 'Obra + gastos' : 'Según el avance', destacada: 'naranja' }
-        : { e: 'TOTAL A PAGAR HOY', v: moneda(0), s: 'Estás al día', destacada: 'verde' },
+        ? { e: 'A PAGAR HOY', v: moneda(aPagarHoy), s: `Ya pagaste ${moneda(estado.cobrado)}`, destacada: 'naranja' }
+        : { e: 'A PAGAR HOY', v: moneda(0), s: 'Estás al día', destacada: 'verde' },
     ])
+    if (estado.gastoExtraPendiente > 0.5) { texto(`Incluye ${moneda(estado.gastoExtraPendiente)} de gastos a reintegrar (detalle más abajo).`, M, y + 2, F_CHICO, font, GRIS); y -= 14 }
     // Mensaje (aviso naranja o verde)
     const ok = msg.tono === 'ok'
     const rMsg = partir(`${msg.titulo}. ${msg.detalle}`.replace(/\.\.\s/, '. '), F_TXT, CW - 44)
@@ -703,54 +704,82 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     })
     y -= altoMsg + 22
 
-    // ---------- Línea de tiempo de pagos ----------
-    lugar(190)
-    titulo('Línea de tiempo de pagos')
-    // Franja destacada: los pasos de pago unidos de izquierda a derecha.
-    {
-      // Sin el paso final cuando ya no suma nada (el avance llegó al 100%).
-      const todos = estado.linea.filter((p) => !((p.tipo === 'final' || p.tipo === 'avance') && Math.abs(p.importe) <= 0.5 && estado.linea.length > 1))
-      const pasos = todos.length > 6 ? [todos[0], ...todos.slice(-5)] : todos
-      const n = pasos.length
-      const altoCaja = 140
-      caja(M, y + 4, CW, altoCaja, { fondo: AVISO_FONDO, borde: AVISO_BORDE, r: 10 })
-      const yNodo = y - 26
-      const margen = 46
-      const paso = n > 1 ? (CW - 2 * margen) / (n - 1) : 0
-      const xDe = (i: number) => (n > 1 ? M + margen + i * paso : M + CW / 2)
-      const colorDe = (e: string) => (e === 'ok' ? VERDE : e === 'pendiente' ? NARANJA : GRIS_CAJA)
-      // pista gris y tramos de color hasta cada paso
-      if (n > 1) {
-        page.drawLine({ start: { x: xDe(0), y: yNodo }, end: { x: xDe(n - 1), y: yNodo }, thickness: 3, color: LINEA })
-        for (let i = 1; i < n; i++) {
-          if (pasos[i].estado !== 'futuro') page.drawLine({ start: { x: xDe(i - 1), y: yNodo }, end: { x: xDe(i), y: yNodo }, thickness: 3, color: colorDe(pasos[i].estado) })
-        }
+    // ---------- Detalle del avance (por ítem) ----------
+    if (estado.detalleAvance && estado.detalleAvance.length) {
+      const det = estado.detalleAvance
+      lugar(60 + Math.min(det.length, 3) * 22)
+      titulo('Detalle del avance')
+      const xValor = M + CW - 190, xAvance = M + CW - 150, xSuma = M + CW
+      espaciado('ÍTEM', M + 2, y, F_MINI, GRIS)
+      espaciadoDer('VALOR', xValor, y, F_MINI)
+      espaciado('AVANCE', xAvance, y, F_MINI, GRIS)
+      espaciadoDer('SUMA HOY', xSuma, y, F_MINI)
+      y -= 8
+      linea(M, y, M + CW, 0.6, LINEA)
+      y -= 15
+      for (const it of det) {
+        const rr = partir(it.descripcion || 'Ítem', F_TXT, xValor - M - 70, bold).slice(0, 2)
+        const alto = rr.length * 13 + 9
+        lugar(alto + 4)
+        rr.forEach((r, i) => texto(r, M + 2, y - i * 13, F_TXT, bold, OSCURO))
+        derecha(moneda(it.valor), xValor, y, F_CHICO + 0.5, font, GRIS)
+        const fin = it.avance >= 100
+        const porUnidad = it.cantidad > 1 && Number.isInteger(it.cantidad) && it.cantidad <= 50
+        const tAv = fin ? 'Terminado' : porUnidad ? `${Math.round(it.cantidad * it.avance / 100)} de ${it.cantidad}` : `${Math.round(it.avance)}%`
+        barra(xAvance, y - 1, 40, it.avance / 100, fin ? VERDE : NARANJA, 4)
+        texto(tAv, xAvance + 46, y, F_CHICO + 0.5, bold, fin ? VERDE : it.avance > 0 ? NARANJA_OSC : GRIS)
+        derecha(moneda(it.sumaHoy), xSuma, y, F_NORMAL, bold, it.sumaHoy > 0.5 ? OSCURO : GRIS)
+        y -= alto
+        linea(M, y + 6, M + CW, 0.5, LINEA_SUAVE)
+        y -= 6
       }
-      const anchoEt = Math.min(110, n > 1 ? paso - 6 : CW)
-      pasos.forEach((p, i) => {
-        const x = xDe(i)
-        if (p.estado === 'futuro') page.drawCircle({ x, y: yNodo, size: 10, color: BLANCO, borderColor: GRIS_CAJA, borderWidth: 1.6 })
-        else { page.drawCircle({ x, y: yNodo, size: 12.5, color: BLANCO }); icono(x, yNodo, p.estado, 10) }
-        const et = p.tipo === 'anticipo' ? `Anticipo ${PCT_ANTICIPO}%` : p.tipo === 'final' ? (estado.terminada ? 'Obra finalizada' : 'Al finalizar') : `Avance ${Math.round(p.porcentaje ?? 0)}%`
-        const centro = (t: string, yy: number, size: number, f: PDFFont, color: RGB) => texto(t, x - ancho(t, size, f) / 2, yy, size, f, color)
-        let yy = yNodo - 24
-        for (const r of partir(et, F_TXT - 0.5, anchoEt, bold).slice(0, 2)) { centro(r, yy, F_TXT - 0.5, bold, OSCURO); yy -= 12.5 }
-        const sub = p.tipo === 'avance' && p.fecha ? diaMes(p.fecha) : p.tipo === 'anticipo' ? 'Al confirmar' : estado.terminada ? '' : 'Saldo final'
-        if (sub) { centro(sub, yy, F_TXT - 1.5, font, GRIS); yy -= 12 }
-        centro(p.tipo === 'anticipo' ? moneda(p.importe) : p.importe < -0.5 ? `- ${moneda(-p.importe)}` : `+ ${moneda(p.importe)}`, yy - 1, F_CHICO, bold, OSCURO); yy -= 11
-        const est = p.estado === 'ok' ? (p.tipo === 'anticipo' ? 'Pagado' : 'Al día') : p.estado === 'futuro' ? 'Pendiente' : `Falta ${moneda(p.falta)}`
-        centro(est, yy - 1, F_CHICO + 0.5, bold, p.estado === 'ok' ? VERDE : p.estado === 'futuro' ? GRIS : NARANJA_OSC)
+      lugar(40)
+      const sumaDet = det.reduce((t, x) => t + x.sumaHoy, 0)
+      texto('Total por avance', M + 2, y - 2, F_NORMAL, bold, OSCURO)
+      derecha(moneda(sumaDet), xSuma, y - 2, F_NORMAL + 0.5, bold, OSCURO)
+      y -= 20
+      for (const r of partir(`Con la seña se cubre el ${PCT_ANTICIPO}% de cada ítem. El ${100 - PCT_ANTICIPO}% restante de cada uno se paga a medida que se termina, hasta completar el total del trabajo.`, F_CHICO + 0.5, CW)) { texto(r, M + 2, y, F_CHICO + 0.5, font, GRIS); y -= 12 }
+      y -= 14
+    }
+
+    // ---------- Línea de pagos (en plata, de $ 0 al total) ----------
+    lugar(150)
+    titulo('Línea de pagos')
+    {
+      const total = Math.max(1, estado.totalActualizado)
+      const restoFinal = Math.max(0, estado.totalActualizado - estado.corresponde)
+      // Barra: seña (naranja) + avance (naranja claro) sobre el total; marca de lo pagado.
+      const yb = y - 16, hb = 12
+      espaciado(`PAGADO ${moneda(estado.cobrado)}`.toUpperCase(), Math.min(M + CW - 120, M + CW * Math.min(1, estado.cobrado / total) - 4), y, F_MINI, VERDE)
+      caja(M, yb + hb, CW, hb, { fondo: LINEA, r: hb / 2 })
+      const wS = CW * Math.min(1, estado.anticipo / total)
+      const wA = CW * Math.min(1, porAvance / total)
+      if (wS > 0) caja(M, yb + hb, wS, hb, { fondo: NARANJA, r: hb / 2 })
+      if (wA > 1) caja(M + wS - hb / 2, yb + hb, wA + hb / 2, hb, { fondo: rgb(0.949, 0.651, 0.369), r: hb / 2 })
+      if (wS > 0 && wA > 1) caja(M + wS - hb, yb + hb, hb, hb, { fondo: NARANJA, r: 0 })
+      const xPag = M + CW * Math.min(1, estado.cobrado / total)
+      page.drawLine({ start: { x: xPag, y: yb + hb + 4 }, end: { x: xPag, y: yb - 4 }, thickness: 1.6, color: VERDE })
+      texto('$ 0', M, yb - 13, F_MINI + 0.5, font, GRIS)
+      derecha(`100% = ${moneda(estado.totalActualizado)}`, M + CW, yb - 13, F_MINI + 0.5, bold, GRIS)
+      y = yb - 28
+      // Tres pasos: seña · por avance (hoy) · al terminar
+      const faltaSena = Math.max(0, estado.anticipo - estado.cobrado)
+      const pasos: { e: string; v: string; s: string; color: RGB; tono: RGB }[] = [
+        { e: `1 · SEÑA ${PCT_ANTICIPO}%`, v: moneda(estado.anticipo), s: faltaSena > 0.5 ? `Falta ${moneda(faltaSena)}` : 'Pagada', color: NARANJA, tono: faltaSena > 0.5 ? NARANJA_OSC : VERDE },
+        { e: '2 · POR AVANCE (HOY)', v: `+ ${moneda(porAvance)}`, s: porAvance > 0.5 ? `obra al ${estado.avance}%` : 'todavía sin ítems terminados', color: rgb(0.949, 0.651, 0.369), tono: GRIS },
+        { e: estado.terminada ? '3 · OBRA FINALIZADA' : '3 · AL TERMINAR', v: `+ ${moneda(restoFinal)}`, s: estado.terminada ? 'Obra terminada' : 'El resto, con la obra al 100%', color: LINEA, tono: GRIS },
+      ]
+      const gap = 8, w = (CW - gap * 2) / 3, h = 50
+      lugar(h + 6)
+      pasos.forEach((ps, i) => {
+        const x = M + i * (w + gap)
+        caja(x, y, w, h, { fondo: GRIS_CLARO, r: 8 })
+        caja(x, y, 3, h, { fondo: ps.color, r: 1.5 })
+        espaciado(ps.e, x + 11, y - 14, F_MINI, GRIS)
+        texto(ps.v, x + 11, y - 30, F_NORMAL + 2, bold, OSCURO)
+        texto(partir(ps.s, F_CHICO, w - 20)[0] ?? '', x + 11, y - 42, F_CHICO, bold, ps.tono)
       })
-      // pie: cuánto se pagó del total
-      const yPie = y + 4 - altoCaja + 13
-      const pct = estado.totalActualizado > 0 ? Math.min(1, estado.cobrado / estado.totalActualizado) : 0
-      texto(`Pagado ${moneda(estado.cobrado)} de ${moneda(estado.totalActualizado)}`, M + 14, yPie, F_CHICO, bold, OSCURO)
-      const xb = M + 14 + ancho(`Pagado ${moneda(estado.cobrado)} de ${moneda(estado.totalActualizado)}`, F_CHICO, bold) + 10
-      const derTxt = estado.pendienteHoy > 0.5 ? `A pagar hoy (obra): ${moneda(estado.pendienteHoy)}` : 'Obra al día'
-      derecha(derTxt, M + CW - 14, yPie, F_CHICO, bold, estado.pendienteHoy > 0.5 ? NARANJA_OSC : VERDE)
-      barra(xb, yPie + 0.5, M + CW - 14 - ancho(derTxt, F_CHICO, bold) - 10 - xb, pct, VERDE)
-      if (todos.length > n) derecha(`(anticipo y últimos ${n - 1} avances)`, M + CW - 12, y - 6, F_MINI, font, GRIS)
-      y -= altoCaja + 18
+      y -= h + 18
     }
     y -= 6
 

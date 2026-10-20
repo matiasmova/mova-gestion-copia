@@ -117,7 +117,7 @@ export function PanelAvance({ porItems, avanceObra, cuenta, onBitacora, onInform
           </div>
           <ul className="oeAvLista">
             {porItems.tramos.map((x, i) => <li key={i} style={{ ['--c' as string]: COLORES_AVANCE[i % COLORES_AVANCE.length] }}>
-              <i aria-hidden /><span>{x.desc}</span><b className={x.av >= 100 ? 'fin' : ''}>{x.av >= 100 ? '✓ 100%' : `${Math.round(x.av)}%`}</b><em>hecho {plata(x.peso * x.av / 100)} <small>de {plata(x.peso)}</small></em>
+              <i aria-hidden /><span>{x.desc}</span><b className={x.av >= 100 ? 'fin' : ''}>{x.av >= 100 ? '✓ 100%' : `${Math.round(x.av)}%`}</b><em>hecho {plata(x.peso * x.av / 100)} <small>de {plata(x.peso)}</small> · suma hoy <strong>{plata(x.peso * (100 - PCT_SENA) / 100 * x.av / 100)}</strong></em>
             </li>)}
           </ul>
           {!marcados && avanceObra > 0 && <p className="oeAyuda">La obra figura en {Math.round(avanceObra)}% (cargado antes). Marcá cada ítem en el presupuesto de abajo, o usá "Arrancar con todos en {Math.round(avanceObra)}%".</p>}

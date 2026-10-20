@@ -64,6 +64,8 @@ export type EstadoPresupuesto = {
   ultimaActualizacion: string
   // Avance de cada ítem (por id), si la obra se lleva por ítems (fase 40).
   avanceItems: Record<number, number> | null
+  // Detalle para el cliente: cada ítem, su avance y lo que suma hoy (el resto de la seña × su avance).
+  detalleAvance: { id: number; descripcion: string; cantidad: number; valor: number; avance: number; sumaHoy: number }[] | null
 }
 
 const num = (x: unknown) => (x == null || x === '' ? null : Number(x))
@@ -86,7 +88,7 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
     obraId != null ? supabase.from('presupuestos').select('id').eq('obra_id', obraId).eq('estado', 'aceptado').eq('activo', true) : Promise.resolve({ data: [{ id: presupuestoId }], error: null }),
     obraId != null ? supabase.from('obra_avances').select('id, fecha, titulo, descripcion, porcentaje, created_at').eq('obra_id', obraId).order('fecha', { ascending: true }).order('id', { ascending: true }) : vacio,
     // Sin la columna "avance" (falta el SQL de la fase 40) esto falla y se sigue con el avance de la obra.
-    supabase.from('presupuesto_items').select('id, avance').eq('presupuesto_id', presupuestoId),
+    supabase.from('presupuesto_items').select('id, descripcion, cantidad, precio_unitario, descuento_pct, avance, orden').eq('presupuesto_id', presupuestoId).order('orden', { ascending: true }),
   ])
   for (const r of [rObra, rAdic, rPagos, rAv]) if (r.error) throw r.error
 
@@ -123,8 +125,13 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
   const terminada = obraEstado === 'finalizada' || obraEstado === 'observacion'
   // Un solo avance: el de la obra. Si se lleva por ítems, la app lo guarda al
   // marcar cada ítem (lo que avanzó cada uno, pesado por lo que vale).
-  const filasIt = rIt.error ? [] : ((rIt.data ?? []) as { id: number; avance: number | null }[])
+  const filasIt = rIt.error ? [] : ((rIt.data ?? []) as { id: number; descripcion: string | null; cantidad: number; precio_unitario: number; descuento_pct: number | null; avance: number | null }[])
   const avanceItems = filasIt.length && filasIt.some((x) => Number(x.avance) > 0) ? Object.fromEntries(filasIt.map((x) => [x.id, Math.min(100, Math.max(0, Number(x.avance) || 0))])) : null
+  const detalleAvance = avanceItems ? filasIt.map((x) => {
+    const valor = r2(Math.max(0, Number(x.cantidad) * Number(x.precio_unitario) * (1 - (Number(x.descuento_pct) || 0) / 100)))
+    const av = avanceItems[x.id] ?? 0
+    return { id: x.id, descripcion: String(x.descripcion ?? '').split('\n')[0], cantidad: Number(x.cantidad) || 0, valor, avance: av, sumaHoy: r2(valor * (100 - PCT_ANTICIPO) / 100 * av / 100) }
+  }).filter((x) => x.valor > 0) : null
   const avance = terminada ? 100 : Math.min(100, Math.max(0, Number(obra?.porcentaje_avance ?? 0)))
   const obraIniciada = avances.length > 0 || avance > 0
 
@@ -184,7 +191,7 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
   return {
     enObra: obraId != null, obraEstado, terminada, avance: Math.round(avance), obraIniciada,
     modificaciones, totalOriginal, totalCambios, totalActualizado,
-    avanceItems,
+    avanceItems, detalleAvance,
     anticipo, anticipoCubierto, faltaAnticipo, resto, corresponde, pendienteHoy, adelanto, saldoTotal,
     gastosExtra, gastoExtraPendiente, pagos, cobrado, avances, linea, ultimaActualizacion,
   }
