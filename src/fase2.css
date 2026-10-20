@@ -3934,3 +3934,11 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .oeAvChips button.fin.on{background:#12a06a;border-color:#12a06a}
 .oeAvChips small{font-size:12px;color:#6b7380}
 .oeAvCtrl input[type=range]{width:100%;accent-color:#e47b00}
+.oeLinea .oeAvRes{margin:10px 0 4px}
+.oeAvEmpezar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;background:#f5f6f8;border-radius:14px;padding:12px 14px;margin:4px 0 6px}
+.oeAvEmpezar > span{display:flex;flex-direction:column;min-width:0;flex:1 1 220px}
+.oeAvEmpezar > span b{font-size:13.5px;color:#14181e}
+.oeAvEmpezar > span small{font-size:12px;color:#6b7380}
+.oeAvEmpezar button{display:flex;flex-direction:column;align-items:flex-start;border:0;border-radius:11px;background:#14181e;color:#fff;padding:8px 12px;font:inherit;font-size:13px;font-weight:800;cursor:pointer;transition:transform .15s}
+.oeAvEmpezar button:hover{transform:translateY(-1px)}
+.oeAvEmpezar button small{font-size:11px;font-weight:500;color:#c9ced6}

@@ -1,6 +1,7 @@
 import { cargarExtrasPendientes, repartirMonto, aplicarCobroAExtras, type ExtraPendiente } from './cobroExtras'
 import {
   useEffect,
+  useRef,
   useState,
   type FormEvent,
 } from 'react'
@@ -613,6 +614,35 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
     cargarImagenes(obraSeguimiento.id)
   }
 
+  // Avance por ítems: al marcar un ítem, el punto de hoy de la línea se crea o se
+  // actualiza solo (una sola línea de avances) y la obra toma ese %.
+  // Se encolan (si se tocan varios ítems seguidos, no se duplica el punto de hoy).
+  const colaAvance = useRef<Promise<void>>(Promise.resolve())
+  const puntoHoy = useRef<{ obra: number; fecha: string; id: number } | null>(null)
+  function guardarAvanceItems(a: AvanceItems) {
+    const obra = obraSeguimiento
+    if (!obra) return
+    colaAvance.current = colaAvance.current.then(async () => {
+      const d = new Date()
+      const hoyLocal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      const datos = { titulo: a.titulo, descripcion: a.descripcion, porcentaje: a.porcentaje, estado: a.porcentaje >= 100 ? 'finalizada' : 'en_proceso' }
+      const ultimo = [...avances].sort((x, y) => (y.fecha ?? '').slice(0, 10).localeCompare((x.fecha ?? '').slice(0, 10)) || y.id - x.id)[0]
+      const idHoy = puntoHoy.current && puntoHoy.current.obra === obra.id && puntoHoy.current.fecha === hoyLocal ? puntoHoy.current.id
+        : ultimo && (ultimo.fecha ?? '').slice(0, 10) === hoyLocal && ultimo.titulo === a.titulo ? ultimo.id : null
+      if (idHoy) {
+        const r = await supabase.from('obra_avances').update(datos).eq('id', idHoy)
+        if (r.error) { console.error(r.error); setErrorAvances('No se pudo actualizar la línea de avances.'); return }
+      } else {
+        const r = await supabase.from('obra_avances').insert({ ...datos, obra_id: obra.id, fecha: hoyLocal }).select('id').single()
+        if (r.error || !r.data) { console.error(r.error); setErrorAvances('No se pudo actualizar la línea de avances.'); return }
+        puntoHoy.current = { obra: obra.id, fecha: hoyLocal, id: r.data.id }
+      }
+      await sincronizarObra(obra)
+      setActualizacion((v) => v + 1)
+      cargarAvances(obra.id)
+    }).catch((e) => console.error(e))
+  }
+
   // El estado y % de la obra siempre reflejan el avance MÁS RECIENTE (al crear,
   // editar o eliminar). Sin avances, la obra vuelve a 0% en proceso.
   async function sincronizarObra(obra: NonNullable<typeof obraSeguimiento>) {
@@ -1131,6 +1161,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                 onNuevo={(pct) => (pct == null && avanceItems ? abrirNuevoAvance(avanceItems.porcentaje, avanceItems) : abrirNuevoAvance(pct))}
                 onInforme={puedeInformeIA ? () => setInformeIA(obraSeguimiento) : undefined}
                 onVerTodo={() => setSeguTab('timeline')}
+                porItems={avanceItems}
               />}
               presupuestoSinAceptar={(() => {
                 if (presupuestoAceptado) return null
@@ -1143,7 +1174,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
               })()}
             >
               {presupuestoAceptado && <PresupuestoVivoObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} onCambio={() => setActualizacion((v) => v + 1)} onVerHistorial={() => setSeguTab('adicionales')} onGanancia={setGananciaObra}
-                avanceObra={Number(obraSeguimiento.porcentaje_avance) || 0} onAvanceItems={setAvanceItems} onCargarAvance={(a) => abrirNuevoAvance(a.porcentaje, a)} />}
+                avanceObra={Number(obraSeguimiento.porcentaje_avance) || 0} onAvanceItems={setAvanceItems} onAvanceCambiado={(a) => void guardarAvanceItems(a)} />}
             </ResumenObra>}
 
             {/* Hoja de abajo: enviar el PDF al cliente sin salir de la obra */}
