@@ -274,7 +274,7 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
     const h: string[] = []
     agendaHoy.forEach((e) => h.push(`Agenda de hoy${e.hora ? ` a las ${e.hora.slice(0, 5)}` : ''}: ${e.titulo}`))
     obrasInfo.terminadasConSaldo.forEach((d) => h.push(`Obra TERMINADA con saldo sin cobrar: ${d.obra.nombre_obra} de ${nombreCli(d.obra.cliente_id)}, debe ${moneda(d.saldo)}`))
-    obrasInfo.deudas.filter((d) => d.situacion === 'naranja').slice(0, 6).forEach((d) => h.push(`Cobro atrasado según el avance: ${d.obra.nombre_obra} de ${nombreCli(d.obra.cliente_id)} (${num(d.obra.porcentaje_avance)}% de avance), correspondería cobrar ${moneda(d.faltaAvance)} más`))
+    obrasInfo.deudas.filter((d) => d.situacion === 'naranja').slice(0, 6).forEach((d) => h.push(`Cobro atrasado según el avance: ${d.obra.nombre_obra} de ${nombreCli(d.obra.cliente_id)} (${Math.round(num(d.obra.porcentaje_avance))}% de avance), correspondería cobrar ${moneda(d.faltaAvance)} más`))
     obrasInfo.enObservacion.forEach((o) => h.push(`Obra en observación para revisar: ${o.nombre_obra} de ${nombreCli(o.cliente_id)}`))
     borradores.slice(0, 6).forEach((p) => { const d = diasDesde(p.fecha); h.push(`Presupuesto en borrador sin enviar: "${p.titulo}" de ${nombreCli(p.cliente_id)} por ${moneda(p.total)}${d != null ? `, hace ${d} días` : ''}`) })
     personal.filas.filter((f) => f.debe > 0.5).slice(0, 5).forEach((f) => h.push(`Le debés al personal: ${f.nombre} (${f.obra}) ${moneda(f.debe)}`))
@@ -320,7 +320,7 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
       clave: `co-${dd.obra.id}`, tipo: 'cobro', grupo: dd.situacion === 'rojo' ? 'atr' : 'hoy',
       titulo: `Cobrar ${dd.obra.nombre_obra}`, monto: dd.situacion === 'rojo' ? dd.saldo : dd.faltaAvance + dd.extras,
       detalle: `${nombreCli(dd.obra.cliente_id)} · ${dd.situacion === 'rojo' ? `terminada, debe ${moneda(dd.saldo)}` : `corresponde ${moneda(dd.faltaAvance + dd.extras)}`}`,
-      explica: dd.situacion === 'rojo' ? `La obra está terminada y todavía te deben ${moneda(dd.saldo)}. Cobrá el saldo.` : `La obra va ${num(dd.obra.porcentaje_avance)}% de avance y, según eso, corresponde cobrar ${moneda(dd.faltaAvance + dd.extras)} más de lo que ya te pagaron${dd.extras > 0.5 ? ` (incluye ${moneda(dd.extras)} de gastos extra para reintegrar)` : ''}. En total te deben ${moneda(dd.saldo)}.`,
+      explica: dd.situacion === 'rojo' ? `La obra está terminada y todavía te deben ${moneda(dd.saldo)}. Cobrá el saldo.` : `La obra va ${Math.round(num(dd.obra.porcentaje_avance))}% de avance y, según eso, corresponde cobrar ${moneda(dd.faltaAvance + dd.extras)} más de lo que ya te pagaron${dd.extras > 0.5 ? ` (incluye ${moneda(dd.extras)} de gastos extra para reintegrar)` : ''}. En total te deben ${moneda(dd.saldo)}.`,
       boton: 'Cobrar', accion: () => onAbrirObra(dd.obra.id), agendar: `Cobrar ${dd.obra.nombre_obra}`, obra_id: dd.obra.id,
     })) : []),
     ...(verPresupuestos ? presupuestos.filter((pr) => pr.estado === 'aceptado' && pr.obra_id == null && (diasDesde(pr.fecha) ?? 999) <= 60).map((pr): TareaPH => ({ clave: `sin-obra-${pr.id}`, tipo: 'pres', grupo: 'hoy', titulo: `Crear la obra de ${pr.titulo}`, detalle: `${nombreCli(pr.cliente_id)} · presupuesto aceptado`, explica: 'El cliente aceptó el presupuesto, pero todavía no creaste la obra. Creala para cargar avances, personal y cobros.', boton: 'Abrir', accion: () => (onAbrirPresupuesto ? onAbrirPresupuesto(pr.id) : onNavegar('presupuestos')) })) : []),

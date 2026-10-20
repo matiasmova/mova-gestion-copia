@@ -16,7 +16,7 @@ import AdicionalesObra from './AdicionalesObra'
 import PersonalObra from './PersonalObra'
 import RentabilidadObra from './RentabilidadObra'
 import AccesosObra from './AccesosObra'
-import { LineaAvances, PresupuestoVivoObra, type AvanceItems } from './ObraEnVivo'
+import { LineaAvances, PanelAvance, PresupuestoVivoObra, type AvanceItems } from './ObraEnVivo'
 import ResumenObra, { DonaAvance, PresupuestoDocumento, TITULO_SECCION, type TabSeguimiento } from './ResumenObra'
 import VistaToggle, { useVista } from './VistaToggle'
 import './obrasCard.css'
@@ -380,9 +380,13 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
     setImagenes(conUrls)
   }
 
-  // Avance calculado por ítems (si se cargó en el presupuesto): se propone al cargar el de hoy.
-  const [avanceItems, setAvanceItems] = useState<AvanceItems | null>(null)
-  function abrirNuevoAvance(porcentaje?: number, desdeItems?: AvanceItems | null) {
+  // Avance por ítems del presupuesto de la obra abierta (undefined = cargando).
+  const [avanceItems, setAvanceItems] = useState<AvanceItems | null | undefined>(undefined)
+  useEffect(() => { setAvanceItems(undefined) }, [obraSeguimiento?.id])
+  // Si algún ítem tiene avance, la obra se lleva por ítems: su % sale solo de ahí.
+  const usaItems = useRef(false)
+  usaItems.current = !!avanceItems && avanceItems.tramos.some((x) => x.av > 0)
+  function abrirNuevoAvance(porcentaje?: number) {
     setFotoAvance(null)
     setEditandoAvanceId(null)
     setFormularioAvance({
@@ -390,7 +394,6 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
       fecha: new Date().toISOString().slice(0, 10),
       estado: (obraSeguimiento?.estado as EstadoObra) ?? 'en_proceso',
       porcentaje: porcentaje ?? Number(obraSeguimiento?.porcentaje_avance || 0),
-      ...(desdeItems ? { titulo: desdeItems.titulo, descripcion: desdeItems.descripcion } : {}),
       ...(porcentaje != null && porcentaje >= 100 ? { estado: 'finalizada' as EstadoObra, titulo: 'Obra terminada' } : {}),
     })
     setMostrarNuevoAvance(true)
@@ -614,38 +617,39 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
     cargarImagenes(obraSeguimiento.id)
   }
 
-  // Avance por ítems: al marcar un ítem, el punto de hoy de la línea se crea o se
-  // actualiza solo (una sola línea de avances) y la obra toma ese %.
-  // Se encolan (si se tocan varios ítems seguidos, no se duplica el punto de hoy).
+  // Avance por ítems: al marcar un ítem, la obra toma el % que sale de los ítems
+  // (con decimales, para que el cobro dé exacto). No se crean puntos de avance.
+  // Se encolan para que, si se tocan varios ítems seguidos, quede el último.
   const colaAvance = useRef<Promise<void>>(Promise.resolve())
-  const puntoHoy = useRef<{ obra: number; fecha: string; id: number } | null>(null)
   function guardarAvanceItems(a: AvanceItems) {
     const obra = obraSeguimiento
     if (!obra) return
     colaAvance.current = colaAvance.current.then(async () => {
-      const d = new Date()
-      const hoyLocal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-      const datos = { titulo: a.titulo, descripcion: a.descripcion, porcentaje: a.porcentaje, estado: a.porcentaje >= 100 ? 'finalizada' : 'en_proceso' }
-      const ultimo = [...avances].sort((x, y) => (y.fecha ?? '').slice(0, 10).localeCompare((x.fecha ?? '').slice(0, 10)) || y.id - x.id)[0]
-      const idHoy = puntoHoy.current && puntoHoy.current.obra === obra.id && puntoHoy.current.fecha === hoyLocal ? puntoHoy.current.id
-        : ultimo && (ultimo.fecha ?? '').slice(0, 10) === hoyLocal && ultimo.titulo === a.titulo ? ultimo.id : null
-      if (idHoy) {
-        const r = await supabase.from('obra_avances').update(datos).eq('id', idHoy)
-        if (r.error) { console.error(r.error); setErrorAvances('No se pudo actualizar la línea de avances.'); return }
-      } else {
-        const r = await supabase.from('obra_avances').insert({ ...datos, obra_id: obra.id, fecha: hoyLocal }).select('id').single()
-        if (r.error || !r.data) { console.error(r.error); setErrorAvances('No se pudo actualizar la línea de avances.'); return }
-        puntoHoy.current = { obra: obra.id, fecha: hoyLocal, id: r.data.id }
-      }
-      await sincronizarObra(obra)
+      const pct = Math.min(100, Math.max(0, Math.round(a.porcentaje * 1e6) / 1e6))
+      const estado = (pct >= 100 ? (obra.estado === 'observacion' ? 'observacion' : 'finalizada') : 'en_proceso') as EstadoObra
+      let r = await supabase.from('obras').update({ porcentaje_avance: pct, estado }).eq('id', obra.id)
+      // Sin el SQL de la fase 41 la columna no acepta decimales: se guarda redondeado.
+      if (r.error) r = await supabase.from('obras').update({ porcentaje_avance: Math.round(pct), estado }).eq('id', obra.id)
+      if (r.error) { console.error(r.error); setErrorAvances('No se pudo actualizar el avance de la obra.'); return }
+      setObraSeguimiento((o) => (o && o.id === obra.id ? { ...o, porcentaje_avance: pct, estado } : o))
+      setObras((lista) => lista.map((o) => (o.id === obra.id ? { ...o, porcentaje_avance: pct, estado } : o)))
       setActualizacion((v) => v + 1)
-      cargarAvances(obra.id)
     }).catch((e) => console.error(e))
   }
+
+  // Al abrir la obra: si los ítems dicen otro % que el guardado (por ejemplo, de
+  // antes de este cambio), la obra se pone al día sola.
+  useEffect(() => {
+    if (!avanceItems || !usaItems.current || !obraSeguimiento) return
+    if (Math.abs(avanceItems.porcentaje - (Number(obraSeguimiento.porcentaje_avance) || 0)) > 0.009) guardarAvanceItems(avanceItems)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avanceItems])
 
   // El estado y % de la obra siempre reflejan el avance MÁS RECIENTE (al crear,
   // editar o eliminar). Sin avances, la obra vuelve a 0% en proceso.
   async function sincronizarObra(obra: NonNullable<typeof obraSeguimiento>) {
+    // Obra llevada por ítems: el % no sale de los puntos de avance (son fotos y notas).
+    if (usaItems.current) return
     const { data: ultimo } = await supabase
       .from('obra_avances')
       .select('estado,porcentaje')
@@ -776,6 +780,8 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                     />
                   </label>
 
+                  {/* Con presupuesto aceptado el avance se marca por ítem: acá van solo fotos y notas. */}
+                  {presupuestoAceptado ? <p className="formFull gestionAyuda">El avance de esta obra se marca por ítem, en el presupuesto (pestaña Obra). Acá cargás fotos y notas de lo que se hizo.</p> : <>
                   {/* Avance y estado son lo mismo: 100% = obra terminada */}
                   <div className="formFull avancePct">
                     <span className="avancePctTit">Avance de la obra</span>
@@ -804,6 +810,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                       )
                     })()}
                   </div>
+                  </>}
 
                   <label className="formFull">
                     Detalle del trabajo realizado
@@ -1025,7 +1032,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                       </div>
                       <div className="crmCardMeta">
                         <span>{obra.localidad || 'Sin localidad'}</span>
-                        <span>{Number(obra.porcentaje_avance || 0)}% avance</span>
+                        <span>{Math.round(Number(obra.porcentaje_avance || 0))}% avance</span>
                       </div>
                       <div className="crmBarra"><span style={{ width: `${Number(obra.porcentaje_avance || 0)}%` }} /></div>
                       <AvisosTarjeta avisos={avisosDe(obra)} />
@@ -1054,7 +1061,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                 <tr key={obra.id} onClick={() => abrirSeguimiento(obra)}>
                   <td><strong>{obra.nombre_obra}</strong></td>
                   <td>{obtenerCliente(obra.cliente_id)}</td>
-                  <td>{Number(obra.porcentaje_avance || 0)}%</td>
+                  <td>{Math.round(Number(obra.porcentaje_avance || 0))}%</td>
                   <td>{dineroFicha(economia[obra.id]?.valor ?? 0)}</td>
                   <td>{dineroFicha(economia[obra.id]?.cobrado ?? 0)}</td>
                   <td>{dineroFicha(economia[obra.id]?.pendiente ?? 0)}{(economia[obra.id]?.extras ?? 0) > 0.5 && <small className="presuDesglose">incl. extras {dineroFicha(economia[obra.id].extras)}</small>}</td>
@@ -1075,7 +1082,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
               const fin = obraTerminada(obraSeguimiento)
               const c = cuentas[obraSeguimiento.id]
               const av = Math.round(avanceEfectivo(obraSeguimiento.estado, obraSeguimiento.porcentaje_avance))
-              const pestanas: [TabSeguimiento, string][] = [['resumen', '📊 Obra'], ...(presupuestoAceptado ? [['finanzas', '💵 Cobros']] as [TabSeguimiento, string][] : []), ['personal', '👷 Personal'], ['timeline', '🕒 Avances']]
+              const pestanas: [TabSeguimiento, string][] = [['resumen', '📊 Obra'], ...(presupuestoAceptado ? [['finanzas', '💵 Cobros']] as [TabSeguimiento, string][] : []), ['personal', '👷 Personal'], ['timeline', presupuestoAceptado ? '📷 Fotos y notas' : '🕒 Avances']]
               return <div className={`oeCab et-${fin ? 'ter' : 'obr'}`}>
                 <div className="oeCabTop">
                   <span className="oeDona"><DonaAvance pct={av} size={50} /></span>
@@ -1151,16 +1158,18 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                 accesos: <AccesosObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} cliente={obtenerCliente(obraSeguimiento.cliente_id)} obra={obraSeguimiento.nombre_obra} ubicacion={[obraSeguimiento.direccion, obraSeguimiento.localidad].filter(Boolean).join(', ') || null} />,
                 rentabilidad: <RentabilidadObra key={`${obraSeguimiento.id}-${actualizacion}`} obraId={obraSeguimiento.id} avance={avanceEfectivo(obraSeguimiento.estado, obraSeguimiento.porcentaje_avance)} estado={obraSeguimiento.estado ?? undefined} />,
               }}
-              lineaAvances={<LineaAvances
+              lineaAvances={presupuestoAceptado
+                ? <PanelAvance porItems={avanceItems} avanceObra={Number(obraSeguimiento.porcentaje_avance) || 0}
+                    cuenta={cuenta ? { anticipo: cuenta.anticipo, corresponde: cuenta.corresponde, totalActualizado: cuenta.totalActualizado } : null}
+                    onBitacora={() => setSeguTab('timeline')} onInforme={puedeInformeIA && avances.length > 0 ? () => setInformeIA(obraSeguimiento) : undefined} />
+                : <LineaAvances
                 avances={avances}
                 cargando={cargandoAvances}
                 terminada={obraTerminada(obraSeguimiento)}
                 onTocar={(id) => { const a = avances.find((x) => x.id === id); if (a) editarAvance(a) }}
-                onNuevo={(pct) => (pct == null && avanceItems ? abrirNuevoAvance(avanceItems.porcentaje, avanceItems) : abrirNuevoAvance(pct))}
+                onNuevo={(pct) => abrirNuevoAvance(pct)}
                 onInforme={puedeInformeIA ? () => setInformeIA(obraSeguimiento) : undefined}
                 onVerTodo={() => setSeguTab('timeline')}
-                porItems={avanceItems}
-                plata={cuenta ? { corresponde: cuenta.corresponde, cobrado: cuenta.cobrado, falta: Math.max(0, cuenta.pendienteHoy) + Math.max(0, cuenta.gastoExtraPendiente) } : null}
               />}
               presupuestoSinAceptar={(() => {
                 if (presupuestoAceptado) return null

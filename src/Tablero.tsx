@@ -493,7 +493,7 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
                   <td><strong>{f.obra}</strong></td>
                   <td>{f.cliente}</td>
                   <td><span className={`crmBadge est-${claseObra(f.estado)}`}>{etiquetaObra(f.estado)}</span></td>
-                  <td>{f.avance}%</td>
+                  <td>{Math.round(f.avance)}%</td>
                   <td>{moneda(f.valor)}</td>
                   <td>{moneda(f.cobrado)}</td>
                   <td><strong>{moneda(f.saldo)}</strong></td>
@@ -556,7 +556,7 @@ function Tablero({ onIrA, onAbrirObra, pestana: pestanaExterna, embebido = false
                   >
                     <td><strong>{f.nombre}</strong></td>
                     <td>{f.obra}{f.estadoObra && f.estadoObra !== 'en_proceso' && <> <span className={`crmBadge est-${claseObra(f.estadoObra)}`}>{etiquetaObra(f.estadoObra)}</span></>}</td>
-                    <td>{f.avance}%</td>
+                    <td>{Math.round(f.avance)}%</td>
                     <td>{MODALIDADES[f.modalidad] ?? f.modalidad}</td>
                     <td>{f.calc.totalContrato != null ? moneda(f.calc.totalContrato) : '—'}</td>
                     <td>{moneda(f.calc.pagado)}</td>

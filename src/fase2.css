@@ -3956,3 +3956,10 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .oeAvPlata b{font-size:14px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .oeAvPlata .falta{background:#fff4e6}.oeAvPlata .falta b{color:#c25e00}
 .oeAvPlata .ok b{color:#12a06a}
+.oeAvRes.cargando{gap:10px}
+.oeAvEsq{display:block;height:14px;border-radius:7px;background:linear-gradient(90deg,#e6e9ee 0%,#f3f5f8 50%,#e6e9ee 100%);background-size:200% 100%;animation:oeEsq 1.2s ease-in-out infinite}
+.oeAvEsq.corto{width:60%}
+@keyframes oeEsq{0%{background-position:100% 0}100%{background-position:-100% 0}}
+.oeAvCuenta{margin:2px 0 0;font-size:12.5px;line-height:1.45;color:#4a5361;background:#fff;border-radius:10px;padding:8px 10px}
+.oeAvCuenta b{color:#14181e}
+@media (prefers-reduced-motion:reduce){.oeAvEsq{animation:none}}

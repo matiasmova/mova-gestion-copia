@@ -432,11 +432,11 @@ function Liquidacion({ datos, situaciones, semana, onSemana, onPagar, onPagado }
           {lineas.map((l) => (
             <div key={l.asig.id} className="liObra">
               <span>{l.obra?.nombre_obra ?? 'Obra'}</span>
-              <div className="liBarra" title={`Avance ${l.obra?.porcentaje_avance ?? 0}% · pagado ${moneda(l.calc.pagado)}`}>
+              <div className="liBarra" title={`Avance ${Math.round(Number(l.obra?.porcentaje_avance ?? 0))}% · pagado ${moneda(l.calc.pagado)}`}>
                 <div className="liAvance" style={{ width: `${Math.min(100, l.obra?.porcentaje_avance ?? 0)}%` }} />
                 <div className="liPagado" style={{ width: `${l.calc.totalContrato ? Math.min(100, (l.calc.pagado / l.calc.totalContrato) * 100) : 0}%` }} />
               </div>
-              <small>Acordado {moneda(l.calc.totalContrato ?? 0)} · avance {l.obra?.porcentaje_avance ?? 0}% → corresponde {moneda(l.calc.devengado)} · pagado {moneda(l.calc.pagado)} · falta para terminar {moneda(Math.max((l.calc.totalContrato ?? 0) - l.calc.pagado, 0))}</small>
+              <small>Acordado {moneda(l.calc.totalContrato ?? 0)} · avance {Math.round(Number(l.obra?.porcentaje_avance ?? 0))}% → corresponde {moneda(l.calc.devengado)} · pagado {moneda(l.calc.pagado)} · falta para terminar {moneda(Math.max((l.calc.totalContrato ?? 0) - l.calc.pagado, 0))}</small>
             </div>
           ))}
         </div>
@@ -522,7 +522,7 @@ function FormularioPago({ datos, situaciones, persona: personaInicial, soloJorna
             <div><strong>{l.obra?.nombre_obra ?? 'Obra'}</strong>
               <small>{l.porJornal
                 ? `${l.calc.jornadas.toLocaleString('es-AR')} día(s) cargados · ${l.calc.diferencia > 0 ? `le corresponden ${moneda(l.calc.diferencia)}` : l.calc.diferencia < 0 ? `adelantado ${moneda(-l.calc.diferencia)}` : 'al día'}`
-                : `Acordado ${moneda(l.calc.totalContrato ?? 0)} · avance ${l.obra?.porcentaje_avance ?? 0}% · ${l.calc.diferencia > 0 ? `corresponde ${moneda(l.calc.diferencia)}` : l.calc.diferencia < 0 ? `adelantado ${moneda(-l.calc.diferencia)}` : 'al día'}`}</small>
+                : `Acordado ${moneda(l.calc.totalContrato ?? 0)} · avance ${Math.round(Number(l.obra?.porcentaje_avance ?? 0))}% · ${l.calc.diferencia > 0 ? `corresponde ${moneda(l.calc.diferencia)}` : l.calc.diferencia < 0 ? `adelantado ${moneda(-l.calc.diferencia)}` : 'al día'}`}</small>
             </div>
             <CampoNumero min="0" value={montos[l.asig.obra_id] ?? ''} onChange={(e) => setMontos((m) => ({ ...m, [l.asig.obra_id]: e.target.value }))} placeholder="0" aria-label={`Monto en ${l.obra?.nombre_obra}`} />
           </div>
