@@ -679,7 +679,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
     return (
       <article className={`prodCard ${el.activo ? '' : 'inactivo'}`} key={el.id}>
         <div className="prodCardFoto">
-          {el.fotoView ? <img src={el.fotoView} alt={el.nombre} loading="lazy" /> : <span className="prodSinFoto"><IconoCategoria nombre={el.tipo === 'servicio' ? 'Servicios' : el.categoria || 'Productos'} tamano={34} /></span>}
+          {el.fotoView ? <img src={el.fotoView} alt={el.nombre} loading="lazy" /> : <span className="prodSinFoto"><IconoCategoria nombre={el.tipo === 'servicio' ? 'Servicios' : esCategoriaApp(el.categoria) ? el.categoria : 'Productos'} tamano={30} conFondo /></span>}
         </div>
         <div className="prodCardTop">
           <span className={`catalogoTipo ${el.tipo}`}>{el.tipo === 'producto' ? 'Producto' : 'Servicio'}</span>
@@ -694,7 +694,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
         {el.tn_variant_id && <button type="button" className={`prodWeb ${el.tn_sincronizar === false ? 'pausa' : ''}`} title="Ver en Productos en página" onClick={() => setPestana('pagina')}>{el.tn_sincronizar === false ? 'En la página · no se actualiza solo' : 'En la página · se actualiza solo'}</button>}
         {el.codigo && <small className="prodCat">Cód. {el.codigo}</small>}
         {el.color && <small className="prodColor"><i style={{ background: hexColor(el.color) ?? '#cfd5de' }} />{el.color}</small>}
-        <small className="prodCat">{el.tipo === 'producto' && esCategoriaApp(el.categoria) ? <><IconoCategoria nombre={el.categoria} tamano={13} /> {el.categoria}</> : el.categoria || 'Sin categoría'}{el.proveedor ? ` · ${el.proveedor}` : ''}</small>
+        <small className="prodCat">{el.tipo === 'producto' && esCategoriaApp(el.categoria) ? <><IconoCategoria nombre={el.categoria} tamano={12} conFondo /> {el.categoria}</> : el.categoria || 'Sin categoría'}{el.proveedor ? ` · ${el.proveedor}` : ''}</small>
         <div className="prodPrecio">
           {tieneDesc ? (<>
             <strong>{mostrar(final)}</strong><s>{mostrar(el.precio_venta)}</s>
@@ -878,13 +878,13 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
       {!cargando && !error && !modoEdicion && (
         <div className="catApp">
           <div className="prodChips" role="tablist" aria-label="Categorías">
-            <button type="button" className={fCategoria === 'todas' && tipoFiltro === 'todos' ? 'active' : ''} onClick={() => { setTipoFiltro('todos'); setFCategoria('todas') }}><IconoCategoria nombre="Todo" />Todo <b>{enEstado.length}</b></button>
-            <button type="button" className={`catTipo${fCategoria === 'todas' && tipoFiltro === 'producto' ? ' active' : ''}`} onClick={() => { setTipoFiltro('producto'); setFCategoria('todas') }}>{<IconoCategoria nombre="Productos" />}Productos <b>{prodsEstado.length}</b></button>
-            <button type="button" className={`catTipo${tipoFiltro === 'servicio' && fCategoria === 'todas' ? ' active' : ''}`} onClick={() => { setTipoFiltro('servicio'); setFCategoria('todas') }}>{<IconoCategoria nombre="Servicios" />}Servicios <b>{servsEstado.length}</b></button>
+            <button type="button" className={fCategoria === 'todas' && tipoFiltro === 'todos' ? 'active' : ''} onClick={() => { setTipoFiltro('todos'); setFCategoria('todas') }}><IconoCategoria nombre="Todo" tamano={13} conFondo />Todo <b>{enEstado.length}</b></button>
+            <button type="button" className={`catTipo${fCategoria === 'todas' && tipoFiltro === 'producto' ? ' active' : ''}`} onClick={() => { setTipoFiltro('producto'); setFCategoria('todas') }}>{<IconoCategoria nombre="Productos" tamano={13} conFondo />}Productos <b>{prodsEstado.length}</b></button>
+            <button type="button" className={`catTipo${tipoFiltro === 'servicio' && fCategoria === 'todas' ? ' active' : ''}`} onClick={() => { setTipoFiltro('servicio'); setFCategoria('todas') }}>{<IconoCategoria nombre="Servicios" tamano={13} conFondo />}Servicios <b>{servsEstado.length}</b></button>
           </div>
           {tipoFiltro !== 'servicio' ? <div className="prodChips catSub" aria-label="Categorías de productos">
-            {CATEGORIAS_PRODUCTO.map((c) => { const n = prodsEstado.filter((el) => el.categoria?.trim() === c.nombre).length; return <button type="button" key={c.nombre} className={`${fCategoria === c.nombre ? 'active' : ''}${n ? '' : ' vacia'}`} onClick={() => elegirCategoria(c.nombre, 'producto')}>{<IconoCategoria nombre={c.nombre} />}{c.nombre} <b>{n}</b></button> })}
-            {sinCategoriaApp > 0 && <button type="button" className={`catSin${fCategoria === '__sinApp' ? ' active' : ''}`} onClick={() => elegirCategoria('__sinApp', 'producto')}>{<IconoCategoria nombre="sin" />}Sin categoría <b>{sinCategoriaApp}</b></button>}
+            {CATEGORIAS_PRODUCTO.map((c) => { const n = prodsEstado.filter((el) => el.categoria?.trim() === c.nombre).length; return <button type="button" key={c.nombre} className={`${fCategoria === c.nombre ? 'active' : ''}${n ? '' : ' vacia'}`} onClick={() => elegirCategoria(c.nombre, 'producto')}>{<IconoCategoria nombre={c.nombre} tamano={13} conFondo />}{c.nombre} <b>{n}</b></button> })}
+            {sinCategoriaApp > 0 && <button type="button" className={`catSin${fCategoria === '__sinApp' ? ' active' : ''}`} onClick={() => elegirCategoria('__sinApp', 'producto')}>{<IconoCategoria nombre="sin" tamano={13} conFondo />}Sin categoría <b>{sinCategoriaApp}</b></button>}
             {sinCategoriaApp > 0 && <button type="button" className="catOrdenar" onClick={() => setOrdenarCategorias(true)}>Asignar categoría a {sinCategoriaApp}</button>}
           </div> : chipsServicios.length > 1 && <div className="prodChips catSub" aria-label="Categorías de servicios">
             {chipsServicios.map(([c, n]) => <button type="button" key={c} className={fCategoria === c ? 'active' : ''} onClick={() => elegirCategoria(c, 'servicio')}>{c} <b>{n}</b></button>)}
@@ -905,7 +905,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                 onDrop={(e) => { e.preventDefault(); void guardarOrden(); setArrastrando(null) }}>
                 <span className="reordAsa" aria-hidden>⋮⋮</span>
                 <span className="reordNum">{i + 1}</span>
-                <span className="reordFoto">{el.fotoView ? <img src={el.fotoView} alt="" /> : <IconoCategoria nombre={el.tipo === 'servicio' ? 'Servicios' : el.categoria} />}</span>
+                <span className="reordFoto">{el.fotoView ? <img src={el.fotoView} alt="" /> : <IconoCategoria nombre={el.tipo === 'servicio' ? 'Servicios' : el.categoria} tamano={16} conFondo />}</span>
                 <span className="reordNom"><b>{el.nombre}</b><small>{el.categoria || 'Sin categoría'}</small></span>
                 <span className="reordFlechas">
                   <button type="button" disabled={!ordenDisponible || i === 0} aria-label="Subir" onClick={() => { moverProducto(i, i - 1, true) }}>▲</button>

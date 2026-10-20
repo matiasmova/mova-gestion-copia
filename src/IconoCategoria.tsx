@@ -20,9 +20,21 @@ const TRAZOS: Record<string, string[]> = {
   sin: ['M3 12V3h9l9 9-9 9z', 'M7.5 7.5h.01'],
 }
 
-export default function IconoCategoria({ nombre, tamano = 15 }: { nombre: string | null | undefined; tamano?: number }) {
-  const trazos = TRAZOS[(nombre ?? '').trim()] ?? TRAZOS.sin
-  return <svg className="icoCat" width={tamano} height={tamano} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+// Un color propio por categoría (tonos apagados, para que no canse).
+const COLOR: Record<string, string> = {
+  Teclas: '#4f63d8', Switch: '#7c5cff', Sensores: '#0e8fb5', Hub: '#8b5cf6', 'Cámaras': '#2f6fd6', WiFi: '#0891b2',
+  LED: '#d4880f', Accesorios: '#64748b', Cerraduras: '#475569', 'Iluminación solar': '#e3a008', 'Protectores de tensión': '#d9483f',
+  Termostatos: '#e0457b', Pantallas: '#0f8a7e', Alexa: '#1fa2d6', Productos: '#e47b00', Servicios: '#12a06a', Todo: '#141a24', sin: '#8a93a0',
+}
+export const colorCategoria = (nombre: string | null | undefined) => COLOR[(nombre ?? '').trim()] ?? COLOR.sin
+
+// conFondo: el ícono en su color, dentro de un cuadradito suave del mismo tono.
+export default function IconoCategoria({ nombre, tamano = 15, conFondo = false }: { nombre: string | null | undefined; tamano?: number; conFondo?: boolean }) {
+  const clave = (nombre ?? '').trim()
+  const trazos = TRAZOS[clave] ?? TRAZOS.sin
+  const svg = <svg className="icoCat" width={tamano} height={tamano} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     {trazos.map((d) => <path key={d} d={d} />)}
   </svg>
+  if (!conFondo) return svg
+  return <span className="icoBadge" style={{ ['--ic' as string]: colorCategoria(clave) }}>{svg}</span>
 }
