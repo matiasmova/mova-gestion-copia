@@ -508,6 +508,63 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
     setElementos((arr) => arr.map((e) => (nuevos.has(e.id) ? { ...e, orden: nuevos.get(e.id) } : e)))
     if (guardarYa) void guardarOrden()
   }
+  // Arrastre con el dedo o el mouse: con el mouse, apenas se mueve; con el dedo,
+  // manteniendo apretado un momento (así deslizar sigue sirviendo para bajar la pantalla).
+  const arrastre = useRef<{ id: number; x: number; y: number; listo: boolean; timer: number | null } | null>(null)
+  // Mientras se arrastra con el dedo, la pantalla no se desplaza sola por el gesto.
+  useEffect(() => {
+    const frenar = (ev: TouchEvent) => { if (arrastre.current?.listo) ev.preventDefault() }
+    document.addEventListener('touchmove', frenar, { passive: false })
+    return () => document.removeEventListener('touchmove', frenar)
+  }, [])
+  function empezarArrastre(e: React.PointerEvent<HTMLDivElement>, id: number) {
+    if (!ordenDisponible || (e.target as HTMLElement).closest('button')) return
+    const el = e.currentTarget
+    const pointerId = e.pointerId
+    const a = { id, x: e.clientX, y: e.clientY, listo: e.pointerType === 'mouse', timer: null as number | null }
+    arrastre.current = a
+    if (a.listo) { el.setPointerCapture(pointerId); setArrastrando(id); return }
+    a.timer = window.setTimeout(() => {
+      if (arrastre.current !== a) return
+      a.listo = true
+      try { el.setPointerCapture(pointerId) } catch { /* ya se soltó */ }
+      setArrastrando(id)
+      navigator.vibrate?.(15)
+    }, 350)
+  }
+  function moverArrastre(e: React.PointerEvent<HTMLDivElement>) {
+    const a = arrastre.current
+    if (!a) return
+    if (!a.listo) {
+      // Si se movió antes de tiempo, era para bajar la pantalla.
+      if (Math.hypot(e.clientX - a.x, e.clientY - a.y) > 8) { if (a.timer) window.clearTimeout(a.timer); arrastre.current = null }
+      return
+    }
+    e.preventDefault()
+    const sobre = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest<HTMLElement>('[data-reord-id]')
+    const hacia = sobre ? Number(sobre.dataset.reordId) : null
+    if (hacia != null && hacia !== a.id) {
+      const desde = elementosFiltrados.findIndex((x) => x.id === a.id)
+      const hasta = elementosFiltrados.findIndex((x) => x.id === hacia)
+      if (desde >= 0 && hasta >= 0) moverProducto(desde, hasta, false)
+    }
+    // Cerca del borde de la pantalla, se desplaza solo.
+    const borde = 90
+    if (e.clientY < borde) window.scrollBy(0, -14)
+    else if (e.clientY > window.innerHeight - borde) window.scrollBy(0, 14)
+  }
+  function terminarArrastre() {
+    const a = arrastre.current
+    arrastre.current = null
+    if (a?.timer) window.clearTimeout(a.timer)
+    if (a?.listo) { setArrastrando(null); void guardarOrden() }
+  }
+  function elegirPosicion(i: number) {
+    const r = window.prompt(`¿A qué posición lo mandás? (1 a ${elementosFiltrados.length})`, String(i + 1))
+    const n = Math.round(Number(r))
+    if (!r || !Number.isFinite(n)) return
+    moverProducto(i, Math.max(0, Math.min(elementosFiltrados.length - 1, n - 1)), true)
+  }
   async function guardarOrden() {
     const cambios = Array.from(pendienteOrden.current.entries())
     pendienteOrden.current.clear()
@@ -934,22 +991,22 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
         <div className="reordPanel">
           {!ordenDisponible
             ? <p className="gestionAyuda usFalta">Para guardar tu orden falta correr en Supabase el SQL <b>supabase-productos-orden-fase-37.sql</b>.</p>
-            : <p className="gestionAyuda">Arrastrá cada producto (o usá las flechas) para dejarlos en el orden que quieras. Se guarda solo. Podés filtrar por categoría y ordenar cada una.</p>}
-          <div className="reordLista">
+            : <p className="gestionAyuda">Mantené apretada una tarjeta y arrastrala a su lugar (o usá las flechas ‹ ›). Tocando el número lo mandás directo a una posición. Se guarda solo; podés filtrar por categoría y ordenar cada una.</p>}
+          <div className={`reordGrid${arrastrando != null ? ' moviendo' : ''}`}>
             {elementosFiltrados.map((el, i) => (
-              <div key={el.id} className={`reordFila${arrastrando === el.id ? ' arrastra' : ''}`} draggable={ordenDisponible}
-                onDragStart={(e) => { setArrastrando(el.id); e.dataTransfer.effectAllowed = 'move' }}
-                onDragEnd={() => setArrastrando(null)}
-                onDragOver={(e) => { e.preventDefault(); if (arrastrando != null && arrastrando !== el.id) { const desde = elementosFiltrados.findIndex((x) => x.id === arrastrando); if (desde >= 0) moverProducto(desde, i, false) } }}
-                onDrop={(e) => { e.preventDefault(); void guardarOrden(); setArrastrando(null) }}>
-                <span className="reordAsa" aria-hidden>⋮⋮</span>
-                <span className="reordNum">{i + 1}</span>
-                <span className="reordFoto">{el.fotoView ? <img src={el.fotoView} alt="" /> : <IconoCategoria nombre={el.tipo === 'servicio' ? 'Servicios' : el.categoria} tamano={16} conFondo />}</span>
-                <span className="reordNom"><b>{el.nombre}</b><small>{el.categoria || 'Sin categoría'}</small></span>
-                <span className="reordFlechas">
-                  <button type="button" disabled={!ordenDisponible || i === 0} aria-label="Subir" onClick={() => { moverProducto(i, i - 1, true) }}>▲</button>
-                  <button type="button" disabled={!ordenDisponible || i === elementosFiltrados.length - 1} aria-label="Bajar" onClick={() => { moverProducto(i, i + 1, true) }}>▼</button>
-                </span>
+              <div key={el.id} data-reord-id={el.id} className={`reordTarj${arrastrando === el.id ? ' arrastra' : ''}`}
+                onContextMenu={(e) => e.preventDefault()} onPointerDown={(e) => empezarArrastre(e, el.id)} onPointerMove={moverArrastre} onPointerUp={terminarArrastre} onPointerCancel={terminarArrastre}>
+                <div className="reordTarjFoto">
+                  {el.fotoView ? <img src={el.fotoView} alt="" draggable={false} /> : <IconoCategoria nombre={el.tipo === 'servicio' ? 'Servicios' : el.categoria} tamano={34} conFondo />}
+                  <button type="button" className="reordPos" disabled={!ordenDisponible} title="Mandarlo a una posición" onClick={() => elegirPosicion(i)}>{i + 1}</button>
+                  <span className="reordAgarre" aria-hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" /><circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" /><circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" /></svg></span>
+                </div>
+                <b className="reordTarjNom">{el.nombre}</b>
+                <div className="reordTarjAcc">
+                  <button type="button" disabled={!ordenDisponible || i === 0} aria-label="Mover antes" onClick={() => moverProducto(i, i - 1, true)}>‹</button>
+                  <small>{el.categoria || 'Sin categoría'}</small>
+                  <button type="button" disabled={!ordenDisponible || i === elementosFiltrados.length - 1} aria-label="Mover después" onClick={() => moverProducto(i, i + 1, true)}>›</button>
+                </div>
               </div>
             ))}
           </div>
