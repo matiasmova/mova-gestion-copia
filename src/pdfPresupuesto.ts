@@ -418,7 +418,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     page.drawCircle({ x: cx, y: cy, size: 15, color: BLANCO })
     texto('$', cx - ancho('$', 17, bold) / 2, cy - 6, 17, bold, VERDE_BTN)
     espaciado(estado ? 'PAGAR AHORA' : `PAGAR LA SEÑA (${PCT_ANTICIPO}%)`, M + 54, y - 22, 14, BLANCO)
-    texto(estado ? 'Tocá acá  ·  transferencia o efectivo' : 'Para aceptar el presupuesto  ·  transferencia o efectivo', M + 54, y - 37, F_TXT, font, rgb(0.86, 0.96, 0.9))
+    texto(estado ? 'Tocá este botón para pagar ahora (transferencia o efectivo)' : 'Tocá este botón para pagar la seña y aceptar el presupuesto', M + 54, y - 37, F_TXT, font, rgb(0.86, 0.96, 0.9))
     // píldora naranja con el monto y la flecha
     const txtPill = `${moneda(montoBtn)}  >`
     const wPill = ancho(txtPill, 13, bold) + 30
