@@ -114,7 +114,7 @@ function PresupuestosForm({ habilitado }: { habilitado: boolean }) {
     <div className="clienteForm"><div className="formGrid">
       <label>Validez de los presupuestos nuevos (días)<CampoNumero min="1" value={validez} onChange={(e) => setValidez(e.target.value)} disabled={!habilitado} /></label>
     </div></div>
-    <p className="gestionAyuda">La forma de cobro de las obras (60% al confirmar y el 40% restante según el avance, hasta terminar) está en el cálculo de cuentas de todas las obras y no se cambia desde acá. Si cambiás el texto de "Forma de pago", mantené ese acuerdo.</p>
+    <p className="gestionAyuda">La forma de cobro de las obras (seña del 60% al confirmar, que cubre el trabajo hasta ese monto; después, lo que el avance supere a la seña, hasta terminar) está en el cálculo de cuentas de todas las obras y no se cambia desde acá. Si cambiás el texto de "Forma de pago", mantené ese acuerdo.</p>
 
     <h4 className="cfgTitulo">Condiciones generales del presupuesto <small>· aparecen al final del presupuesto, en este orden</small></h4>
     <div className="cfgConds">

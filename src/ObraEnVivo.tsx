@@ -117,13 +117,18 @@ export function PanelAvance({ porItems, avanceObra, cuenta, onBitacora, onInform
           </div>
           <ul className="oeAvLista">
             {porItems.tramos.map((x, i) => <li key={i} style={{ ['--c' as string]: COLORES_AVANCE[i % COLORES_AVANCE.length] }}>
-              <i aria-hidden /><span>{x.desc}</span><b className={x.av >= 100 ? 'fin' : ''}>{x.av >= 100 ? '✓ 100%' : `${Math.round(x.av)}%`}</b><em>hecho {plata(x.peso * x.av / 100)} <small>de {plata(x.peso)}</small> · suma hoy <strong>{plata(x.peso * (100 - PCT_SENA) / 100 * x.av / 100)}</strong></em>
+              <i aria-hidden /><span>{x.desc}</span><b className={x.av >= 100 ? 'fin' : ''}>{x.av >= 100 ? '✓ 100%' : `${Math.round(x.av)}%`}</b><em>hecho {plata(x.peso * x.av / 100)} <small>de {plata(x.peso)}</small></em>
             </li>)}
           </ul>
           {!marcados && avanceObra > 0 && <p className="oeAyuda">La obra figura en {Math.round(avanceObra)}% (cargado antes). Marcá cada ítem en el presupuesto de abajo, o usá "Arrancar con todos en {Math.round(avanceObra)}%".</p>}
-          {cuenta && cuenta.totalActualizado > 0 && <p className="oeAvCuenta">
-            Con este avance corresponde <b>{plata(cuenta.corresponde)}</b>: seña {PCT_SENA}% {plata(cuenta.anticipo)} + el {100 - PCT_SENA}% de lo hecho {plata(Math.max(0, cuenta.corresponde - cuenta.anticipo))}.
-          </p>}
+          {cuenta && cuenta.totalActualizado > 0 && (() => {
+            const hecho = porItems.tramos.reduce((t, x) => t + x.peso * x.av / 100, 0)
+            return <p className="oeAvCuenta">
+              Trabajo hecho <b>{plata(hecho)}</b>. {cuenta.corresponde > cuenta.anticipo + 0.5
+                ? <>Supera la seña ({plata(cuenta.anticipo)}): corresponde <b>{plata(cuenta.corresponde)}</b>.</>
+                : <>La seña del {PCT_SENA}% ({plata(cuenta.anticipo)}) lo cubre: el cliente vuelve a pagar cuando lo hecho la supere{hecho > 0 ? ` (faltan ${plata(cuenta.anticipo - hecho)} de trabajo)` : ''}.</>}
+            </p>
+          })()}
         </div>}
   </section>
 }

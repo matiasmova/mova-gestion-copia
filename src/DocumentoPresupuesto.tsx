@@ -131,7 +131,7 @@ function FranjaLinea({ e }: { e: EstadoPresupuesto }) {
   const pctDe = (n: number) => `${Math.max(0, Math.min(100, (n / total) * 100))}%`
   const pasos = [
     { e: `1 · Seña ${PCT_ANTICIPO}%`, v: moneda(e.anticipo), s: faltaSena > 0.5 ? `Falta ${moneda(faltaSena)}` : 'Pagada', c: NARANJA, t: faltaSena > 0.5 ? NARANJA_OSC : VERDE },
-    { e: '2 · Por avance (hoy)', v: `+ ${moneda(porAvance)}`, s: porAvance > 0.5 ? `obra al ${e.avance}%` : 'todavía sin ítems terminados', c: '#F2A65E', t: GRIS },
+    { e: '2 · Por avance (hoy)', v: `+ ${moneda(porAvance)}`, s: porAvance > 0.5 ? 'lo hecho supera la seña' : `hecho ${moneda(e.trabajoHecho)}: lo cubre la seña`, c: '#F2A65E', t: GRIS },
     { e: e.terminada ? '3 · Obra finalizada' : '3 · Al terminar', v: `+ ${moneda(restoFinal)}`, s: e.terminada ? 'Obra terminada' : 'El resto, con la obra al 100%', c: '#DADDE2', t: GRIS },
   ]
   return (
@@ -161,13 +161,13 @@ function FranjaLinea({ e }: { e: EstadoPresupuesto }) {
 // Detalle por ítem: cuánto avanzó cada uno y lo que suma hoy.
 function DetalleAvance({ e }: { e: EstadoPresupuesto }) {
   const det = e.detalleAvance ?? []
-  const suma = det.reduce((t, x) => t + x.sumaHoy, 0)
+  const suma = det.reduce((t, x) => t + x.hecho, 0)
   const th = { fontSize: '9.5px', fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase' as const, color: GRIS, textAlign: 'left' as const, padding: '0 6px 6px', borderBottom: '1px solid #E8EBEF' }
   const td = { padding: '8px 6px', borderBottom: '1px solid #F1F3F5', verticalAlign: 'middle' as const }
   return <>
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
-        <thead><tr><th style={th}>Ítem</th><th style={{ ...th, textAlign: 'right' }}>Valor</th><th style={th}>Avance</th><th style={{ ...th, textAlign: 'right' }}>Suma hoy</th></tr></thead>
+        <thead><tr><th style={th}>Ítem</th><th style={{ ...th, textAlign: 'right' }}>Valor</th><th style={th}>Avance</th><th style={{ ...th, textAlign: 'right' }}>Hecho</th></tr></thead>
         <tbody>
           {det.map((it) => {
             const fin = it.avance >= 100
@@ -177,14 +177,14 @@ function DetalleAvance({ e }: { e: EstadoPresupuesto }) {
               <td style={{ ...td, fontWeight: 700, color: OSCURO }}>{it.descripcion}</td>
               <td style={{ ...td, textAlign: 'right', color: GRIS, whiteSpace: 'nowrap' }}>{moneda(it.valor)}</td>
               <td style={{ ...td, whiteSpace: 'nowrap' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700, fontSize: '11.5px', color: fin ? VERDE : it.avance > 0 ? NARANJA_OSC : GRIS }}><span style={{ display: 'inline-flex', width: '60px', marginRight: '2px' }}><Barra pct={it.avance} color={fin ? VERDE : NARANJA} /></span>{tAv}</span></td>
-              <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: it.sumaHoy > 0.5 ? OSCURO : GRIS, whiteSpace: 'nowrap' }}>{moneda(it.sumaHoy)}</td>
+              <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: it.hecho > 0.5 ? OSCURO : GRIS, whiteSpace: 'nowrap' }}>{moneda(it.hecho)}</td>
             </tr>
           })}
         </tbody>
-        <tfoot><tr><td style={{ ...td, borderBottom: 0, fontWeight: 800, color: OSCURO }} colSpan={3}>Total por avance</td><td style={{ ...td, borderBottom: 0, textAlign: 'right', fontWeight: 800, color: OSCURO, whiteSpace: 'nowrap' }}>{moneda(suma)}</td></tr></tfoot>
+        <tfoot><tr><td style={{ ...td, borderBottom: 0, fontWeight: 800, color: OSCURO }} colSpan={3}>Trabajo hecho</td><td style={{ ...td, borderBottom: 0, textAlign: 'right', fontWeight: 800, color: OSCURO, whiteSpace: 'nowrap' }}>{moneda(suma)}</td></tr></tfoot>
       </table>
     </div>
-    <p style={{ ...s.chico, margin: '6px 0 0' }}>Con la seña se cubre el {PCT_ANTICIPO}% de cada ítem. El {100 - PCT_ANTICIPO}% restante de cada uno se paga a medida que se termina, hasta completar el total del trabajo.</p>
+    <p style={{ ...s.chico, margin: '6px 0 0' }}>La seña ({moneda(e.anticipo)}) cubre el trabajo hasta ese monto. Cuando lo hecho la supera, se paga la diferencia, hasta completar el total del trabajo.</p>
   </>
 }
 
@@ -227,7 +227,7 @@ function EstadoCuenta({ e }: { e: EstadoPresupuesto }) {
     <Seccion texto="Cuánto corresponde hoy">
       <Tarjetas cifras={[
         { e: `Seña ${PCT_ANTICIPO}%`, v: moneda(e.anticipo), s: 'Al confirmar el trabajo' },
-        { e: 'Avance de obra', v: `+ ${moneda(Math.max(0, e.corresponde - e.anticipo))}`, s: `${100 - PCT_ANTICIPO}% de lo terminado · obra al ${e.avance}%` },
+        { e: 'Trabajo hecho', v: moneda(e.trabajoHecho), s: e.corresponde > e.anticipo + 0.5 ? `Supera la seña en ${moneda(e.corresponde - e.anticipo)}` : `Obra al ${e.avance}% · lo cubre la seña` },
         hoy > 0.5
           ? { e: 'A pagar hoy', v: moneda(hoy), s: `Ya pagaste ${moneda(e.cobrado)}`, destacada: 'naranja' }
           : { e: 'A pagar hoy', v: moneda(0), s: 'Estás al día', destacada: 'verde' },

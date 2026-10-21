@@ -9,8 +9,9 @@ import type { antesYAhora } from './presupuestoModificaciones'
 //   · ANTICIPO = 60% del presupuesto original aceptado (si las modificaciones
 //     bajan el total, se limita al total actualizado). Los pagos del cliente se
 //     aplican primero al anticipo, aunque la obra ya haya empezado.
-//   · RESTO = total actualizado − anticipo. Se va habilitando según el avance,
-//     desde 0%: a hoy corresponde  anticipo + resto × avance%.
+//   · La seña cubre el trabajo hasta su monto. A hoy corresponde el mayor entre
+//     la seña y lo hecho (total actualizado × avance%): si lo hecho supera la
+//     seña, se paga la diferencia, hasta completar el total.
 //   · GASTOS EXTRA = reintegros aparte: aprobado = pendiente de reintegro,
 //     "Pagado" = ya reintegrado. No se mezclan con el total de la obra.
 // =====================================================================
@@ -64,8 +65,10 @@ export type EstadoPresupuesto = {
   ultimaActualizacion: string
   // Avance de cada ítem (por id), si la obra se lleva por ítems (fase 40).
   avanceItems: Record<number, number> | null
-  // Detalle para el cliente: cada ítem, su avance y lo que suma hoy (el resto de la seña × su avance).
-  detalleAvance: { id: number; descripcion: string; cantidad: number; valor: number; avance: number; sumaHoy: number }[] | null
+  // Detalle para el cliente: cada ítem, su avance y el trabajo hecho en plata (valor × avance).
+  // Valor del trabajo hecho (total actualizado × avance, sin redondear el %).
+  trabajoHecho: number
+  detalleAvance: { id: number; descripcion: string; cantidad: number; valor: number; avance: number; hecho: number }[] | null
 }
 
 const num = (x: unknown) => (x == null || x === '' ? null : Number(x))
@@ -130,7 +133,7 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
   const detalleAvance = avanceItems ? filasIt.map((x) => {
     const valor = r2(Math.max(0, Number(x.cantidad) * Number(x.precio_unitario) * (1 - (Number(x.descuento_pct) || 0) / 100)))
     const av = avanceItems[x.id] ?? 0
-    return { id: x.id, descripcion: String(x.descripcion ?? '').split('\n')[0], cantidad: Number(x.cantidad) || 0, valor, avance: av, sumaHoy: r2(valor * (100 - PCT_ANTICIPO) / 100 * av / 100) }
+    return { id: x.id, descripcion: String(x.descripcion ?? '').split('\n')[0], cantidad: Number(x.cantidad) || 0, valor, avance: av, hecho: r2(valor * av / 100) }
   }).filter((x) => x.valor > 0) : null
   const avance = terminada ? 100 : Math.min(100, Math.max(0, Number(obra?.porcentaje_avance ?? 0)))
   const obraIniciada = avances.length > 0 || avance > 0
@@ -163,7 +166,7 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
   }]
   // Seña → avance de hoy (un solo paso) → al finalizar.
   let pctPrevio = 0
-  if (avance > 0 && avance < 100) {
+  if (avance > 0 && avance < 100 && correspondePorAvance(anticipo, totalActualizado, avance) > anticipo + 0.5) {
     const acumulado = correspondePorAvance(anticipo, totalActualizado, avance)
     const falta = r2(Math.max(0, acumulado - cobrado))
     const ult = avances[avances.length - 1]
@@ -191,7 +194,7 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
   return {
     enObra: obraId != null, obraEstado, terminada, avance: Math.round(avance), obraIniciada,
     modificaciones, totalOriginal, totalCambios, totalActualizado,
-    avanceItems, detalleAvance,
+    avanceItems, detalleAvance, trabajoHecho: Math.round(totalActualizado * avance / 100),
     anticipo, anticipoCubierto, faltaAnticipo, resto, corresponde, pendienteHoy, adelanto, saldoTotal,
     gastosExtra, gastoExtraPendiente, pagos, cobrado, avances, linea, ultimaActualizacion,
   }

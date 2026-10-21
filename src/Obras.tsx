@@ -804,7 +804,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                       return (
                         <div className="avanceCobro">
                           <b>💵 Con este avance, el cliente tiene que haber pagado {dineroFicha(correspondeObra)}</b>
-                          <span>Seña {PCT_ANTICIPO}% {dineroFicha(cuenta.anticipo)} + el {pct}% del resto por avance {dineroFicha(correspondeObra - cuenta.anticipo)}</span>
+                          <span>{correspondeObra > cuenta.anticipo + 0.5 ? <>Lo hecho ({pct}% de {dineroFicha(cuenta.totalActualizado)}) supera la seña de {dineroFicha(cuenta.anticipo)}</> : <>La seña del {PCT_ANTICIPO}% ({dineroFicha(cuenta.anticipo)}) cubre el trabajo hasta ese monto</>}</span>
                           <span>Ya pagó {dineroFicha(cuenta.cobrado)} → {falta > 0.5 ? <strong className="pend">falta cobrar {dineroFicha(falta)}</strong> : <strong className="ok">está al día</strong>}{cuenta.gastoExtraPendiente > 0.5 ? ` (más ${dineroFicha(cuenta.gastoExtraPendiente)} de gastos a reintegrar)` : ''}</span>
                         </div>
                       )

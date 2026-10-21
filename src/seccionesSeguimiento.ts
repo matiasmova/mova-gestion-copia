@@ -26,7 +26,7 @@ export function seccionesSeguimiento(r: ResumenModificaciones): SeccionSeguimien
     'Los reintegros devueltos se registran por separado; no se vuelven a sumar al saldo ni a los pagos de la obra.',
   ] })
   secciones.push({ titulo: 'Condición de pago y saldo exigible', lineas: [
-    `Acuerdo: 60% al confirmar y 40% según el avance hasta finalizar. Anticipo sobre el original aceptado: ${moneda(r.cuenta.anticipo)}${r.cuenta.anticipo < r.totalOriginal * .6 - .01 ? ' (limitado al valor actualizado por reducción de alcance)' : ''}.`,
+    `Acuerdo: seña del 60% al confirmar, que cubre el trabajo hasta ese monto; después se paga lo que el avance supere a la seña, hasta finalizar. Anticipo sobre el original aceptado: ${moneda(r.cuenta.anticipo)}${r.cuenta.anticipo < r.totalOriginal * .6 - .01 ? ' (limitado al valor actualizado por reducción de alcance)' : ''}.`,
     `Corresponde haber abonado a hoy${fin ? ' (obra finalizada)' : ' (anticipo)'}: ${moneda(r.cuenta.corresponde)}. Incluye reintegros pendientes.`,
     `Pendiente de pago hoy: ${moneda(r.cuenta.pendienteHoy)}.`,
     ...(r.cuenta.diferencia > 0 ? [`Adelanto sobre lo exigible hoy: ${moneda(r.cuenta.diferencia)}.`] : []),
