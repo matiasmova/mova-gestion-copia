@@ -674,12 +674,14 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     // ---------- Cuánto corresponde hoy ----------
     // Una sola cuenta (la misma que la app): seña + el resto de cada ítem según su avance.
     const msg = mensajeEstado(estado, moneda)
+    // La seña cubre el trabajo hasta su monto; si lo hecho la supera, se paga la diferencia.
+    const hecho = estado.trabajoHecho
     const porAvance = Math.max(0, estado.corresponde - estado.anticipo)
     lugar(170)
     titulo('Cuánto corresponde hoy')
     tarjetas([
       { e: `SEÑA ${PCT_ANTICIPO}%`, v: moneda(estado.anticipo), s: 'Al confirmar el trabajo' },
-      { e: 'AVANCE DE OBRA', v: `+ ${moneda(porAvance)}`, s: `${100 - PCT_ANTICIPO}% de lo terminado · obra al ${estado.avance}%` },
+      { e: 'TRABAJO HECHO', v: moneda(hecho), s: porAvance > 0.5 ? `Supera la seña en ${moneda(porAvance)}` : `Obra al ${estado.avance}% · lo cubre la seña` },
       aPagarHoy > 0.5
         ? { e: 'A PAGAR HOY', v: moneda(aPagarHoy), s: `Ya pagaste ${moneda(estado.cobrado)}`, destacada: 'naranja' }
         : { e: 'A PAGAR HOY', v: moneda(0), s: 'Estás al día', destacada: 'verde' },
@@ -713,7 +715,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
       espaciado('ÍTEM', M + 2, y, F_MINI, GRIS)
       espaciadoDer('VALOR', xValor, y, F_MINI)
       espaciado('AVANCE', xAvance, y, F_MINI, GRIS)
-      espaciadoDer('SUMA HOY', xSuma, y, F_MINI)
+      espaciadoDer('HECHO', xSuma, y, F_MINI)
       y -= 8
       linea(M, y, M + CW, 0.6, LINEA)
       y -= 15
@@ -728,17 +730,17 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
         const tAv = fin ? 'Terminado' : porUnidad ? `${Math.round(it.cantidad * it.avance / 100)} de ${it.cantidad}` : `${Math.round(it.avance)}%`
         barra(xAvance, y - 1, 40, it.avance / 100, fin ? VERDE : NARANJA, 4)
         texto(tAv, xAvance + 46, y, F_CHICO + 0.5, bold, fin ? VERDE : it.avance > 0 ? NARANJA_OSC : GRIS)
-        derecha(moneda(it.sumaHoy), xSuma, y, F_NORMAL, bold, it.sumaHoy > 0.5 ? OSCURO : GRIS)
+        derecha(moneda(it.hecho), xSuma, y, F_NORMAL, bold, it.hecho > 0.5 ? OSCURO : GRIS)
         y -= alto
         linea(M, y + 6, M + CW, 0.5, LINEA_SUAVE)
         y -= 6
       }
       lugar(40)
-      const sumaDet = det.reduce((t, x) => t + x.sumaHoy, 0)
-      texto('Total por avance', M + 2, y - 2, F_NORMAL, bold, OSCURO)
+      const sumaDet = det.reduce((t, x) => t + x.hecho, 0)
+      texto('Trabajo hecho', M + 2, y - 2, F_NORMAL, bold, OSCURO)
       derecha(moneda(sumaDet), xSuma, y - 2, F_NORMAL + 0.5, bold, OSCURO)
       y -= 20
-      for (const r of partir(`Con la seña se cubre el ${PCT_ANTICIPO}% de cada ítem. El ${100 - PCT_ANTICIPO}% restante de cada uno se paga a medida que se termina, hasta completar el total del trabajo.`, F_CHICO + 0.5, CW)) { texto(r, M + 2, y, F_CHICO + 0.5, font, GRIS); y -= 12 }
+      for (const r of partir(`La seña (${moneda(estado.anticipo)}) cubre el trabajo hasta ese monto. Cuando lo hecho la supera, se paga la diferencia, hasta completar el total del trabajo.`, F_CHICO + 0.5, CW)) { texto(r, M + 2, y, F_CHICO + 0.5, font, GRIS); y -= 12 }
       y -= 14
     }
 
@@ -766,7 +768,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
       const faltaSena = Math.max(0, estado.anticipo - estado.cobrado)
       const pasos: { e: string; v: string; s: string; color: RGB; tono: RGB }[] = [
         { e: `1 · SEÑA ${PCT_ANTICIPO}%`, v: moneda(estado.anticipo), s: faltaSena > 0.5 ? `Falta ${moneda(faltaSena)}` : 'Pagada', color: NARANJA, tono: faltaSena > 0.5 ? NARANJA_OSC : VERDE },
-        { e: '2 · POR AVANCE (HOY)', v: `+ ${moneda(porAvance)}`, s: porAvance > 0.5 ? `obra al ${estado.avance}%` : 'todavía sin ítems terminados', color: rgb(0.949, 0.651, 0.369), tono: GRIS },
+        { e: '2 · POR AVANCE (HOY)', v: `+ ${moneda(porAvance)}`, s: porAvance > 0.5 ? `lo hecho supera la seña` : `hecho ${moneda(hecho)}: lo cubre la seña`, color: rgb(0.949, 0.651, 0.369), tono: GRIS },
         { e: estado.terminada ? '3 · OBRA FINALIZADA' : '3 · AL TERMINAR', v: `+ ${moneda(restoFinal)}`, s: estado.terminada ? 'Obra terminada' : 'El resto, con la obra al 100%', color: LINEA, tono: GRIS },
       ]
       const gap = 8, w = (CW - gap * 2) / 3, h = 50

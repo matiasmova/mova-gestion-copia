@@ -64,13 +64,16 @@ let tablaOk: boolean | null = null
 export const configActual = () => actual
 export const configTablaDisponible = () => tablaOk
 
-// La seña pasó del 70% al 60%: si la condición guardada todavía tiene el texto
-// viejo de fábrica, se usa el nuevo (un texto escrito a mano no se toca).
-const SENA_VIEJA = 'Se solicita una seña del 70% para confirmar el presupuesto y adquirir los materiales necesarios. El 30% restante deberá abonarse al finalizar los trabajos y antes de la entrega definitiva del sistema.'
+// La forma de pago cambió (seña del 60% que cubre el trabajo hasta su monto): si
+// la condición guardada todavía tiene un texto viejo de fábrica, se usa el nuevo (un texto escrito a mano no se toca).
+const SENAS_VIEJAS = [
+  'Se solicita una seña del 70% para confirmar el presupuesto y adquirir los materiales necesarios. El 30% restante deberá abonarse al finalizar los trabajos y antes de la entrega definitiva del sistema.',
+  'Se solicita una seña del 60% para confirmar el presupuesto y adquirir los materiales necesarios. El 40% restante se abona según el avance de la obra, completándose al finalizar los trabajos y antes de la entrega definitiva del sistema.',
+]
 function actualizarSena(p: ConfigApp['presupuestos']): ConfigApp['presupuestos'] {
   const nueva = CONDICIONES_GENERALES.find((c) => c.texto.startsWith('Se solicita una seña'))?.texto
   if (!nueva || !Array.isArray(p.condiciones)) return p
-  return { ...p, condiciones: p.condiciones.map((c) => (c.texto?.trim() === SENA_VIEJA ? { ...c, texto: nueva } : c)) }
+  return { ...p, condiciones: p.condiciones.map((c) => (SENAS_VIEJAS.includes(c.texto?.trim() ?? '') ? { ...c, texto: nueva } : c)) }
 }
 
 export async function cargarConfig(): Promise<ConfigApp> {

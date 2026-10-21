@@ -12,7 +12,7 @@ export const CONDICIONES_GENERALES = [
     {
       titulo: 'Forma de pago',
       texto:
-        'Se solicita una seña del 60% para confirmar el presupuesto y adquirir los materiales necesarios. El 40% restante se abona según el avance de la obra, completándose al finalizar los trabajos y antes de la entrega definitiva del sistema.',
+        'Se solicita una seña del 60% para confirmar el presupuesto y adquirir los materiales necesarios. La seña cubre el trabajo hasta ese monto; a medida que el trabajo realizado la supera, se abona la diferencia según el avance de la obra, hasta completar el total al finalizar los trabajos y antes de la entrega definitiva del sistema.',
     },
     {
       titulo: 'Alcance del presupuesto',
