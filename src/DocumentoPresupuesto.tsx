@@ -366,7 +366,7 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
       {linkPago && (!e || aPagarHoy > 0.5) && (
         <a href={linkPago} target="_blank" rel="noreferrer" className="docPagarAhora">
           <span className="ico">$</span>
-          <span className="txt"><b>{e ? 'PAGAR AHORA' : `PAGAR LA SEÑA (${PCT_ANTICIPO}%)`}</b><small>{e ? 'Tocá acá · transferencia o efectivo' : 'Para aceptar el presupuesto · transferencia o efectivo'}</small></span>
+          <span className="txt"><b>{e ? 'PAGAR AHORA' : `PAGAR LA SEÑA (${PCT_ANTICIPO}%)`}</b><small>{e ? 'Tocá este botón para pagar ahora (transferencia o efectivo)' : 'Tocá este botón para pagar la seña y aceptar el presupuesto'}</small></span>
           <span className="pill">{moneda(e ? aPagarHoy : Math.round(Number(d.total) * PCT_ANTICIPO) / 100)} ›</span>
         </a>
       )}
