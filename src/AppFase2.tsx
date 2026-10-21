@@ -5,6 +5,7 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase, TIPO_LINK_AUTH, ERROR_LINK_AUTH } from './supabase'
 import Clientes from './Clientes'
 import Soluciones from './Soluciones'
+import Planos from './Planos'
 import ProductosServicios from './ProductosServicios'
 import Finanzas from './Finanzas'
 import Gastos from './Gastos'
@@ -219,6 +220,7 @@ export default function AppFase2() {
     presupuestos: trabajos('armando'),
     catalogo: <ProductosServicios pedido={pedidoPara('catalogo')} onPedidoAtendido={pedidoAtendido} />,
     soluciones: <Soluciones />,
+    planos: <Planos />,
     gastos: <Gastos />,
     finanzas: <Finanzas pedido={pedidoPara('finanzas')} onPedidoAtendido={pedidoAtendido} onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} />,
     compras: <Compras pedido={pedidoPara('compras')} onPedidoAtendido={pedidoAtendido} />,

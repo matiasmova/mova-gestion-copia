@@ -13,7 +13,8 @@ export async function pedirAsistente<T>(cuerpo: Record<string, unknown>): Promis
 }
 
 // Achica una foto (máx. 1600 px, JPEG) y la devuelve en base64 para mandarla a la IA.
-export async function archivoParaIA(archivo: File): Promise<{ data: string; mime: string }> {
+// maxLado: lado más largo de la imagen que se manda (los planos necesitan más detalle).
+export async function archivoParaIA(archivo: File, maxLado = 1600): Promise<{ data: string; mime: string }> {
   const aBase64 = (blob: Blob) => new Promise<string>((ok, mal) => {
     const lector = new FileReader()
     lector.onload = () => ok(String(lector.result).split(',')[1] ?? '')
@@ -25,7 +26,7 @@ export async function archivoParaIA(archivo: File): Promise<{ data: string; mime
     const url = URL.createObjectURL(archivo)
     const img = document.createElement('img')
     await new Promise<void>((ok, mal) => { img.onload = () => ok(); img.onerror = () => mal(new Error('img')); img.src = url })
-    const max = 1600
+    const max = maxLado
     let w = img.naturalWidth, h = img.naturalHeight
     if (w > max || h > max) { const r = Math.min(max / w, max / h); w = Math.round(w * r); h = Math.round(h * r) }
     const canvas = document.createElement('canvas')
