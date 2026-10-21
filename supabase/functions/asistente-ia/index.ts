@@ -301,6 +301,21 @@ Analizá cómo está posicionado el presupuesto en el mercado y respondé:
 Tené en cuenta que el precio del mercado de productos suele ser solo el equipo, sin instalación; y que en los servicios los precios publicados son orientativos. Si un renglón no tiene datos del mercado, no lo juzgues: mencionalo solo si pesa mucho en el total.
 Español rioplatense con voseo, claro y directo, sin emojis. No inventes precios del mercado que no estén en los datos.`
 
+// Lectura de planos eléctricos (o de arquitectura) para contar puntos de la instalación.
+const SISTEMA_PLANO = `Sos un técnico electricista matriculado de Argentina que lee planos para presupuestar.
+Tu tarea: contar, ambiente por ambiente, los elementos de la instalación eléctrica:
+- bocas: bocas de luz (centros y apliques en techo o pared; en los planos suelen ser un círculo con una cruz o X, o un círculo relleno).
+- tomas: tomacorrientes (semicírculo o círculo con líneas, a veces "TC", "T", "TUG", "TUE"; uno doble cuenta como 1 boca de toma).
+- llaves: llaves de luz / puntos de comando (suelen ser "S", "L", un punto con una línea en diagonal, "punto y toma"). Contá los puntos de comando, no los módulos.
+- registros: registros o cajas de paso/derivación (cuadrados, "CP", "R", "CD").
+Reglas:
+- Si el plano trae una leyenda o tabla de referencias (simbología), usala primero.
+- Agrupá por ambiente con el nombre que figura en el plano (Cocina, Living, Dormitorio 1, Baño, etc.). Si no hay nombres, usá "Ambiente 1", "Ambiente 2"...
+- Contá solo lo que ves dibujado. No inventes. Si algo es dudoso, contalo y aclaralo en notas.
+- Si el plano es solo de arquitectura (no tiene la instalación dibujada), estimá lo mínimo según la reglamentación AEA 90364 para cada ambiente (grado de electrificación medio), poné estimado=true y explicá el criterio en notas.
+- confianza: "alta" si los símbolos se leen claros, "media" si hay partes dudosas, "baja" si la imagen es borrosa o incompleta.
+- notas: breve, en español rioplatense, qué viste y los supuestos (escala, símbolos raros, partes ilegibles).`
+
 const SISTEMA_FACTURA = `Leés fotos de facturas, tickets y remitos de proveedores argentinos (materiales eléctricos, redes, domótica, ferretería).
 Devolvé los datos tal cual figuran:
 - proveedor: razón social o nombre del comercio.
@@ -326,7 +341,7 @@ Deno.serve(async (req) => {
   const { data: perfil } = await db.from('profiles').select('rol, activo').eq('id', quien.user.id).maybeSingle()
   const cuerpo = await req.json().catch(() => ({})) as Record<string, unknown>
   const { accion, idea, titulo, descripcion, existentes } = cuerpo
-  const roles = accion === 'factura' ? ['admin', 'contable', 'encargado', 'auxiliar'] : accion === 'informe_obra' || accion === 'recomendaciones' || accion === 'relevamiento' || accion === 'resumen_documento' ? ['admin', 'contable', 'encargado'] : ['admin', 'contable']
+  const roles = accion === 'factura' ? ['admin', 'contable', 'encargado', 'auxiliar'] : accion === 'informe_obra' || accion === 'recomendaciones' || accion === 'relevamiento' || accion === 'resumen_documento' || accion === 'plano' ? ['admin', 'contable', 'encargado'] : ['admin', 'contable']
   if (!perfil || !roles.includes(perfil.rol) || perfil.activo === false) return responder({ error: 'No tenés permiso para usar el asistente.' }, 403)
 
   const clave = Deno.env.get('GEMINI_API_KEY')
@@ -413,6 +428,30 @@ Deno.serve(async (req) => {
         })).filter((it) => it.catalogo_id || it.descripcion),
       })
     }
+    if (accion === 'plano') {
+      const imagen = String(cuerpo.imagen ?? '')
+      const mime = String(cuerpo.mime ?? 'image/jpeg')
+      if (!imagen || imagen.length > 8_000_000 || !/^(image\/(jpeg|png|webp|heic|heif)|application\/pdf)$/.test(mime)) return responder({ error: 'El plano no es válido o es muy pesado (máximo ~6 MB).' }, 400)
+      const esquema = {
+        type: 'OBJECT',
+        properties: {
+          estimado: { type: 'BOOLEAN' },
+          confianza: { type: 'STRING', enum: ['alta', 'media', 'baja'] },
+          notas: { type: 'STRING' },
+          ambientes: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
+            nombre: { type: 'STRING' }, bocas: { type: 'NUMBER' }, tomas: { type: 'NUMBER' }, llaves: { type: 'NUMBER' }, registros: { type: 'NUMBER' },
+          }, required: ['nombre', 'bocas', 'tomas', 'llaves', 'registros'] } },
+        },
+        required: ['estimado', 'confianza', 'notas', 'ambientes'],
+      }
+      const r = await gemini(clave, [{ inlineData: { mimeType: mime, data: imagen } }, { text: 'Leé este plano y contá por ambiente las bocas de luz, tomacorrientes, llaves de luz y registros (cajas de paso).' }], esquema, SISTEMA_PLANO, 0.1) as { estimado?: boolean; confianza?: string; notas?: string; ambientes?: { nombre: string; bocas: number; tomas: number; llaves: number; registros: number }[] }
+      const n = (x: unknown) => Math.max(0, Math.min(500, Math.round(Number(x) || 0)))
+      return responder({
+        estimado: !!r.estimado, confianza: ['alta', 'media', 'baja'].includes(String(r.confianza)) ? r.confianza : 'media', notas: recorte(r.notas, 800),
+        ambientes: (r.ambientes ?? []).slice(0, 60).map((x) => ({ nombre: recorte(x.nombre, 60) || 'Ambiente', bocas: n(x.bocas), tomas: n(x.tomas), llaves: n(x.llaves), registros: n(x.registros) })),
+      })
+    }
+
     if (accion === 'factura') {
       const imagen = String(cuerpo.imagen ?? '')
       const mime = String(cuerpo.mime ?? 'image/jpeg')

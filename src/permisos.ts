@@ -13,6 +13,7 @@ export const NAVEGACION = [
   ['dashboard', 'principal', 'Balance general'],
   ['clientes', 'comercial', 'Clientes'],
   ['relevamientos', 'comercial', 'Relevamientos'],
+  ['planos', 'comercial', 'Leer planos'],
   // Presupuestos y Obras se ven juntos en "Trabajos" (un solo ítem del menú).
   ['presupuestos', 'comercial', 'Trabajos · presupuestos'],
   ['obras', 'comercial', 'Trabajos'],
@@ -40,6 +41,7 @@ export type Vista = (typeof NAVEGACION)[number][0]
 export const PERMISOS: Partial<Record<Vista, Rol[]>> = {
   clientes: ['admin', 'encargado', 'contable'],
   relevamientos: ['admin', 'encargado', 'contable'],
+  planos: ['admin', 'encargado', 'contable'],
   presupuestos: ['admin', 'contable'],
   soluciones: ['admin', 'contable'],
   finanzas: ['admin', 'contable'],
