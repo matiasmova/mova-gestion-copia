@@ -369,6 +369,8 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
               : it.catalogo_id != null
                 ? <small className="pvGan sin">⚠ Sin costo cargado · tocá para cargarlo</small>
                 : <small className="pvGan sin">Escrito a mano y sin costo: se cuenta como mano de obra. Si lo compraste vos, cargá el costo.</small>)}
+            {/* Servicio: es mano de obra, la ganancia es todo lo que paga el cliente (el personal se descuenta en "Ganancia y personal") */}
+            {ed && it.tipo === 'servicio' && it.descripcion.trim() && importeNeto(it) > 0 && <small className="pvGan">💰 Ganás {moneda(importeNeto(it))} (100%) · {Number(it.cantidad).toLocaleString('es-AR')} × {moneda(importeNeto(it) / (Number(it.cantidad) || 1))} · antes de pagar al personal</small>}
           </div>
           <div className="pvImp">{moneda(importeNeto(it))}{pct > 0 && <s>{moneda(importeBruto(it))}</s>}</div>
         </div>
@@ -436,11 +438,13 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
                 <button type="button" className={it.tipo === 'servicio' ? 'on' : ''} onClick={() => cambiarItem(it._k, { tipo: 'servicio' })}>🛠️ Servicio</button>
               </div>
             </div>
-            <div className="pvCtrl">
-              <label>Costo</label>
-              <CampoNumero className="pvPrecio" value={it.costo_unitario} onChange={(e) => cambiarItem(it._k, { costo_unitario: Number(e.target.value) || 0 })} aria-label="Costo unitario" />
-              <small className="pvAyuda">interno, no lo ve el cliente</small>
-            </div>
+            {it.tipo === 'servicio'
+              ? <p className="pvAyuda pvSinCosto">Es mano de obra: no lleva costo. Lo que le pagás al personal se descuenta en "Ganancia y personal".</p>
+              : <div className="pvCtrl">
+                <label>Costo</label>
+                <CampoNumero className="pvPrecio" value={it.costo_unitario} onChange={(e) => cambiarItem(it._k, { costo_unitario: Number(e.target.value) || 0 })} aria-label="Costo unitario" />
+                <small className="pvAyuda">interno, no lo ve el cliente</small>
+              </div>}
             <div className="pvAcc">
               <button type="button" className="rojo" onClick={() => { setItems((l) => l.filter((x) => x._k !== it._k)); setAbierto(null) }}>🗑 Quitar</button>
               <button type="button" className="listo" onClick={() => setAbierto(null)}>✓ Listo</button>
@@ -537,6 +541,10 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
                   const venta = conTexto.reduce((s, it) => s + importeNeto(it), 0)
                   const sinCosto = conTexto.filter((it) => it.catalogo_id != null && !(Number(it.costo_unitario) > 0)).length
                   return <div className="pvGanTotal"><span>💰 Ganancia en productos <small>interno</small></span><b>{moneda(g)}{venta > 0 ? <em> · {Math.round((g / venta) * 100)}%</em> : null}</b>{sinCosto > 0 && <small className="pvGanAviso">⚠ {sinCosto} sin costo: se cuentan como ganancia completa</small>}</div>
+                })()}
+                {ed && tipo === 'servicio' && its.some((it) => it.descripcion.trim()) && (() => {
+                  const g = its.filter((it) => it.descripcion.trim()).reduce((t, it) => t + importeNeto(it), 0)
+                  return <div className="pvGanTotal"><span>💰 Ganancia en servicios <small>interno · antes de pagar al personal</small></span><b>{moneda(g)}<em> · 100%</em></b></div>
                 })()}
                 {res && partes.map((p) => (
                   <div className="pvParte" key={p.id}>
