@@ -4014,3 +4014,52 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .plAviso{margin:0;font-size:13px;font-weight:700;color:#12a06a}
 .pvSinCosto{margin:2px 0 0;font-size:12px}
 .peAcciones .peEliminar{color:#b23b32;border-color:#f1c9c5}.peAcciones .peEliminar:hover{background:#fff1f0}
+
+/* Personal: pagos por empleado */
+.peResGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.peRes{border:1px solid #e3e8ef;border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px;background:#fff;min-width:0}
+.peRes.cero{opacity:.8}
+.peResCab{display:flex;align-items:center;gap:10px}
+.peResCab span{flex:1;min-width:0;display:flex;flex-direction:column}
+.peResCab span b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.peResCab span small{color:#6a7382;font-size:12px}
+.peResCab em{font-style:normal;text-align:right}
+.peResCab em b{display:block;font-family:var(--fuente-titulos,inherit);font-size:18px;font-variant-numeric:tabular-nums}
+.peResCab em small{color:#6a7382;font-size:11px}
+.peResObras{display:flex;flex-wrap:wrap;gap:6px}
+.peResObras span{display:inline-flex;align-items:center;gap:6px;font-size:12px;background:#f5f6f8;border-radius:999px;padding:4px 10px;font-variant-numeric:tabular-nums}
+.peResObras span i{width:8px;height:8px;border-radius:50%;background:var(--c)}
+.peResObras small{color:#8a93a0;font-size:12px}
+.peResAcc{display:flex;flex-wrap:wrap;gap:8px}
+.cpModal{max-width:560px}
+.cpListo{display:flex;flex-direction:column;gap:4px;font-size:15px;margin:4px 0 8px}
+.cpListo b{font-family:var(--fuente-titulos,inherit);font-size:24px}
+.cpListo small{color:#6a7382;font-size:13px}
+/* Gasto por ayudantes (presupuesto, ganancia y obra) */
+.pvAyudantes{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#fff7ec;border:1px dashed #f0c48d;border-radius:12px;padding:10px 12px;margin:10px 0}
+.pvAyudantes span{display:flex;flex-direction:column;min-width:0;flex:1 1 240px}
+.pvAyudantes small{color:#6a7382;font-size:12px}
+.gtAvance{display:flex;flex-direction:column;gap:6px;background:#f5f6f8;border-radius:12px;padding:10px 12px}
+.gtAvNums{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12.5px;font-variant-numeric:tabular-nums}
+.gtAvNums b{font-size:14px}
+.gtAvNums b.v{color:#12a06a}.gtAvNums b.r{color:#d9483f}
+.gtAvBarra{height:10px;border-radius:9px;background:#e3e7ec;overflow:hidden}
+.gtAvBarra i{display:block;height:100%;background:#2f6fd6;border-radius:9px;transition:width .4s}
+.gtAvBarra i.pasado{background:#d9483f}
+.gtPagos{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:12.5px}
+.gtPagos li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center}
+.gtPagos li span{color:#6a7382;font-variant-numeric:tabular-nums}
+.gtPagos li b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gtPagos li em{font-style:normal;font-weight:700;font-variant-numeric:tabular-nums}
+.poWrap{display:flex;flex-direction:column;gap:10px}
+.poCab{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.poCab div{display:flex;flex-direction:column;min-width:0;flex:1 1 220px}
+.poCab small{color:#6a7382;font-size:12.5px}
+.poChips{display:flex;flex-wrap:wrap;gap:6px}
+.poChips span{font-size:12px;background:#f5f6f8;border-radius:999px;padding:4px 10px}
+.poLista{display:flex;flex-direction:column}
+.poFila{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:8px 2px;border-top:1px solid #eef1f4}
+.poFila:first-child{border-top:0}
+.poFecha{font-size:12px;color:#6a7382;font-variant-numeric:tabular-nums}
+.poInfo{display:flex;flex-direction:column;min-width:0}
+.poInfo small{color:#6a7382;font-size:12px}

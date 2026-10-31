@@ -64,6 +64,7 @@ type Datos = {
   adic: { aprobados: number; pendientes: number; rechazados: number }
   gastado: number // gastos propios de la obra (sin los gastos extra a reintegrar)
   extraNoPagado: number // gastos extra que adelantaste y el cliente todavía no devolvió
+  pagadoAyudantes: number // lo pagado al personal en esta obra (desde Personal)
 }
 
 type Pendiente = { tono: 'alerta' | 'info'; texto: string; tab?: TabSeguimiento; accion?: () => void }
@@ -137,7 +138,9 @@ async function cargarDatos(obraId: number, avance: number): Promise<Datos> {
     }
   })
   const jornales = jornalesObra.reduce((s, j) => s + (j.jornada || 0), 0)
-  return { personal: equipo.length, equipo, jornales, fotos, accesos, adic, gastado, extraNoPagado }
+  const pagadoAyudantes = ((rCostos.data ?? []) as { monto: number | string; tipo: string; personal_id: number | null }[])
+    .filter((c) => c.personal_id != null || c.tipo === 'mano_obra' || c.tipo === 'terciarizado').reduce((s, c) => s + (Number(c.monto) || 0), 0)
+  return { personal: equipo.length, equipo, jornales, fotos, accesos, adic, gastado, extraNoPagado, pagadoAyudantes }
 }
 
 // Gráfico circular de avance (lo usa también el encabezado de la ficha).
@@ -210,7 +213,6 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
   if (cuenta && aCobrarHoy > 0.5) pendientes.push({ tono: 'alerta', texto: cuenta.gastoExtraPendiente > 0.5 && cuenta.pendienteHoy > 0.5 ? `Falta cobrar ${dinero(aCobrarHoy)} a hoy (obra ${dinero(cuenta.pendienteHoy)} + gastos a reintegrar ${dinero(cuenta.gastoExtraPendiente)}).` : `Falta cobrar ${dinero(aCobrarHoy)} a hoy.`, tab: 'finanzas' })
   if (cuenta && cuenta.gastoExtraPendiente > 0.5) pendientes.push({ tono: 'alerta', texto: `Reintegros de gastos pendientes: ${dinero(cuenta.gastoExtraPendiente)}.`, tab: 'adicionales' })
   if (datos && datos.adic.pendientes > 0) pendientes.push({ tono: 'alerta', texto: datos.adic.pendientes === 1 ? '1 cambio o adicional esperando aprobación.' : `${datos.adic.pendientes} cambios o adicionales esperando aprobación.`, tab: 'adicionales' })
-  if (datos && datos.personal === 0 && !terminada) pendientes.push({ tono: 'alerta', texto: 'No hay personal asignado a la obra.', tab: 'personal' })
   // Con presupuesto aceptado el avance se marca por ítem; sin presupuesto, con la línea de avances.
   if (tienePresupuesto) { if (avance <= 0 && !terminada) pendientes.push({ tono: 'alerta', texto: 'Todavía no marcaste el avance de ningún ítem del presupuesto.' }) }
   else if (!cargandoAvances && avances.length === 0) pendientes.push({ tono: 'alerta', texto: 'Todavía no cargaste ningún avance.', tab: 'timeline' })
@@ -271,7 +273,7 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
         {([
           ['documento', '📄', 'Documento y pagos', 'Comprobantes, formas de pago, cómo lo ve el cliente', false],
           ['finanzas', '💰', 'Cobros', !tienePresupuesto ? 'Sin presupuesto' : !cuenta ? 'Cargando…' : `Cobrado ${dinero(cuenta.cobrado)}`, avisoDe('finanzas')],
-          ['personal', '👷', 'Equipo', !datos ? 'Cargando…' : datos.equipo.length === 0 ? 'Sin asignar' : `${datos.equipo.length} ${datos.equipo.length === 1 ? 'persona' : 'personas'}${datos.equipo.some((m) => m.falta > 0.5) ? ' · hay pagos pendientes' : ''}`, avisoDe('personal') || !!datos?.equipo.some((m) => m.falta > 0.5)],
+          ['personal', '👷', 'Gasto por ayudantes', !datos ? 'Cargando…' : datos.pagadoAyudantes > 0.5 ? `Pagado ${dinero(datos.pagadoAyudantes)}` : 'Sin pagos todavía', false],
           ['accesos', '🔐', 'Accesos y claves', !datos ? 'Cargando…' : datos.accesos === null ? '—' : datos.accesos === 0 ? 'Sin cargar' : `${datos.accesos} cargados`, avisoDe('accesos')],
           ['rentabilidad', '📊', 'Rentabilidad', !datos || (tienePresupuesto && !cuenta) ? 'Cargando…' : `${cajaObra >= 0 ? '+' : '−'} ${dinero(Math.abs(cajaObra))} en caja`, false],
         ] as [SeccionVivo, string, string, string, boolean][]).filter(([id]) => secciones[id]).map(([id, icono, titulo, estadoTxt, alerta]) => {

@@ -1,4 +1,5 @@
 import GananciaTrabajo from './GananciaTrabajo'
+import CargarPago from './CargarPago'
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase'
 import { avisoGuardado } from './Animados'
@@ -181,6 +182,9 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
   const [errorEd, setErrorEd] = useState('')
   const [catalogo, setCatalogo] = useState<Producto[] | null>(null)
   const [verCambios, setVerCambios] = useState(false)
+  // Cargar un pago al personal desde la ganancia (después se recarga la cuenta).
+  const [pagando, setPagando] = useState(false)
+  const [vueltaPagos, setVueltaPagos] = useState(0)
   // Comparar con el mercado: todo el presupuesto (solo para ver) o el ítem que se está editando.
   const [mercado, setMercado] = useState<{ productos: ProductoAComparar[]; deItem: boolean } | null>(null)
   // Avance de cada ítem (columna "avance", fase 40). null = falta el SQL.
@@ -521,7 +525,8 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
       <button type="button" className={`cambio${verCambios ? ' on' : ''}`} aria-expanded={verCambios} onClick={() => setVerCambios((v) => !v)}><small>CAMBIOS {verCambios ? '▴' : '▾'}</small><b>{conSigno(aprobados)}</b></button>
       <div className="total"><small>TOTAL HOY</small><b>{plata(original + aprobados)}</b></div>
     </div>
-    <GananciaTrabajo presupuestoIds={presus.map((p) => p.id)} obraId={obraId} total={original} adicionales={aprobados}
+    {pagando && <CargarPago obraId={obraId} onCancelar={() => setPagando(false)} onGuardado={() => { setPagando(false); setVueltaPagos((v) => v + 1); onCambio() }} />}
+    <GananciaTrabajo key={vueltaPagos} onCargarPago={() => setPagando(true)} presupuestoIds={presus.map((p) => p.id)} obraId={obraId} total={original} adicionales={aprobados}
       items={items.map((it) => ({ tipo: it.tipo ?? '', catalogo_id: it.catalogo_id ?? null, cantidad: it.cantidad, precio_unitario: it.precio_unitario, costo_unitario: Number(it.costo_unitario) || 0, descuento_pct: it.descuento_pct }))}
       reintegros={adicionales.filter((a) => a.tipo === 'gasto_extra' && a.estado !== 'rechazado').reduce((s, a) => s + a.importe, 0)} onGanancia={onGanancia} />
     {huerfanos.length > 0 && !verCambios && <button type="button" className="oeAviso pend oeAvisoBtn" onClick={() => setVerCambios(true)}>⚠ {huerfanos.length === 1 ? 'Hay 1 cambio' : `Hay ${huerfanos.length} cambios`} de ítems que ya no están en el presupuesto (se editó después). Tocá para verlos ›</button>}

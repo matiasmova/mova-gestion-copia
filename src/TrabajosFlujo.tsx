@@ -47,14 +47,11 @@ export default function TrabajosFlujo({ verPlata, busqueda, revision, onAbrir, o
       const conEst = 'id,cliente_id,obra_id,titulo,estado,total,fecha,created_at,activo,pago_empleados_estimado'
       let rP = await supabase.from('presupuestos').select(conEst).eq('activo', true)
       if (rP.error) rP = await supabase.from('presupuestos').select('id,cliente_id,obra_id,titulo,estado,total,fecha,created_at,activo').eq('activo', true) as typeof rP
-      const [rO, rC, rPa, rAd, rAs, rPe, rJ, rCo, rSeg] = await Promise.all([
+      const [rO, rC, rPa, rAd, rCo, rSeg] = await Promise.all([
         supabase.from('obras').select('id,cliente_id,nombre_obra,estado,porcentaje_avance,activo').eq('activo', true),
         supabase.from('Clientes').select('id,nombre,apellido'),
         supabase.from('pagos').select('obra_id,presupuesto_id,monto'),
         supabase.from('adicionales').select('obra_id,importe,estado,tipo'),
-        supabase.from('obra_asignaciones').select('obra_id,personal_id,modalidad,valor_acordado'),
-        supabase.from('personal').select('id,costo_dia'),
-        supabase.from('jornales').select('obra_id,personal_id,jornada,horas'),
         supabase.from('costos').select('obra_id,personal_id,tipo,monto'),
         supabase.from('presupuestos').select('id,enviado_at').eq('activo', true),
       ])
@@ -65,9 +62,6 @@ export default function TrabajosFlujo({ verPlata, busqueda, revision, onAbrir, o
       const obras = (rO.data ?? []) as Obra[]
       const clientes = (rC.data ?? []) as { id: number; nombre: string; apellido: string | null }[]
       const adic = ((rAd.data ?? []) as { obra_id: number | null; importe: unknown; estado: string; tipo: string }[]).map((a) => ({ ...a, importe: num(a.importe) }))
-      const asig = ((rAs.data ?? []) as { obra_id: number; personal_id: number | null; modalidad: string | null; valor_acordado: unknown }[]).map((a) => ({ ...a, valor_acordado: a.valor_acordado == null ? null : num(a.valor_acordado) }))
-      const personas = ((rPe.data ?? []) as { id: number; costo_dia: unknown }[]).map((p) => ({ id: p.id, costo_dia: p.costo_dia == null ? null : num(p.costo_dia) }))
-      const jornales = ((rJ.data ?? []) as { obra_id: number; personal_id: number | null; jornada: unknown; horas: unknown }[]).map((j) => ({ ...j, jornada: num(j.jornada), horas: j.horas == null ? null : num(j.horas) }))
       const costos = ((rCo.data ?? []) as { obra_id: number | null; personal_id: number | null; tipo: string | null; monto: unknown }[]).map((c) => ({ ...c, monto: num(c.monto) }))
 
       // Ítems para la ganancia (solo si se ve la plata).
@@ -92,7 +86,7 @@ export default function TrabajosFlujo({ verPlata, busqueda, revision, onAbrir, o
         const estimado = presDeTrabajo.reduce((s, p) => s + num(p.pago_empleados_estimado), 0)
         if (obraId == null) return cuentaTrabajo(items, total, estimado, 0).ganancia
         const valorObra = total + adic.filter((a) => a.obra_id === obraId && a.estado === 'aprobado' && a.tipo !== 'gasto_extra').reduce((s, a) => s + a.importe, 0)
-        const filasEmp = empleadosDeObra(asig.filter((a) => a.obra_id === obraId), personas, costos.filter((c) => c.obra_id === obraId && esPagoEmpleado(c)), jornales.filter((j) => j.obra_id === obraId), valorObra)
+        const filasEmp = empleadosDeObra(costos.filter((c) => c.obra_id === obraId && esPagoEmpleado(c)))
         const ext = costos.filter((c) => c.obra_id === obraId && esExtraDeObra(c)).reduce((s, c) => s + c.monto, 0)
         return cuentaTrabajo(items, total, totalEmpleados(filasEmp, estimado).total, ext, valorObra - total).ganancia
       }

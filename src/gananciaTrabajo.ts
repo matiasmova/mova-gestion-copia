@@ -1,10 +1,9 @@
 import { importeNeto } from './presupuestoCalculos'
-import { calcularPersona, type AsignacionCalc, type JornalCalc, type PersonaCalc } from './personalCalculos'
 
 // La cuenta de MOVA, igual en el presupuesto, en Productos y en el Inicio:
 //  · Productos: ganás lo que lo vendés menos lo que te costó.
 //  · Servicios: el 100% es tuyo…
-//  · …menos lo que le pagás a los empleados por ese trabajo
+//  · …menos el gasto por ayudantes (lo estimado, o lo pagado si es más)
 //  · …menos los extras de la obra (nafta, tercerizados, otros).
 // Comprar stock NO es un gasto: es plata invertida (se ve en Productos).
 
@@ -50,29 +49,16 @@ export function cuentaTrabajo(items: ItemCuenta[], total: number, empleados: num
   }
 }
 
-// Empleados de una obra: por cada persona asignada, lo acordado (o lo ya
-// pagado, si es más); y además todo lo pagado a gente que no está asignada
-// (o mano de obra cargada sin persona). Así ningún pago queda afuera.
-export type FilaEmpleado = { personal_id: number | null; total: number; pagado: number; asignado: boolean; sinJornales: boolean; acuerdo: boolean }
-export function empleadosDeObra(
-  asignaciones: AsignacionCalc[], personas: PersonaCalc[], pagos: { personal_id: number | null; monto: number }[], jornales: JornalCalc[], valorObra: number,
-): FilaEmpleado[] {
-  const filas: FilaEmpleado[] = asignaciones.map((a) => {
-    const c = calcularPersona(a, personas.find((p) => p.id === a.personal_id), pagos, jornales, valorObra, 0)
-    const porTiempo = c.modalidad === 'por_dia' || c.modalidad === 'por_hora'
-    // "Por pagos": para la ganancia se usa lo estimado a pagarle (o lo ya pagado, si es más).
-    const total = c.modalidad === 'libre' ? Math.max(Number(a.valor_acordado) || 0, c.pagado) : c.proyectado
-    return { personal_id: a.personal_id, total, pagado: c.pagado, asignado: true, sinJornales: porTiempo && c.devengado === 0, acuerdo: c.modalidad !== 'libre' }
-  })
-  const asignados = new Set(asignaciones.map((a) => a.personal_id))
-  const otros: Record<string, FilaEmpleado> = {}
-  pagos.filter((p) => p.personal_id == null || !asignados.has(p.personal_id)).forEach((p) => {
-    const k = String(p.personal_id)
-    const f = (otros[k] ??= { personal_id: p.personal_id, total: 0, pagado: 0, asignado: false, sinJornales: false, acuerdo: false })
+// Pagos al personal de una obra, agrupados por persona (se cargan desde Personal).
+export type FilaEmpleado = { personal_id: number | null; total: number; pagado: number }
+export function empleadosDeObra(pagos: { personal_id: number | null; monto: number }[]): FilaEmpleado[] {
+  const porPersona: Record<string, FilaEmpleado> = {}
+  pagos.forEach((p) => {
+    const f = (porPersona[String(p.personal_id)] ??= { personal_id: p.personal_id, total: 0, pagado: 0 })
     f.total += Number(p.monto) || 0
     f.pagado += Number(p.monto) || 0
   })
-  return [...filas, ...Object.values(otros)]
+  return Object.values(porPersona)
 }
 
 // Pagos de empleados: los que tienen persona o son mano de obra.
@@ -82,11 +68,9 @@ export const esPagoEmpleado = (c: { personal_id: number | null; tipo?: string | 
 export const esExtraDeObra = (c: { personal_id: number | null; tipo?: string | null }) =>
   c.personal_id == null && !['material', 'mano_obra', 'gasto_extra'].includes(c.tipo ?? '')
 
-// Lo que se resta por empleados en un trabajo: lo de cada persona de la obra
-// (acordado, o estimado para los que cobran por pagos). Si todavía no hay
-// nadie asignado, el estimado general del presupuesto.
+// Lo que se resta por personal en un trabajo: el "Gasto por ayudantes estimado"
+// del presupuesto, o lo ya pagado (desde Personal) si es más.
 export function totalEmpleados(filas: FilaEmpleado[], estimado: number) {
-  const personas = filas.reduce((s, f) => s + f.total, 0)
-  const hayAsignados = filas.some((f) => f.asignado)
-  return { personas, hayAsignados, total: hayAsignados ? personas : personas + estimado }
+  const pagado = filas.reduce((s, f) => s + f.pagado, 0)
+  return { pagado, estimado, total: Math.max(estimado, pagado) }
 }
