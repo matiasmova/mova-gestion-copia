@@ -179,7 +179,9 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
     const valorObra = (obraId: number) =>
       presupuestos.filter((p) => p.obra_id === obraId && p.estado === 'aceptado').reduce((s, p) => s + p.total, 0) +
       adicionales.filter((a) => a.obra_id === obraId && a.estado === 'aprobado' && a.tipo !== 'gasto_extra').reduce((s, a) => s + a.importe, 0)
-    const filas = asignaciones.map((a) => {
+    // Los pagos al personal ya no se calculan por asignación (se cargan desde Personal
+    // contra el gasto estimado de cada obra): no se generan deudas ni "Pagarle a…".
+    const filas = ([] as typeof asignaciones).map((a) => {
       const persona = personas.find((p) => p.id === a.personal_id)
       const obra = obras.find((o) => o.id === a.obra_id)
       const pagosPersona = costos.filter((c) => c.personal_id === a.personal_id && c.obra_id === a.obra_id).map((c) => ({ personal_id: c.personal_id, monto: c.monto }))
@@ -213,21 +215,15 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
     }
   }, [asignaciones, personas, obras, costos, jornales, presupuestos, adicionales])
 
-  // ---- Lo acordado con el personal de cada obra (para la ganancia del Inicio) ----
+  // ---- Lo pagado al personal de cada obra (para la ganancia del Inicio) ----
   const empleadosObra = useMemo(() => {
     const m: Record<number, FilaEmpleado[]> = {}
-    const valorObra = (obraId: number) =>
-      presupuestos.filter((p) => p.obra_id === obraId && p.estado === 'aceptado').reduce((s, p) => s + p.total, 0) +
-      adicionales.filter((a) => a.obra_id === obraId && a.estado === 'aprobado' && a.tipo !== 'gasto_extra').reduce((s, a) => s + a.importe, 0)
-    const obrasCon = Array.from(new Set([...asignaciones.map((a) => a.obra_id), ...costos.filter((c) => c.obra_id != null && esPagoEmpleado(c)).map((c) => c.obra_id as number)]))
+    const obrasCon = Array.from(new Set(costos.filter((c) => c.obra_id != null && esPagoEmpleado(c)).map((c) => c.obra_id as number)))
     obrasCon.forEach((obraId) => {
-      m[obraId] = empleadosDeObra(
-        asignaciones.filter((a) => a.obra_id === obraId), personas,
-        costos.filter((c) => c.obra_id === obraId && esPagoEmpleado(c)), jornales.filter((j) => j.obra_id === obraId), valorObra(obraId),
-      )
+      m[obraId] = empleadosDeObra(costos.filter((c) => c.obra_id === obraId && esPagoEmpleado(c)))
     })
     return m
-  }, [asignaciones, personas, costos, jornales, presupuestos, adicionales])
+  }, [costos])
 
   // ---- Plata del mes: neto real y neto si pagás lo pendiente ----
   const mes = useMemo(() => {

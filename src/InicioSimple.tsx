@@ -172,7 +172,7 @@ export default function InicioSimple(p: Props) {
           // Lo acordado + (lo estimado para los que cobran por pagos, o lo ya pagado si es más).
           const t = totalEmpleados(p.empleadosObra[x.obra_id] ?? [], estimadoObra[x.obra_id] ?? 0)
           emp = t.total
-          if (!t.hayAsignados && (estimadoObra[x.obra_id] ?? 0) > 0) conEstimado++
+          if (t.pagado < t.estimado && t.estimado > 0) conEstimado++
         }
         const ext = deObra ? p.costos.filter((c) => c.obra_id === x.obra_id && esExtraDeObra(c)).reduce((s2, c) => s2 + c.monto, 0) : 0
         const c = cuentaTrabajo(itemsPor[x.id] ?? [], x.total, emp, ext, adic)

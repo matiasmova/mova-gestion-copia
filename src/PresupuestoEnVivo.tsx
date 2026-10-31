@@ -78,6 +78,24 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
   // Pestañas del editor (solo al editar) y la ganancia para el encabezado.
   const [pestana, setPestana] = useState<'doc' | 'gan'>('doc')
   const [ganancia, setGanancia] = useState<number | null>(null)
+  // Gasto por ayudantes estimado (interno, no lo ve el cliente): se descuenta de la
+  // ganancia y, cuando es obra, los pagos cargados en Personal se restan de acá.
+  const [ayudantes, setAyudantes] = useState(0)
+  const [ayudantesEstado, setAyudantesEstado] = useState<'ok' | 'guardando' | 'error'>('ok')
+  const tAyudantes = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    void supabase.from('presupuestos').select('pago_empleados_estimado').eq('id', presupuesto.id).maybeSingle()
+      .then(({ data }) => setAyudantes(Number((data as { pago_empleados_estimado?: unknown } | null)?.pago_empleados_estimado) || 0))
+  }, [presupuesto.id])
+  function cambiarAyudantes(v: number) {
+    setAyudantes(v); setAyudantesEstado('guardando')
+    if (tAyudantes.current) clearTimeout(tAyudantes.current)
+    tAyudantes.current = setTimeout(async () => {
+      const { error: e } = await supabase.from('presupuestos').update({ pago_empleados_estimado: v }).eq('id', presupuesto.id)
+      if (e) console.error(e)
+      setAyudantesEstado(e ? 'error' : 'ok')
+    }, 800)
+  }
   const [modo, setModo] = useState<'edit' | 'ver'>(modoInicial)
   const [titulo, setTitulo] = useState(presupuesto.titulo)
   const [items, setItems] = useState<Item[]>(() => presupuesto.items.map(conClave))
@@ -523,7 +541,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
             <div><small>TOTAL DEL PRESUPUESTO</small><b>{moneda(total)}</b>{bonificacion > 0.5 && <span>Incluye bonificación de {moneda(Math.min(bonificacion, sumaNeta))}</span>}</div>
             <div className="der"><small>SEÑA 60%</small><b>{moneda(sena)}</b></div>
           </div>
-          {ed && <div className="pvGanWrap" hidden={pestana !== 'gan'}><GananciaTrabajo presupuestoIds={[presupuesto.id]} obraId={obraId} items={validos} total={total} abiertaInicial onGanancia={setGanancia} /></div>}
+          {ed && <div className="pvGanWrap" hidden={pestana !== 'gan'}><GananciaTrabajo presupuestoIds={[presupuesto.id]} obraId={obraId} items={validos} total={total} abiertaInicial estimadoFijo={ayudantes} onGanancia={setGanancia} /></div>}
 
           {SECCIONES.map(({ tipo, titulo: tSec }) => {
             const its = items.filter((it) => (it.tipo === 'servicio' ? 'servicio' : 'producto') === tipo)
@@ -569,6 +587,11 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
             )
           })}
           {items.length === 0 && !ed && <p className="pvVacioDoc">Todavía no hay ítems.</p>}
+
+          {ed && <div className="pvAyudantes">
+            <span><b>👷 Gasto por ayudantes estimado</b><small>{ayudantesEstado === 'guardando' ? 'Guardando…' : ayudantesEstado === 'error' ? '⚠ No se guardó (falta el SQL de la fase 42)' : 'Interno, no lo ve el cliente · se resta de tu ganancia; los pagos que cargues en Personal a esta obra se descuentan de acá'}</small></span>
+            <CampoNumero className="pvPrecio" value={ayudantes} onChange={(e) => cambiarAyudantes(Math.max(0, Number(e.target.value) || 0))} aria-label="Gasto por ayudantes estimado" />
+          </div>}
 
           {formas && (
             <div className="pvPagos">
