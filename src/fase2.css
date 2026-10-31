@@ -4013,3 +4013,4 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .plAcc{display:flex;flex-wrap:wrap;gap:8px}
 .plAviso{margin:0;font-size:13px;font-weight:700;color:#12a06a}
 .pvSinCosto{margin:2px 0 0;font-size:12px}
+.peAcciones .peEliminar{color:#b23b32;border-color:#f1c9c5}.peAcciones .peEliminar:hover{background:#fff1f0}
