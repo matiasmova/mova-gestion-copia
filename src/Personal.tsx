@@ -196,6 +196,22 @@ function Personal({ pedido, onPedidoAtendido }: { pedido?: Pedido | null; onPedi
     if (e) { window.alert('No se pudo dar de baja.'); return }
     recargar()
   }
+  // Eliminar del todo (solo dados de baja): se borran sus asignaciones y jornales;
+  // los pagos que ya le hiciste quedan como gasto de la obra, sin su nombre.
+  async function eliminar(p: Persona) {
+    const pagos = (datos?.costos ?? []).filter((c) => c.personal_id === p.id).length
+    if (!confirmarEliminacion(`¿Eliminar a ${nombrePersona(p)} para siempre?\n\nSe borran sus datos, asignaciones y jornales.${pagos ? ` Los ${pagos} pago(s) que le hiciste quedan en las obras como gasto de mano de obra (sin su nombre), así no cambian tus cuentas.` : ''}\n\nNo se puede deshacer.`)) return
+    const pasos = [
+      await supabase.from('jornales').delete().eq('personal_id', p.id),
+      await supabase.from('obra_asignaciones').delete().eq('personal_id', p.id),
+      await supabase.from('costos').update({ personal_id: null }).eq('personal_id', p.id),
+      await supabase.from('personal').delete().eq('id', p.id),
+    ]
+    const fallo = pasos.find((r) => r.error)
+    if (fallo) { console.error(fallo.error); window.alert(`No se pudo eliminar: ${fallo.error?.message ?? 'probá de nuevo'}`); recargar(); return }
+    setAviso(`${nombrePersona(p)} se eliminó.`)
+    recargar()
+  }
   async function reactivar(p: Persona) {
     const { error: e } = await supabase.from('personal').update({ activo: true }).eq('id', p.id)
     if (e) { window.alert('No se pudo reactivar.'); return }
@@ -305,6 +321,7 @@ function Personal({ pedido, onPedidoAtendido }: { pedido?: Pedido | null; onPedi
                   <div className="peAcciones">
                     <button type="button" className="newButton" onClick={() => void reactivar(p)}>↺ Reactivar</button>
                     <button type="button" className="editButton" onClick={() => setPreviaPdf({ id: p.id, nombre: nombrePersona(p) })}>📄 Cuenta</button>
+                    <button type="button" className="editButton peEliminar" onClick={() => void eliminar(p)}>🗑 Eliminar</button>
                   </div>
                 )}
               </article>
