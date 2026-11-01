@@ -6,6 +6,8 @@ import { linkWhatsApp } from './whatsapp'
 import { confirmarEliminacion } from './confirmar'
 import CargarPago from './CargarPago'
 import { cargarEtiquetasObras, type ObraEtiqueta } from './etiquetasObras'
+import VistaPreviaPdf from './VistaPreviaPdf'
+import { armarPdfPagos } from './pdfPagosPersonal'
 
 // Personal: todo se maneja desde acá. Cargás cada pago (a quién, cuánto y a qué
 // obra va) y ves cuánto le pagaste a cada uno en el mes y a qué obras fue.
@@ -80,6 +82,7 @@ function Personal({ pedido, onPedidoAtendido }: { pedido?: Pedido | null; onPedi
   const [formPersona, setFormPersona] = useState<Persona | 'nueva' | null>(null)
   const [pagando, setPagando] = useState<{ personaId?: number } | null>(null)
   const [aviso, setAviso] = useState('')
+  const [pdfPagos, setPdfPagos] = useState<{ personaId?: number } | null>(null)
 
   useEffect(() => {
     let vigente = true
@@ -157,6 +160,16 @@ function Personal({ pedido, onPedidoAtendido }: { pedido?: Pedido | null; onPedi
     setAviso(`${nombrePersona(p)} se eliminó.`)
     recargar()
   }
+  // Datos del PDF del mes: de todo el equipo o de una persona.
+  function datosPdf(personaId?: number) {
+    const p = personaId != null ? persona(personaId) : undefined
+    return {
+      mes, mesNombre: nombreMes(mes),
+      persona: p ? { nombre: nombrePersona(p), subtitulo: [p.especialidad, TIPOS[p.tipo] ?? p.tipo].filter(Boolean).join(' · ') } : null,
+      pagos: delMes.filter((x) => personaId == null || x.personal_id === personaId)
+        .map((x) => ({ fecha: x.fecha, obraId: x.obra_id, obra: obraNombre(x.obra_id), persona: nombrePersona(persona(x.personal_id)), detalle: detalleDe(x), monto: x.monto })),
+    }
+  }
   function whatsappMes(r: (typeof resumen)[number]) {
     const lineas = r.suyos.slice().reverse().map((x) => `• ${fechaCorta(x.fecha)} · ${obraNombre(x.obra_id)}: ${moneda(x.monto)}`)
     const url = linkWhatsApp(r.p.telefono, `Hola ${r.p.nombre}! Te paso los pagos de ${nombreMes(mes).toLowerCase()}:\n${lineas.join('\n') || '• Sin pagos'}\nTotal: ${moneda(r.total)}`)
@@ -197,6 +210,7 @@ function Personal({ pedido, onPedidoAtendido }: { pedido?: Pedido | null; onPedi
       {pestana === 'pagos' && <>
         <div className="peFiltros">
           <select value={mes} onChange={(e) => setMes(e.target.value)} aria-label="Mes">{meses.map((m) => <option key={m} value={m}>{nombreMes(m)}</option>)}</select>
+          <button type="button" className="editButton" disabled={!delMes.length} onClick={() => setPdfPagos({})}>📄 Resumen PDF del mes</button>
         </div>
         <section className="liSeccion">
           <div className="liHead"><div><h3>Resumen por empleado</h3><small>{nombreMes(mes)} · total {moneda(totalMes)}</small></div></div>
@@ -207,9 +221,10 @@ function Personal({ pedido, onPedidoAtendido }: { pedido?: Pedido | null; onPedi
                 <span><b>{nombrePersona(r.p)}</b><small>{[r.p.especialidad, TIPOS[r.p.tipo] ?? r.p.tipo].filter(Boolean).join(' · ')}{r.p.activo ? '' : ' · de baja'}</small></span>
                 <em><b>{moneda(r.total)}</b><small>{r.suyos.length} pago(s) en el mes</small></em>
               </div>
-              <div className="peResObras">{r.porObra.length ? r.porObra.map(([o, m]) => <span key={String(o)} style={{ ['--c' as string]: colorObra(o) }}><i aria-hidden />{obraNombre(o)} · <b>{moneda(m)}</b></span>) : <small>Sin pagos este mes{r.ultimo ? ` · último ${fechaCorta(r.ultimo)}` : ''}</small>}</div>
+              <div className="peResObras">{r.porObra.length ? r.porObra.map(([o, m]) => <span key={String(o)} style={{ ['--c' as string]: colorObra(o) }}><i aria-hidden />{obraNombre(o)} <b>{moneda(m)}</b></span>) : <small>Sin pagos este mes{r.ultimo ? ` · último ${fechaCorta(r.ultimo)}` : ''}</small>}</div>
               <div className="peResAcc">
                 {r.p.activo && <button type="button" className="newButton" onClick={() => setPagando({ personaId: r.p.id })}>💵 Cargar pago</button>}
+                {r.suyos.length > 0 && <button type="button" className="editButton" onClick={() => setPdfPagos({ personaId: r.p.id })}>📄 PDF</button>}
                 {r.p.telefono && r.suyos.length > 0 && <button type="button" className="editButton peWa" onClick={() => whatsappMes(r)}>💬 Mandarle el resumen</button>}
               </div>
             </article>)}
@@ -273,6 +288,7 @@ function Personal({ pedido, onPedidoAtendido }: { pedido?: Pedido | null; onPedi
 
     {formPersona && <FormularioPersona persona={formPersona === 'nueva' ? undefined : formPersona} conDatosPersonales={datos?.conDatosPersonales ?? false}
       onCancelar={() => setFormPersona(null)} onGuardado={() => { setFormPersona(null); recargar() }} />}
+    {pdfPagos && <VistaPreviaPdf titulo={`Pagos al personal · ${nombreMes(mes)}${pdfPagos.personaId != null ? ` · ${nombrePersona(persona(pdfPagos.personaId))}` : ''}`} generar={() => armarPdfPagos(datosPdf(pdfPagos.personaId))} onCerrar={() => setPdfPagos(null)} />}
     {pagando && <CargarPago personaId={pagando.personaId} onCancelar={() => setPagando(null)} onGuardado={(texto) => { setPagando(null); setAviso(texto); recargar() }} />}
   </div>
 }
