@@ -8,7 +8,7 @@ import { cargarEtiquetasObras, type ObraEtiqueta } from './etiquetasObras'
 // Cargar un pago al personal: a quién, cuánto, cuándo y a qué obra va.
 // Se guarda en "costos" (mano de obra de la obra). En la obra, cada pago se
 // descuenta del "Gasto por ayudantes estimado" del presupuesto.
-// "Sin obra" queda como gasto general (necesita el SQL de la fase 42).
+// "Gastos como empresa" (sin obra) es para quien trabaja en todas (necesita el SQL de la fase 42).
 
 type Persona = { id: number; nombre: string; apellido: string | null; tipo: string; telefono: string | null; activo: boolean }
 const hoy = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
@@ -44,7 +44,7 @@ export default function CargarPago({ personaId: personaInicial, obraId: obraInic
     const m = Math.round((Number(monto) || 0) * 100) / 100
     if (!p) { setError('Elegí a quién le pagás.'); return }
     if (!(m > 0)) { setError('Poné el monto del pago.'); return }
-    if (!obraId) { setError('Elegí a qué obra va el pago (o "Sin obra").'); return }
+    if (!obraId) { setError('Elegí a qué obra va el pago (o "Gastos como empresa").'); return }
     const general = obraId === 'general'
     setGuardando(true)
     const { error: fallo } = await supabase.from('costos').insert({
@@ -54,10 +54,10 @@ export default function CargarPago({ personaId: personaInicial, obraId: obraInic
     setGuardando(false)
     if (fallo) {
       console.error(fallo)
-      setError(general && /null|not-null|obra_id/i.test(fallo.message) ? 'Para cargar pagos sin obra falta correr en Supabase el SQL supabase-pagos-personal-fase-42.sql. Mientras tanto elegí una obra.' : 'No se pudo guardar el pago. Probá de nuevo.')
+      setError(general && /null|not-null|obra_id/i.test(fallo.message) ? 'Para cargar gastos como empresa falta correr en Supabase el SQL supabase-pagos-personal-fase-42.sql. Mientras tanto elegí una obra.' : 'No se pudo guardar el pago. Probá de nuevo.')
       return
     }
-    setListo({ persona: p, monto: m, obra: obras.find((o) => o.id === Number(obraId))?.etiqueta ?? 'Sin obra (gasto general)' })
+    setListo({ persona: p, monto: m, obra: obras.find((o) => o.id === Number(obraId))?.etiqueta ?? '🏢 Gastos como empresa (para todas las obras)' })
   }
 
   function whatsapp() {
@@ -72,7 +72,7 @@ export default function CargarPago({ personaId: personaInicial, obraId: obraInic
     <div className="modalCard cpModal" role="dialog" aria-modal="true" aria-label="Cargar pago">
       <div className="modalHeader"><div><p className="subtitle">PERSONAL</p><h2>{listo ? 'Pago guardado' : '💵 Cargar pago'}</h2></div><button type="button" className="closeButton" disabled={guardando} onClick={() => { if (listo) terminar(); else onCancelar() }} aria-label="Cerrar">×</button></div>
       {listo ? <div className="clienteForm">
-        <p className="cpListo"><b>{moneda(listo.monto)}</b> a {nombrePersona(listo.persona)}<small>{listo.obra}{listo.obra.startsWith('Sin obra') ? '' : ' · se descontó del gasto por ayudantes estimado'}</small></p>
+        <p className="cpListo"><b>{moneda(listo.monto)}</b> a {nombrePersona(listo.persona)}<small>{listo.obra}{listo.obra.startsWith('🏢') ? '' : ' · se descontó del gasto por ayudantes estimado'}</small></p>
         <div className="formActions">
           {listo.persona.telefono && <button type="button" className="editButton" onClick={whatsapp}>💬 Avisarle por WhatsApp</button>}
           <button type="button" className="newButton" onClick={terminar}>Listo</button>
@@ -86,8 +86,10 @@ export default function CargarPago({ personaId: personaInicial, obraId: obraInic
           <label>Monto *<CampoNumero min="0" value={monto} onChange={(e) => setMonto(e.target.value)} placeholder="$ 0" /></label>
           <label>Obra *<select required value={obraId} onChange={(e) => setObraId(e.target.value)}>
             <option value="">Elegí la obra</option>
-            {obras.map((o) => <option key={o.id} value={o.id}>{o.etiqueta}</option>)}
-            <option value="general">Sin obra (gasto general)</option>
+            <option value="general">🏢 Gastos como empresa (para todas las obras)</option>
+            <optgroup label="Obras">
+              {obras.map((o) => <option key={o.id} value={o.id}>{o.etiqueta}</option>)}
+            </optgroup>
           </select></label>
           <label>Fecha *<input type="date" required value={fecha} onChange={(e) => setFecha(e.target.value)} /></label>
           <label className="formFull">Nota (opcional)<input value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Ej.: semana del 27 al 31, adelanto" /></label>
