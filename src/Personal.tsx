@@ -101,7 +101,7 @@ function Personal({ pedido, onPedidoAtendido }: { pedido?: Pedido | null; onPedi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pedido])
 
-  const obraNombre = (id: number | null) => (id == null ? 'Sin obra (gasto general)' : datos?.obras.find((o) => o.id === id)?.etiqueta ?? `Obra #${id}`)
+  const obraNombre = (id: number | null) => (id == null ? '🏢 Gastos como empresa (para todas las obras)' : datos?.obras.find((o) => o.id === id)?.etiqueta ?? `Obra #${id}`)
   const colorObra = (id: number | null) => (id == null ? '#9aa2ae' : COLORES_OBRA[Math.abs(id) % COLORES_OBRA.length])
   const persona = (id: number | null) => datos?.personas.find((p) => p.id === id)
   const delMes = useMemo(() => (datos?.pagos ?? []).filter((p) => p.fecha.slice(0, 7) === mes), [datos, mes])
@@ -167,7 +167,7 @@ function Personal({ pedido, onPedidoAtendido }: { pedido?: Pedido | null; onPedi
       mes, mesNombre: nombreMes(mes),
       persona: p ? { nombre: nombrePersona(p), subtitulo: [p.especialidad, TIPOS[p.tipo] ?? p.tipo].filter(Boolean).join(' · ') } : null,
       pagos: delMes.filter((x) => personaId == null || x.personal_id === personaId)
-        .map((x) => ({ fecha: x.fecha, obraId: x.obra_id, obra: obraNombre(x.obra_id), persona: nombrePersona(persona(x.personal_id)), detalle: detalleDe(x), monto: x.monto })),
+        .map((x) => ({ fecha: x.fecha, obraId: x.obra_id, obra: obraNombre(x.obra_id).replace(/^🏢 /, ''), persona: nombrePersona(persona(x.personal_id)), detalle: detalleDe(x), monto: x.monto })),
     }
   }
   function whatsappMes(r: (typeof resumen)[number]) {
@@ -197,7 +197,7 @@ function Personal({ pedido, onPedidoAtendido }: { pedido?: Pedido | null; onPedi
       <div className="peKpis">
         <button type="button" onClick={() => setPestana('pagos')}><span>Pagado en {nombreMes(mes).split(' ')[0].toLowerCase()}</span><strong>{moneda(totalMes)}</strong><small>{nombreMes(mes)}</small></button>
         <button type="button" onClick={() => setPestana('pagos')}><span>Pagos del mes</span><strong>{delMes.length}</strong><small>{new Set(delMes.map((p) => p.personal_id)).size} persona(s)</small></button>
-        <button type="button" onClick={() => setPestana('pagos')}><span>Obras con pagos</span><strong>{obrasMes}</strong><small>{delMes.some((p) => p.obra_id == null) ? 'más gastos generales' : 'en el mes'}</small></button>
+        <button type="button" onClick={() => setPestana('pagos')}><span>Obras con pagos</span><strong>{obrasMes}</strong><small>{delMes.some((p) => p.obra_id == null) ? 'más gastos como empresa' : 'en el mes'}</small></button>
         <div className={seguros.length ? 'alerta' : ''}><span>Seguros / ART</span><strong>{seguros.length ? `${seguros.length} para revisar` : 'Al día'}</strong><small>{datos.conDatosPersonales ? 'Vencidos o por vencer (15 días)' : 'Corré el SQL de Personal para cargarlos'}</small></div>
       </div>
 
@@ -306,7 +306,7 @@ function Movimientos({ datos, obraNombre, onBorrar }: { datos: Datos; obraNombre
   return <div className="mvWrap">
     <div className="peFiltros">
       <select value={fPersona} onChange={(e) => setFPersona(e.target.value)}><option value="">Todas las personas</option>{datos.personas.map((p) => <option key={p.id} value={p.id}>{nombrePersona(p)}{p.activo ? '' : ' (baja)'}</option>)}</select>
-      <select value={fObra} onChange={(e) => setFObra(e.target.value)}><option value="">Todas las obras</option>{datos.obras.map((o) => <option key={o.id} value={o.id}>{o.etiqueta}</option>)}<option value="general">Sin obra (gasto general)</option></select>
+      <select value={fObra} onChange={(e) => setFObra(e.target.value)}><option value="">Todas las obras</option><option value="general">🏢 Gastos como empresa (para todas las obras)</option>{datos.obras.map((o) => <option key={o.id} value={o.id}>{o.etiqueta}</option>)}</select>
     </div>
     <section className="liSeccion">
       <div className="liHead"><div><h3>Pagos por mes</h3><small>Últimos 6 meses{fObra || fPersona ? ', con el filtro elegido' : ''}</small></div></div>

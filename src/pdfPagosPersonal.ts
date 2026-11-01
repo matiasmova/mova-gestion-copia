@@ -136,7 +136,7 @@ export async function generarPdfPagos(d: DatosResumenPagos): Promise<Blob> {
   const cajas = [
     { etq: d.persona ? 'TOTAL COBRADO EN EL MES' : 'TOTAL PAGADO EN EL MES', v: moneda(total), destacada: true },
     { etq: 'PAGOS', v: String(d.pagos.length), s: d.persona ? '' : `${personas.length} persona(s)` },
-    { etq: 'OBRAS', v: String(obras.filter((o) => o.pagos[0]?.obraId != null).length), s: obras.some((o) => o.pagos[0]?.obraId == null) ? 'más gastos generales' : '' },
+    { etq: 'OBRAS', v: String(obras.filter((o) => o.pagos[0]?.obraId != null).length), s: obras.some((o) => o.pagos[0]?.obraId == null) ? 'más gastos como empresa' : '' },
   ]
   const cajaW = (CW - 24) / 3
   cajas.forEach((k, i) => {
