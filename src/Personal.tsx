@@ -5,6 +5,7 @@ import { moneda, fechaCorta } from './gestionFormat'
 import { linkWhatsApp } from './whatsapp'
 import { confirmarEliminacion } from './confirmar'
 import CargarPago from './CargarPago'
+import { cargarEtiquetasObras, type ObraEtiqueta } from './etiquetasObras'
 
 // Personal: todo se maneja desde acá. Cargás cada pago (a quién, cuánto y a qué
 // obra va) y ves cuánto le pagaste a cada uno en el mes y a qué obras fue.
@@ -18,7 +19,7 @@ type Persona = {
   documento?: string | null; cuil?: string | null; contacto_emergencia?: string | null
   seguro?: string | null; seguro_vencimiento?: string | null; notas?: string | null
 }
-type Obra = { id: number; nombre_obra: string; activo: boolean }
+type Obra = ObraEtiqueta
 type Pago = { id: number; obra_id: number | null; personal_id: number | null; tipo: string; descripcion: string | null; monto: number; fecha: string }
 type Datos = { personas: Persona[]; obras: Obra[]; pagos: Pago[]; conDatosPersonales: boolean }
 type Pestana = 'pagos' | 'equipo' | 'movimientos'
@@ -48,7 +49,7 @@ async function leerTodo<T>(tabla: string, columnas: string, extra?: (q: any) => 
 async function cargarDatos(): Promise<Datos> {
   const [personas, obras, costos, extra] = await Promise.all([
     leerTodo<Persona>('personal', '*'),
-    leerTodo<Obra>('obras', 'id,nombre_obra,activo'),
+    cargarEtiquetasObras(),
     leerTodo<Pago>('costos', 'id,obra_id,personal_id,tipo,descripcion,monto,fecha', (q) => q.in('tipo', ['mano_obra', 'terciarizado'])),
     supabase.from('personal').select('id,seguro_vencimiento').limit(1),
   ])
@@ -97,7 +98,7 @@ function Personal({ pedido, onPedidoAtendido }: { pedido?: Pedido | null; onPedi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pedido])
 
-  const obraNombre = (id: number | null) => (id == null ? 'Sin obra (gasto general)' : datos?.obras.find((o) => o.id === id)?.nombre_obra ?? `Obra #${id}`)
+  const obraNombre = (id: number | null) => (id == null ? 'Sin obra (gasto general)' : datos?.obras.find((o) => o.id === id)?.etiqueta ?? `Obra #${id}`)
   const colorObra = (id: number | null) => (id == null ? '#9aa2ae' : COLORES_OBRA[Math.abs(id) % COLORES_OBRA.length])
   const persona = (id: number | null) => datos?.personas.find((p) => p.id === id)
   const delMes = useMemo(() => (datos?.pagos ?? []).filter((p) => p.fecha.slice(0, 7) === mes), [datos, mes])
@@ -289,7 +290,7 @@ function Movimientos({ datos, obraNombre, onBorrar }: { datos: Datos; obraNombre
   return <div className="mvWrap">
     <div className="peFiltros">
       <select value={fPersona} onChange={(e) => setFPersona(e.target.value)}><option value="">Todas las personas</option>{datos.personas.map((p) => <option key={p.id} value={p.id}>{nombrePersona(p)}{p.activo ? '' : ' (baja)'}</option>)}</select>
-      <select value={fObra} onChange={(e) => setFObra(e.target.value)}><option value="">Todas las obras</option>{datos.obras.map((o) => <option key={o.id} value={o.id}>{o.nombre_obra}</option>)}<option value="general">Sin obra (gasto general)</option></select>
+      <select value={fObra} onChange={(e) => setFObra(e.target.value)}><option value="">Todas las obras</option>{datos.obras.map((o) => <option key={o.id} value={o.id}>{o.etiqueta}</option>)}<option value="general">Sin obra (gasto general)</option></select>
     </div>
     <section className="liSeccion">
       <div className="liHead"><div><h3>Pagos por mes</h3><small>Últimos 6 meses{fObra || fPersona ? ', con el filtro elegido' : ''}</small></div></div>
