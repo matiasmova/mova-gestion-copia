@@ -3,6 +3,7 @@ import { supabase } from './supabase'
 import { moneda } from './gestionFormat'
 import CampoNumero from './CampoNumero'
 import { linkWhatsApp } from './whatsapp'
+import { cargarEtiquetasObras, type ObraEtiqueta } from './etiquetasObras'
 
 // Cargar un pago al personal: a quién, cuánto, cuándo y a qué obra va.
 // Se guarda en "costos" (mano de obra de la obra). En la obra, cada pago se
@@ -10,7 +11,6 @@ import { linkWhatsApp } from './whatsapp'
 // "Sin obra" queda como gasto general (necesita el SQL de la fase 42).
 
 type Persona = { id: number; nombre: string; apellido: string | null; tipo: string; telefono: string | null; activo: boolean }
-type Obra = { id: number; nombre_obra: string }
 const hoy = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 export const nombrePersona = (p?: { nombre: string; apellido: string | null } | null) => (p ? `${p.nombre} ${p.apellido ?? ''}`.trim() : 'Mano de obra')
 
@@ -18,7 +18,7 @@ export default function CargarPago({ personaId: personaInicial, obraId: obraInic
   personaId?: number; obraId?: number | null; onCancelar: () => void; onGuardado: (texto: string) => void
 }) {
   const [personas, setPersonas] = useState<Persona[]>([])
-  const [obras, setObras] = useState<Obra[]>([])
+  const [obras, setObras] = useState<ObraEtiqueta[]>([])
   const [personaId, setPersonaId] = useState(personaInicial ? String(personaInicial) : '')
   const [obraId, setObraId] = useState(obraInicial != null ? String(obraInicial) : '')
   const [monto, setMonto] = useState('')
@@ -31,12 +31,12 @@ export default function CargarPago({ personaId: personaInicial, obraId: obraInic
   useEffect(() => {
     void Promise.all([
       supabase.from('personal').select('id,nombre,apellido,tipo,telefono,activo').order('nombre'),
-      supabase.from('obras').select('id,nombre_obra').eq('activo', true).order('nombre_obra'),
-    ]).then(([rP, rO]) => {
+      cargarEtiquetasObras(),
+    ]).then(([rP, todas]) => {
       setPersonas(((rP.data ?? []) as Persona[]).filter((p) => p.activo !== false || p.id === personaInicial))
-      setObras((rO.data ?? []) as Obra[])
+      setObras(todas.filter((o) => o.activo || o.id === obraInicial))
     })
-  }, [personaInicial])
+  }, [personaInicial, obraInicial])
 
   async function guardar(e: FormEvent) {
     e.preventDefault(); setError('')
@@ -57,7 +57,7 @@ export default function CargarPago({ personaId: personaInicial, obraId: obraInic
       setError(general && /null|not-null|obra_id/i.test(fallo.message) ? 'Para cargar pagos sin obra falta correr en Supabase el SQL supabase-pagos-personal-fase-42.sql. Mientras tanto elegí una obra.' : 'No se pudo guardar el pago. Probá de nuevo.')
       return
     }
-    setListo({ persona: p, monto: m, obra: obras.find((o) => o.id === Number(obraId))?.nombre_obra ?? 'Sin obra (gasto general)' })
+    setListo({ persona: p, monto: m, obra: obras.find((o) => o.id === Number(obraId))?.etiqueta ?? 'Sin obra (gasto general)' })
   }
 
   function whatsapp() {
@@ -86,7 +86,7 @@ export default function CargarPago({ personaId: personaInicial, obraId: obraInic
           <label>Monto *<CampoNumero min="0" value={monto} onChange={(e) => setMonto(e.target.value)} placeholder="$ 0" /></label>
           <label>Obra *<select required value={obraId} onChange={(e) => setObraId(e.target.value)}>
             <option value="">Elegí la obra</option>
-            {obras.map((o) => <option key={o.id} value={o.id}>{o.nombre_obra}</option>)}
+            {obras.map((o) => <option key={o.id} value={o.id}>{o.etiqueta}</option>)}
             <option value="general">Sin obra (gasto general)</option>
           </select></label>
           <label>Fecha *<input type="date" required value={fecha} onChange={(e) => setFecha(e.target.value)} /></label>
