@@ -143,18 +143,26 @@ type Adicional = {
   id: number; tipo: string; descripcion: string; motivo: string | null; importe: number; estado: string; fecha: string
   presupuesto_id: number | null; item_id: number | null; cambio_tipo: CambioTipo | null
   cantidad_anterior: number | null; precio_anterior: number | null; cantidad_nueva: number | null; precio_nuevo: number | null
+  costo_unitario?: number | null // costo interno de un extra (fase 43)
 }
 type Presu = { id: number; titulo: string; total: number }
 type EstadoItem = { descripcion: string; cantidad: number; precio: number; quitado: boolean; modificado: boolean; pendiente: boolean; cambio: Adicional | null }
-type Producto = { id: number; nombre: string; nombre_presupuesto?: string | null; unidad: string; precio_venta: number; tipo: string; categoria?: string | null; foto_url?: string | null }
+type Producto = { id: number; nombre: string; nombre_presupuesto?: string | null; unidad: string; precio_venta: number; costo_unitario?: number | null; tipo: string; categoria?: string | null; foto_url?: string | null }
 
 // Lo que se está editando: un ítem del presupuesto o un ítem nuevo (extra).
-type Edicion = { clave: string; itemId: number | null; presupuestoId: number; descripcion: string; cantidad: number; precio: string; motivo: string; catalogoId: number | null }
+// extraId: un extra ya agregado en la obra que se está editando.
+// precio: precio de lista; descuento: % que se le resta (se guarda el precio final).
+type Edicion = { clave: string; itemId: number | null; extraId: number | null; presupuestoId: number; descripcion: string; cantidad: number; precio: string; descuento: string; costo: string; motivo: string; catalogoId: number | null }
 // Paso de confirmación: "¿el cliente ya aprobó?"
 type Pregunta = { quitar: boolean; diferencia: number }
 
 const num = (x: unknown) => (x == null || x === '' ? null : Number(x))
 const precioNeto = (it: Item) => it.precio_unitario * (1 - (Number(it.descuento_pct) || 0) / 100)
+const pctDto = (e: Edicion) => Math.min(100, Math.max(0, Number(e.descuento) || 0))
+// Precio final por unidad de lo que se está editando (con el descuento ya restado).
+const netoEd = (e: Edicion) => Math.round((Number(e.precio) || 0) * (1 - pctDto(e) / 100) * 100) / 100
+// Producto de tu lista (tiene costo): ganás venta − costo. Servicio o escrito a mano: 100%.
+const esDeLista = (it: Item) => (it.tipo ?? '').toLowerCase() !== 'servicio' && ((it.tipo ?? '').toLowerCase() === 'producto' || (it.tipo ?? '').toLowerCase() === 'material') && (it.catalogo_id != null || Number(it.costo_unitario) > 0)
 
 function estadoDe(item: Item, adicionales: Adicional[]): EstadoItem {
   const cambios = adicionales
@@ -216,7 +224,7 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
       setItems(filas)
       setAdicionales((rAdic.data ?? []).map((a) => ({
         ...a, importe: Number(a.importe), presupuesto_id: num(a.presupuesto_id), item_id: num(a.item_id), cambio_tipo: a.cambio_tipo ?? null,
-        cantidad_anterior: num(a.cantidad_anterior), precio_anterior: num(a.precio_anterior), cantidad_nueva: num(a.cantidad_nueva), precio_nuevo: num(a.precio_nuevo),
+        cantidad_anterior: num(a.cantidad_anterior), precio_anterior: num(a.precio_anterior), cantidad_nueva: num(a.cantidad_nueva), precio_nuevo: num(a.precio_nuevo), costo_unitario: num(a.costo_unitario),
       })) as Adicional[])
       setCargando(false)
     })()
@@ -225,12 +233,12 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
 
   // El catálogo se pide recién al agregar un extra.
   useEffect(() => {
-    if (!edicion || edicion.itemId != null || catalogo) return
+    if (!edicion || edicion.clave !== 'nuevo' || catalogo) return
     void (async () => {
-      const columnas = 'id, tipo, nombre, unidad, precio_venta, categoria, foto_url'
+      const columnas = 'id, tipo, nombre, unidad, precio_venta, costo_unitario, categoria, foto_url'
       let r = await supabase.from('productos_servicios').select(`${columnas}, nombre_presupuesto`).eq('activo', true).order('nombre')
       if (r.error) r = await supabase.from('productos_servicios').select(columnas).eq('activo', true).order('nombre') as typeof r
-      setCatalogo(((r.data ?? []) as Producto[]).map((p) => ({ ...p, precio_venta: Number(p.precio_venta) || 0 })))
+      setCatalogo(((r.data ?? []) as Producto[]).map((p) => ({ ...p, precio_venta: Number(p.precio_venta) || 0, costo_unitario: Number(p.costo_unitario) || 0 })))
     })()
   }, [edicion, catalogo])
 
@@ -328,14 +336,40 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
     const e = estadoDe(it, adicionales)
     setErrorEd('')
     setPregunta(null)
-    setEdicion({ clave: `i${it.id}`, itemId: it.id, presupuestoId: it.presupuesto_id, descripcion: e.descripcion, cantidad: e.cantidad, precio: String(redondear(e.precio)), motivo: '', catalogoId: null })
+    // Sin cambios y con descuento del presupuesto: se muestra el precio de lista y el %.
+    const conDto = !e.modificado && Number(it.descuento_pct) > 0
+    setEdicion({ clave: `i${it.id}`, itemId: it.id, extraId: null, presupuestoId: it.presupuesto_id, descripcion: e.descripcion, cantidad: e.cantidad,
+      precio: String(redondear(conDto ? it.precio_unitario : e.precio)), descuento: conDto ? String(Number(it.descuento_pct)) : '', costo: '', motivo: '', catalogoId: null })
   }
 
   function abrirExtra() {
     setErrorEd('')
     setPregunta(null)
-    setEdicion({ clave: 'nuevo', itemId: null, presupuestoId: presus[0].id, descripcion: '', cantidad: 1, precio: '', motivo: '', catalogoId: null })
+    setEdicion({ clave: 'nuevo', itemId: null, extraId: null, presupuestoId: presus[0].id, descripcion: '', cantidad: 1, precio: '', descuento: '', costo: '', motivo: '', catalogoId: null })
     setTimeout(() => document.querySelector('[data-oe-nuevo]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60)
+  }
+
+  // Un extra ya agregado: se abre para editarlo como cualquier ítem.
+  function abrirAgregado(a: Adicional) {
+    if (edicion?.clave === `a${a.id}`) { setEdicion(null); setPregunta(null); return }
+    setErrorEd('')
+    setPregunta(null)
+    setEdicion({ clave: `a${a.id}`, itemId: null, extraId: a.id, presupuestoId: a.presupuesto_id ?? presus[0].id, descripcion: a.descripcion, cantidad: Number(a.cantidad_nueva ?? 1) || 1,
+      precio: String(redondear(a.precio_nuevo ?? a.importe)), descuento: '', costo: Number(a.costo_unitario) > 0 ? String(a.costo_unitario) : '', motivo: a.motivo ?? '', catalogoId: null })
+  }
+
+  // Guardar un extra editado: se actualiza en el lugar y el total se recalcula.
+  async function guardarExtra() {
+    if (!edicion || edicion.extraId == null) return
+    const cant = Number(edicion.cantidad) || 0
+    const precio = netoEd(edicion)
+    const datos: Record<string, unknown> = { descripcion: edicion.descripcion.trim(), motivo: edicion.motivo.trim() || null, cantidad_nueva: cant, precio_nuevo: precio, importe: redondear(cant * precio) }
+    setGuardando(true)
+    let { error: fallo } = await supabase.from('adicionales').update({ ...datos, costo_unitario: Number(edicion.costo) || 0 }).eq('id', edicion.extraId)
+    if (fallo && /costo_unitario/.test(fallo.message)) ({ error: fallo } = await supabase.from('adicionales').update(datos).eq('id', edicion.extraId))
+    setGuardando(false)
+    if (fallo) { console.error(fallo); setErrorEd(`No se pudo guardar: ${fallo.message || 'volvé a intentar.'}`); return }
+    terminar('Extra actualizado: el total se recalculó')
   }
 
   const itemEd = edicion?.itemId != null ? items.find((x) => x.id === edicion.itemId) ?? null : null
@@ -346,12 +380,13 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
     if (!edicion) return
     setErrorEd('')
     const cant = Number(edicion.cantidad) || 0
-    const precio = Number(edicion.precio)
+    const precio = netoEd(edicion)
     if (!quitar) {
       if (!edicion.descripcion.trim()) { setErrorEd('Escribí la descripción.'); return }
       if (!(cant > 0)) { setErrorEd('La cantidad tiene que ser mayor que cero.'); return }
       if (edicion.precio === '' || !(precio >= 0)) { setErrorEd('Poné el precio unitario.'); return }
     }
+    if (edicion.extraId != null) { void guardarExtra(); return }
     const antes = estEd ? estEd.cantidad * estEd.precio : 0
     const ahora = quitar ? 0 : cant * precio
     if (estEd && itemEd && estEd.modificado && !quitar) {
@@ -369,12 +404,12 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
   async function guardar(aprobado: boolean) {
     if (!edicion || !pregunta) return
     const cant = Number(edicion.cantidad) || 0
-    const precio = redondear(Number(edicion.precio) || 0)
+    const precio = netoEd(edicion)
     let cambioTipo: CambioTipo = 'agregado'
     if (pregunta.quitar) cambioTipo = 'quitado'
     else if (estEd) cambioTipo = edicion.descripcion.trim() !== estEd.descripcion.trim() || Math.abs(precio - estEd.precio) > 0.005 ? 'reemplazo' : 'cantidad'
     setGuardando(true)
-    const { error: fallo } = await supabase.from('adicionales').insert({
+    const fila: Record<string, unknown> = {
       obra_id: obraId,
       tipo: 'cambio',
       descripcion: pregunta.quitar && estEd ? estEd.descripcion : edicion.descripcion.trim(),
@@ -391,7 +426,10 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
       precio_anterior: estEd ? redondear(estEd.precio) : null,
       cantidad_nueva: pregunta.quitar ? null : cant,
       precio_nuevo: pregunta.quitar ? null : precio,
-    })
+    }
+    // El costo interno va solo en un extra nuevo (si falta la columna, se guarda sin él).
+    let { error: fallo } = await supabase.from('adicionales').insert(!estEd && Number(edicion.costo) > 0 ? { ...fila, costo_unitario: Number(edicion.costo) } : fila)
+    if (fallo && /costo_unitario/.test(fallo.message)) ({ error: fallo } = await supabase.from('adicionales').insert(fila))
     setGuardando(false)
     if (fallo) { console.error(fallo); setErrorEd(`No se pudo guardar: ${fallo.message || 'volvé a intentar.'}`); return }
     terminar(aprobado ? 'Cambio aprobado: el total se actualizó' : 'Cambio guardado, espera aprobación')
@@ -442,7 +480,7 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
   function elegirProducto(id: string) {
     const p = catalogo?.find((x) => x.id === Number(id))
     if (!p || !edicion) return
-    setEdicion({ ...edicion, catalogoId: p.id, descripcion: p.nombre_presupuesto || p.nombre, precio: String(p.precio_venta || '') })
+    setEdicion({ ...edicion, catalogoId: p.id, descripcion: p.nombre_presupuesto || p.nombre, precio: String(p.precio_venta || ''), costo: Number(p.costo_unitario) > 0 ? String(p.costo_unitario) : '' })
   }
 
   // Panel de edición (mismo para un ítem y para un extra nuevo).
@@ -475,16 +513,22 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
       </div>
     }
     const cant = Number(edicion.cantidad) || 0
-    const precio = Number(edicion.precio) || 0
+    const precio = netoEd(edicion)
     const antes = estEd ? estEd.cantidad * estEd.precio : 0
     const dif = redondear(cant * precio - antes)
+    const esExtra = edicion.itemId == null
+    const extraEd = edicion.extraId != null ? adicionales.find((a) => a.id === edicion.extraId) ?? null : null
+    // Cuánto ganás con este ítem (interno): venta − costo.
+    const costoU = esExtra ? Number(edicion.costo) || 0 : itemEd && esDeLista(itemEd) ? Number(itemEd.costo_unitario) || 0 : 0
+    const venta = cant * precio
+    const gana = venta - cant * costoU
     return <div className="oePanel">
       {estEd?.modificado && itemEd && <div className="oeEraOriginal">
         <span>{estEd.quitado ? 'Este ítem está quitado.' : 'Este ítem tiene cambios.'} Original: <b>{Number(itemEd.cantidad).toLocaleString('es-AR')} × {plata(precioNeto(itemEd))} = {plata(itemEd.cantidad * precioNeto(itemEd))}</b></span>
         <button type="button" disabled={guardando} onClick={() => void volverAlOriginal(itemEd.id)}>↩️ Volver al original</button>
       </div>}
-      {edicion.itemId == null && <BuscadorCatalogo catalogo={catalogo ?? []} valor={edicion.catalogoId} cargando={!catalogo} onElegir={elegirProducto}
-        onCreado={(p) => { setCatalogo((c) => [...(c ?? []), p]); setEdicion((e) => (e ? { ...e, catalogoId: p.id, descripcion: p.nombre_presupuesto || p.nombre, precio: String(p.precio_venta || '') } : e)) }} />}
+      {edicion.clave === 'nuevo' && <BuscadorCatalogo catalogo={catalogo ?? []} valor={edicion.catalogoId} cargando={!catalogo} onElegir={elegirProducto}
+        onCreado={(p) => { setCatalogo((c) => [...(c ?? []), p]); setEdicion((e) => (e ? { ...e, catalogoId: p.id, descripcion: p.nombre_presupuesto || p.nombre, precio: String(p.precio_venta || ''), costo: Number(p.costo_unitario) > 0 ? String(p.costo_unitario) : '' } : e)) }} />}
       <Texto className="pvDesc" value={edicion.descripcion} onChange={(v) => setEdicion({ ...edicion, descripcion: v })} placeholder="Descripción" />
       <div className="pvCtrl">
         <label>Cantidad</label>
@@ -498,16 +542,27 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
         <label>Precio</label>
         <CampoNumero className="pvPrecio" value={edicion.precio} onChange={(e) => setEdicion({ ...edicion, precio: e.target.value })} aria-label="Precio unitario" />
       </div>
+      <div className="pvCtrl">
+        <label>Descuento</label>
+        <span className="oeDto"><CampoNumero className="pvPrecio" min="0" max="100" value={edicion.descuento} placeholder="0" onChange={(e) => setEdicion({ ...edicion, descuento: e.target.value })} aria-label="Descuento en %" /><b>%</b></span>
+        {pctDto(edicion) > 0 && <small className="pvCU">= {plata(precio)} c/u</small>}
+      </div>
+      {esExtra && <div className="pvCtrl">
+        <label>Costo c/u</label>
+        <CampoNumero className="pvPrecio" value={edicion.costo} placeholder="Lo que te cuesta (interno)" onChange={(e) => setEdicion({ ...edicion, costo: e.target.value })} aria-label="Costo por unidad (interno)" />
+      </div>}
+      {venta > 0 && <p className="oeGanPanel">💰 <span><em>Con este ítem ganás <b>{plata(gana)}</b>{venta > 0 ? ` (${Math.round((gana / venta) * 100)}%)` : ''}</em><small>{costoU > 0 ? `Lo vendés a ${plata(venta)} y te cuesta ${plata(cant * costoU)}` : esExtra ? 'Sin costo cargado: si es un producto, poné cuánto te cuesta' : 'Servicio o mano de obra: es todo tuyo'} · no lo ve el cliente</small></span></p>}
       {edicion.descripcion.trim() && <button type="button" className="pvMercadoItem" onClick={() => setMercado({ deItem: true, productos: [{ nombre: edicion.descripcion.split('\n')[0].trim(), precio: Number(edicion.precio) || 0, cantidad: Number(edicion.cantidad) || 1, tipo: itemEd?.tipo === 'servicio' ? 'servicio' : 'producto', costo: Number(itemEd?.costo_unitario) || 0 }] })}>
         📈 ¿Cómo estoy en el mercado?<small>la IA busca este ítem</small>
       </button>}
       <input className="oeMotivo" value={edicion.motivo} onChange={(e) => setEdicion({ ...edicion, motivo: e.target.value })} placeholder="Motivo (opcional): ej. lo pidió el cliente" />
-      <p className="oeAviso">🔁 No se pisa el presupuesto aceptado: queda como modificación{edicion.itemId != null && Math.abs(dif) > 0.5 ? <> · <b>{conSigno(dif)}</b></> : ''}.</p>
+      {extraEd ? <p className="oeAviso">✏️ Se corrige este extra y el total se recalcula.</p> : <p className="oeAviso">🔁 No se pisa el presupuesto aceptado: queda como modificación{edicion.itemId != null && Math.abs(dif) > 0.5 ? <> · <b>{conSigno(dif)}</b></> : ''}.</p>}
       {errorEd && <p role="alert" className="oeError">{errorEd}</p>}
       <div className="pvAcc">
         {estEd && !estEd.quitado && <button type="button" className="rojo" onClick={() => preguntar(true)}>🗑 Quitar</button>}
+        {extraEd && <button type="button" className="rojo" disabled={guardando} onClick={() => void borrarAgregado(extraEd)}>🗑 Borrar</button>}
         <button type="button" onClick={() => { setEdicion(null); setPregunta(null) }}>Cancelar</button>
-        <button type="button" className="listo" onClick={() => preguntar(false)}>✓ Listo</button>
+        <button type="button" className="listo" disabled={guardando} onClick={() => preguntar(false)}>{guardando ? 'Guardando…' : '✓ Listo'}</button>
       </div>
     </div>
   }
@@ -528,6 +583,7 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
     {pagando && <CargarPago obraId={obraId} onCancelar={() => setPagando(false)} onGuardado={() => { setPagando(false); setVueltaPagos((v) => v + 1); onCambio() }} />}
     <GananciaTrabajo key={vueltaPagos} onCargarPago={() => setPagando(true)} presupuestoIds={presus.map((p) => p.id)} obraId={obraId} total={original} adicionales={aprobados}
       items={items.map((it) => ({ tipo: it.tipo ?? '', catalogo_id: it.catalogo_id ?? null, cantidad: it.cantidad, precio_unitario: it.precio_unitario, costo_unitario: Number(it.costo_unitario) || 0, descuento_pct: it.descuento_pct }))}
+      costoAdicionales={agregados.filter((a) => a.estado === 'aprobado' || a.estado === 'pagado').reduce((s, a) => s + (Number(a.cantidad_nueva ?? 1) || 0) * (Number(a.costo_unitario) || 0), 0)}
       reintegros={adicionales.filter((a) => a.tipo === 'gasto_extra' && a.estado !== 'rechazado').reduce((s, a) => s + a.importe, 0)} onGanancia={onGanancia} />
     {huerfanos.length > 0 && !verCambios && <button type="button" className="oeAviso pend oeAvisoBtn" onClick={() => setVerCambios(true)}>⚠ {huerfanos.length === 1 ? 'Hay 1 cambio' : `Hay ${huerfanos.length} cambios`} de ítems que ya no están en el presupuesto (se editó después). Tocá para verlos ›</button>}
     {verCambios && <div className="oeCambios">
@@ -566,6 +622,7 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
           const abierto = edicion?.clave === `i${it.id}`
           const original = it.cantidad * precioNeto(it)
           const ahora = vigente.quitado ? 0 : vigente.cantidad * vigente.precio
+          const costoIt = esDeLista(it) ? (Number(it.costo_unitario) || 0) * (vigente.quitado ? 0 : vigente.cantidad) : 0
           return <div key={it.id} className={`oeItem${abierto ? ' abierto' : ''}${e.quitado ? ' quitado' : ''}`}>
             <button type="button" className="oeFila" aria-expanded={abierto} onClick={() => abrirItem(it)}>
               <span className="pvN">{String(i + 1).padStart(2, '0')}</span>
@@ -573,7 +630,8 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
                   ? <>{Number(it.cantidad).toLocaleString('es-AR')} × {plata(it.precio_unitario)}<span className="pvPct">{Number(it.descuento_pct)}% dto.</span><span className="pvCU">= {plata(precioNeto(it))} c/u</span></>
                   : `${Number(vigente.cantidad).toLocaleString('es-AR')} × ${plata(vigente.precio)}`}</small>
                 {e.pendiente && <small className="oePropuesto">Propuesto: {e.quitado ? 'quitarlo' : `${Number(e.cantidad).toLocaleString('es-AR')} × ${plata(e.precio)} = ${plata(e.cantidad * e.precio)}`}</small>}
-                {avances && !vigente.quitado && (() => { const av = avances[it.id] ?? 0; return <span className={`oeAvFila${av >= 100 ? ' fin' : ''}`}><span className="oeAvMini"><i style={{ width: `${av}%` }} /></span><small>{av >= 100 ? '✓ ' : ''}{Math.round(av)}% · {textoAvance(av, Number(vigente.cantidad) || 0)}</small></span> })()}</span>
+                {avances && !vigente.quitado && (() => { const av = avances[it.id] ?? 0; return <span className={`oeAvFila${av >= 100 ? ' fin' : ''}`}><span className="oeAvMini"><i style={{ width: `${av}%` }} /></span><small>{av >= 100 ? '✓ ' : ''}{Math.round(av)}% · {textoAvance(av, Number(vigente.cantidad) || 0)}</small></span> })()}
+                {!vigente.quitado && ahora > 0 && <small className="oeGan">💰 Ganás {plata(ahora - costoIt)} ({Math.round(((ahora - costoIt) / ahora) * 100)}%){esDeLista(it) && !(Number(it.costo_unitario) > 0) ? ' · falta el costo' : ''}</small>}</span>
               <span className="pvImp">{plata(ahora)}{vigente.modificado && Math.abs(ahora - original) > 0.5 && <s>{plata(original)}</s>}</span>
             </button>
             {abierto && !pregunta && controlAvance(it)}
@@ -588,20 +646,26 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
       {[...agregados, ...extras].map((a) => {
         const pend = a.estado === 'pendiente'
         const reintegro = a.tipo === 'gasto_extra'
-        return <div key={a.id} className="oeItem">
-          <div className="oeFila fija">
+        const editable = a.tipo === 'cambio'
+        const abierto = edicion?.clave === `a${a.id}`
+        const cantA = Number(a.cantidad_nueva ?? 1) || 1
+        const ganaA = a.importe - cantA * (Number(a.costo_unitario) || 0)
+        const cabeza = <>
             <span className="pvN">＋</span>
             <span className="oeTx"><b>{a.descripcion}{pend ? <span className="oeMod pe">⏳ por aprobar</span> : <span className="oeMod ap">{reintegro ? 'reintegro' : 'aprobado'}</span>}</b>
-              <small>{a.tipo === 'cambio' ? `${Number(a.cantidad_nueva ?? 1).toLocaleString('es-AR')} × ${plata(a.precio_nuevo ?? a.importe)}` : ETIQUETA_ADICIONAL[a.tipo] ?? a.tipo}</small></span>
+              <small>{a.tipo === 'cambio' ? `${cantA.toLocaleString('es-AR')} × ${plata(a.precio_nuevo ?? a.importe)}` : ETIQUETA_ADICIONAL[a.tipo] ?? a.tipo}</small>
+              {editable && a.importe > 0 && <small className="oeGan">💰 Ganás {plata(ganaA)} ({Math.round((ganaA / a.importe) * 100)}%){Number(a.costo_unitario) > 0 ? '' : ' · sin costo cargado'}</small>}</span>
             <span className="pvImp">{conSigno(a.importe)}</span>
-          </div>
-          {!pend && a.tipo === 'cambio' && <div className="oePanel"><button type="button" className="oeOriginal" disabled={guardando} onClick={() => void borrarAgregado(a)}>↩️ Deshacer: borrar este extra</button></div>}
-          {pend && (reintegro
+        </>
+        return <div key={a.id} className={`oeItem${abierto ? ' abierto' : ''}`}>
+          {editable ? <button type="button" className="oeFila" aria-expanded={abierto} onClick={() => abrirAgregado(a)}>{cabeza}</button> : <div className="oeFila fija">{cabeza}</div>}
+          {abierto && panel()}
+          {!abierto && pend && (reintegro
             ? <div className="oePanel"><button type="button" className="oeLink" onClick={onVerHistorial}>Revisar el gasto en Cambios y extras ›</button></div>
             : <div className="oePanel"><div className="oeDecidir">
                 <button type="button" className="si" disabled={guardando} onClick={() => void decidir(a, 'aprobado')}>✅ Aprobó</button>
                 <button type="button" className="no" disabled={guardando} onClick={() => void decidir(a, 'rechazado')}>❌ No aprobó</button>
-              </div>{a.tipo === 'cambio' && <button type="button" className="oeOriginal" disabled={guardando} onClick={() => void borrarAgregado(a)}>↩️ Lo cargué por error: borrarlo</button>}</div>)}
+              </div></div>)}
         </div>
       })}
     </div>}

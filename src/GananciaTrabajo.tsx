@@ -15,6 +15,7 @@ type Props = {
   items: ItemCuenta[]
   total: number
   adicionales?: number
+  costoAdicionales?: number // lo que te cuestan los extras agregados en la obra
   reintegros?: number // Gasto extra que devuelve el cliente: no suma ni resta
   abiertaInicial?: boolean
   // Si el estimado se carga en otro lado (en el presupuesto), se pasa acá y no se muestra el campo.
@@ -24,7 +25,7 @@ type Props = {
 }
 type Pago = { id: number; fecha: string; monto: number; nombre: string }
 
-export default function GananciaTrabajo({ presupuestoIds, obraId, items, total, adicionales = 0, reintegros = 0, abiertaInicial = false, estimadoFijo, onGanancia, onCargarPago }: Props) {
+export default function GananciaTrabajo({ presupuestoIds, obraId, items, total, adicionales = 0, costoAdicionales = 0, reintegros = 0, abiertaInicial = false, estimadoFijo, onGanancia, onCargarPago }: Props) {
   const [estimadoGuardado, setEstimado] = useState(0)
   const [faltaSql, setFaltaSql] = useState(false)
   const [pagos, setPagos] = useState<Pago[]>([])
@@ -79,11 +80,12 @@ export default function GananciaTrabajo({ presupuestoIds, obraId, items, total, 
   const t = totalEmpleados(pagos.map((p) => ({ personal_id: null, total: p.monto, pagado: p.monto })), estimado)
   const empleados = t.total
   const queda = t.estimado - t.pagado
-  const c = cuentaTrabajo(items, total, empleados, extras, adicionales)
+  const c0 = cuentaTrabajo(items, total, empleados, extras, adicionales)
+  const c = { ...c0, ganancia: c0.ganancia - costoAdicionales }
   const base = total + adicionales
   useEffect(() => { onGanancia?.(c.ganancia) }, [c.ganancia]) // eslint-disable-line react-hooks/exhaustive-deps
   const pct = base > 0 ? Math.round((c.ganancia / base) * 100) : null
-  const partes: [number, string][] = [[c.ganProductos, '#e0701a'], [Math.max(0, c.servicios + c.adicionales - c.bonificacion - c.empleados - c.extras), '#2f63b8'], [c.empleados, '#a1530f'], [c.extras, '#cf4b37'], [c.costoProductos, '#b7bdc6']]
+  const partes: [number, string][] = [[c.ganProductos, '#e0701a'], [Math.max(0, c.servicios + c.adicionales - costoAdicionales - c.bonificacion - c.empleados - c.extras), '#2f63b8'], [c.empleados, '#a1530f'], [c.extras, '#cf4b37'], [c.costoProductos, '#b7bdc6']]
 
   return <section className="gtCaja" aria-label="Vas a ganar">
     <button type="button" className="gtCab" aria-expanded={abierta} onClick={() => setAbierta((v) => !v)}>
@@ -97,6 +99,7 @@ export default function GananciaTrabajo({ presupuestoIds, obraId, items, total, 
         <div><span><i style={{ background: '#e0701a' }} />Ganancia en productos<small>{c.ventaProductos > 0 ? `Vendés ${moneda(c.ventaProductos)} · te cuestan ${moneda(c.costoProductos)}` : 'No hay productos de tu lista en este trabajo'}</small></span><b>{moneda(c.ganProductos)}</b></div>
         <div><span><i style={{ background: '#2f63b8' }} />Mano de obra y servicios<small>100% tuyo (antes de pagar al personal)</small></span><b>{moneda(c.servicios)}</b></div>
         {c.adicionales !== 0 && <div><span><i style={{ background: '#2f63b8' }} />Cambios y adicionales<small>aprobados en la obra</small></span><b>{moneda(c.adicionales)}</b></div>}
+        {costoAdicionales > 0.5 && <div><span><i style={{ background: '#b7bdc6' }} />Costo de los extras<small>lo que te cuestan los productos agregados en la obra</small></span><b className="r">− {moneda(costoAdicionales)}</b></div>}
         {c.bonificacion > 0.5 && <div><span><i style={{ background: '#b7bdc6' }} />Bonificación general</span><b className="r">− {moneda(c.bonificacion)}</b></div>}
         <div><span><i style={{ background: '#a1530f' }} />Gasto por ayudantes<small>{t.pagado > t.estimado + 0.5 ? 'Lo ya pagado (superó lo estimado)' : t.estimado > 0 ? 'El estimado del presupuesto' : 'Todavía sin estimado'}</small></span><b className="r">− {moneda(c.empleados)}</b></div>
         <div><span><i style={{ background: '#cf4b37' }} />Extras de la obra<small>{obraId == null ? 'Se cargan cuando es obra' : c.extras ? 'Nafta, tercerizados y otros cargados en la obra' : 'Todavía no hay gastos cargados'}</small></span><b className="r">− {moneda(c.extras)}</b></div>
