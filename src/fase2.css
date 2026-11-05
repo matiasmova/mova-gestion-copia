@@ -4254,3 +4254,11 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .bcEditar{position:absolute;right:8px;bottom:8px;width:30px;height:30px;border-radius:9px;border:1px solid #e3e8ef;background:#fff;cursor:pointer;font-size:14px;display:grid;place-items:center;opacity:.85}
 .bcEditar:hover{opacity:1;border-color:#e4740f}
 .bcPrecio .bcUsd{color:#1f7a4d;font-weight:700}
+/* Cobro rápido: completa el monto con lo que debe */
+.cobroRapido{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;margin-bottom:12px}
+.cobroRapido>span{flex:1 1 100%;font-size:12px;font-weight:800;color:#69707d;text-transform:uppercase;letter-spacing:.06em}
+.cobroRapido button{flex:1 1 180px;display:flex;flex-direction:column;align-items:flex-start;gap:2px;border:1.5px solid #bfe3cf;background:#eef9f3;border-radius:14px;padding:10px 14px;cursor:pointer;font:inherit;color:#14171c;text-align:left}
+.cobroRapido button b{font-size:14.5px;color:#13724b}
+.cobroRapido button small{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums}
+.cobroRapido button.on{border-color:#13915f;background:#d8f2e4;box-shadow:0 0 0 2px #13915f33}
+.cobroRapidoNota{flex:1 1 100%;font-size:12.5px;color:#69707d}

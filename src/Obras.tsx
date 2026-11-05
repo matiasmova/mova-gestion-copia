@@ -1580,6 +1580,15 @@ function EconomiaObra({ obraId, cuenta, presupuestoId, onGenerarPdf, onCambio, a
 
     {mostrarCobro && (
       <form className="clienteForm adicForm" data-registrar onSubmit={guardarCobro}>
+        {/* Atajos: se completa el monto con lo que debe (igual se puede escribir otro). */}
+        {cuenta && destinoCobro === 'obra' && (cuenta.pendienteHoy > 0.5 || cuenta.saldoTotal > 0.5) && <div className="cobroRapido">
+          <span>Cobro rápido</span>
+          {cuenta.pendienteHoy > 0.5 && <button type="button" className={Math.abs(Number(cobroForm.monto) - cuenta.pendienteHoy) < 0.005 ? 'on' : ''} onClick={() => setCobroForm((f) => ({ ...f, monto: String(Math.round(cuenta.pendienteHoy * 100) / 100) }))}>
+            <b>✓ Pagó lo de hoy</b><small>{dineroFicha(cuenta.pendienteHoy)}</small></button>}
+          {cuenta.saldoTotal > cuenta.pendienteHoy + 0.5 && <button type="button" className={Math.abs(Number(cobroForm.monto) - cuenta.saldoTotal) < 0.005 ? 'on' : ''} onClick={() => setCobroForm((f) => ({ ...f, monto: String(Math.round(cuenta.saldoTotal * 100) / 100) }))}>
+            <b>✓ Canceló todo el saldo</b><small>{dineroFicha(cuenta.saldoTotal)}</small></button>}
+          <small className="cobroRapidoNota">Si pagó otra cifra, escribila en Monto.</small>
+        </div>}
         <div className="formGrid">
           <label>Monto *<CampoNumero min="0.01" required value={cobroForm.monto} onChange={(e) => setCobroForm((f) => ({ ...f, monto: e.target.value }))} /></label>
           <label>Fecha *<input type="date" required value={cobroForm.fecha} onChange={(e) => setCobroForm((f) => ({ ...f, fecha: e.target.value }))} /></label>
