@@ -9,6 +9,7 @@ import { confirmarEliminacion } from './confirmar'
 import { GRUPOS_PH, TIPOS_PH, claveDeNota, leerOcultas, marcaPH, mostrarDeNuevo, notaSinMarca, ocultarPorHoy, type GrupoPH, type TareaPH, type TipoPH } from './paraHacer'
 import AvisosDiarios from './AvisosDiarios'
 import NotasPH from './NotasPH'
+import { cargarEtiquetasObras } from './etiquetasObras'
 
 // Para hacer (antes Agenda): todo lo pendiente en una sola lista (lo que agendás
 // vos y lo que el sistema detecta solo: cobros, presupuestos, obras, stock,
@@ -506,7 +507,7 @@ function useDictado(alTexto: (texto: string, final: boolean) => void) {
 }
 
 // "Para agendar": se arman solas con plazos de obra, seguros del personal y presupuestos sin respuesta.
-type Sugerencia = { clave: string; icono: string; tono: 'r' | 'n' | 'a'; titulo: string; detalle: string; agendar: string; tipo: string; obra_id?: number; explica?: string }
+type Sugerencia = { clave: string; icono: string; tono: 'r' | 'n' | 'a'; titulo: string; detalle: string; agendar: string; tipo: string; obra_id?: number; explica?: string; agendarViejo?: string }
 function useSugerencias(tick: number): Sugerencia[] {
   const [lista, setLista] = useState<Sugerencia[]>([])
   useEffect(() => {
@@ -514,18 +515,26 @@ function useSugerencias(tick: number): Sugerencia[] {
     void (async () => {
       const hoyStr = isoLocal(new Date())
       const [o, p, s, r] = await Promise.all([
-        supabase.from('obras').select('id,nombre_obra,fecha_fin_estimada').eq('activo', true).eq('estado', 'en_proceso'),
+        supabase.from('obras').select('id,nombre_obra,fecha_fin_estimada,porcentaje_avance').eq('activo', true).eq('estado', 'en_proceso'),
         supabase.from('presupuestos').select('id,titulo,enviado_at,fecha').eq('activo', true).eq('estado', 'enviado'),
         supabase.from('personal').select('id,nombre,apellido,seguro,seguro_vencimiento').eq('activo', true).not('seguro_vencimiento', 'is', null),
         supabase.from('recordatorios').select('titulo').eq('completado', false).gte('fecha', hoyStr),
       ])
+      // Cliente y título del presupuesto de cada obra, para saber de quién es.
+      const etiquetas = await cargarEtiquetasObras().catch(() => [])
       if (!vigente) return
       const yaAgendado = new Set(((r.data ?? []) as { titulo: string }[]).map((x) => x.titulo))
       const out: Sugerencia[] = []
-      for (const ob of (o.data ?? []) as { id: number; nombre_obra: string; fecha_fin_estimada: string | null }[]) {
+      for (const ob of (o.data ?? []) as { id: number; nombre_obra: string; fecha_fin_estimada: string | null; porcentaje_avance: number | null }[]) {
         if (!ob.fecha_fin_estimada || ob.fecha_fin_estimada > sumarDias(hoyStr, 7)) continue
         const vencido = ob.fecha_fin_estimada < hoyStr
-        out.push({ clave: `o${ob.id}`, icono: '⏰', tono: vencido ? 'r' : 'n', titulo: `${ob.nombre_obra} · ${vencido ? 'plazo vencido' : 'vence pronto'}`, detalle: `Fin estimado ${fechaCorta(ob.fecha_fin_estimada)}`, agendar: `Revisar plazo de ${ob.nombre_obra}`, tipo: 'recordatorio', obra_id: ob.id, explica: vencido ? `La obra tenía que terminar el ${fechaCorta(ob.fecha_fin_estimada)} y sigue en proceso. Actualizá el avance, cambiá la fecha estimada o marcala terminada.` : `La obra tiene fin estimado el ${fechaCorta(ob.fecha_fin_estimada)}. Revisá si llegás o avisale al cliente.` })
+        const et = etiquetas.find((x) => x.id === ob.id)
+        const quien = et?.cliente || ob.nombre_obra
+        const trabajo = et ? `${et.titulo}${et.titulo.toLowerCase() !== ob.nombre_obra.toLowerCase() ? ` (${ob.nombre_obra})` : ''}` : ob.nombre_obra
+        const dias = Math.round((new Date(`${hoyStr}T12:00:00`).getTime() - new Date(`${ob.fecha_fin_estimada}T12:00:00`).getTime()) / 86400000)
+        const cuando = vencido ? `venció el ${fechaCorta(ob.fecha_fin_estimada)} (hace ${dias} día${dias === 1 ? '' : 's'})` : `vence el ${fechaCorta(ob.fecha_fin_estimada)}`
+        const av = Math.round(Number(ob.porcentaje_avance) || 0)
+        out.push({ clave: `o${ob.id}`, icono: '⏰', tono: vencido ? 'r' : 'n', titulo: `${vencido ? 'Plazo vencido' : 'Vence pronto'} · ${quien}`, detalle: `${trabajo} · ${cuando} · ${av}% hecho`, agendar: `Revisar plazo de ${quien} · ${trabajo}`, agendarViejo: `Revisar plazo de ${ob.nombre_obra}`, tipo: 'recordatorio', obra_id: ob.id, explica: vencido ? `La obra tenía que terminar el ${fechaCorta(ob.fecha_fin_estimada)} y sigue en proceso. Actualizá el avance, cambiá la fecha estimada o marcala terminada.` : `La obra tiene fin estimado el ${fechaCorta(ob.fecha_fin_estimada)}. Revisá si llegás o avisale al cliente.` })
       }
       if (!s.error) for (const pe of (s.data ?? []) as { id: number; nombre: string; apellido: string | null; seguro: string | null; seguro_vencimiento: string | null }[]) {
         if (!pe.seguro_vencimiento || pe.seguro_vencimiento > sumarDias(hoyStr, 15)) continue
@@ -538,7 +547,7 @@ function useSugerencias(tick: number): Sugerencia[] {
         const dias = Math.round((Date.parse(hoyStr) - Date.parse(desde)) / 86400000)
         out.push({ clave: `p${pr.id}`, icono: '💬', tono: 'a', titulo: `Seguir presupuesto ${pr.titulo}`, detalle: `Enviado hace ${dias} días · sin respuesta`, agendar: `Seguimiento presupuesto ${pr.titulo}`, tipo: 'llamada', explica: `Le mandaste el presupuesto hace ${dias} días y el cliente no respondió. Conviene escribirle para saber si tiene dudas o quiere ajustar algo.` })
       }
-      setLista(out.filter((x) => !yaAgendado.has(x.agendar)).slice(0, 6))
+      setLista(out.filter((x) => !yaAgendado.has(x.agendar) && !(x.agendarViejo && yaAgendado.has(x.agendarViejo))).slice(0, 6))
     })()
     return () => { vigente = false }
   }, [tick])
