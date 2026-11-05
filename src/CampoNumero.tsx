@@ -24,7 +24,8 @@ export function formatoCampo(v: number | string | null | undefined): string {
   const n = typeof v === 'number' ? v : Number(v)
   if (!Number.isFinite(n)) return String(v)
   const [ent, dec] = String(Math.round(n * 10000) / 10000).replace('-', '').split('.')
-  return `${n < 0 ? '-' : ''}${conMiles(ent)}${dec ? `,${dec}` : ''}`
+  // Con un solo decimal se completa a centavos: 1.234,5 → 1.234,50.
+  return `${n < 0 ? '-' : ''}${conMiles(ent)}${dec ? `,${dec.length === 1 ? `${dec}0` : dec}` : ''}`
 }
 
 // Lo que escribió la persona → texto a mostrar y número crudo.
