@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { supabase } from './supabase'
 import { subirFotoProducto } from './fotosProducto'
 import { pedirAsistente } from './asistenteIA'
-import { leerCotizacion } from './catalogoMoneda'
+import { leerCotizacion, textoUsd } from './catalogoMoneda'
 import { useNombreClienteIA } from './NombreClienteIA'
 import CampoNumero from './CampoNumero'
 import { fijarCategorias, sugerirCategoria, useCategoriasProducto } from './categoriasApp'
@@ -20,6 +20,8 @@ type Props = {
   onElegir: (id: string) => void
   // Producto nuevo cargado desde acá: se suma al catálogo y queda elegido.
   onCreado?: (p: Producto & { costo_unitario: number; descripcion: string | null }) => void
+  // Producto corregido desde acá (✏️): para actualizar la lista de quien lo usa.
+  onEditado?: (p: Producto & { costo_unitario: number; descripcion: string | null }) => void
 }
 
 const UNIDADES = ['unidad', 'metro', 'hora', 'servicio', 'kit', 'boca', 'circuito']
@@ -51,8 +53,12 @@ async function firmarFotos(rutas: string[]): Promise<void> {
 }
 const urlFoto = (p: Producto) => (p.foto_url ? (esHttp(p.foto_url) ? p.foto_url : fotosCache[p.foto_url] || '') : '')
 
-export default function BuscadorCatalogo({ catalogo, valor, cargando, onElegir, onCreado }: Props) {
-  const [vista, setVista] = useState<'lista' | 'nuevo'>('lista')
+export default function BuscadorCatalogo({ catalogo: catalogoBase, valor, cargando, onElegir, onCreado, onEditado }: Props) {
+  const [vista, setVista] = useState<'lista' | 'nuevo' | 'editar'>('lista')
+  const [editandoId, setEditandoId] = useState<number | null>(null)
+  // Lo corregido acá se ve al toque en la lista, aunque quien lo usa no la actualice.
+  const [cambios, setCambios] = useState<Record<number, Producto>>({})
+  const catalogo = useMemo(() => catalogoBase.map((p) => cambios[p.id] ?? p), [catalogoBase, cambios])
   const [abierto, setAbierto] = useState(false)
   const [texto, setTexto] = useState('')
   const [tipo, setTipo] = useState<'todos' | 'producto' | 'servicio'>('todos')
@@ -117,8 +123,8 @@ export default function BuscadorCatalogo({ catalogo, valor, cargando, onElegir, 
         <div className="bcFondo" onPointerDown={(e) => { if (e.target === e.currentTarget) cerrar() }}>
           <div className="bcVentana" role="dialog" aria-modal="true" aria-label="Elegir producto o servicio">
             <div className="bcCab">
-              {vista === 'nuevo' && <button type="button" className="bcCerrar" onClick={() => setVista('lista')} aria-label="Volver a la lista">‹</button>}
-              <h3>{vista === 'nuevo' ? 'Nuevo producto o servicio' : 'Elegir producto o servicio'}</h3>
+              {vista !== 'lista' && <button type="button" className="bcCerrar" onClick={() => setVista('lista')} aria-label="Volver a la lista">‹</button>}
+              <h3>{vista === 'nuevo' ? 'Nuevo producto o servicio' : vista === 'editar' ? 'Editar producto o servicio' : 'Elegir producto o servicio'}</h3>
               <button type="button" className="bcCerrar" onClick={cerrar} aria-label="Cerrar">✕</button>
             </div>
             {vista === 'nuevo' ? (
@@ -127,6 +133,15 @@ export default function BuscadorCatalogo({ catalogo, valor, cargando, onElegir, 
                 categorias={categorias}
                 onCancelar={() => setVista('lista')}
                 onCreado={(p) => { onCreado?.(p); setAbierto(false); setTexto(''); setVista('lista') }}
+              />
+            ) : vista === 'editar' && editandoId != null ? (
+              <NuevoProductoRapido
+                key={editandoId}
+                editarId={editandoId}
+                nombreInicial=""
+                categorias={categorias}
+                onCancelar={() => setVista('lista')}
+                onCreado={(p) => { setCambios((c) => ({ ...c, [p.id]: p })); onEditado?.(p); setVista('lista') }}
               />
             ) : <>
             <input
@@ -166,15 +181,18 @@ export default function BuscadorCatalogo({ catalogo, valor, cargando, onElegir, 
               {resultados.slice(0, 120).map((p, i) => {
                 const foto = urlFoto(p)
                 return (
-                  <button key={p.id} type="button" role="option" aria-selected={p.id === valor} className={`bcOpcion${p.id === valor ? ' activo' : ''}${i === marcado && texto ? ' marcado' : ''}`} onClick={() => elegir(String(p.id))}>
+                  <div key={p.id} className="bcFilaOp">
+                  <button type="button" role="option" aria-selected={p.id === valor} className={`bcOpcion${p.id === valor ? ' activo' : ''}${i === marcado && texto ? ' marcado' : ''}`} onClick={() => elegir(String(p.id))}>
                     <span className="bcFoto">{foto ? <img src={foto} alt="" loading="lazy" /> : p.tipo === 'servicio' ? '🛠️' : '📦'}</span>
                     <span className="bcTexto">
                       <b>{p.nombre}</b>
                       {p.nombre_presupuesto && <small>En el presupuesto: “{p.nombre_presupuesto}”</small>}
                       {p.categoria && <small className="bcCat">{p.categoria}</small>}
                     </span>
-                    <span className="bcPrecio">{Number(p.precio_venta) > 0 ? <>{plata(p.precio_venta)}<small>por {p.tipo === 'servicio' ? 'servicio' : p.unidad}</small></> : <em>Sin precio</em>}</span>
+                    <span className="bcPrecio">{Number(p.precio_venta) > 0 ? <>{plata(p.precio_venta)}<small>por {p.tipo === 'servicio' ? 'servicio' : p.unidad}</small>{textoUsd(p.precio_venta) && <small className="bcUsd">≈ {textoUsd(p.precio_venta)}</small>}</> : <em>Sin precio</em>}</span>
                   </button>
+                  <button type="button" className="bcEditar" aria-label={`Editar ${p.nombre}`} title="Editar rápido" onClick={() => { setEditandoId(p.id); setVista('editar') }}>✏️</button>
+                  </div>
                 )
               })}
               {resultados.length === 0 && <p className="bcVacio">No hay nada con “{texto}”. Probá con otra palabra o usá Carga manual.</p>}
@@ -195,7 +213,7 @@ export default function BuscadorCatalogo({ catalogo, valor, cargando, onElegir, 
 // completa después en Productos y servicios.
 
 type Mercado = { minimo: number; maximo: number; mediana: number; comentario: string; ofertas: { tienda: string; titulo: string; precio: number; url: string }[] }
-function NuevoProductoRapido({ nombreInicial, categorias, onCancelar, onCreado }: { nombreInicial: string; categorias: string[]; onCancelar: () => void; onCreado: NonNullable<Props['onCreado']> }) {
+function NuevoProductoRapido({ nombreInicial, categorias, onCancelar, onCreado, editarId }: { nombreInicial: string; categorias: string[]; onCancelar: () => void; onCreado: NonNullable<Props['onCreado']>; editarId?: number }) {
   const [tipo, setTipo] = useState<'producto' | 'servicio'>('producto')
   const [nombre, setNombre] = useState(nombreInicial)
   const [paraCliente, setParaCliente] = useState('')
@@ -229,6 +247,26 @@ function NuevoProductoRapido({ nombreInicial, categorias, onCancelar, onCreado }
   const [buscando, setBuscando] = useState(false)
   const [errorMercado, setErrorMercado] = useState('')
   const nombreIA = useNombreClienteIA(nombre, tipo, setParaCliente)
+  // Editar: se traen los datos del producto.
+  const [cargandoEd, setCargandoEd] = useState(editarId != null)
+  const [fotoActual, setFotoActual] = useState('')
+  const [enDolares, setEnDolares] = useState(false)
+  useEffect(() => {
+    if (editarId == null) return
+    void (async () => {
+      const cols = 'id, tipo, nombre, unidad, precio_venta, costo_unitario, categoria, foto_url'
+      let r = await supabase.from('productos_servicios').select(`${cols}, nombre_presupuesto, moneda`).eq('id', editarId).single()
+      if (r.error) r = await supabase.from('productos_servicios').select(cols).eq('id', editarId).single() as typeof r
+      const d = r.data as (Producto & { costo_unitario: number; moneda?: string | null }) | null
+      if (d) {
+        setTipo(d.tipo === 'servicio' ? 'servicio' : 'producto'); setNombre(d.nombre); setParaCliente(d.nombre_presupuesto ?? '')
+        setPrecio(Number(d.precio_venta) > 0 ? String(d.precio_venta) : ''); setCosto(Number(d.costo_unitario) > 0 ? String(d.costo_unitario) : '')
+        setUnidad(d.unidad || 'unidad'); setCategoria(d.categoria ?? ''); setCatTocada(true); setEnDolares(d.moneda === 'USD')
+        if (d.foto_url) { await firmarFotos([d.foto_url]); setFotoActual(urlFoto(d)) }
+      }
+      setCargandoEd(false)
+    })()
+  }, [editarId])
   useEffect(() => () => { if (fotoVista) URL.revokeObjectURL(fotoVista) }, [fotoVista])
 
   function elegirFoto(f: File | null) {
@@ -264,13 +302,16 @@ function NuevoProductoRapido({ nombreInicial, categorias, onCancelar, onCreado }
     const fila: Record<string, unknown> = {
       ...(fotoPath ? { foto_url: fotoPath } : {}),
       tipo, nombre: nombre.trim(), unidad: tipo === 'servicio' && unidad === 'unidad' ? 'servicio' : unidad,
-      precio_venta: Number(precio) || 0, costo_unitario: tipo === 'producto' ? Number(costo) || 0 : 0, categoria: categoria.trim() || null,
-      stock: 0, stock_minimo: 0, iva_pct: 21, activo: true, nombre_presupuesto: paraCliente.trim() || null,
+      // Un producto cargado en dólares mantiene su precio (se calcula con la cotización).
+      ...(enDolares ? {} : { precio_venta: Number(precio) || 0, costo_unitario: tipo === 'producto' ? Number(costo) || 0 : 0 }),
+      categoria: categoria.trim() || null, nombre_presupuesto: paraCliente.trim() || null,
+      ...(editarId == null ? { stock: 0, stock_minimo: 0, iva_pct: 21, activo: true } : {}),
     }
     const columnas = 'id, tipo, nombre, descripcion, unidad, precio_venta, costo_unitario, categoria, foto_url'
-    let r = await supabase.from('productos_servicios').insert(fila).select(columnas).single()
+    const enviar = () => (editarId != null ? supabase.from('productos_servicios').update(fila).eq('id', editarId) : supabase.from('productos_servicios').insert(fila)).select(columnas).single()
+    let r = await enviar()
     // Sin el SQL de Productos no existe "nombre para el presupuesto": se guarda sin eso.
-    if (r.error && /nombre_presupuesto/.test(r.error.message ?? '')) { delete fila.nombre_presupuesto; r = await supabase.from('productos_servicios').insert(fila).select(columnas).single() }
+    if (r.error && /nombre_presupuesto/.test(r.error.message ?? '')) { delete fila.nombre_presupuesto; r = await enviar() }
     setGuardando(false)
     if (r.error || !r.data) { console.error(r.error); setError('No se pudo guardar el producto. Probá de nuevo.'); return }
     const d = r.data as Producto & { costo_unitario: number; descripcion: string | null }
@@ -278,6 +319,7 @@ function NuevoProductoRapido({ nombreInicial, categorias, onCancelar, onCreado }
   }
 
   return (
+    cargandoEd ? <p className="bcVacio">Cargando el producto…</p> :
     <form className="bcNuevoForm" onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); void guardar() }}>
       <div className="bcChips">
         <button type="button" className={tipo === 'producto' ? 'activo' : ''} onClick={() => setTipo('producto')}>📦 Producto</button>
@@ -291,7 +333,7 @@ function NuevoProductoRapido({ nombreInicial, categorias, onCancelar, onCreado }
         {!nombreIA.error && <small>Es lo que va en el presupuesto, corto y sin marca ni modelo.</small>}
       </label>
       <div className="bcNuevoFila">
-        <label>Precio de venta<CampoNumero min="0" value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="0" /></label>
+        <label>Precio de venta<CampoNumero min="0" value={precio} disabled={enDolares} onChange={(e) => setPrecio(e.target.value)} placeholder="0" />{enDolares ? <small>Está cargado en dólares: el precio se cambia en Productos y servicios.</small> : textoUsd(Number(precio)) && <small>≈ {textoUsd(Number(precio))} (dólar de hoy)</small>}</label>
         {tipo === 'producto'
           ? <label>Costo (opcional)<CampoNumero min="0" value={costo} onChange={(e) => setCosto(e.target.value)} placeholder="0" /></label>
           : <p className="bcTodoGanancia">💰 <span><b>100% ganancia</b><small>Los servicios no llevan costo</small></span></p>}
@@ -322,8 +364,8 @@ function NuevoProductoRapido({ nombreInicial, categorias, onCancelar, onCreado }
       </div>
 
       <label className="bcFotoCarga">
-        {fotoVista ? <img src={fotoVista} alt="Foto del producto" /> : <span aria-hidden>📷</span>}
-        <span><b>{foto ? 'Cambiar foto' : 'Sumar foto (opcional)'}</b><small>{foto ? foto.name : 'Sacá una foto o elegila de la galería'}</small></span>
+        {fotoVista || fotoActual ? <img src={fotoVista || fotoActual} alt="Foto del producto" /> : <span aria-hidden>📷</span>}
+        <span><b>{foto || fotoActual ? 'Cambiar foto' : 'Sumar foto (opcional)'}</b><small>{foto ? foto.name : fotoActual ? 'Foto actual' : 'Sacá una foto o elegila de la galería'}</small></span>
         <input type="file" accept="image/*" onChange={(e) => elegirFoto(e.target.files?.[0] ?? null)} />
       </label>
       {foto && <button type="button" className="bcQuitarFoto" onClick={() => elegirFoto(null)}>Quitar foto</button>}
@@ -341,7 +383,7 @@ function NuevoProductoRapido({ nombreInicial, categorias, onCancelar, onCreado }
       <p className="bcNuevoNota">El stock y lo demás los completás después en Productos y servicios.</p>
       <div className="bcNuevoAcc">
         <button type="button" className="cancelButton" onClick={onCancelar}>Volver</button>
-        <button type="submit" className="newButton" disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar y usar'}</button>
+        <button type="submit" className="newButton" disabled={guardando}>{guardando ? 'Guardando…' : editarId != null ? 'Guardar cambios' : 'Guardar y usar'}</button>
       </div>
     </form>
   )

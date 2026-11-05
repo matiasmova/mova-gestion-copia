@@ -901,6 +901,7 @@ function NuevoPresupuesto({
                       setCatalogo((lista) => [...lista, prod].sort((a, b) => a.nombre.localeCompare(b.nombre)))
                       seleccionarDelCatalogo(indice, String(p.id), prod)
                     }}
+                    onEditado={(p) => setCatalogo((lista) => lista.map((x) => (x.id === p.id ? { ...x, ...p, tipo: p.tipo as ProductoServicio['tipo'] } : x)))}
                   />
                 </div>
 

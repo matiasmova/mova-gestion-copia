@@ -8,7 +8,7 @@ import VistaToggle, { useVista } from './VistaToggle'
 import ImportarCatalogo from './ImportarCatalogo'
 import ActualizarCotizacion from './ActualizarCotizacion'
 import { dos, gananciaDesdePrecio, precioDesdeGanancia, type ModoGanancia } from './catalogoCalculos'
-import { formatoDinero, formatoDolar, guardarMoneda, leerCotizacion, leerMoneda, type Moneda } from './catalogoMoneda'
+import { formatoDinero, formatoDolar, guardarMoneda, leerCotizacion, leerMoneda, textoUsd, type Moneda } from './catalogoMoneda'
 import { confirmarEliminacion } from './confirmar'
 import { cargarConfig } from './config'
 import CompararMercado, { type ProductoAComparar } from './CompararMercado'
@@ -784,6 +784,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
             <span className="prodBadgeDesc">{el.descuento_pct > 0 ? `-${el.descuento_pct}%` : `-${mostrar(el.descuento_monto)}`}</span>
           </>) : el.precio_venta > 0 ? <strong>{mostrar(el.precio_venta)}</strong> : <button type="button" className="prodSinPrecio" onClick={() => abrirEdicion(el)}>Sin precio · cargar</button>}
         </div>
+        {el.moneda !== 'USD' && moneda !== 'USD' && final > 0 && textoUsd(final) && <small className="prodUsd">≈ {textoUsd(final)} al dólar de hoy</small>}
         {el.moneda === 'USD' && <small className="prodUsd">US$ {formatoDolar(el.precio_usd ?? 0).replace('$', '').trim()} · compra US$ {formatoDolar(el.costo_usd ?? 0).replace('$', '').trim()} · sigue al dólar</small>}
         {el.iva_pct > 0 && <small className="prodCat">Sin IVA · con IVA {String(el.iva_pct).replace('.', ',')}%: {mostrar(final * (1 + el.iva_pct / 100))}</small>}
         <div className="prodDatos">
@@ -1033,7 +1034,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                     <td><strong>{el.nombre}</strong>{el.codigo && <><br /><small>{el.codigo}</small></>}</td>
                     <td>{el.proveedor || '—'}</td>
                     <td>{mostrar(el.costo_unitario)}</td>
-                    <td>{mostrar(final)}{el.moneda === 'USD' && <><br /><small className="prodUsdMini">US$ {formatoDolar(el.precio_usd ?? 0).replace('$', '').trim()}</small></>}</td>
+                    <td>{mostrar(final)}{el.moneda === 'USD' ? <><br /><small className="prodUsdMini">US$ {formatoDolar(el.precio_usd ?? 0).replace('$', '').trim()}</small></> : moneda !== 'USD' && textoUsd(final) ? <><br /><small className="prodUsdMini">≈ {textoUsd(final)}</small></> : null}</td>
                     <td>{mostrar(final - el.costo_unitario)}</td>
                     <td>{el.tipo === 'producto' ? <span className={`crmBadge ${nivel === 'sin' ? 'est-rechazado' : nivel === 'bajo' ? 'est-observacion' : 'est-aceptado'}`}>{el.stock}</span> : '—'}</td>
                     <td className="prodListaAcc">{el.tipo === 'producto' && <button type="button" className="editButton" title="Comparar con precios del mercado" onClick={(e) => { e.stopPropagation(); compararUno(el) }}>💲</button>}
@@ -1257,7 +1258,7 @@ function ProductosServicios({ pedido, onPedidoAtendido }: { pedido?: Pedido | nu
                 </div>
                 <label>Precio de compra{monedaProd === 'USD' ? ' (US$)' : ' ($)'}<CampoNumero min="0" value={precioCompra} onChange={(e) => cambiarCompra(e.target.value)} placeholder="0,00" /></label>
                 <label>{modoGanancia === 'margen' ? '% de margen (sobre la venta)' : '% de recargo (sobre el costo)'}<CampoNumero max={modoGanancia === 'margen' ? 99.9 : undefined} value={gananciaPct} onChange={(e) => cambiarGanancia(e.target.value)} placeholder="Ej.: 50" /></label>
-                <label>Precio de lista sin IVA{monedaProd === 'USD' ? ' (US$)' : ' ($)'}<CampoNumero min="0" value={precioLista} onChange={(e) => cambiarLista(e.target.value)} placeholder="0,00" />{monedaProd === 'USD' && cotizacion > 0 && Number(precioLista) > 0 && <small className="npAyuda">≈ {formatoDinero(Number(precioLista) * cotizacion)} · compra ≈ {formatoDinero(Number(precioCompra || 0) * cotizacion)}</small>}</label>
+                <label>Precio de lista sin IVA{monedaProd === 'USD' ? ' (US$)' : ' ($)'}<CampoNumero min="0" value={precioLista} onChange={(e) => cambiarLista(e.target.value)} placeholder="0,00" />{monedaProd === 'USD' && cotizacion > 0 && Number(precioLista) > 0 && <small className="npAyuda">≈ {formatoDinero(Number(precioLista) * cotizacion)} · compra ≈ {formatoDinero(Number(precioCompra || 0) * cotizacion)}</small>}{monedaProd !== 'USD' && textoUsd(Number(precioLista)) && <small className="npAyuda">≈ {textoUsd(Number(precioLista))}{Number(precioCompra) > 0 ? ` · compra ≈ ${textoUsd(Number(precioCompra))}` : ''} (dólar de hoy)</small>}</label>
                 {margenIgualAPct && <p className="loginError formFull">Un margen de 100% o más no es posible: el precio de venta sería infinito. Usá menos de 100%.</p>}
 
                 {tipo === 'producto' && (colores.length && coloresDisponible

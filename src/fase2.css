@@ -4247,3 +4247,10 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .vdAviso button{border:1.5px solid #e3c9a6;background:#fff;border-radius:12px;padding:8px 14px;font:inherit;font-weight:800;cursor:pointer;color:#14171c}
 .vdAviso button.si{background:#e4740f;border-color:#e4740f;color:#fff}
 @media (max-width:900px){.vdFila{justify-content:flex-start}}
+.pvUsd{font-size:12px;color:#69707d;font-weight:700;white-space:nowrap}
+/* Buscador del catálogo: lápiz para editar rápido y precio en dólares */
+.bcFilaOp{position:relative;display:flex;min-width:0}
+.bcFilaOp .bcOpcion{flex:1;min-width:0;padding-right:44px}
+.bcEditar{position:absolute;right:8px;bottom:8px;width:30px;height:30px;border-radius:9px;border:1px solid #e3e8ef;background:#fff;cursor:pointer;font-size:14px;display:grid;place-items:center;opacity:.85}
+.bcEditar:hover{opacity:1;border-color:#e4740f}
+.bcPrecio .bcUsd{color:#1f7a4d;font-weight:700}

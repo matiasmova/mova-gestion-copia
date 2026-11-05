@@ -12,6 +12,7 @@ import { hoy } from './gestionFormat'
 import { PCT_ANTICIPO as PCT_SENA } from './estadoObra'
 import type { CambioTipo } from './presupuestoModificaciones'
 import { ETIQUETA_ADICIONAL, etiquetaModificacion } from './presupuestoModificaciones'
+import { textoUsd } from './catalogoMoneda'
 
 // La obra en vivo: la línea de avances que se toca para cargar o corregir, y el
 // presupuesto aceptado que se edita directo. El presupuesto nunca se pisa: cada
@@ -528,7 +529,8 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
         <button type="button" disabled={guardando} onClick={() => void volverAlOriginal(itemEd.id)}>↩️ Volver al original</button>
       </div>}
       {edicion.clave === 'nuevo' && <BuscadorCatalogo catalogo={catalogo ?? []} valor={edicion.catalogoId} cargando={!catalogo} onElegir={elegirProducto}
-        onCreado={(p) => { setCatalogo((c) => [...(c ?? []), p]); setEdicion((e) => (e ? { ...e, catalogoId: p.id, descripcion: p.nombre_presupuesto || p.nombre, precio: String(p.precio_venta || ''), costo: Number(p.costo_unitario) > 0 ? String(p.costo_unitario) : '' } : e)) }} />}
+        onCreado={(p) => { setCatalogo((c) => [...(c ?? []), p]); setEdicion((e) => (e ? { ...e, catalogoId: p.id, descripcion: p.nombre_presupuesto || p.nombre, precio: String(p.precio_venta || ''), costo: Number(p.costo_unitario) > 0 ? String(p.costo_unitario) : '' } : e)) }}
+        onEditado={(p) => setCatalogo((c) => (c ?? []).map((x) => (x.id === p.id ? { ...x, ...p } : x)))} />}
       <Texto className="pvDesc" value={edicion.descripcion} onChange={(v) => setEdicion({ ...edicion, descripcion: v })} placeholder="Descripción" />
       <div className="pvCtrl">
         <label>Cantidad</label>
@@ -541,6 +543,7 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
       <div className="pvCtrl">
         <label>Precio</label>
         <CampoNumero className="pvPrecio" value={edicion.precio} onChange={(e) => setEdicion({ ...edicion, precio: e.target.value })} aria-label="Precio unitario" />
+        {textoUsd(Number(edicion.precio)) && <small className="pvUsd">≈ {textoUsd(Number(edicion.precio))}</small>}
       </div>
       <div className="pvCtrl">
         <label>Descuento</label>

@@ -14,6 +14,7 @@ import { pedirAsistente } from './asistenteIA'
 import { codigoPresupuesto } from './codigoPresupuesto'
 import logo from './assets/mova-logo.jpg'
 import GananciaTrabajo from './GananciaTrabajo'
+import { textoUsd } from './catalogoMoneda'
 
 // Presupuesto "en vivo": se arma sobre el mismo documento que recibe el cliente.
 // Se toca un ítem y se cambia ahí (cantidad, precio, descuento); el total se
@@ -396,7 +397,8 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
           <div className="pvPanel">
             <BuscadorCatalogo catalogo={catalogo} valor={it.catalogo_id} cargando={cargandoCat}
               onElegir={(id) => elegirProducto(it._k, id)}
-              onCreado={(p) => { const prod = { ...p, costo_unitario: p.costo_unitario } as Producto; setCatalogo((c) => [...c, prod]); elegirProducto(it._k, String(p.id), prod) }} />
+              onCreado={(p) => { const prod = { ...p, costo_unitario: p.costo_unitario } as Producto; setCatalogo((c) => [...c, prod]); elegirProducto(it._k, String(p.id), prod) }}
+              onEditado={(p) => setCatalogo((c) => c.map((x) => (x.id === p.id ? { ...x, ...p } as Producto : x)))} />
             <Texto className="pvDesc" value={it.descripcion} onChange={(v) => cambiarItem(it._k, { descripcion: v })} placeholder="Descripción que lee el cliente" />
             <div className="pvCtrl">
               <label>Cantidad</label>
@@ -409,6 +411,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
             <div className="pvCtrl">
               <label>Precio</label>
               <CampoNumero className="pvPrecio" value={it.precio_unitario} onChange={(e) => cambiarItem(it._k, { precio_unitario: Number(e.target.value) || 0 })} aria-label="Precio unitario" />
+              {textoUsd(it.precio_unitario) && <small className="pvUsd">≈ {textoUsd(it.precio_unitario)}</small>}
               {medianas[it._k] ? <button type="button" className="pvMercadoUsar" onClick={() => usarPrecioMercado(it._k, medianas[it._k])}>Mercado {moneda(medianas[it._k])} · usar</button> : null}
             </div>
             {it.descripcion.trim() && <button type="button" className="pvMercadoItem" onClick={() => compararPrecios(it._k)}>

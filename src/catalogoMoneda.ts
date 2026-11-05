@@ -59,3 +59,10 @@ export function formatoDinero(valor: number) {
 export function formatoDolar(valor: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(valor || 0))
 }
+
+// Precio en pesos → texto en dólares con la cotización guardada ("US$ 17,11"). Vacío si no hay cotización.
+export function textoUsd(pesos: number | null | undefined): string {
+  const c = leerCotizacion(), n = Number(pesos) || 0
+  if (!(c > 0) || !(n > 0)) return ''
+  return `US$ ${(n / c).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
