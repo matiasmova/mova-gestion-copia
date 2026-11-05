@@ -4228,3 +4228,22 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .drCampos .formFull{grid-column:1/-1}
 .drCampos input,.drCampos select{font:inherit;font-size:15px;font-weight:500;text-transform:none;letter-spacing:0;color:#14171c;padding:10px 12px;border:1.5px solid #e3e8ef;border-radius:12px;background:#fff;min-width:0;width:100%;box-sizing:border-box}
 .ph2Deuda{margin:-4px 0 0;font-size:13px;color:#69707d;line-height:1.4}.ph2Deuda b{color:#14171c}
+.ctEjemplos{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:13px}
+.ctEjemplos li{display:flex;justify-content:space-between;gap:10px}
+.ctEjemplos li span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#4d5562}
+.ctEjemplos li b{white-space:nowrap;font-variant-numeric:tabular-nums}
+.ctEjemplos li.mas{color:#69707d}
+/* ===== Dólar del día (arriba de cada página) ===== */
+.vdFila{max-width:1280px;margin:0 auto 10px;display:flex;justify-content:flex-end}
+.vdChip{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;background:#fff;border:1px solid #e3e8ef;border-radius:999px;padding:5px 12px;font-size:13px;color:#4d5562}
+.vdChip b{color:#14171c;font-variant-numeric:tabular-nums}
+.vdChip small{color:#69707d;font-size:12px}
+.vdChip.cambio{border-color:#f3c48f;background:#fff8ef}
+.vdChip button{border:0;background:#e4740f;color:#fff;border-radius:999px;padding:3px 10px;font:inherit;font-size:12px;font-weight:800;cursor:pointer}
+.vdAviso{max-width:1280px;margin:0 auto 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fff4e6;border:1.5px solid #f3b36b;border-radius:16px;padding:12px 14px}
+.vdAviso>span{font-size:22px}
+.vdAviso p{margin:0;flex:1 1 260px;font-size:14px;line-height:1.4;color:#3d2a12}
+.vdAviso div{display:flex;gap:8px}
+.vdAviso button{border:1.5px solid #e3c9a6;background:#fff;border-radius:12px;padding:8px 14px;font:inherit;font-weight:800;cursor:pointer;color:#14171c}
+.vdAviso button.si{background:#e4740f;border-color:#e4740f;color:#fff}
+@media (max-width:900px){.vdFila{justify-content:flex-start}}
