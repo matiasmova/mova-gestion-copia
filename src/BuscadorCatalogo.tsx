@@ -5,6 +5,7 @@ import { subirFotoProducto } from './fotosProducto'
 import { pedirAsistente } from './asistenteIA'
 import { leerCotizacion } from './catalogoMoneda'
 import { useNombreClienteIA } from './NombreClienteIA'
+import CampoNumero from './CampoNumero'
 import { fijarCategorias, sugerirCategoria, useCategoriasProducto } from './categoriasApp'
 
 // Elegir un producto o servicio del catálogo: se abre una ventana grande con
@@ -290,9 +291,9 @@ function NuevoProductoRapido({ nombreInicial, categorias, onCancelar, onCreado }
         {!nombreIA.error && <small>Es lo que va en el presupuesto, corto y sin marca ni modelo.</small>}
       </label>
       <div className="bcNuevoFila">
-        <label>Precio de venta<input type="number" inputMode="decimal" min="0" step="any" value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="0" /></label>
+        <label>Precio de venta<CampoNumero min="0" value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="0" /></label>
         {tipo === 'producto'
-          ? <label>Costo (opcional)<input type="number" inputMode="decimal" min="0" step="any" value={costo} onChange={(e) => setCosto(e.target.value)} placeholder="0" /></label>
+          ? <label>Costo (opcional)<CampoNumero min="0" value={costo} onChange={(e) => setCosto(e.target.value)} placeholder="0" /></label>
           : <p className="bcTodoGanancia">💰 <span><b>100% ganancia</b><small>Los servicios no llevan costo</small></span></p>}
       </div>
 

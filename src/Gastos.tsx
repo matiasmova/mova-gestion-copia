@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from './supabase'
 import { fechaCorta, hoy } from './gestionFormat'
 import { confirmarEliminacion } from './confirmar'
+import CampoNumero from './CampoNumero'
 
 // Gastos: los de la EMPRESA (cuentan en la ganancia; se guardan en gastos_generales,
 // los mismos que ven Movimientos e Inicio) y los PERSONALES (casa, impuestos de la
@@ -274,7 +275,7 @@ function FormGasto({ inicial, faltaSql, onCerrar, onGuardado }: { inicial: Gasto
           ))}
         </div>
         <label className="gtsCampo">Monto
-          <input type="number" inputMode="decimal" min="0" step="any" autoFocus value={monto} onChange={(e) => setMonto(e.target.value)} placeholder="0" />
+          <CampoNumero min="0" autoFocus value={monto} onChange={(e) => setMonto(e.target.value)} placeholder="0" />
         </label>
         <label className="gtsCampo">Detalle (opcional)
           <input value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder={cats.find((c) => c.nombre === categoria)?.ayuda ?? ''} />
