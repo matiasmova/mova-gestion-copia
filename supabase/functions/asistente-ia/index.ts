@@ -275,6 +275,23 @@ Para cada dispositivo que se menciona devolvé un ítem:
 - catalogo_id: el id del producto del CATÁLOGO que mejor corresponde a ese dispositivo, teniendo en cuenta tipo, cantidad de canales o vías, color, terminación (soft touch, vidrio, etc.) y si es smart. Si ninguno corresponde razonablemente, 0. No inventes ids.
 No agregues dispositivos que no se mencionan.`
 
+const SISTEMA_DICTADO = `Sos el asistente del dueño de MOVA Tecnología Smart (Mendoza, Argentina): domótica, WiFi, cámaras, alarmas, riego y electricidad. Él dicta (o escribe) algo rápido, con errores de dictado, y vos decidís a dónde va y sacás los datos.
+Te pasan HOY (fecha y día de la semana), el TEXTO, las OBRAS (id | cliente · trabajo), el PERSONAL (id | nombre) y el CATÁLOGO (id | nombre | nombre para el cliente | precio).
+- destino:
+  · recordatorio: algo para hacer en un día u hora ("mañana a las 9 llamar a…", "el jueves visita a…").
+  · pendObra: algo que falta o hay que hacer en una obra, sin fecha ("en lo de Claudia falta el disyuntor").
+  · modObra: agregar, quitar o cambiar ítems de una obra (un extra que se cobra): "agregar dos tomas en el quincho".
+  · pago: le pagó (o hay que anotar un pago) a alguien del personal: "le pagué 100 mil a Sebastián".
+  · compra: materiales para comprar: "comprar 3 cajas de fichas".
+  · nota: cualquier otra cosa.
+- titulo: lo que hay que hacer, corto y claro (3 a 10 palabras), sin repetir la fecha.
+- obra_id: el id de la OBRA de la que se habla (por nombre del cliente o del trabajo). 0 si no se nombra ninguna.
+- fecha (AAAA-MM-DD) y hora (HH:MM, 24 h): solo si se dicen; calculalas desde HOY ("mañana", "el jueves", "a las 3 de la tarde" = 15:00). Si no, vacío.
+- personal_id y monto: para un pago (monto en pesos, "100 mil" = 100000). Si no, 0.
+- items: para modObra (cada ítem que se agrega, con cantidad; precio del CATÁLOGO si corresponde, si no 0; catalogo_id o 0; cantidad negativa si se quita) y para compra (cada material con su cantidad, precio 0). Para el resto, lista vacía.
+- resumen: una frase corta de lo que entendiste.
+No inventes ids ni datos que no se dicen.`
+
 const SISTEMA_RECOMENDACIONES = `Escribís, para MOVA Tecnología Smart (Mendoza, Argentina), la sección "Formas de uso y recomendaciones" que se le entrega al cliente junto con su presupuesto u obra terminada.
 - Basate SOLO en los productos y servicios del presupuesto: cómo se usan en el día a día (apps, escenas, control por voz, horarios), cuidados y mantenimiento, qué hacer ante un corte de luz o de internet, y consejos para aprovecharlos.
 - Entre 4 y 8 recomendaciones, cada una una oración clara y concreta (máximo 220 caracteres), en español rioplatense con voseo, tono profesional y cercano.
@@ -341,7 +358,7 @@ Deno.serve(async (req) => {
   const { data: perfil } = await db.from('profiles').select('rol, activo').eq('id', quien.user.id).maybeSingle()
   const cuerpo = await req.json().catch(() => ({})) as Record<string, unknown>
   const { accion, idea, titulo, descripcion, existentes } = cuerpo
-  const roles = accion === 'factura' ? ['admin', 'contable', 'encargado', 'auxiliar'] : accion === 'informe_obra' || accion === 'recomendaciones' || accion === 'relevamiento' || accion === 'resumen_documento' || accion === 'plano' ? ['admin', 'contable', 'encargado'] : ['admin', 'contable']
+  const roles = accion === 'factura' ? ['admin', 'contable', 'encargado', 'auxiliar'] : accion === 'informe_obra' || accion === 'recomendaciones' || accion === 'relevamiento' || accion === 'resumen_documento' || accion === 'plano' || accion === 'dictado' ? ['admin', 'contable', 'encargado'] : ['admin', 'contable']
   if (!perfil || !roles.includes(perfil.rol) || perfil.activo === false) return responder({ error: 'No tenés permiso para usar el asistente.' }, 403)
 
   const clave = Deno.env.get('GEMINI_API_KEY')
@@ -656,6 +673,41 @@ Deno.serve(async (req) => {
           detalle: recorte(it.detalle, 200), revisar: !!it.revisar, smart: !!it.smart,
           catalogo_id: ids.has(Number(it.catalogo_id)) ? Number(it.catalogo_id) : null,
         })),
+      })
+    }
+    if (accion === 'dictado') {
+      // Dictado rápido de "Para hacer": a dónde va y los datos para cargarlo.
+      const texto = recorte(cuerpo.texto, 1500)
+      if (!texto) return responder({ error: 'Dictá o escribí algo.' }, 400)
+      const obras = (Array.isArray(cuerpo.obras) ? cuerpo.obras : []).slice(0, 200) as { id: number; etiqueta: string }[]
+      const personas = (Array.isArray(cuerpo.personas) ? cuerpo.personas : []).slice(0, 200) as { id: number; nombre: string }[]
+      const rCat = await db.from('productos_servicios').select('id,nombre,nombre_presupuesto,precio_venta,activo').eq('activo', true).order('nombre').limit(800)
+      const catalogo = (rCat.data ?? []) as { id: number; nombre: string; nombre_presupuesto?: string | null; precio_venta: number }[]
+      const pedido = `HOY: ${recorte(cuerpo.hoy, 60)}\n\nTEXTO:\n${texto}\n\nOBRAS:\n${obras.map((o) => `${Number(o.id)} | ${recorte(o.etiqueta, 140)}`).join('\n') || '(ninguna)'}\n\nPERSONAL:\n${personas.map((p) => `${Number(p.id)} | ${recorte(p.nombre, 80)}`).join('\n') || '(nadie)'}\n\nCATÁLOGO:\n${catalogo.map((p) => `${p.id} | ${p.nombre} | ${p.nombre_presupuesto ?? ''} | ${Number(p.precio_venta) || 0}`).join('\n') || '(vacío)'}`
+      const esquema = { type: 'OBJECT', properties: {
+        destino: { type: 'STRING', enum: ['recordatorio', 'pendObra', 'modObra', 'pago', 'compra', 'nota'] },
+        titulo: { type: 'STRING' }, obra_id: { type: 'INTEGER' }, fecha: { type: 'STRING' }, hora: { type: 'STRING' },
+        personal_id: { type: 'INTEGER' }, monto: { type: 'NUMBER' }, resumen: { type: 'STRING' },
+        items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { descripcion: { type: 'STRING' }, cantidad: { type: 'NUMBER' }, precio: { type: 'NUMBER' }, catalogo_id: { type: 'INTEGER' } }, required: ['descripcion', 'cantidad', 'precio', 'catalogo_id'] } },
+      }, required: ['destino', 'titulo', 'obra_id', 'fecha', 'hora', 'personal_id', 'monto', 'items', 'resumen'] }
+      const r = await gemini(clave, pedido, esquema, SISTEMA_DICTADO, 0.2) as { destino?: string; titulo?: string; obra_id?: number; fecha?: string; hora?: string; personal_id?: number; monto?: number; resumen?: string; items?: { descripcion: string; cantidad: number; precio: number; catalogo_id: number }[] }
+      const idsObra = new Set(obras.map((o) => Number(o.id)))
+      const idsPers = new Set(personas.map((p) => Number(p.id)))
+      const idsCat = new Map(catalogo.map((p) => [p.id, p]))
+      const destinos = ['recordatorio', 'pendObra', 'modObra', 'pago', 'compra', 'nota']
+      return responder({
+        destino: destinos.includes(r.destino ?? '') ? r.destino : 'nota',
+        titulo: recorte(r.titulo, 160) || recorte(texto, 160),
+        obra_id: idsObra.has(Number(r.obra_id)) ? Number(r.obra_id) : null,
+        fecha: /^\d{4}-\d{2}-\d{2}$/.test(r.fecha ?? '') ? r.fecha : null,
+        hora: /^\d{1,2}:\d{2}$/.test(r.hora ?? '') ? (r.hora as string).padStart(5, '0') : null,
+        personal_id: idsPers.has(Number(r.personal_id)) ? Number(r.personal_id) : null,
+        monto: Number(r.monto) > 0 ? Math.round(Number(r.monto) * 100) / 100 : 0,
+        resumen: recorte(r.resumen, 240),
+        items: (r.items ?? []).slice(0, 30).map((it) => {
+          const cat = idsCat.get(Number(it.catalogo_id))
+          return { descripcion: recorte(it.descripcion, 160) || (cat?.nombre_presupuesto || cat?.nombre || ''), cantidad: Number(it.cantidad) || 1, precio: Number(it.precio) > 0 ? Number(it.precio) : cat ? Number(cat.precio_venta) || 0 : 0, catalogo_id: cat ? cat.id : null }
+        }).filter((it) => it.descripcion),
       })
     }
     if (accion === 'resumen_dia') {
