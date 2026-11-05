@@ -4076,3 +4076,7 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .bcCatNueva{display:flex;gap:6px;align-items:center}
 .bcCatNueva input{flex:1;min-width:0}
 .bcCatNueva button{border:1px solid var(--mova-border,#e3e6ea);background:#fff;border-radius:10px;padding:8px 10px;cursor:pointer}
+.bcTodoGanancia{display:flex;gap:8px;align-items:center;margin:22px 0 0;padding:10px 12px;border-radius:12px;background:#ecf7f0;color:#1f4d36;font-size:14px;align-self:start}
+.bcTodoGanancia span{display:flex;flex-direction:column}
+.bcTodoGanancia b{color:#1f7a4d}
+.bcTodoGanancia small{font-size:12px;color:#4d6b5a}

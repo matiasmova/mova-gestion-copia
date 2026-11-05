@@ -217,8 +217,8 @@ function NuevoProductoRapido({ nombreInicial, categorias, onCancelar, onCreado }
   }, [deApp, categorias, tipo])
   // Mientras no la elijas a mano, se propone una según el nombre.
   useEffect(() => {
-    if (catTocada || tipo !== 'producto') return
-    setCategoria(sugerirCategoria(nombre) ?? '')
+    if (catTocada) return
+    setCategoria(tipo === 'producto' ? sugerirCategoria(nombre) ?? '' : '')
   }, [nombre, tipo, catTocada])
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
@@ -263,7 +263,7 @@ function NuevoProductoRapido({ nombreInicial, categorias, onCancelar, onCreado }
     const fila: Record<string, unknown> = {
       ...(fotoPath ? { foto_url: fotoPath } : {}),
       tipo, nombre: nombre.trim(), unidad: tipo === 'servicio' && unidad === 'unidad' ? 'servicio' : unidad,
-      precio_venta: Number(precio) || 0, costo_unitario: Number(costo) || 0, categoria: categoria.trim() || null,
+      precio_venta: Number(precio) || 0, costo_unitario: tipo === 'producto' ? Number(costo) || 0 : 0, categoria: categoria.trim() || null,
       stock: 0, stock_minimo: 0, iva_pct: 21, activo: true, nombre_presupuesto: paraCliente.trim() || null,
     }
     const columnas = 'id, tipo, nombre, descripcion, unidad, precio_venta, costo_unitario, categoria, foto_url'
@@ -291,7 +291,9 @@ function NuevoProductoRapido({ nombreInicial, categorias, onCancelar, onCreado }
       </label>
       <div className="bcNuevoFila">
         <label>Precio de venta<input type="number" inputMode="decimal" min="0" step="any" value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="0" /></label>
-        <label>Costo (opcional)<input type="number" inputMode="decimal" min="0" step="any" value={costo} onChange={(e) => setCosto(e.target.value)} placeholder="0" /></label>
+        {tipo === 'producto'
+          ? <label>Costo (opcional)<input type="number" inputMode="decimal" min="0" step="any" value={costo} onChange={(e) => setCosto(e.target.value)} placeholder="0" /></label>
+          : <p className="bcTodoGanancia">💰 <span><b>100% ganancia</b><small>Los servicios no llevan costo</small></span></p>}
       </div>
 
       {/* Precio de referencia del mercado: comparar, copiar el recomendado o dejar el propio */}
