@@ -4073,3 +4073,6 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .oeGanPanel b{color:#1f7a4d}
 .oeGanPanel small{font-size:12px;color:#4d6b5a}
 .oeGanPanel em{font-style:normal}
+.bcCatNueva{display:flex;gap:6px;align-items:center}
+.bcCatNueva input{flex:1;min-width:0}
+.bcCatNueva button{border:1px solid var(--mova-border,#e3e6ea);background:#fff;border-radius:10px;padding:8px 10px;cursor:pointer}

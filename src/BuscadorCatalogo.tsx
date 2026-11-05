@@ -5,6 +5,7 @@ import { subirFotoProducto } from './fotosProducto'
 import { pedirAsistente } from './asistenteIA'
 import { leerCotizacion } from './catalogoMoneda'
 import { useNombreClienteIA } from './NombreClienteIA'
+import { fijarCategorias, sugerirCategoria, useCategoriasProducto } from './categoriasApp'
 
 // Elegir un producto o servicio del catálogo: se abre una ventana grande con
 // buscador, filtros y la foto de cada producto. "Carga manual" sigue disponible.
@@ -201,6 +202,24 @@ function NuevoProductoRapido({ nombreInicial, categorias, onCancelar, onCreado }
   const [costo, setCosto] = useState('')
   const [unidad, setUnidad] = useState('unidad')
   const [categoria, setCategoria] = useState('')
+  const [catNueva, setCatNueva] = useState(false)
+  const [catTocada, setCatTocada] = useState(false)
+  // Lista para elegir: las categorías de la app (las de Productos y servicios) y
+  // las que ya usan tus productos. Con "＋ Nueva categoría" se escribe una nueva.
+  const deApp = useCategoriasProducto()
+  useEffect(() => {
+    void supabase.from('configuracion').select('valor').eq('clave', 'categorias_producto').maybeSingle()
+      .then(({ data }) => { if (data?.valor) fijarCategorias(data.valor) })
+  }, [])
+  const opcionesCat = useMemo(() => {
+    const base = tipo === 'producto' ? deApp.map((c) => c.nombre) : []
+    return [...new Set([...base, ...categorias])].sort((a, b) => a.localeCompare(b))
+  }, [deApp, categorias, tipo])
+  // Mientras no la elijas a mano, se propone una según el nombre.
+  useEffect(() => {
+    if (catTocada || tipo !== 'producto') return
+    setCategoria(sugerirCategoria(nombre) ?? '')
+  }, [nombre, tipo, catTocada])
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const [foto, setFoto] = useState<File | null>(null)
@@ -307,8 +326,13 @@ function NuevoProductoRapido({ nombreInicial, categorias, onCancelar, onCreado }
       {foto && <button type="button" className="bcQuitarFoto" onClick={() => elegirFoto(null)}>Quitar foto</button>}
       <div className="bcNuevoFila">
         <label>Unidad<select value={unidad} onChange={(e) => setUnidad(e.target.value)}>{UNIDADES.map((u) => <option key={u} value={u}>{u[0].toUpperCase() + u.slice(1)}</option>)}</select></label>
-        <label>Categoría<input list="bcCategorias" value={categoria} onChange={(e) => setCategoria(e.target.value)} placeholder="Ej.: Domótica" /></label>
-        <datalist id="bcCategorias">{categorias.map((c) => <option key={c} value={c} />)}</datalist>
+        <label>Categoría{catNueva
+          ? <span className="bcCatNueva"><input autoFocus value={categoria} onChange={(e) => setCategoria(e.target.value)} placeholder="Nueva categoría" /><button type="button" onClick={() => { setCatNueva(false); setCategoria('') }} aria-label="Volver a la lista">✕</button></span>
+          : <select value={opcionesCat.includes(categoria) ? categoria : ''} onChange={(e) => { setCatTocada(true); if (e.target.value === '__nueva') { setCatNueva(true); setCategoria('') } else setCategoria(e.target.value) }}>
+              <option value="">Sin categoría</option>
+              {opcionesCat.map((c) => <option key={c} value={c}>{c}</option>)}
+              <option value="__nueva">＋ Nueva categoría…</option>
+            </select>}</label>
       </div>
       {error && <p className="loginError" style={{ margin: 0 }}>{error}</p>}
       <p className="bcNuevoNota">El stock y lo demás los completás después en Productos y servicios.</p>
