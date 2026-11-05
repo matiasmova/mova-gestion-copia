@@ -24,6 +24,7 @@ import { aplicarTema, temaGuardado, type Tema } from './temaOscuro'
 import IconoMenu from './iconosMenu'
 import { BuscadorGlobal, BotonMas, type Pedido, type Ir } from './BuscadorGlobal'
 import BarraRecorrido from './BarraRecorrido'
+import VigiaDolar from './VigiaDolar'
 
 import { ROLES, ROLES_VALIDOS, NAVEGACION, GRUPOS_MENU, FUERA_DEL_MENU, puedeVer, type Rol, type Vista } from './permisos'
 import Trabajos from './Trabajos'
@@ -288,6 +289,7 @@ export default function AppFase2() {
     <BarraRecorrido onVolver={() => navegar('agenda')} />
     {(rol === 'admin' || rol === 'contable') && <AvisoComprobantes onAbrirObra={(id) => { if (id) void abrirObra(id); else navegar('presupuestos') }} />}
     <main className="fase2Main" key={recarga}>
+      {puedeVer(rol, 'catalogo') && <VigiaDolar puedeAceptar={rol === 'admin' || rol === 'contable'} />}
       {vistaSegura === 'dashboard'
         ? <HomeResumen nombre={nombreUsuario} rol={rol} rolEtiqueta={ROLES[rol]} onNavegar={navegar} onSalir={salir} onAbrirObra={(id) => void abrirObra(id)} onAbrirPresupuesto={puedeVer(rol, 'presupuestos') ? (id) => { setPresupuestoAbrirId(id); navegar('presupuestos') } : undefined} />
         : contenido[vistaSegura]}

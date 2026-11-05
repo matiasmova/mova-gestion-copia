@@ -16,18 +16,22 @@ type Props = {
   elementos: ProductoServicio[]
   onCerrar: () => void
   onActualizado: () => void
+  // Al abrirla desde el aviso de "el dólar cambió": el valor nuevo ya cargado.
+  valorInicial?: number
+  fuenteInicial?: string
+  ajustarInicial?: boolean
 }
 
 type Fase = 'ingresar' | 'aplicando' | 'listo'
 const numero = (n: number) => new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n)
 
-export default function ActualizarCotizacion({ elementos, onCerrar, onActualizado }: Props) {
+export default function ActualizarCotizacion({ elementos, onCerrar, onActualizado, valorInicial, fuenteInicial, ajustarInicial = false }: Props) {
   const actual = leerCotizacion()
   const info = configActual().cotizacion
-  const [nueva, setNueva] = useState(actual > 0 ? String(actual).replace('.', ',') : '')
-  const [fuente, setFuente] = useState<string | null>(null)
+  const [nueva, setNueva] = useState(valorInicial ? String(valorInicial).replace('.', ',') : actual > 0 ? String(actual).replace('.', ',') : '')
+  const [fuente, setFuente] = useState<string | null>(fuenteInicial ?? null)
   const [trayendo, setTrayendo] = useState<string | null>(null)
-  const [ajustarPesos, setAjustarPesos] = useState(false)
+  const [ajustarPesos, setAjustarPesos] = useState(ajustarInicial)
   const [fase, setFase] = useState<Fase>('ingresar')
   const [error, setError] = useState('')
   const [resumen, setResumen] = useState<string[]>([])
@@ -123,15 +127,19 @@ export default function ActualizarCotizacion({ elementos, onCerrar, onActualizad
             <div className="simulacionBox">
               <span className="simulacionTitulo">Qué va a pasar</span>
               <p className="ctLinea">💵 <strong>{enUsd.length}</strong> producto(s) cargados en dólares se recalculan en pesos{ejemploUsd && valida ? ` (ej.: ${ejemploUsd.nombre}: US$ ${formatoDolar(ejemploUsd.precio_usd ?? 0).replace("$", "").trim()} → ${formatoDinero(dos((ejemploUsd.precio_usd ?? 0) * nuevaNum))})` : ''}.</p>
-              <p className="ctLinea">$ <strong>{enPesos.length}</strong> producto(s) en pesos {ajustarPesos ? `se ajustan un ${variacion > 0 ? '+' : ''}${variacion.toFixed(1)}%` : 'quedan igual'}.</p>
+              <p className="ctLinea">$ <strong>{enPesos.length}</strong> producto(s) y servicio(s) en pesos {ajustarPesos && actual > 0 ? `se ajustan un ${variacion > 0 ? '+' : ''}${variacion.toFixed(1)}% (precio de venta y costo)` : 'quedan igual'}.</p>
               {actual > 0 && enPesos.length > 0 && (
-                <label className="caCheck"><input type="checkbox" checked={ajustarPesos} onChange={(e) => setAjustarPesos(e.target.checked)} /> Ajustar también los productos en pesos según la variación del dólar</label>
+                <label className="caCheck"><input type="checkbox" checked={ajustarPesos} onChange={(e) => setAjustarPesos(e.target.checked)} /> Actualizar también los precios en pesos de productos y servicios según la variación del dólar</label>
               )}
+              {ajustarPesos && actual > 0 && valida && Math.abs(ratio - 1) >= 0.0005 && enPesos.length > 0 && <ul className="ctEjemplos">
+                {enPesos.filter((el) => el.precio_venta > 0).slice(0, 4).map((el) => <li key={el.id}><span>{el.nombre}</span><b>{formatoDinero(el.precio_venta)} → {formatoDinero(dos(el.precio_venta * ratio))}</b></li>)}
+                {enPesos.length > 4 && <li className="mas">y {enPesos.length - 4} más</li>}
+              </ul>}
             </div>
             {error && <p className="loginError">{error}</p>}
             <div className="modalActions formActions">
               <button type="button" className="cancelButton" onClick={onCerrar}>Cancelar</button>
-              <button type="button" className="newButton" disabled={!valida} onClick={() => void aplicar()}>Guardar cotización</button>
+              <button type="button" className="newButton" disabled={!valida} onClick={() => void aplicar()}>{ajustarPesos && actual > 0 && Math.abs(ratio - 1) >= 0.0005 && enPesos.length > 0 ? 'Aceptar y actualizar precios' : 'Guardar cotización'}</button>
             </div>
           </div>
         )}
