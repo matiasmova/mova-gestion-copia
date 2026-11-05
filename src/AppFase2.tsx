@@ -152,6 +152,18 @@ export default function AppFase2() {
 
   async function salir() { await supabase.auth.signOut(); setVista('agenda') }
   function navegar(destino: Vista) { setVista(destino); setMenuAbierto(false) }
+  // Abrir un trabajo desde Para hacer, Clientes, Finanzas…: igual que en Trabajos.
+  // Si la obra todavía no tiene un presupuesto aceptado, se abre su presupuesto
+  // (armando o enviado), que es donde está la información; si no, la obra.
+  async function abrirObra(id: number) {
+    if (puedeVer(rol, 'presupuestos')) {
+      const { data, error } = await supabase.from('presupuestos').select('id, estado, activo, fecha').eq('obra_id', id)
+      const pres = ((error ? [] : data ?? []) as { id: number; estado: string; activo: boolean | null; fecha: string | null }[]).filter((p) => p.activo !== false)
+      const enCurso = pres.filter((p) => p.estado === 'borrador' || p.estado === 'enviado').sort((a, b) => (b.fecha ?? '').localeCompare(a.fecha ?? '') || b.id - a.id)
+      if (!pres.some((p) => p.estado === 'aceptado') && enCurso.length) { setPresupuestoAbrirId(enCurso[0].id); navegar('presupuestos'); return }
+    }
+    setObraAbrirId(id); navegar('obras')
+  }
 
   if (verificando) return <div className="loading">Cargando MOVA Gestión...</div>
 
@@ -211,7 +223,7 @@ export default function AppFase2() {
 
   const contenido: Record<Exclude<Vista, 'dashboard'>, React.ReactNode> = {
     clientes: <Clientes pedido={pedidoPara('clientes')} onPedidoAtendido={pedidoAtendido}
-      onAbrirObra={puedeVer(rol, 'obras') ? (id) => { setObraAbrirId(id); navegar('obras') } : undefined}
+      onAbrirObra={puedeVer(rol, 'obras') ? (id) => void abrirObra(id) : undefined}
       onAbrirPresupuesto={puedeVer(rol, 'presupuestos') ? (id) => { setPresupuestoAbrirId(id); navegar('presupuestos') } : undefined}
       onNuevoPresupuesto={puedeVer(rol, 'presupuestos') ? (clienteId) => ir('presupuestos', { accion: 'nuevo', clienteId }) : undefined} />,
     relevamientos: <Relevamientos pedido={pedidoPara('relevamientos')} onPedidoAtendido={pedidoAtendido} puedePresupuestar={puedeVer(rol, 'presupuestos')}
@@ -222,9 +234,9 @@ export default function AppFase2() {
     soluciones: <Soluciones />,
     planos: <Planos />,
     gastos: <Gastos />,
-    finanzas: <Finanzas pedido={pedidoPara('finanzas')} onPedidoAtendido={pedidoAtendido} onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} />,
+    finanzas: <Finanzas pedido={pedidoPara('finanzas')} onPedidoAtendido={pedidoAtendido} onAbrirObra={(id) => void abrirObra(id)} />,
     compras: <Compras pedido={pedidoPara('compras')} onPedidoAtendido={pedidoAtendido} />,
-    personal: <Personal pedido={pedidoPara('personal')} onPedidoAtendido={pedidoAtendido} />, agenda: <HomeResumen modo="tareas" pedido={pedidoPara('agenda')} onPedidoAtendido={pedidoAtendido} nombre={nombreUsuario} rol={rol} rolEtiqueta={ROLES[rol]} onNavegar={navegar} onSalir={salir} onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} onAbrirPresupuesto={puedeVer(rol, 'presupuestos') ? (id) => { setPresupuestoAbrirId(id); navegar('presupuestos') } : undefined} />, usuarios: <Usuarios />, configuracion: <Configuracion />,
+    personal: <Personal pedido={pedidoPara('personal')} onPedidoAtendido={pedidoAtendido} />, agenda: <HomeResumen modo="tareas" pedido={pedidoPara('agenda')} onPedidoAtendido={pedidoAtendido} nombre={nombreUsuario} rol={rol} rolEtiqueta={ROLES[rol]} onNavegar={navegar} onSalir={salir} onAbrirObra={(id) => void abrirObra(id)} onAbrirPresupuesto={puedeVer(rol, 'presupuestos') ? (id) => { setPresupuestoAbrirId(id); navegar('presupuestos') } : undefined} />, usuarios: <Usuarios />, configuracion: <Configuracion />,
   }
 
   return <div className={`fase2App${menuChico ? ' menuChico' : ''}`}>
@@ -269,10 +281,10 @@ export default function AppFase2() {
     : cambiosAfuera.hayCambios && <button type="button" className="avisoCambios" onClick={() => { cambiosAfuera.listo(); actualizarPantalla() }}>🔄 Hay cambios nuevos de otro dispositivo · <b>Actualizar</b></button>}
     <BuscadorGlobal rol={rol} abierto={buscadorAbierto} onCerrar={() => setBuscadorAbierto(false)} ir={ir} />
     <BotonMas rol={rol} ir={ir} />
-    {(rol === 'admin' || rol === 'contable') && <AvisoComprobantes onAbrirObra={(id) => { if (id) { setObraAbrirId(id); navegar('obras') } else navegar('presupuestos') }} />}
+    {(rol === 'admin' || rol === 'contable') && <AvisoComprobantes onAbrirObra={(id) => { if (id) void abrirObra(id); else navegar('presupuestos') }} />}
     <main className="fase2Main" key={recarga}>
       {vistaSegura === 'dashboard'
-        ? <HomeResumen nombre={nombreUsuario} rol={rol} rolEtiqueta={ROLES[rol]} onNavegar={navegar} onSalir={salir} onAbrirObra={(id) => { setObraAbrirId(id); navegar('obras') }} onAbrirPresupuesto={puedeVer(rol, 'presupuestos') ? (id) => { setPresupuestoAbrirId(id); navegar('presupuestos') } : undefined} />
+        ? <HomeResumen nombre={nombreUsuario} rol={rol} rolEtiqueta={ROLES[rol]} onNavegar={navegar} onSalir={salir} onAbrirObra={(id) => void abrirObra(id)} onAbrirPresupuesto={puedeVer(rol, 'presupuestos') ? (id) => { setPresupuestoAbrirId(id); navegar('presupuestos') } : undefined} />
         : contenido[vistaSegura]}
     </main>
   </div>
