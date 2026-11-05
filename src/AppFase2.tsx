@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useActualizarDatos, useVersionNueva } from './actualizarDatos'
+import { usarAvisoPropio } from './actualizacion'
 import { avisoGuardado } from './Animados'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, TIPO_LINK_AUTH, ERROR_LINK_AUTH } from './supabase'
@@ -66,6 +67,8 @@ export default function AppFase2() {
   const cambiosAfuera = useActualizarDatos(() => { actualizarPantalla(); avisoGuardado('🔄 Actualizado con los cambios nuevos') })
   // Si hay una versión nueva del sistema publicada, el ↻ recarga la página entera.
   const versionNueva = useVersionNueva()
+  // Con la sesión abierta el aviso de versión nueva es el de arriba (uno solo).
+  useEffect(() => { usarAvisoPropio(!!session && !crearClave); return () => usarAvisoPropio(false) }, [session, crearClave])
   const actualizarTodo = () => { if (versionNueva) { window.location.reload(); return } cambiosAfuera.listo(); actualizarPantalla() }
   // Pedido del buscador o del botón "+" para el módulo de destino (abrir algo o crear nuevo).
   const [pedido, setPedido] = useState<(Pedido & { vista: Vista }) | null>(null)
