@@ -4227,3 +4227,4 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .drCampos label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:800;color:#69707d;text-transform:uppercase;letter-spacing:.05em;min-width:0}
 .drCampos .formFull{grid-column:1/-1}
 .drCampos input,.drCampos select{font:inherit;font-size:15px;font-weight:500;text-transform:none;letter-spacing:0;color:#14171c;padding:10px 12px;border:1.5px solid #e3e8ef;border-radius:12px;background:#fff;min-width:0;width:100%;box-sizing:border-box}
+.ph2Deuda{margin:-4px 0 0;font-size:13px;color:#69707d;line-height:1.4}.ph2Deuda b{color:#14171c}

@@ -77,7 +77,7 @@ const suma = (l: { monto?: number }[]) => l.reduce((t, x) => t + (x.monto ?? 0),
 const plataCorta = (n: number) => n >= 1e6 ? `$ ${(n / 1e6).toLocaleString('es-AR', { maximumFractionDigits: 1 })} M` : n >= 1e3 ? `$ ${Math.round(n / 1e3).toLocaleString('es-AR')} mil` : `$ ${Math.round(n).toLocaleString('es-AR')}`
 type Clase = { k: string; nombre: string; icono: string; pie: (l: ItemPH[]) => string }
 const CLASES: Clase[] = [
-  { k: 'saldo', nombre: 'Obras con saldo para cobrar', icono: '💵', pie: (l) => `${plataCorta(suma(l))} en total` },
+  { k: 'saldo', nombre: 'Obras con saldo para cobrar', icono: '💵', pie: (l) => `${plataCorta(suma(l))} según el avance` },
   { k: 'comprobantes', nombre: 'Comprobantes de pago para revisar', icono: '🧾', pie: (l) => `${l.length} sin confirmar` },
   { k: 'borrador', nombre: 'Presupuestos en borrador', icono: '📤', pie: (l) => `${plataCorta(suma(l))} sin enviar` },
   { k: 'sinResp', nombre: 'Enviados sin respuesta', icono: '💬', pie: (l) => `${plataCorta(suma(l))} esperando` },
@@ -264,7 +264,9 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
   const orden: GrupoPH[] = ['atr', 'hoy', 'sem', 'luego']
   const ordenados = [...items].sort((a, b) => orden.indexOf(a.grupo) - orden.indexOf(b.grupo))
   const visibles = ordenados.filter((x) => !clase || claseDe(x) === clase)
-  const paraCobrar = porCobrar ?? suma(items.filter((x) => claseDe(x) === 'saldo'))
+  // Para cobrar hoy: lo que corresponde según el avance de cada obra (y el saldo de las terminadas).
+  // "porCobrar" es todo lo que falta cobrar de las obras, incluido el trabajo que todavía no se hizo.
+  const paraCobrar = suma(items.filter((x) => claseDe(x) === 'saldo'))
   const hechosHoy = ocultas.size + eventos.filter((e) => e.completado && e.fecha === hoyStr).length
   const totalDia = hechosHoy + items.length
   // Lo primero: lo atrasado (o de hoy) con más plata en juego; cobrar va primero.
@@ -403,6 +405,7 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
       {/* ---- Resumen del día ---- */}
       <div className="ph2Resumen">
         <h1>{cargando || cargandoTareas ? 'Juntando tus pendientes…' : items.length ? <>Tenés <em>{items.length} pendiente{items.length === 1 ? '' : 's'}</em>{paraCobrar > 0.5 ? <><br />y {plataCorta(paraCobrar)} para cobrar</> : null}</> : <>Todo al día <em>✓</em></>}</h1>
+        {porCobrar != null && porCobrar > paraCobrar + 0.5 && !cargando && !cargandoTareas && <p className="ph2Deuda">Según el avance de cada obra. En total te faltan cobrar <b>{plataCorta(porCobrar)}</b> de las obras en curso, contando lo que todavía no se hizo.</p>}
         {totalDia > 0 && <div className="ph2Progreso" aria-label="Avance del día"><b>{hechosHoy}/{totalDia}</b><span className="ph2Barra"><i style={{ width: `${(hechosHoy / totalDia) * 100}%` }} /></span><small>hechos hoy</small></div>}
       </div>
       {error && <p className="loginError">{error}</p>}
