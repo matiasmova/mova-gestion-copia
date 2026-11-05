@@ -16,8 +16,17 @@ async function hayVersionNueva(): Promise<boolean> {
   } catch { return false }
 }
 
+// Con la app abierta (sesión iniciada) el aviso lo muestra la propia pantalla
+// arriba ("Hay una versión nueva del sistema"): este de abajo no se muestra,
+// así no aparecen dos botones de Actualizar.
+let avisoPropio = false
+export function usarAvisoPropio(activo: boolean) {
+  avisoPropio = activo
+  if (activo) document.getElementById('avisoVersion')?.remove()
+}
+
 function mostrarAviso() {
-  if (document.getElementById('avisoVersion')) return
+  if (avisoPropio || document.getElementById('avisoVersion')) return
   const aviso = document.createElement('div')
   aviso.id = 'avisoVersion'
   aviso.setAttribute('role', 'status')
