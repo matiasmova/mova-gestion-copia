@@ -1,13 +1,18 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import type { Pedido } from './BuscadorGlobal'
 import { supabase } from './supabase'
 import { fechaCorta } from './gestionFormat'
 import { linkWhatsApp } from './whatsapp'
-import { entenderFrase, isoLocal } from './agendaFrase'
+import { isoLocal } from './agendaFrase'
 import { estadoPush, activarPush, desactivarPush, type EstadoPush } from './push'
 import { confirmarEliminacion } from './confirmar'
 import { GRUPOS_PH, TIPOS_PH, claveDeNota, leerOcultas, marcaPH, mostrarDeNuevo, notaSinMarca, ocultarPorHoy, type GrupoPH, type TareaPH, type TipoPH } from './paraHacer'
 import AvisosDiarios from './AvisosDiarios'
+import { crearEvento, momentoAviso } from './agendaEventos'
+import DictadoRapido, { RevisarDictados } from './DictadoRapido'
+import { cargarParaRevisar, type Dictado } from './dictados'
+import { iniciarRecorrido, terminarRecorrido } from './recorridoPH'
+import { moneda } from './gestionFormat'
 import NotasPH from './NotasPH'
 import { cargarEtiquetasObras } from './etiquetasObras'
 
@@ -19,6 +24,8 @@ import { cargarEtiquetasObras } from './etiquetasObras'
 // seguros y presupuestos sin respuesta).
 // El aviso push lo manda la Edge Function "enviar-recordatorios" cuando llega
 // notificar_en (fecha + hora − anticipación, hora de Argentina).
+
+export { momentoAviso }
 
 export type Evento = {
   id: number
@@ -59,18 +66,72 @@ const sumarDias = (f: string, n: number) => {
 const diaSemana = (f: string) => new Date(`${f}T12:00:00`).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
 const tipoDe = (t: string | null) => TIPOS_EVENTO[t ?? ''] ?? TIPOS_EVENTO.recordatorio
 
-// Cuándo mandar el aviso: fecha + hora (9:00 si no tiene) − anticipación, en hora de Argentina (UTC−3).
-export function momentoAviso(fecha: string, hora: string | null, avisoMin: number | null): string | null {
-  if (avisoMin == null) return null
-  const base = new Date(`${fecha}T${(hora || '09:00').slice(0, 5)}:00-03:00`)
-  return new Date(base.getTime() - avisoMin * 60000).toISOString()
-}
-
 const textoAviso = (e: Evento) =>
   e.aviso_min == null ? 'Sin aviso' : AVISOS.find(([v]) => v === String(e.aviso_min))?.[1] ?? `${e.aviso_min} min antes`
 
 // Un renglón de la lista: una tarea automática, una sugerencia para agendar o un evento de la agenda.
 type ItemPH = { clave: string; tipo: TipoPH; grupo: GrupoPH; icono: string; titulo: string; detalle: string; explica?: string; monto?: number; tarea?: TareaPH; sugerencia?: Sugerencia; evento?: Evento }
+
+// Cuadrados de Para hacer: qué tipo de pendiente es, dicho como lo pensás.
+const suma = (l: { monto?: number }[]) => l.reduce((t, x) => t + (x.monto ?? 0), 0)
+const plataCorta = (n: number) => n >= 1e6 ? `$ ${(n / 1e6).toLocaleString('es-AR', { maximumFractionDigits: 1 })} M` : n >= 1e3 ? `$ ${Math.round(n / 1e3).toLocaleString('es-AR')} mil` : `$ ${Math.round(n).toLocaleString('es-AR')}`
+type Clase = { k: string; nombre: string; icono: string; pie: (l: ItemPH[]) => string }
+const CLASES: Clase[] = [
+  { k: 'saldo', nombre: 'Obras con saldo para cobrar', icono: '💵', pie: (l) => `${plataCorta(suma(l))} en total` },
+  { k: 'comprobantes', nombre: 'Comprobantes de pago para revisar', icono: '🧾', pie: (l) => `${l.length} sin confirmar` },
+  { k: 'borrador', nombre: 'Presupuestos en borrador', icono: '📤', pie: (l) => `${plataCorta(suma(l))} sin enviar` },
+  { k: 'sinResp', nombre: 'Enviados sin respuesta', icono: '💬', pie: (l) => `${plataCorta(suma(l))} esperando` },
+  { k: 'sinObra', nombre: 'Aceptados sin obra creada', icono: '✅', pie: () => 'falta crear la obra' },
+  { k: 'plazo', nombre: 'Obras con plazo vencido', icono: '⏰', pie: (l) => { const d = Math.max(0, ...l.map((x) => x.sugerencia?.dias ?? 0)); return d > 0 ? `la más atrasada: ${d} días` : 'vencen esta semana' } },
+  { k: 'informes', nombre: 'Obras para informar o revisar', icono: '📝', pie: (l) => `${l.length} sin novedades` },
+  { k: 'seguro', nombre: 'Seguros / ART por vencer', icono: '🦺', pie: (l) => l[0]?.detalle ?? '' },
+  { k: 'personal', nombre: 'Pagos al personal', icono: '👷', pie: (l) => plataCorta(suma(l)) },
+  { k: 'agenda', nombre: 'Recordatorios y visitas', icono: '🔔', pie: (l) => `el próximo: ${(l[0]?.detalle ?? '').split(' · ')[0]}` },
+  { k: 'otros', nombre: 'Stock, gastos y otros', icono: '📦', pie: (l) => `${l.length} para ver` },
+]
+function claseDe(x: ItemPH): string {
+  const k = x.clave
+  if (x.evento) return 'agenda'
+  if (k.startsWith('cp-')) return 'comprobantes'
+  if (x.tipo === 'cobro') return 'saldo'
+  if (k.startsWith('b-')) return 'borrador'
+  if (k.startsWith('sin-obra-')) return 'sinObra'
+  if (k.startsWith('sug-p')) return 'sinResp'
+  if (k.startsWith('sug-o')) return 'plazo'
+  if (k.startsWith('sug-s')) return 'seguro'
+  if (k.startsWith('inf-') || k.startsWith('ob-')) return 'informes'
+  if (x.tipo === 'personal') return 'personal'
+  return 'otros'
+}
+const claseMeta = (x: ItemPH) => CLASES.find((c) => c.k === claseDe(x)) ?? CLASES[CLASES.length - 1]
+
+// Tarjeta que se desliza: a la derecha "hecho", a la izquierda "para mañana".
+function Deslizable({ onDerecha, onIzquierda, children }: { onDerecha: () => void; onIzquierda: () => void; children: ReactNode }) {
+  const toque = useRef<{ x: number; y: number; activo: boolean } | null>(null)
+  const movido = useRef(false)
+  const [dx, setDx] = useState(0)
+  const [sale, setSale] = useState(0)
+  const soltar = () => {
+    const t = toque.current; toque.current = null
+    if (!t?.activo) { setDx(0); return }
+    if (dx > 90) { setSale(1); window.setTimeout(() => { onDerecha(); setSale(0); setDx(0) }, 180) }
+    else if (dx < -90) { setSale(-1); window.setTimeout(() => { onIzquierda(); setSale(0); setDx(0) }, 180) }
+    else setDx(0)
+  }
+  return <div className={`ph2Desl${dx > 0 ? ' der' : dx < 0 ? ' izq' : ''}`}
+    onPointerDown={(e) => { if (e.pointerType === 'mouse' && e.button !== 0) return; toque.current = { x: e.clientX, y: e.clientY, activo: false }; movido.current = false }}
+    onPointerMove={(e) => {
+      const t = toque.current; if (!t) return
+      const mx = e.clientX - t.x, my = e.clientY - t.y
+      if (!t.activo) { if (Math.abs(my) > 10 && Math.abs(my) > Math.abs(mx)) { toque.current = null; return } if (Math.abs(mx) < 12) return; t.activo = true; movido.current = true }
+      setDx(mx)
+    }}
+    onPointerUp={soltar} onPointerCancel={() => { toque.current = null; setDx(0) }}
+    onClickCapture={(e) => { if (movido.current) { e.stopPropagation(); e.preventDefault(); movido.current = false } }}>
+    <div className="ph2Fondo" aria-hidden><span>✓ Hecho</span><span>Mañana ⏭</span></div>
+    <div className="ph2Mover" style={{ transform: sale ? `translateX(${sale * 110}%)` : dx ? `translateX(${dx}px)` : undefined, transition: toque.current?.activo ? 'none' : undefined }}>{children}</div>
+  </div>
+}
 
 export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargandoTareas = false, porCobrar = null, onAbrirObra, onAbrirPresupuesto }: { pedido?: Pedido | null; onPedidoAtendido?: () => void; tareas?: TareaPH[]; cargandoTareas?: boolean; porCobrar?: number | null; onAbrirObra?: (id: number) => void; onAbrirPresupuesto?: (id: number) => void } = {}) {
   const hoyStr = isoLocal(new Date())
@@ -84,28 +145,25 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
   const [sel, setSel] = useState(hoyStr)
   const [inicioSem, setInicioSem] = useState(() => lunesDe(hoyStr))
   const [verMes, setVerMes] = useState(false)
-  const [frase, setFrase] = useState('')
-  const [guardandoFrase, setGuardandoFrase] = useState(false)
   const [aviso, setAviso] = useState('')
-  const [filtro, setFiltro] = useState<TipoPH | 'todo'>('todo')
-  const [foco, setFoco] = useState<GrupoPH | 'plata' | null>(null)
+  const [clase, setClase] = useState<string | null>(null)
+  // Dictado rápido (nuevo o editando uno para revisar) y la bandeja "Para revisar".
+  const [dictando, setDictando] = useState<Dictado | 'nuevo' | null>(null)
+  const [revisar, setRevisar] = useState<Dictado[]>([])
+  const [vueltaRev, setVueltaRev] = useState(0)
+  useEffect(() => { void cargarParaRevisar().then((r) => setRevisar(r.lista)) }, [vueltaRev])
   const [ocultas, setOcultas] = useState<Set<string>>(() => leerOcultas())
-  const [menuDe, setMenuDe] = useState<string | null>(null)
   const [verAvisos, setVerAvisos] = useState(false)
   // Tarjeta abierta (muestra qué es) y el "Deshacer" de lo último que se hizo.
-  const [abiertoPH, setAbiertoPH] = useState<string | null>(null)
+  const [hoja, setHoja] = useState<string | null>(null)
+  // Al volver a Para hacer se termina el recorrido de pendientes.
+  useEffect(() => { terminarRecorrido() }, [])
   const [deshacer, setDeshacer] = useState<{ texto: string; hacer: () => void | Promise<void> } | null>(null)
   useEffect(() => {
     if (!deshacer) return
     const t = window.setTimeout(() => setDeshacer(null), 8000)
     return () => window.clearTimeout(t)
   }, [deshacer])
-  useEffect(() => {
-    if (!menuDe) return
-    const cerrar = () => setMenuDe(null)
-    window.addEventListener('click', cerrar)
-    return () => window.removeEventListener('click', cerrar)
-  }, [menuDe])
   // Pedido del buscador general o del botón "+".
   useEffect(() => {
     if (!pedido) return
@@ -168,13 +226,9 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
     mostrar(fecha === hoyStr ? 'Pasado a hoy' : `Pasado al ${diaSemana(fecha)}`)
   }
 
-  // ---------- Carga rápida (dictada o escrita) ----------
-  const entendida = useMemo(() => (frase.trim().length > 2 ? entenderFrase(frase, clientes, obras) : null), [frase, clientes, obras])
-  const dictado = useDictado((t, final) => { setFrase(t); if (final) setTimeout(() => document.getElementById('agFraseOk')?.focus(), 50) })
+  // ---------- Agendar desde una tarea ----------
   async function guardarFrase(datos: { titulo: string; fecha: string; hora: string | null; tipo: string; cliente_id: number | null; obra_id: number | null; detalle?: string | null }) {
-    setGuardandoFrase(true)
     const r = await crearEvento({ ...datos, aviso_min: 60 })
-    setGuardandoFrase(false)
     if (r) { setError(r); return false }
     irA(datos.fecha)
     setTick((t) => t + 1)
@@ -200,16 +254,22 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
   const agendadas = new Set(eventos.filter((e) => !e.completado).map((e) => claveDeNota(e.detalle)).filter((k): k is string => !!k))
   const items: ItemPH[] = [
     ...tareas.map((t): ItemPH => ({ clave: t.clave, tipo: t.tipo, grupo: t.grupo, icono: t.icono ?? TIPOS_PH[t.tipo].icono, titulo: t.titulo, detalle: t.detalle, explica: t.explica, monto: t.monto, tarea: t })),
-    ...sugerencias.map((x): ItemPH => ({ clave: `sug-${x.clave}`, tipo: x.clave.startsWith('p') ? 'pres' : x.clave.startsWith('s') ? 'personal' : 'obra', grupo: x.tono === 'r' || x.clave.startsWith('p') ? 'atr' : 'sem', icono: x.icono, titulo: x.titulo, detalle: x.detalle, explica: x.explica, sugerencia: x })),
+    ...sugerencias.map((x): ItemPH => ({ clave: `sug-${x.clave}`, tipo: x.clave.startsWith('p') ? 'pres' : x.clave.startsWith('s') ? 'personal' : 'obra', grupo: x.tono === 'r' || x.clave.startsWith('p') ? 'atr' : 'sem', icono: x.icono, titulo: x.titulo, detalle: x.detalle, explica: x.explica, monto: x.monto || undefined, sugerencia: x })),
     ...eventos.filter((e) => !e.completado && e.fecha <= enSemana).map((e): ItemPH => {
       const c = cliente(e.cliente_id)
       const cuando = e.fecha === hoyStr ? (e.hora ? `Hoy ${e.hora.slice(0, 5)}` : 'Hoy') : `${capital(diaSemana(e.fecha))}${e.hora ? ` · ${e.hora.slice(0, 5)}` : ''}`
       return { clave: `ev-${e.id}`, tipo: 'visita', grupo: e.fecha < hoyStr ? 'atr' : e.fecha === hoyStr ? 'hoy' : 'sem', icono: tipoDe(e.tipo).icono, titulo: e.titulo, detalle: [cuando, e.lugar, c?.nombre].filter(Boolean).join(' · '), explica: notaSinMarca(e.detalle) || undefined, evento: e }
     }),
   ].filter((x) => !ocultas.has(x.clave) && !agendadas.has(x.clave))
-  const visibles = items.filter((x) => (filtro === 'todo' || x.tipo === filtro) && (!foco || (foco === 'plata' ? x.tipo === 'cobro' : x.grupo === foco)))
-  const cuenta = (g: GrupoPH) => items.filter((x) => x.grupo === g).length
-  const tiposConItems = (Object.keys(TIPOS_PH) as TipoPH[]).filter((t) => items.some((x) => x.tipo === t))
+  const orden: GrupoPH[] = ['atr', 'hoy', 'sem', 'luego']
+  const ordenados = [...items].sort((a, b) => orden.indexOf(a.grupo) - orden.indexOf(b.grupo))
+  const visibles = ordenados.filter((x) => !clase || claseDe(x) === clase)
+  const paraCobrar = porCobrar ?? suma(items.filter((x) => claseDe(x) === 'saldo'))
+  const hechosHoy = ocultas.size + eventos.filter((e) => e.completado && e.fecha === hoyStr).length
+  const totalDia = hechosHoy + items.length
+  // Lo primero: lo atrasado (o de hoy) con más plata en juego; cobrar va primero.
+  const primero = items.filter((x) => x.grupo === 'atr' || x.grupo === 'hoy')
+    .sort((a, b) => (a.grupo === 'atr' ? 0 : 1) - (b.grupo === 'atr' ? 0 : 1) || Number(claseDe(b) === 'saldo') - Number(claseDe(a) === 'saldo') || (b.monto ?? 0) - (a.monto ?? 0))[0]
   const manana = sumarDias(hoyStr, 1)
   const lunesProx = sumarDias(lunesDe(hoyStr), 7)
 
@@ -257,51 +317,44 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
     if (x.clave.startsWith('p') && onAbrirPresupuesto) return { t: 'Ver el presupuesto', f: () => onAbrirPresupuesto(id) }
     return null
   }
-  const renglon = (x: ItemPH) => {
+  // Qué abre cada pendiente (la obra, el presupuesto…), para "Ir a" y el recorrido.
+  const irDe = (x: ItemPH): { t: string; f: () => void } | null => {
+    if (x.tarea?.accion) return { t: x.tarea.boton && x.tarea.boton !== 'Ver' ? x.tarea.boton : 'Abrir', f: x.tarea.accion }
+    if (x.sugerencia) return abrirSug(x.sugerencia)
+    if (x.evento?.obra_id != null && onAbrirObra) { const id = x.evento.obra_id; return { t: 'Ver la obra', f: () => onAbrirObra(id) } }
+    return null
+  }
+  // Entra al pendiente y arma el recorrido con los del mismo tipo ("Siguiente").
+  function recorrer(x: ItemPH) {
+    const meta = claseMeta(x)
+    const mismos = visibles.filter((y) => claseDe(y) === meta.k && irDe(y))
+    const i = Math.max(0, mismos.findIndex((y) => y.clave === x.clave))
+    iniciarRecorrido({ nombre: meta.nombre, icono: meta.icono, i, pasos: mismos.map((y) => ({ clave: y.clave, titulo: y.titulo, ir: irDe(y)!.f, hecho: y.evento ? () => void completar(y.evento!) : undefined })) })
+  }
+  function hecho(x: ItemPH) {
     const e = x.evento
-    const principal = x.tarea?.boton && x.tarea.accion ? <button type="button" className="phPrim" onClick={x.tarea.accion}>{x.tarea.boton}</button>
-      : x.sugerencia ? <button type="button" className="phPrim" onClick={() => void agendarTarea(x, manana)}>Agendar</button>
-        : e?.lugar ? <a className="phPrim" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.lugar)}`} target="_blank" rel="noreferrer">Cómo llegar</a>
-          : e ? <button type="button" className="phPrim" onClick={() => irA(e.fecha)}>Ver</button> : null
-    const abierto = abiertoPH === x.clave
-    const origen = e ? claveOrigen(e) : null
-    const sug = x.sugerencia ? abrirSug(x.sugerencia) : null
-    return <div key={x.clave} className={`phItem t-${x.tipo}${abierto ? ' abierto' : ''}`}>
-      <span className="phIco" aria-hidden>{x.icono}</span>
-      <button type="button" className="phTxt" aria-expanded={abierto} onClick={() => setAbiertoPH(abierto ? null : x.clave)} title="Tocá para ver qué es">
-        <strong>{x.titulo}<span className="phTag">{e ? (origen ? 'AGENDADO DE LA LISTA' : 'AGENDADO') : 'AUTOMÁTICO'}</span></strong><small>{x.detalle}</small>
+    if (e) { void completar(e); setDeshacer({ texto: `"${e.titulo}" marcado como hecho`, hacer: () => void completar({ ...e, completado: true }) }) }
+    else ocultar(x)
+  }
+  function posponer(x: ItemPH, f: string) {
+    if (x.evento) { if (f !== x.evento.fecha) void mover(x.evento, f) } else void agendarTarea(x, f)
+  }
+  function elegirDia(x: ItemPH) {
+    const e = x.evento
+    if (e) setForm({ evento: e })
+    else setForm({ evento: { id: 0, titulo: x.tarea?.agendar ?? x.sugerencia?.agendar ?? x.titulo, detalle: notaDe(x), fecha: manana, hora: '10:00', tipo: x.sugerencia?.tipo ?? 'recordatorio', lugar: null, obra_id: x.tarea?.obra_id ?? x.sugerencia?.obra_id ?? null, cliente_id: null, completado: false, aviso_min: 60 } })
+  }
+  const renglon = (x: ItemPH) => {
+    const meta = claseMeta(x)
+    const e = x.evento
+    return <Deslizable key={x.clave} onDerecha={() => hecho(x)} onIzquierda={() => posponer(x, x.evento && x.evento.fecha >= manana ? sumarDias(x.evento.fecha, 1) : manana)}>
+      <button type="button" className={`ph2Card t-${x.tipo}${x.grupo === 'atr' ? ' atr' : ''}`} onClick={() => setHoja(x.clave)}>
+        <span className="ph2Ico" aria-hidden>{e ? tipoDe(e.tipo).icono : meta.icono}</span>
+        <span className="ph2Tx"><b>{x.titulo}</b><small>{x.detalle}</small>
+          {(e || x.grupo === 'atr') && <span className="ph2Chips">{x.grupo === 'atr' && <i className="r">atrasado</i>}{e && <i>{claveOrigen(e) ? 'agendado de la lista' : 'agendado'}</i>}</span>}</span>
+        <span className="ph2Der">{x.monto ? <em>{plataCorta(x.monto)}</em> : null}<i aria-hidden>›</i></span>
       </button>
-      {abierto && <div className="phDet">
-        <b className="phDetTit">{x.titulo}</b>
-        <p>{x.explica ?? (e ? 'Lo agendaste en la agenda.' : x.detalle)}</p>
-        {e && <ul>
-          <li>📅 {capital(diaSemana(e.fecha))}{e.hora ? ` · ${e.hora.slice(0, 5)}` : ''}</li>
-          {e.lugar && <li>📍 {e.lugar}</li>}
-          {cliente(e.cliente_id) && <li>👤 {cliente(e.cliente_id)!.nombre}</li>}
-          {nombreObra(e.obra_id) && <li>🏗️ {nombreObra(e.obra_id)}</li>}
-        </ul>}
-        <div className="phDetAcc">
-          {sug && <button type="button" onClick={sug.f}>{sug.t} →</button>}
-          {e && e.obra_id != null && onAbrirObra && <button type="button" onClick={() => onAbrirObra(e.obra_id!)}>Ver la obra →</button>}
-          {e && <button type="button" onClick={() => irA(e.fecha)}>Ver en el día</button>}
-          {e && <button type="button" onClick={() => setForm({ evento: e })}>✏️ Editar</button>}
-          {e && origen && <button type="button" className="volver" onClick={() => void volverEvento(e)}>↩ Volver a pendientes</button>}
-        </div>
-      </div>}
-      <div className="phAcc">
-        {principal}
-        <span className="phMenuWrap">
-          <button type="button" className="phSec" title={e ? 'Pasar a otro día' : 'Agendar para otro día'} aria-label="Pasar a otro día" onClick={(ev) => { ev.stopPropagation(); setMenuDe(menuDe === x.clave ? null : x.clave) }}>📅</button>
-          {menuDe === x.clave && <div className="phMenu" onClick={(ev) => ev.stopPropagation()}>
-            {(e ? [['Hoy', hoyStr], ['Mañana', manana], ['El lunes que viene', lunesProx]] : [['Mañana', manana], ['El lunes que viene', lunesProx]]).filter(([, f]) => !e || f !== e.fecha).map(([t, f]) => (
-              <button key={t} type="button" onClick={() => { setMenuDe(null); if (e) void mover(e, f); else void agendarTarea(x, f) }}>{t}</button>
-            ))}
-            <button type="button" onClick={() => { setMenuDe(null); if (e) setForm({ evento: e }); else setForm({ evento: { id: 0, titulo: x.tarea?.agendar ?? x.sugerencia?.agendar ?? x.titulo, detalle: notaDe(x), fecha: manana, hora: '10:00', tipo: x.sugerencia?.tipo ?? 'recordatorio', lugar: null, obra_id: x.tarea?.obra_id ?? x.sugerencia?.obra_id ?? null, cliente_id: null, completado: false, aviso_min: 60 } }) }}>Elegir día y hora…</button>
-          </div>}
-        </span>
-        <button type="button" className="phSec ok" title={e ? 'Hecho' : 'Listo por hoy (vuelve mañana si sigue pendiente)'} aria-label="Hecho" onClick={() => { if (e) { void completar(e); setDeshacer({ texto: `"${e.titulo}" marcado como hecho`, hacer: () => void completar({ ...e, completado: true }) }) } else ocultar(x) }}>✓</button>
-      </div>
-    </div>
+    </Deslizable>
   }
 
   const carta = (e: Evento) => {
@@ -332,27 +385,70 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
     </div>
   }
 
+  const hojaItem = hoja ? items.find((x) => x.clave === hoja) ?? null : null
+  const conItems = CLASES.map((c) => ({ c, l: items.filter((x) => claseDe(x) === c.k) })).filter((x) => x.l.length)
+  const claseSel = clase ? CLASES.find((c) => c.k === clase) : null
+
   return (
-    <div className="gestionPage agenda agNueva">
+    <div className="gestionPage agenda agNueva ph2">
       <div className="agCab">
         <div><small>{capital(diaSemana(hoyStr))}</small><h2>Para hacer</h2></div>
         <button type="button" className={`agIcono${push === 'activo' ? ' on' : ''}`} onClick={() => setVerAvisos(true)} title="Avisos en el celular">
           {push === 'activo' ? '🔔 Avisos' : '🔕 Avisos'}
         </button>
-        <button type="button" className="agIcono nuevo" onClick={() => setForm({ fecha: sel })} aria-label="Nuevo evento">＋</button>
+        <button type="button" className="agIcono nuevo" onClick={() => setForm({ fecha: sel })} aria-label="Agendar algo">📅</button>
       </div>
 
-      {/* ---- Resumen: tocá uno para filtrar ---- */}
-      <div className="phResumen">
-        {([['atr', 'Atrasado', cuenta('atr'), 'se pasó la fecha'], ['hoy', 'Hoy', cuenta('hoy'), `${eventos.filter((e) => !e.completado && e.fecha === hoyStr).length} en la agenda`], ['sem', 'Esta semana', cuenta('sem'), 'próximos 7 días']] as const).map(([g, t, n, sub]) => (
-          <button key={g} type="button" className={`phNum g-${g}${foco === g ? ' on' : ''}`} onClick={() => setFoco((f) => (f === g ? null : g))}><span>{t}</span><b>{cargandoTareas ? '…' : n}</b><small>{sub}</small></button>
-        ))}
-        {porCobrar != null && <button type="button" className={`phNum g-plata${foco === 'plata' ? ' on' : ''}`} onClick={() => setFoco((f) => (f === 'plata' ? null : 'plata'))}><span>Te deben</span><b>$ {Math.round(porCobrar).toLocaleString('es-AR')}</b><small>{items.filter((x) => x.tipo === 'cobro').length} para cobrar</small></button>}
-      </div>
-
-      {/* ---- Semana / mes ---- */}
-      {/* En la PC: calendario y carga a la izquierda, el día a la derecha. En el celular, una sola columna. */}
       <div className="agCols"><div className="agColIzq">
+      {/* ---- Resumen del día ---- */}
+      <div className="ph2Resumen">
+        <h1>{cargando || cargandoTareas ? 'Juntando tus pendientes…' : items.length ? <>Tenés <em>{items.length} pendiente{items.length === 1 ? '' : 's'}</em>{paraCobrar > 0.5 ? <><br />y {plataCorta(paraCobrar)} para cobrar</> : null}</> : <>Todo al día <em>✓</em></>}</h1>
+        {totalDia > 0 && <div className="ph2Progreso" aria-label="Avance del día"><b>{hechosHoy}/{totalDia}</b><span className="ph2Barra"><i style={{ width: `${(hechosHoy / totalDia) * 100}%` }} /></span><small>hechos hoy</small></div>}
+      </div>
+      {error && <p className="loginError">{error}</p>}
+      {aviso && <p className="agAvisoTxt ok" role="status">{aviso}</p>}
+
+      {/* ---- Lo primero ---- */}
+      {primero && !clase && (() => {
+        const ir = irDe(primero)
+        return <div className={`ph2Primero t-${primero.tipo}`}>
+          <span className="ph2Eti">Lo primero · {claseMeta(primero).nombre}</span>
+          <h3>{primero.titulo}</h3>
+          {primero.monto ? <b className="ph2Monto">{moneda(primero.monto)}</b> : null}
+          <small>{primero.detalle}</small>
+          <div className="ph2PrimAcc">
+            {ir ? <button type="button" className="lleno" onClick={() => recorrer(primero)}>{ir.t} ›</button> : <button type="button" className="lleno" onClick={() => setHoja(primero.clave)}>Ver ›</button>}
+            <button type="button" className="claro" onClick={() => posponer(primero, manana)}>Mañana</button>
+          </div>
+        </div>
+      })()}
+
+      {/* ---- Cuadrados: qué tipo de pendiente es ---- */}
+      {conItems.length > 0 && <div className="ph2Cuadros">
+        {conItems.map(({ c, l }) => <button key={c.k} type="button" className={`ph2Cuadro${clase === c.k ? ' on' : ''}`} aria-pressed={clase === c.k} onClick={() => setClase((v) => (v === c.k ? null : c.k))}>
+          <span className="ph2CuadroArr"><span className="ph2Ico">{c.icono}</span><b>{l.length}</b></span>
+          <span className="ph2CuadroNom">{c.nombre}</span>
+          <small>{c.pie(l)}</small>
+        </button>)}
+      </div>}
+      {claseSel && <div className="ph2Filtro"><span>Mostrando: {claseSel.nombre.toLowerCase()}</span><button type="button" onClick={() => setClase(null)}>Ver todo</button></div>}
+
+      {/* ---- Lo dictado que falta cargar ---- */}
+      <RevisarDictados lista={revisar} onEditar={(d) => setDictando(d)} onCambio={() => { setVueltaRev((v) => v + 1); setTick((t) => t + 1) }}
+        onAviso={(t, deshacerlo) => (deshacerlo ? setDeshacer({ texto: t, hacer: deshacerlo }) : mostrar(t))} />
+
+      {/* ---- La lista ---- */}
+      {cargando || cargandoTareas ? <p className="phVacio">Juntando lo que tenés para hacer…</p>
+        : visibles.length === 0 ? <p className="phVacio">✓ {items.length ? 'Nada de este tipo.' : 'Todo al día. Tocá 🎤 Dictar rápido para anotar algo.'}</p>
+          : <div className="ph2Lista">
+            {GRUPOS_PH.map(([g, t]) => {
+              const del = visibles.filter((x) => x.grupo === g)
+              if (!del.length) return null
+              return <section key={g} className={`ph2Grupo g-${g}`}><h3>{t.replace('⚠ ', '')} <span>{del.length}</span></h3>{del.map(renglon)}</section>
+            })}
+            <p className="ph2Ayuda">Deslizá a la derecha → <b>hecho</b> · a la izquierda → <b>para mañana</b> · tocá para ver más</p>
+          </div>}
+      </div><div className="agColDer">
       <section className="agSemana" aria-label="Calendario">
         <div className="agSemCab">
           <b>{capital((verMes ? new Date(`${sel}T12:00:00`) : new Date(`${inicioSem}T12:00:00`)).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }))}</b>
@@ -383,49 +479,6 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
           })()}
         </div>}
       </section>
-
-      {/* ---- Carga rápida: dictar o escribir ---- */}
-      <div className={`agRapida${dictado.escuchando ? ' oyendo' : ''}`}>
-        <button type="button" className="agMic" aria-label={dictado.escuchando ? 'Dejar de escuchar' : 'Dictar'} onClick={() => (dictado.escuchando ? dictado.parar() : dictado.empezar())}>🎤</button>
-        <input value={frase} onChange={(e) => setFrase(e.target.value)} placeholder="Dictá o escribí: “visita obra el martes 9hs”" aria-label="Carga rápida"
-          onKeyDown={(e) => { if (e.key === 'Enter' && entendida) void guardarFrase(entendida).then((ok) => ok && setFrase('')) }} />
-      </div>
-      {dictado.escuchando && <div className="agEscucha"><span className="agOndas" aria-hidden><i /><i /><i /><i /><i /></span><div><b>Escuchando…</b><small>Hablá normal: “reunión con Aldo el jueves a las 3 de la tarde”</small></div><button type="button" onClick={dictado.parar}>Listo</button></div>}
-      {dictado.error && <p className="agAvisoTxt">{dictado.error}</p>}
-      {entendida && !dictado.escuchando && <div className="agPrevia">
-        <b>{tipoDe(entendida.tipo).icono} {entendida.titulo}</b>
-        <div className="agChipsPrev">
-          <span>📅 {capital(diaSemana(entendida.fecha))}</span>
-          <span>🕑 {entendida.hora ?? 'sin hora'}</span>
-          {entendida.cliente_id && <span>👤 {cliente(entendida.cliente_id)?.nombre}</span>}
-          {entendida.obra_id && <span>🏗️ {nombreObra(entendida.obra_id)}</span>}
-          <span>🔔 1 h antes</span>
-        </div>
-        <div className="agPreviaAcc">
-          <button id="agFraseOk" type="button" className="ok" disabled={guardandoFrase} onClick={() => void guardarFrase(entendida).then((ok) => ok && setFrase(''))}>{guardandoFrase ? 'Guardando…' : '✓ Guardar'}</button>
-          <button type="button" onClick={() => setForm({ evento: { id: 0, titulo: entendida.titulo, detalle: null, fecha: entendida.fecha, hora: entendida.hora, tipo: entendida.tipo, lugar: null, obra_id: entendida.obra_id, cliente_id: entendida.cliente_id, completado: false, aviso_min: 60 } })}>✏️ Ajustar</button>
-          <button type="button" onClick={() => setFrase('')}>Cancelar</button>
-        </div>
-      </div>}
-
-      {/* ---- Todo lo pendiente ---- */}
-      {tiposConItems.length > 1 && <div className="phChips" role="group" aria-label="Filtrar por tipo">
-        <button type="button" className={filtro === 'todo' ? 'on' : ''} onClick={() => setFiltro('todo')}>Todo <em>{items.length}</em></button>
-        {tiposConItems.map((t) => <button key={t} type="button" className={filtro === t ? 'on' : ''} onClick={() => setFiltro((f) => (f === t ? 'todo' : t))}>{TIPOS_PH[t].icono} {TIPOS_PH[t].nombre} <em>{items.filter((x) => x.tipo === t).length}</em></button>)}
-      </div>}
-      {cargando || cargandoTareas ? <p className="phVacio">Juntando lo que tenés para hacer…</p>
-        : visibles.length === 0 ? <p className="phVacio">✓ {items.length ? 'Nada con este filtro.' : 'Todo al día. Escribí arriba para agendar algo.'}</p>
-          : <div className="phLista">
-            {GRUPOS_PH.map(([g, t]) => {
-              const del = visibles.filter((x) => x.grupo === g)
-              if (!del.length) return null
-              return <section key={g} className={`phGrupo g-${g}`}><h3>{t} <span>{del.length}</span></h3>{del.map(renglon)}</section>
-            })}
-          </div>}
-      </div><div className="agColDer">
-      {aviso && <p className="agAvisoTxt ok" role="status">{aviso}</p>}
-      {deshacer && <div className="phDeshacer" role="status"><span>{deshacer.texto}</span><button type="button" onClick={() => { const d = deshacer; setDeshacer(null); void d.hacer() }}>Deshacer</button></div>}
-      {error && <p className="loginError">{error}</p>}
       {cargando ? <p>Cargando agenda…</p> : <>
         {/* ---- El día ---- */}
         <div className="agDiaTit"><b>{tituloDia}</b>{delDia.length > 0 && <span>{pendDia ? `${pendDia} pendiente${pendDia === 1 ? '' : 's'}` : '✓ Todo hecho'}</span>}</div>
@@ -448,6 +501,51 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
       <NotasPH />
       </div></div>
 
+      {/* ---- Detalle de un pendiente ---- */}
+      {hojaItem && (() => {
+        const x = hojaItem
+        const e = x.evento
+        const ir = irDe(x)
+        const origen = e ? claveOrigen(e) : null
+        return <div className="modalOverlay drVelo" onClick={(ev) => { if (ev.target === ev.currentTarget) setHoja(null) }}>
+          <div className={`drHoja ph2Hoja t-${x.tipo}`} role="dialog" aria-modal="true" aria-label={x.titulo}>
+            <span className="drAsa" aria-hidden />
+            <div className="ph2HojaCab"><span className="ph2Ico">{e ? tipoDe(e.tipo).icono : claseMeta(x).icono}</span><div><h2>{x.titulo}</h2><small>{x.detalle}</small></div></div>
+            {(x.explica || e) && <p className="ph2Porque">{x.explica ?? 'Lo agendaste en la agenda.'}</p>}
+            {x.monto ? <div className="ph2Dato"><small>Monto</small><b>{moneda(x.monto)}</b></div> : null}
+            {e && <ul className="ph2Datos">
+              <li>📅 {capital(diaSemana(e.fecha))}{e.hora ? ` · ${e.hora.slice(0, 5)}` : ''}</li>
+              {e.lugar && <li>📍 {e.lugar}</li>}
+              {cliente(e.cliente_id) && <li>👤 {cliente(e.cliente_id)!.nombre}</li>}
+              {nombreObra(e.obra_id) && <li>🏗️ {nombreObra(e.obra_id)}</li>}
+            </ul>}
+            <div className="drAcc col">
+              {ir && <button type="button" className="newButton" onClick={() => { setHoja(null); recorrer(x) }}>{ir.t} ›</button>}
+              <button type="button" className="drYa" onClick={() => { setHoja(null); hecho(x) }}>✓ {e ? 'Hecho' : 'Ya está hecho'}</button>
+            </div>
+            <span className="drLbl">{e ? 'Pasar a otro día' : 'Posponer'}</span>
+            <div className="ph2Posponer">
+              {e && e.fecha !== hoyStr && <button type="button" onClick={() => { setHoja(null); posponer(x, hoyStr) }}>Hoy</button>}
+              {(!e || e.fecha !== manana) && <button type="button" onClick={() => { setHoja(null); posponer(x, manana) }}>Mañana</button>}
+              <button type="button" onClick={() => { setHoja(null); posponer(x, lunesProx) }}>El lunes</button>
+              <button type="button" onClick={() => { setHoja(null); elegirDia(x) }}>📅 Elegir día</button>
+            </div>
+            {e && <div className="ph2Mas">
+              <button type="button" onClick={() => { setHoja(null); irA(e.fecha) }}>Ver en el día</button>
+              <button type="button" onClick={() => { setHoja(null); setForm({ evento: e }) }}>✏️ Editar</button>
+              {e.lugar && <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.lugar)}`} target="_blank" rel="noreferrer">📍 Cómo llegar</a>}
+              {origen && <button type="button" onClick={() => { setHoja(null); void volverEvento(e) }}>↩ Volver a pendientes</button>}
+            </div>}
+            <button type="button" className="cancelButton" onClick={() => setHoja(null)}>Cerrar</button>
+          </div>
+        </div>
+      })()}
+
+      {deshacer && <div className="ph2Toast" role="status"><span>{deshacer.texto}</span><button type="button" onClick={() => { const d = deshacer; setDeshacer(null); void d.hacer() }}>Deshacer</button></div>}
+      {!dictando && !hojaItem && !form && <button type="button" className="ph2Dictar" onClick={() => setDictando('nuevo')}><span aria-hidden>🎤</span>Dictar rápido</button>}
+      {dictando && <DictadoRapido inicial={dictando === 'nuevo' ? undefined : dictando} onCerrar={() => setDictando(null)}
+        onListo={(t) => { setDictando(null); mostrar(t); setVueltaRev((v) => v + 1); setTick((v) => v + 1) }} />}
+
       {form && (
         <FormEvento
           evento={form.evento && form.evento.id ? form.evento : undefined}
@@ -456,7 +554,7 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
           obras={obras}
           clientes={clientes}
           onCancelar={() => setForm(null)}
-          onGuardado={(f) => { setForm(null); setFrase(''); if (f) irA(f); setTick((t) => t + 1) }}
+          onGuardado={(f) => { setForm(null); if (f) irA(f); setTick((t) => t + 1) }}
         />
       )}
       {verAvisos && <AvisosDiarios push={push} onPush={() => void togglePush()} onCerrar={() => setVerAvisos(false)} />}
@@ -469,57 +567,24 @@ const lunesDe = (f: string) => { const d = new Date(`${f}T12:00:00`); return sum
 const sumarMeses = (f: string, n: number) => { const d = new Date(`${f.slice(0, 7)}-01T12:00:00`); d.setMonth(d.getMonth() + n); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01` }
 
 // Crea un evento (con su aviso programado). Devuelve el error o null.
-async function crearEvento(d: { titulo: string; fecha: string; hora: string | null; tipo: string; cliente_id: number | null; obra_id: number | null; aviso_min: number | null; lugar?: string | null; detalle?: string | null }): Promise<string | null> {
-  const { data: userData } = await supabase.auth.getUser()
-  const base = { titulo: d.titulo, fecha: d.fecha, hora: d.hora, tipo: d.tipo, obra_id: d.obra_id, cliente_id: d.cliente_id, detalle: d.detalle ?? null, notificado: false, completado: false, user_id: userData.user?.id ?? null }
-  let r = await supabase.from('recordatorios').insert({ ...base, lugar: d.lugar ?? null, aviso_min: d.aviso_min, notificar_en: momentoAviso(d.fecha, d.hora, d.aviso_min) })
-  if (r.error && /column|lugar|aviso_min|notificar_en/i.test(r.error.message)) r = await supabase.from('recordatorios').insert(base)
-  if (r.error) { console.error(r.error); return 'No se pudo guardar.' }
-  return null
-}
-
-// Dictado con el micrófono (reconocimiento de voz del navegador, en español).
-type Reconocedor = { lang: string; interimResults: boolean; continuous: boolean; start: () => void; stop: () => void; onresult: ((ev: { results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null; onend: (() => void) | null; onerror: ((ev: { error: string }) => void) | null }
-function useDictado(alTexto: (texto: string, final: boolean) => void) {
-  const [escuchando, setEscuchando] = useState(false)
-  const [error, setError] = useState('')
-  const ref = useRef<Reconocedor | null>(null)
-  function empezar() {
-    setError('')
-    const w = window as unknown as { SpeechRecognition?: new () => Reconocedor; webkitSpeechRecognition?: new () => Reconocedor }
-    const Clase = w.SpeechRecognition ?? w.webkitSpeechRecognition
-    if (!Clase) { setError('En este navegador no se puede usar el micrófono acá. Tocá el campo y usá el 🎤 del teclado para dictar.'); return }
-    const r = new Clase()
-    r.lang = 'es-AR'; r.interimResults = true; r.continuous = false
-    r.onresult = (ev) => {
-      let texto = '', final = false
-      for (let i = 0; i < ev.results.length; i++) { texto += ev.results[i][0].transcript; final = ev.results[i].isFinal }
-      alTexto(texto.trim(), final)
-    }
-    r.onerror = (ev) => setError(ev.error === 'not-allowed' || ev.error === 'service-not-allowed' ? 'No hay permiso para el micrófono. Habilitalo en los ajustes del navegador, o usá el 🎤 del teclado.' : ev.error === 'no-speech' ? 'No te escuché. Probá de nuevo.' : 'No se pudo usar el micrófono. Usá el 🎤 del teclado.')
-    r.onend = () => setEscuchando(false)
-    ref.current = r
-    try { r.start(); setEscuchando(true) } catch { setError('No se pudo usar el micrófono. Usá el 🎤 del teclado.') }
-  }
-  function parar() { ref.current?.stop(); setEscuchando(false) }
-  useEffect(() => () => ref.current?.stop(), [])
-  return { escuchando, error, empezar, parar }
-}
 
 // "Para agendar": se arman solas con plazos de obra, seguros del personal y presupuestos sin respuesta.
-type Sugerencia = { clave: string; icono: string; tono: 'r' | 'n' | 'a'; titulo: string; detalle: string; agendar: string; tipo: string; obra_id?: number; explica?: string; agendarViejo?: string }
+type Sugerencia = { clave: string; icono: string; tono: 'r' | 'n' | 'a'; titulo: string; detalle: string; agendar: string; tipo: string; obra_id?: number; explica?: string; agendarViejo?: string; monto?: number; dias?: number }
 function useSugerencias(tick: number): Sugerencia[] {
   const [lista, setLista] = useState<Sugerencia[]>([])
   useEffect(() => {
     let vigente = true
     void (async () => {
       const hoyStr = isoLocal(new Date())
-      const [o, p, s, r] = await Promise.all([
+      const [o, p, s, r, rc] = await Promise.all([
         supabase.from('obras').select('id,nombre_obra,fecha_fin_estimada,porcentaje_avance').eq('activo', true).eq('estado', 'en_proceso'),
-        supabase.from('presupuestos').select('id,titulo,enviado_at,fecha').eq('activo', true).eq('estado', 'enviado'),
+        supabase.from('presupuestos').select('id,titulo,enviado_at,fecha,total,cliente_id').eq('activo', true).eq('estado', 'enviado'),
         supabase.from('personal').select('id,nombre,apellido,seguro,seguro_vencimiento').eq('activo', true).not('seguro_vencimiento', 'is', null),
         supabase.from('recordatorios').select('titulo').eq('completado', false).gte('fecha', hoyStr),
+        supabase.from('Clientes').select('id,nombre,apellido'),
       ])
+      const clientesSug = (rc.data ?? []) as { id: number; nombre: string | null; apellido: string | null }[]
+      const nombreCliSug = (id: number | null) => { const c = clientesSug.find((x) => x.id === id); return c ? `${c.nombre ?? ''} ${c.apellido ?? ''}`.trim() : '' }
       // Cliente y título del presupuesto de cada obra, para saber de quién es.
       const etiquetas = await cargarEtiquetasObras().catch(() => [])
       if (!vigente) return
@@ -534,20 +599,21 @@ function useSugerencias(tick: number): Sugerencia[] {
         const dias = Math.round((new Date(`${hoyStr}T12:00:00`).getTime() - new Date(`${ob.fecha_fin_estimada}T12:00:00`).getTime()) / 86400000)
         const cuando = vencido ? `venció el ${fechaCorta(ob.fecha_fin_estimada)} (hace ${dias} día${dias === 1 ? '' : 's'})` : `vence el ${fechaCorta(ob.fecha_fin_estimada)}`
         const av = Math.round(Number(ob.porcentaje_avance) || 0)
-        out.push({ clave: `o${ob.id}`, icono: '⏰', tono: vencido ? 'r' : 'n', titulo: `${vencido ? 'Plazo vencido' : 'Vence pronto'} · ${quien}`, detalle: `${trabajo} · ${cuando} · ${av}% hecho`, agendar: `Revisar plazo de ${quien} · ${trabajo}`, agendarViejo: `Revisar plazo de ${ob.nombre_obra}`, tipo: 'recordatorio', obra_id: ob.id, explica: vencido ? `La obra tenía que terminar el ${fechaCorta(ob.fecha_fin_estimada)} y sigue en proceso. Actualizá el avance, cambiá la fecha estimada o marcala terminada.` : `La obra tiene fin estimado el ${fechaCorta(ob.fecha_fin_estimada)}. Revisá si llegás o avisale al cliente.` })
+        out.push({ clave: `o${ob.id}`, icono: '⏰', dias, tono: vencido ? 'r' : 'n', titulo: `${vencido ? 'Plazo vencido' : 'Vence pronto'} · ${quien}`, detalle: `${trabajo} · ${cuando} · ${av}% hecho`, agendar: `Revisar plazo de ${quien} · ${trabajo}`, agendarViejo: `Revisar plazo de ${ob.nombre_obra}`, tipo: 'recordatorio', obra_id: ob.id, explica: vencido ? `La obra tenía que terminar el ${fechaCorta(ob.fecha_fin_estimada)} y sigue en proceso. Actualizá el avance, cambiá la fecha estimada o marcala terminada.` : `La obra tiene fin estimado el ${fechaCorta(ob.fecha_fin_estimada)}. Revisá si llegás o avisale al cliente.` })
       }
       if (!s.error) for (const pe of (s.data ?? []) as { id: number; nombre: string; apellido: string | null; seguro: string | null; seguro_vencimiento: string | null }[]) {
         if (!pe.seguro_vencimiento || pe.seguro_vencimiento > sumarDias(hoyStr, 15)) continue
         const nom = `${pe.nombre} ${pe.apellido ?? ''}`.trim()
         out.push({ clave: `s${pe.id}`, icono: '🦺', tono: pe.seguro_vencimiento < hoyStr ? 'r' : 'n', titulo: `${pe.seguro || 'Seguro / ART'} de ${nom} ${pe.seguro_vencimiento < hoyStr ? 'vencido' : 'por vencer'}`, detalle: `Vence ${fechaCorta(pe.seguro_vencimiento)}`, agendar: `Renovar ${pe.seguro || 'seguro / ART'} de ${nom}`, tipo: 'recordatorio', explica: `El ${pe.seguro || 'seguro / ART'} de ${nom} ${pe.seguro_vencimiento < hoyStr ? 'venció' : 'vence'} el ${fechaCorta(pe.seguro_vencimiento)}. Sin cobertura no conviene que trabaje en obra.` })
       }
-      for (const pr of (p.data ?? []) as { id: number; titulo: string; enviado_at?: string | null; fecha: string | null }[]) {
+      for (const pr of (p.data ?? []) as { id: number; titulo: string; enviado_at?: string | null; fecha: string | null; total: number | null; cliente_id: number | null }[]) {
         const desde = (pr.enviado_at ?? pr.fecha ?? '').slice(0, 10)
         if (!desde || desde > sumarDias(hoyStr, -5)) continue
         const dias = Math.round((Date.parse(hoyStr) - Date.parse(desde)) / 86400000)
-        out.push({ clave: `p${pr.id}`, icono: '💬', tono: 'a', titulo: `Seguir presupuesto ${pr.titulo}`, detalle: `Enviado hace ${dias} días · sin respuesta`, agendar: `Seguimiento presupuesto ${pr.titulo}`, tipo: 'llamada', explica: `Le mandaste el presupuesto hace ${dias} días y el cliente no respondió. Conviene escribirle para saber si tiene dudas o quiere ajustar algo.` })
+        const cli = nombreCliSug(pr.cliente_id)
+        out.push({ clave: `p${pr.id}`, icono: '💬', tono: 'a', monto: Number(pr.total) || 0, dias, titulo: cli ? `Seguir presupuesto · ${cli}` : `Seguir presupuesto ${pr.titulo}`, detalle: `${cli ? `${pr.titulo} · ` : ''}enviado hace ${dias} días · sin respuesta`, agendar: `Seguimiento presupuesto ${pr.titulo}`, tipo: 'llamada', explica: `Le mandaste el presupuesto hace ${dias} días y el cliente no respondió. Conviene escribirle para saber si tiene dudas o quiere ajustar algo.` })
       }
-      setLista(out.filter((x) => !yaAgendado.has(x.agendar) && !(x.agendarViejo && yaAgendado.has(x.agendarViejo))).slice(0, 6))
+      setLista(out.filter((x) => !yaAgendado.has(x.agendar) && !(x.agendarViejo && yaAgendado.has(x.agendarViejo))).slice(0, 40))
     })()
     return () => { vigente = false }
   }, [tick])

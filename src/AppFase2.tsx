@@ -23,6 +23,7 @@ import './menu.css'
 import { aplicarTema, temaGuardado, type Tema } from './temaOscuro'
 import IconoMenu from './iconosMenu'
 import { BuscadorGlobal, BotonMas, type Pedido, type Ir } from './BuscadorGlobal'
+import BarraRecorrido from './BarraRecorrido'
 
 import { ROLES, ROLES_VALIDOS, NAVEGACION, GRUPOS_MENU, FUERA_DEL_MENU, puedeVer, type Rol, type Vista } from './permisos'
 import Trabajos from './Trabajos'
@@ -284,6 +285,7 @@ export default function AppFase2() {
     : cambiosAfuera.hayCambios && <button type="button" className="avisoCambios" onClick={() => { cambiosAfuera.listo(); actualizarPantalla() }}>🔄 Hay cambios nuevos de otro dispositivo · <b>Actualizar</b></button>}
     <BuscadorGlobal rol={rol} abierto={buscadorAbierto} onCerrar={() => setBuscadorAbierto(false)} ir={ir} />
     <BotonMas rol={rol} ir={ir} />
+    <BarraRecorrido onVolver={() => navegar('agenda')} />
     {(rol === 'admin' || rol === 'contable') && <AvisoComprobantes onAbrirObra={(id) => { if (id) void abrirObra(id); else navegar('presupuestos') }} />}
     <main className="fase2Main" key={recarga}>
       {vistaSegura === 'dashboard'
