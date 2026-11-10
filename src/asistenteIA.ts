@@ -5,9 +5,8 @@ import { supabase } from './supabase'
 export async function pedirAsistente<T>(cuerpo: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke('asistente-ia', { body: cuerpo })
   if (error || data?.error) {
-    let msg = data?.error ?? 'No se pudo conectar con el asistente de IA. Revisá que la función "asistente-ia" esté instalada en Supabase (con Verify JWT apagado).'
-    try { const ctx = (error as { context?: Response } | null)?.context; if (ctx) { const j = await ctx.json(); msg = j.error ?? j.message ?? msg } } catch { /* sin detalle */ }
-    throw new Error(msg)
+    if (data?.error) throw new Error(data.error)
+    throw new Error(await explicarFallo(error))
   }
   return data as T
 }
@@ -37,4 +36,20 @@ export async function archivoParaIA(archivo: File, maxLado = 1600): Promise<{ da
     if (blob) return { data: await aBase64(blob), mime: 'image/jpeg' }
   } catch { /* si no se puede achicar, se manda tal cual */ }
   return { data: await aBase64(archivo), mime: archivo.type || 'image/jpeg' }
+}
+
+// Qué pasó cuando la función no contestó bien, dicho para poder arreglarlo.
+async function explicarFallo(error: unknown): Promise<string> {
+  const nombre = (error as { name?: string } | null)?.name ?? ''
+  const ctx = (error as { context?: Response } | null)?.context
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return 'No hay internet. Probá de nuevo cuando tengas conexión.'
+  if (nombre === 'FunctionsFetchError' || !ctx) {
+    return 'La función "asistente-ia" de Supabase no respondió. Suele pasar cuando falló al arrancar después de publicarla (código pegado incompleto) o cuando no está publicada. En Supabase → Edge Functions → asistente-ia mirá "Logs"; si dice que falló al iniciar, volvé a pegar el código completo y tocá Deploy (Verify JWT apagado).'
+  }
+  let detalle = ''
+  try { const j = await ctx.clone().json() as { error?: string; message?: string; code?: string }; if (j.error) return j.error; detalle = `${j.code ?? ''} ${j.message ?? ''}`.trim() } catch { /* sin detalle */ }
+  if (ctx.status === 404) return 'La función "asistente-ia" no está publicada en Supabase. Creala en Edge Functions con el código del repositorio (Verify JWT apagado).'
+  if (ctx.status === 401) return 'Supabase rechazó la llamada a "asistente-ia": apagá "Verify JWT" en la configuración de la función y volvé a publicarla.'
+  if (/BOOT|failed to start/i.test(detalle) || ctx.status === 503) return `La función "asistente-ia" falló al arrancar en Supabase. Volvé a pegar el código completo y tocá Deploy.${detalle ? ` (${detalle})` : ''}`
+  return `La función "asistente-ia" devolvió un error (${ctx.status}${detalle ? `: ${detalle}` : ''}). Mirá los Logs de la función en Supabase.`
 }
