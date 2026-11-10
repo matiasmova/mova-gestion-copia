@@ -46,10 +46,10 @@ class Consulta implements PromiseLike<Resultado> {
   maybeSingle() { this.unico = true; return this }
   private async correr(): Promise<Resultado> {
     try {
-      const r = await fetch(`${URL_SB}/rest/v1/${encodeURIComponent(this.tabla)}?${this.params}`, {
+      const r = await traer(`${URL_SB}/rest/v1/${encodeURIComponent(this.tabla)}?${this.params}`, {
         method: this.soloConteo ? 'HEAD' : 'GET',
         headers: { apikey: CLAVE_SB, Authorization: `Bearer ${CLAVE_SB}`, ...(this.conteo ? { Prefer: 'count=exact' } : {}) },
-      })
+      }, 15_000)
       const count = this.conteo ? Number((r.headers.get('content-range') ?? '').split('/')[1]) || 0 : null
       if (!r.ok) { const j = await r.json().catch(() => ({})) as { message?: string }; return { data: null, error: { message: j.message ?? `HTTP ${r.status}` }, count } }
       if (this.soloConteo) return { data: null, error: null, count }
@@ -62,10 +62,21 @@ class Consulta implements PromiseLike<Resultado> {
   }
 }
 const db = { from: (tabla: string) => new Consulta(tabla) }
+
+// Tiempo límite: Supabase corta la función a los 150 s (error 546). Cada pedido a
+// la IA tiene su propio límite y todo el pedido termina antes de ese corte, así
+// se responde con un error claro en vez de quedarse esperando.
+let finPedido = Date.now() + 120_000
+async function traer(url: string, init: RequestInit, ms: number): Promise<Response> {
+  const queda = Math.min(ms, finPedido - Date.now() - 2_000)
+  if (queda <= 1_000) throw new Error('tiempo|no hubo tiempo para pedirlo')
+  try { return await fetch(url, { ...init, signal: AbortSignal.timeout(queda) }) }
+  catch (e) { const n = (e as Error).name; if (n === 'TimeoutError' || n === 'AbortError') throw new Error(`tiempo|no respondió en ${Math.round(queda / 1000)} s`); throw e }
+}
 // Quién llama: se valida el token del usuario con Supabase Auth.
 async function usuarioDe(token: string): Promise<{ id: string } | null> {
   if (!token) return null
-  const r = await fetch(`${URL_SB}/auth/v1/user`, { headers: { apikey: CLAVE_SB, Authorization: `Bearer ${token}` } }).catch(() => null)
+  const r = await traer(`${URL_SB}/auth/v1/user`, { headers: { apikey: CLAVE_SB, Authorization: `Bearer ${token}` } }, 15_000).catch(() => null)
   if (!r?.ok) return null
   const u = await r.json().catch(() => null) as { id?: string } | null
   return u?.id ? { id: u.id } : null
@@ -108,7 +119,7 @@ async function claudeJson(clave: string, pedido: string | Parte[], esquema: unkn
     : p.inlineData.mimeType === 'application/pdf'
       ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: p.inlineData.data } }
       : { type: 'image', source: { type: 'base64', media_type: /^image\/(jpeg|png|webp|gif)$/.test(p.inlineData.mimeType) ? p.inlineData.mimeType : 'image/jpeg', data: p.inlineData.data } })
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
+  const r = await traer('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': clave, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({
@@ -118,7 +129,7 @@ async function claudeJson(clave: string, pedido: string | Parte[], esquema: unkn
       tools: [{ name: 'responder', description: 'Devolvé la respuesta con este formato.', input_schema: esquemaJson(esquema) }],
       tool_choice: { type: 'tool', name: 'responder' },
     }),
-  })
+  }, 45_000)
   const cuerpo = await r.json().catch(() => ({})) as { error?: { message?: string }; content?: { type: string; input?: unknown }[] }
   if (!r.ok) throw new Error(`Claude ${r.status}: ${String(cuerpo.error?.message ?? '').slice(0, 200)}`)
   const uso = (cuerpo.content ?? []).find((b) => b.type === 'tool_use')
@@ -144,17 +155,26 @@ async function geminiSolo(clave: string, pedido: string | Parte[], esquema: unkn
   // (los "lite" suelen tener menos demanda cuando los otros están saturados).
   const modelos = Array.from(new Set([Deno.env.get('GEMINI_MODEL'), 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3-flash-preview', 'gemini-flash-lite-latest', 'gemini-3.8-flash-lite', 'gemini-2.5-flash'].filter(Boolean) as string[]))
   const errores: string[] = [], limites: string[] = []
+  // Google no tiene más de 70 s en total (queda tiempo para el respaldo con Claude).
+  const finGoogle = Date.now() + 70_000
   // Cada modelo tiene su propio cupo gratis: si uno se agotó, se prueba el siguiente.
   for (const modelo of modelos) for (let intento = 0; intento < 2; intento++) {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': clave },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: sistema }] },
-        contents: [{ role: 'user', parts: typeof pedido === 'string' ? [{ text: pedido }] : pedido }],
-        generationConfig: { temperature: temperatura, responseMimeType: 'application/json', responseSchema: esquema },
-      }),
-    })
+    if (Date.now() > finGoogle - 3_000) break
+    let r: Response
+    try {
+      r = await traer(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': clave },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: sistema }] },
+          contents: [{ role: 'user', parts: typeof pedido === 'string' ? [{ text: pedido }] : pedido }],
+          generationConfig: { temperature: temperatura, responseMimeType: 'application/json', responseSchema: esquema },
+        }),
+      }, Math.min(25_000, finGoogle - Date.now()))
+    } catch (e) {
+      const m = (e as Error).message
+      errores.push(`${modelo}: ${m.startsWith('tiempo|') ? m.slice(7) : m.slice(0, 120)}`); break
+    }
     const cuerpo = await r.json().catch(() => ({}))
     const mensaje = String((cuerpo as { error?: { message?: string } }).error?.message ?? '').slice(0, 300)
     // Saturado (503/500): se espera un momento y se reintenta una vez el mismo modelo.
@@ -168,6 +188,7 @@ async function geminiSolo(clave: string, pedido: string | Parte[], esquema: unkn
     try { return JSON.parse(texto) } catch { errores.push(`${modelo}: respuesta sin formato`); break }
   }
   if (limites.length) throw new Error(`límite|${limites.join(' | ')}`)
+  if (errores.length && errores.every((x) => /no respondió|no hubo tiempo/.test(x))) throw new Error(`tiempo|${errores.join(' | ')}`)
   throw new Error(errores.join(' | ') || 'sin respuesta')
 }
 
@@ -181,7 +202,7 @@ async function geminiBuscar(clave: string, pedido: string, sistema: string): Pro
   const errores: string[] = [], limites: string[] = []
   // Cada modelo tiene su propio cupo gratis: si uno se agotó, se prueba el siguiente.
   for (const modelo of modelos) {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
+    const r = await traer(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': clave },
       body: JSON.stringify({
@@ -190,7 +211,7 @@ async function geminiBuscar(clave: string, pedido: string, sistema: string): Pro
         tools: [{ google_search: {} }],
         generationConfig: { temperature: 0.2 },
       }),
-    })
+    }, 45_000)
     const cuerpo = await r.json().catch(() => ({})) as {
       error?: { message?: string }
       candidates?: { content?: { parts?: { text?: string }[] }; groundingMetadata?: { groundingChunks?: { web?: { uri?: string; title?: string } }[]; webSearchQueries?: string[] } }[]
@@ -210,6 +231,7 @@ async function geminiBuscar(clave: string, pedido: string, sistema: string): Pro
     return { datos, fuentes, busquedas: (c?.groundingMetadata?.webSearchQueries ?? []).map((q) => recorte(q, 120)).filter(Boolean).slice(0, 8) }
   }
   if (limites.length) throw new Error(`límite|${limites.join(' | ')}`)
+  if (errores.length && errores.every((x) => /no respondió|no hubo tiempo/.test(x))) throw new Error(`tiempo|${errores.join(' | ')}`)
   throw new Error(errores.join(' | ') || 'sin respuesta')
 }
 
@@ -221,7 +243,7 @@ async function claudeBuscar(clave: string, pedido: string, sistema: string, busq
   const fuentes: Fuente[] = [], busquedas: string[] = []
   let textoFinal = ''
   for (let vuelta = 0; vuelta < 4; vuelta++) {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
+    const r = await traer('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': clave, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
@@ -229,7 +251,7 @@ async function claudeBuscar(clave: string, pedido: string, sistema: string, busq
         max_tokens: 4000, system: sistema, messages: mensajes,
         tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: busquedasMax, user_location: { type: 'approximate', country: 'AR', region: 'Mendoza', city: 'Mendoza', timezone: 'America/Argentina/Mendoza' } }],
       }),
-    })
+    }, 45_000)
     const cuerpo = await r.json().catch(() => ({})) as { error?: { message?: string }; content?: Bloque[]; stop_reason?: string }
     const mensaje = String(cuerpo.error?.message ?? '').slice(0, 300)
     if (r.status === 401 || r.status === 403) throw new Error(`claude|Claude rechazó la clave (ANTHROPIC_API_KEY): ${mensaje}`)
@@ -404,6 +426,7 @@ const lista = (props: Record<string, unknown>) => ({
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return responder({ error: 'Método no permitido' }, 405)
+  finPedido = Date.now() + 120_000
 
   const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
   const quien = await usuarioDe(token)
@@ -776,6 +799,7 @@ Deno.serve(async (req) => {
     return responder({ error: 'Acción desconocida' }, 400)
   } catch (e) {
     const m = (e as Error).message
+    if (/tiempo\|/.test(m)) return responder({ error: `La IA tardó demasiado en responder y se cortó para no trabar la app. Probá de nuevo en un momento. Detalle: ${m.replace(/tiempo\|/g, '').slice(0, 300)}` }, 504)
     if (m.startsWith('clave|')) return responder({ error: `Google rechazó la clave de Gemini (GEMINI_API_KEY): ${m.slice(6)}` }, 400)
     if (m.startsWith('claude|')) return responder({ error: m.slice(7) }, 502)
     if (m.startsWith('límite|')) {
