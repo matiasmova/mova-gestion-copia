@@ -15,8 +15,61 @@
 // encargados y auxiliares (los que cargan compras). Desplegar con "Verify JWT" apagado
 // (la función controla sola quién la usa). La clave va en el secret
 // GEMINI_API_KEY (Google AI Studio). Opcional: GEMINI_MODEL.
-// jsr: arranca más liviano que npm: (menos procesador al iniciar en frío).
-import { createClient } from 'jsr:@supabase/supabase-js@2'
+// Sin librerías: la base se consulta con fetch directo (PostgREST). Así la
+// función arranca liviana y no se queda sin recursos en el plan gratis (error 546).
+const URL_SB = Deno.env.get('SUPABASE_URL') ?? ''
+const CLAVE_SB = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+type Resultado = { data: any; error: { message: string } | null; count: number | null } // deno-lint-ignore no-explicit-any
+class Consulta implements PromiseLike<Resultado> {
+  private params = new URLSearchParams()
+  private unico = false
+  private conteo = false
+  private soloConteo = false
+  constructor(private tabla: string) {}
+  select(columnas: string, opciones?: { count?: 'exact'; head?: boolean }) {
+    this.params.set('select', columnas.replace(/\s+/g, ''))
+    if (opciones?.count) this.conteo = true
+    if (opciones?.head) this.soloConteo = true
+    return this
+  }
+  private filtro(col: string, op: string, valor: unknown) { this.params.append(col, `${op}.${valor}`); return this }
+  eq(col: string, valor: unknown) { return this.filtro(col, 'eq', valor) }
+  gte(col: string, valor: unknown) { return this.filtro(col, 'gte', valor) }
+  in(col: string, valores: unknown[]) { return this.filtro(col, 'in', `(${valores.map((v) => (typeof v === 'string' ? `"${v}"` : v)).join(',')})`) }
+  order(col: string, opciones?: { ascending?: boolean }) {
+    const antes = this.params.get('order')
+    const este = `${col}.${opciones?.ascending === false ? 'desc' : 'asc'}`
+    this.params.set('order', antes ? `${antes},${este}` : este)
+    return this
+  }
+  limit(n: number) { this.params.set('limit', String(n)); return this }
+  maybeSingle() { this.unico = true; return this }
+  private async correr(): Promise<Resultado> {
+    try {
+      const r = await fetch(`${URL_SB}/rest/v1/${encodeURIComponent(this.tabla)}?${this.params}`, {
+        method: this.soloConteo ? 'HEAD' : 'GET',
+        headers: { apikey: CLAVE_SB, Authorization: `Bearer ${CLAVE_SB}`, ...(this.conteo ? { Prefer: 'count=exact' } : {}) },
+      })
+      const count = this.conteo ? Number((r.headers.get('content-range') ?? '').split('/')[1]) || 0 : null
+      if (!r.ok) { const j = await r.json().catch(() => ({})) as { message?: string }; return { data: null, error: { message: j.message ?? `HTTP ${r.status}` }, count } }
+      if (this.soloConteo) return { data: null, error: null, count }
+      const filas = await r.json() as unknown[]
+      return { data: this.unico ? (filas[0] ?? null) : filas, error: null, count }
+    } catch (e) { return { data: null, error: { message: (e as Error).message }, count: null } }
+  }
+  then<A = Resultado, B = never>(ok?: ((v: Resultado) => A | PromiseLike<A>) | null, mal?: ((e: unknown) => B | PromiseLike<B>) | null): PromiseLike<A | B> {
+    return this.correr().then(ok, mal)
+  }
+}
+const db = { from: (tabla: string) => new Consulta(tabla) }
+// Quién llama: se valida el token del usuario con Supabase Auth.
+async function usuarioDe(token: string): Promise<{ id: string } | null> {
+  if (!token) return null
+  const r = await fetch(`${URL_SB}/auth/v1/user`, { headers: { apikey: CLAVE_SB, Authorization: `Bearer ${token}` } }).catch(() => null)
+  if (!r?.ok) return null
+  const u = await r.json().catch(() => null) as { id?: string } | null
+  return u?.id ? { id: u.id } : null
+}
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -352,11 +405,10 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return responder({ error: 'Método no permitido' }, 405)
 
-  const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
   const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
-  const { data: quien } = await db.auth.getUser(token)
-  if (!quien?.user) return responder({ error: 'No autorizado' }, 401)
-  const { data: perfil } = await db.from('profiles').select('rol, activo').eq('id', quien.user.id).maybeSingle()
+  const quien = await usuarioDe(token)
+  if (!quien) return responder({ error: 'No autorizado' }, 401)
+  const { data: perfil } = await db.from('profiles').select('rol, activo').eq('id', quien.id).maybeSingle()
   const cuerpo = await req.json().catch(() => ({})) as Record<string, unknown>
   const { accion, idea, titulo, descripcion, existentes } = cuerpo
   const roles = accion === 'factura' ? ['admin', 'contable', 'encargado', 'auxiliar'] : accion === 'informe_obra' || accion === 'recomendaciones' || accion === 'relevamiento' || accion === 'resumen_documento' || accion === 'plano' || accion === 'dictado' ? ['admin', 'contable', 'encargado'] : ['admin', 'contable']
