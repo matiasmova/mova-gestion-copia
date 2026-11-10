@@ -15,7 +15,8 @@
 // encargados y auxiliares (los que cargan compras). Desplegar con "Verify JWT" apagado
 // (la función controla sola quién la usa). La clave va en el secret
 // GEMINI_API_KEY (Google AI Studio). Opcional: GEMINI_MODEL.
-import { createClient } from 'npm:@supabase/supabase-js@2'
+// jsr: arranca más liviano que npm: (menos procesador al iniciar en frío).
+import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
