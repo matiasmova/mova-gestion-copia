@@ -64,5 +64,5 @@ async function explicarFallo(error: unknown): Promise<string> {
 function reintentable(error: unknown): boolean {
   const nombre = (error as { name?: string } | null)?.name ?? ''
   const estado = (error as { context?: Response } | null)?.context?.status ?? 0
-  return nombre === 'FunctionsFetchError' || nombre === 'FunctionsRelayError' || [502, 503, 504, 546].includes(estado)
+  return nombre === 'FunctionsFetchError' || nombre === 'FunctionsRelayError' || [502, 503].includes(estado)
 }
