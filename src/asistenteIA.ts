@@ -3,7 +3,13 @@ import { supabase } from './supabase'
 // Llama a la Edge Function "asistente-ia" (Gemini) y devuelve la respuesta o
 // un mensaje de error claro.
 export async function pedirAsistente<T>(cuerpo: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke('asistente-ia', { body: cuerpo })
+  let { data, error } = await supabase.functions.invoke('asistente-ia', { body: cuerpo })
+  // Si la función se quedó sin recursos al arrancar en frío (546) o no respondió,
+  // se reintenta una vez: la segunda vez suele andar.
+  if (error && !data?.error && reintentable(error)) {
+    await new Promise((ok) => setTimeout(ok, 1500))
+    ;({ data, error } = await supabase.functions.invoke('asistente-ia', { body: cuerpo }))
+  }
   if (error || data?.error) {
     if (data?.error) throw new Error(data.error)
     throw new Error(await explicarFallo(error))
@@ -50,6 +56,13 @@ async function explicarFallo(error: unknown): Promise<string> {
   try { const j = await ctx.clone().json() as { error?: string; message?: string; code?: string }; if (j.error) return j.error; detalle = `${j.code ?? ''} ${j.message ?? ''}`.trim() } catch { /* sin detalle */ }
   if (ctx.status === 404) return 'La función "asistente-ia" no está publicada en Supabase. Creala en Edge Functions con el código del repositorio (Verify JWT apagado).'
   if (ctx.status === 401) return 'Supabase rechazó la llamada a "asistente-ia": apagá "Verify JWT" en la configuración de la función y volvé a publicarla.'
+  if (ctx.status === 546 || /RESOURCE_LIMIT/i.test(detalle)) return 'La función "asistente-ia" se quedó sin recursos en Supabase (pasa a veces en el plan gratis al arrancar). Probá de nuevo en unos segundos; si sigue, volvé a publicar la función con el código actualizado.'
   if (/BOOT|failed to start/i.test(detalle) || ctx.status === 503) return `La función "asistente-ia" falló al arrancar en Supabase. Volvé a pegar el código completo y tocá Deploy.${detalle ? ` (${detalle})` : ''}`
   return `La función "asistente-ia" devolvió un error (${ctx.status}${detalle ? `: ${detalle}` : ''}). Mirá los Logs de la función en Supabase.`
+}
+
+function reintentable(error: unknown): boolean {
+  const nombre = (error as { name?: string } | null)?.name ?? ''
+  const estado = (error as { context?: Response } | null)?.context?.status ?? 0
+  return nombre === 'FunctionsFetchError' || nombre === 'FunctionsRelayError' || [502, 503, 504, 546].includes(estado)
 }
