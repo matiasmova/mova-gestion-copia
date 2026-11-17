@@ -146,9 +146,10 @@ export default function TrabajosFlujo({ verPlata, busqueda, revision, onAbrir, o
   const fila = (f: Fila) => (
     <button key={f.clave} type="button" className={`tfFila et-${f.etapa}`} onClick={() => onAbrir(f.abrir)}>
       <span className="tfIco" aria-hidden>{ETAPAS[f.etapa].i}</span>
-      <span className="tfInfo"><b>{f.titulo}</b><small>{f.cliente} · <span className="tfQue">{f.que}</span></small></span>
+      <span className="tfInfo"><b>{f.cliente || f.titulo}</b>{f.cliente && <small className="tfObra">{f.titulo}</small>}</span>
       {verPlata && f.total > 0 && <span className="tfPlata"><b>{pesos(f.total)}</b>{f.ganancia != null && <small className={f.ganancia < 0 ? 'neg' : ''}>ganás {corto(f.ganancia)}</small>}</span>}
       <span className="tfAcc">{f.accion} ›</span>
+      <small className="tfQue tfEstado">{f.que}</small>
     </button>
   )
 
