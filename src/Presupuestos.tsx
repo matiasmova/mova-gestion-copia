@@ -26,7 +26,7 @@ import { etiquetaEtapa, type ObraEtapa } from './VidaEtapas'
 import { codigoPresupuesto } from './codigoPresupuesto'
 import { estadoTrabajo, obrasSinPresupuesto } from './estadoTrabajo'
 import { PillTrabajo, VidaTrabajo } from './VidaTrabajo'
-import { linkWhatsApp, mensajeSeguimientoPresupuesto } from './whatsapp'
+import { mensajeSeguimientoPresupuesto, linkWhatsAppCliente } from './whatsapp'
 
 type PresupuestoCompleto = PresupuestoEditable & {
   created_at: string
@@ -381,7 +381,7 @@ function Presupuestos({ presupuestoAbrirId, onPresupuestoAbierto, pedido, onPedi
     const validez = Number(p.validez_dias) || 0
     const vencido = validez > 0 && Date.now() - new Date(`${p.fecha.slice(0, 10)}T00:00:00`).getTime() > validez * 86400000
     const texto = mensajeSeguimientoPresupuesto({ cliente: nombreCliente(p.cliente_id), titulo: p.titulo, codigo: codigoPresupuesto(p.id), fecha: fechaCorta(p.enviado_at || p.fecha), vencido })
-    const url = linkWhatsApp(telefonos[p.cliente_id] ?? null, texto)
+    const url = linkWhatsAppCliente(telefonos[p.cliente_id] ?? null, texto)
     if (url) window.open(url, '_blank', 'noopener')
     void marcarSeguido(p.id)
   }

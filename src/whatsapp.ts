@@ -19,6 +19,14 @@ export function linkWhatsApp(telefono: string | null | undefined, texto: string)
   return n ? `https://wa.me/${n}?text=${encodeURIComponent(texto)}` : `https://wa.me/?text=${encodeURIComponent(texto)}`
 }
 
+// Mensaje para un cliente: si está cargado el número de vista previa
+// (Configuración → Empresa), va a ese número para revisarlo y reenviarlo.
+export function linkWhatsAppCliente(telefonoCliente: string | null | undefined, texto: string): string | null {
+  const previa = (configActual().empresa.whatsappPrevia ?? '').trim()
+  return linkWhatsApp(previa || telefonoCliente, texto)
+}
+export const envioConPrevia = () => !!(configActual().empresa.whatsappPrevia ?? '').trim()
+
 const primerNombre = (n: string) => n.trim().split(/\s+/)[0] || ''
 const empresa = () => configActual().empresa.nombre || 'MOVA'
 

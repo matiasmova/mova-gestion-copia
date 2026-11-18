@@ -1,4 +1,4 @@
-import { linkWhatsApp, mensajeEnvioPresupuesto, mensajeSeguimientoPresupuesto } from './whatsapp'
+import { mensajeEnvioPresupuesto, mensajeSeguimientoPresupuesto, linkWhatsAppCliente } from './whatsapp'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from './supabase'
 import { moneda } from './gestionFormat'
@@ -199,13 +199,13 @@ export default function PresupuestoFicha({
   // Abre WhatsApp con el mensaje listo y, si era borrador, pasa solo a Enviado.
   // El PDF se adjunta con "Compartir PDF".
   function enviarWhatsApp() {
-    const url = linkWhatsApp(telefono, mensajeEnvioPresupuesto({ cliente, titulo: presupuesto.titulo, codigo, validezDias: presupuesto.validez_dias ?? null, linkPago }))
+    const url = linkWhatsAppCliente(telefono, mensajeEnvioPresupuesto({ cliente, titulo: presupuesto.titulo, codigo, validezDias: presupuesto.validez_dias ?? null, linkPago }))
     if (url) window.open(url, '_blank', 'noopener')
     if (presupuesto.estado === 'borrador') onCambiarEstado('enviado')
   }
   function seguimientoWhatsApp() {
     const vencido = !!presupuesto.validez_dias && diasEnviado != null && diasEnviado > presupuesto.validez_dias
-    const url = linkWhatsApp(telefono, mensajeSeguimientoPresupuesto({ cliente, titulo: presupuesto.titulo, codigo, fecha: fechaCorta(presupuesto.enviado_at || presupuesto.fecha), vencido }))
+    const url = linkWhatsAppCliente(telefono, mensajeSeguimientoPresupuesto({ cliente, titulo: presupuesto.titulo, codigo, fecha: fechaCorta(presupuesto.enviado_at || presupuesto.fecha), vencido }))
     if (url) window.open(url, '_blank', 'noopener')
   }
   const diasEnviado = presupuesto.estado === 'enviado'

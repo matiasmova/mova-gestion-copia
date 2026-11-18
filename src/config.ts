@@ -22,6 +22,10 @@ export type Empresa = {
   cbu?: string
   titular?: string
   banco?: string
+  // Los mensajes de WhatsApp para clientes (presupuesto, seguimiento, estado de
+  // obra, informe) se mandan primero a este número para verlos y reenviarlos.
+  // Vacío: se mandan directo al cliente.
+  whatsappPrevia?: string
 }
 
 export type ConfigApp = {
@@ -46,6 +50,7 @@ export const DEFAULTS: ConfigApp = {
     cbu: '',
     titular: '',
     banco: '',
+    whatsappPrevia: '2615557970',
   },
   cotizacion: { usd: 0, fecha: null, fuente: null },
   presupuestos: { validezDias: 15, condiciones: CONDICIONES_GENERALES.map((c) => ({ ...c })) },
