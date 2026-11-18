@@ -637,6 +637,62 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
     }).catch((e) => console.error(e))
   }
 
+  // ---------- Cambiar la etapa tocando Armando / Enviado / En obra / Terminado ----------
+  // (con confirmación). Atrás de "En obra" el presupuesto vuelve a enviado o borrador.
+  const [etapaPedida, setEtapaPedida] = useState<number | null>(null)
+  const [cambiandoEtapa, setCambiandoEtapa] = useState(false)
+  const [errorEtapa, setErrorEtapa] = useState('')
+  const [vueltaItems, setVueltaItems] = useState(0)
+  async function cambiarEtapa(destino: number) {
+    const obra = obraSeguimiento
+    if (!obra) return
+    setCambiandoEtapa(true); setErrorEtapa('')
+    try {
+      if (destino <= 1) {
+        // Vuelve a Enviado o Armando: el presupuesto deja de estar aceptado.
+        if (!presupuestoAceptado) throw new Error('Esta obra no tiene un presupuesto aceptado.')
+        const { error: e } = await supabase.from('presupuestos').update({ estado: destino === 1 ? 'enviado' : 'borrador' }).eq('id', presupuestoAceptado.id)
+        if (e) throw e
+        const id = presupuestoAceptado.id
+        setEtapaPedida(null)
+        avisoGuardado(destino === 1 ? 'El presupuesto volvió a Enviado' : 'El presupuesto volvió a Armando')
+        cerrarSeguimiento()
+        onVerPresupuesto?.(id)
+        return
+      }
+      if (destino === 3) {
+        // Terminado: con avance por ítems, todos los ítems quedan al 100%.
+        if (usaItems.current && presupuestoAceptado) {
+          const { error: e } = await supabase.from('presupuesto_items').update({ avance: 100 }).eq('presupuesto_id', presupuestoAceptado.id)
+          if (e) throw e
+        }
+        const { error: e } = await supabase.from('obras').update({ estado: 'finalizada', porcentaje_avance: 100 }).eq('id', obra.id)
+        if (e) throw e
+        setObraSeguimiento((o) => (o && o.id === obra.id ? { ...o, estado: 'finalizada', porcentaje_avance: 100 } : o))
+        setObras((lista) => lista.map((o) => (o.id === obra.id ? { ...o, estado: 'finalizada', porcentaje_avance: 100 } : o)))
+        avisoGuardado('Obra marcada como terminada')
+      } else {
+        // En obra (desde Terminado): con avance por ítems, el % sale de los ítems.
+        const pctItems = usaItems.current && avanceItems ? avanceItems.porcentaje : null
+        if (pctItems != null && pctItems >= 99.995) throw new Error('Todos los ítems están al 100%: para volver a "En obra", bajá el avance de algún ítem en el presupuesto (Avance de este ítem).')
+        const actual = Number(obra.porcentaje_avance) || 0
+        const pct = pctItems ?? (actual >= 100 ? 99 : actual)
+        const { error: e } = await supabase.from('obras').update({ estado: 'en_proceso', porcentaje_avance: pct }).eq('id', obra.id)
+        if (e) throw e
+        setObraSeguimiento((o) => (o && o.id === obra.id ? { ...o, estado: 'en_proceso', porcentaje_avance: pct } : o))
+        setObras((lista) => lista.map((o) => (o.id === obra.id ? { ...o, estado: 'en_proceso', porcentaje_avance: pct } : o)))
+        avisoGuardado('La obra volvió a En obra')
+      }
+      setEtapaPedida(null)
+      setVueltaItems((v) => v + 1)
+      setActualizacion((v) => v + 1)
+      onCambio?.()
+    } catch (e) {
+      console.error(e)
+      setErrorEtapa((e as Error).message?.startsWith('Todos') || (e as Error).message?.startsWith('Esta obra') ? (e as Error).message : 'No se pudo cambiar el estado. Probá de nuevo.')
+    } finally { setCambiandoEtapa(false) }
+  }
+
   // Al abrir la obra: si los ítems dicen otro % que el guardado (por ejemplo, de
   // antes de este cambio), la obra se pone al día sola.
   useEffect(() => {
@@ -1104,9 +1160,34 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                     <button type="button" aria-label="Cerrar" onClick={cerrarSeguimiento}>×</button>
                   </div>
                 </div>
-                <div className="pvPasos">
-                  {[['Armando', 0], ['Enviado', 1], ['En obra', 2], ['Terminado', 3]].map(([t, i]) => { const actual = fin ? 3 : 2; return <span key={t} className={Number(i) < actual ? 'ok' : Number(i) === actual ? 'on' : ''}>{Number(i) < actual ? '✓ ' : ''}{t}</span> })}
+                <div className="pvPasos" role="group" aria-label="Etapa de la obra (tocá para cambiarla)">
+                  {[['Armando', 0], ['Enviado', 1], ['En obra', 2], ['Terminado', 3]].map(([t, i]) => {
+                    const actual = fin ? 3 : 2
+                    const n = Number(i)
+                    const puede = n !== actual && (n >= 2 || !!presupuestoAceptado)
+                    return <button key={t} type="button" className={`pvPaso ${n < actual ? 'ok' : n === actual ? 'on' : ''}`} disabled={!puede} aria-current={n === actual ? 'step' : undefined}
+                      onClick={() => { setErrorEtapa(''); setEtapaPedida(n) }}>{n < actual ? '✓ ' : ''}{t}</button>
+                  })}
                 </div>
+                {etapaPedida != null && (() => {
+                  const NOMBRES = ['Armando', 'Enviado', 'En obra', 'Terminado']
+                  const que = etapaPedida === 0 ? 'El presupuesto vuelve a borrador (deja de estar aceptado) y se abre para que lo edites. La obra y lo cargado en ella no se borran.'
+                    : etapaPedida === 1 ? 'El presupuesto vuelve a "enviado" (deja de estar aceptado). La obra y lo cargado en ella no se borran.'
+                    : etapaPedida === 3 ? `La obra queda terminada al 100%${usaItems.current ? ' (todos los ítems al 100%)' : ''}.`
+                    : 'La obra vuelve a estar en proceso.'
+                  return <div className="modalOverlay etConfirmFondo" onClick={(e) => { if (e.target === e.currentTarget && !cambiandoEtapa) setEtapaPedida(null) }}>
+                    <div className="etConfirm" role="alertdialog" aria-modal="true" aria-label="Confirmar cambio de estado">
+                      <b>¿Estás seguro?</b>
+                      <p>Se cambia el estado a <strong>«{NOMBRES[etapaPedida]}»</strong>.</p>
+                      <small>{que}</small>
+                      {errorEtapa && <p className="loginError">{errorEtapa}</p>}
+                      <div className="etConfirmAcc">
+                        <button type="button" className="cancelButton" disabled={cambiandoEtapa} onClick={() => setEtapaPedida(null)}>No</button>
+                        <button type="button" className="newButton" disabled={cambiandoEtapa} onClick={() => void cambiarEtapa(etapaPedida)}>{cambiandoEtapa ? 'Cambiando…' : 'Sí, cambiar'}</button>
+                      </div>
+                    </div>
+                  </div>
+                })()}
                 {presupuestoAceptado && c && <div className="pvNums">
                   <div><small>VALOR OBRA</small><b>{dineroFicha(c.valor + c.extras)}</b></div>
                   <button type="button" onClick={() => setSeguTab('resumen')}><small>VAS A GANAR</small><b>{gananciaObra == null ? '…' : dineroFicha(gananciaObra)}</b></button>
@@ -1181,7 +1262,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                 return null
               })()}
             >
-              {presupuestoAceptado && <PresupuestoVivoObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} onCambio={() => setActualizacion((v) => v + 1)} onVerHistorial={() => setSeguTab('adicionales')} onGanancia={setGananciaObra}
+              {presupuestoAceptado && <PresupuestoVivoObra key={`${obraSeguimiento.id}-${vueltaItems}`} obraId={obraSeguimiento.id} onCambio={() => setActualizacion((v) => v + 1)} onVerHistorial={() => setSeguTab('adicionales')} onGanancia={setGananciaObra}
                 avanceObra={Number(obraSeguimiento.porcentaje_avance) || 0} onAvanceItems={setAvanceItems} onAvanceCambiado={(a) => void guardarAvanceItems(a)} />}
             </ResumenObra>}
 
