@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { pedirAsistente } from './asistenteIA'
-import { linkWhatsApp } from './whatsapp'
+import { linkWhatsAppCliente } from './whatsapp'
 
 // Mensaje de avance de obra para el cliente, escrito por la IA con lo cargado
 // en "Estados y avances". Se revisa y se manda por WhatsApp o se copia.
@@ -61,7 +61,7 @@ function InformeObraIA({ obraId, obra, onCerrar }: { obraId: number; obra: strin
           <div className="modalActions formActions">
             <button type="button" className="cancelButton" onClick={onCerrar}>Cerrar</button>
             {mensaje && <button type="button" className="editButton" onClick={() => void copiar()}>{copiado ? '✓ Copiado' : '📋 Copiar'}</button>}
-            {mensaje && <a className="newButton informeIaWa" href={linkWhatsApp(telefono, mensaje) ?? '#'} target="_blank" rel="noreferrer">💬 Enviar por WhatsApp</a>}
+            {mensaje && <a className="newButton informeIaWa" href={linkWhatsAppCliente(telefono, mensaje) ?? '#'} target="_blank" rel="noreferrer">💬 Enviar por WhatsApp</a>}
           </div>
         </div>
       </div>

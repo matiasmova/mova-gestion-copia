@@ -90,6 +90,11 @@ function EmpresaForm({ habilitado }: { habilitado: boolean }) {
     <div className="clienteForm"><div className="formGrid">
       {([['alias', 'Alias', 'mova.smart'], ['cbu', 'CBU / CVU', '22 números'], ['titular', 'Titular de la cuenta', 'Nombre o razón social'], ['banco', 'Banco o billetera (opcional)', 'Ej.: Banco Nación, Mercado Pago']] as [keyof Empresa, string, string][]).map(([k, t, ph]) => <label key={k}>{t}<input value={e[k] ?? ''} placeholder={ph} onChange={(ev) => set(k, ev.target.value)} disabled={!habilitado} /></label>)}
     </div></div>
+    <h4 className="cfgSub">📲 Vista previa de WhatsApp</h4>
+    <p className="gestionAyuda" style={{ marginTop: 0 }}>Los mensajes para clientes (enviar presupuesto, seguimiento, estado de obra e informe de avance) se mandan primero a este número, para que veas cómo quedan y los reenvíes. Dejalo vacío para mandarlos directo al cliente.</p>
+    <div className="clienteForm"><div className="formGrid">
+      <label>Mandar primero a este WhatsApp<input value={e.whatsappPrevia ?? ''} placeholder="Ej.: 2615557970 (vacío = directo al cliente)" inputMode="tel" onChange={(ev) => set('whatsappPrevia', ev.target.value)} disabled={!habilitado} /></label>
+    </div></div>
     <div className="cfgVista"><span>Así se ve el pie de los documentos</span><strong>{e.nombre}</strong><small>{lineaContacto(e) || '—'}</small></div>
     <BarraGuardar estado={estado} habilitado={habilitado} onGuardar={() => void guardar(() => guardarConfig('empresa', e))} onRestaurar={() => setE({ ...DEFAULTS.empresa })} />
   </section>

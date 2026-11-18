@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { moneda, fechaCorta } from './gestionFormat'
 import { codigoPresupuesto } from './codigoPresupuesto'
-import { linkWhatsApp, mensajeSeguimientoPresupuesto } from './whatsapp'
+import { mensajeSeguimientoPresupuesto, linkWhatsAppCliente } from './whatsapp'
 
 // Seguimiento comercial: presupuestos enviados sin respuesta, por vencer o
 // vencidos, con WhatsApp listo para escribirle al cliente, y la tasa de cierre.
@@ -86,7 +86,7 @@ export default function SeguimientoPresupuestos({ presupuestos, nombreCliente, t
 
   function whatsapp(p: PresupuestoSeguimiento, m: Motivo) {
     const texto = mensajeSeguimientoPresupuesto({ cliente: nombreCliente(p.cliente_id), titulo: p.titulo, codigo: codigoPresupuesto(p.id), fecha: fechaCorta(p.enviado_at || p.fecha), vencido: m.tipo === 'vencido' })
-    const url = linkWhatsApp(telefonoCliente(p.cliente_id), texto)
+    const url = linkWhatsAppCliente(telefonoCliente(p.cliente_id), texto)
     if (url) window.open(url, '_blank', 'noopener')
     onSeguido(p.id)
   }

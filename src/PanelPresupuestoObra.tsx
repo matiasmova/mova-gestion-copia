@@ -5,7 +5,7 @@ import RecomendacionesUso from './RecomendacionesUso'
 import ComoLoVeCliente from './ComoLoVeCliente'
 import FormasPagoEditor from './FormasPagoEditor'
 import CompararMercado, { type ProductoAComparar } from './CompararMercado'
-import { linkWhatsApp, mensajeEstadoObra } from './whatsapp'
+import { mensajeEstadoObra, linkWhatsAppCliente } from './whatsapp'
 import { codigoPresupuesto } from './codigoPresupuesto'
 import { asegurarLinkPago, estadoLinkPago, activarLinkPago } from './pagoLink'
 import { configActual } from './config'
@@ -81,7 +81,7 @@ export default function PanelPresupuestoObra({ obra, cliente, version, onVerDocu
   }
 
   if (error) return <p className="loginError" style={{ margin: '8px 0 0' }}>{error}</p>
-  const linkWa = datos ? linkWhatsApp(datos.contacto?.telefono ?? null, mensajeEstadoObra({ cliente, obra: obra.nombre_obra, codigo: codigoPresupuesto(datos.id), linkPago })) : null
+  const linkWa = datos ? linkWhatsAppCliente(datos.contacto?.telefono ?? null, mensajeEstadoObra({ cliente, obra: obra.nombre_obra, codigo: codigoPresupuesto(datos.id), linkPago })) : null
   const hayComprobantes = !!datos?.estado?.gastosExtra.some((g) => g.comprobante)
   const refrescar = () => setRevision((v) => v + 1)
 
