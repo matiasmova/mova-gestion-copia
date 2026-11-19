@@ -1,0 +1,43 @@
+# Publica las Edge Functions de Supabase solas cuando cambia su código en main
+# (o a mano desde la pestaña Actions → "Publicar funciones de Supabase" → Run workflow).
+# Necesita el secret SUPABASE_ACCESS_TOKEN en GitHub (Settings → Secrets and variables → Actions).
+name: Publicar funciones de Supabase
+
+on:
+  push:
+    branches: [main]
+    paths: ['supabase/functions/**', 'supabase/config.toml']
+  workflow_dispatch:
+
+concurrency:
+  group: publicar-funciones
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROYECTO: aceukzftfkjhmponaktd
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Revisar la llave de Supabase
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "::error::Falta el secret SUPABASE_ACCESS_TOKEN (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Publicar cada función
+        run: |
+          for dir in supabase/functions/*/; do
+            nombre=$(basename "$dir")
+            [ -f "$dir/index.ts" ] || continue
+            echo "▶ Publicando $nombre"
+            supabase functions deploy "$nombre" --project-ref "$PROYECTO" --no-verify-jwt --use-api
+          done
