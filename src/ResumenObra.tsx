@@ -50,7 +50,7 @@ type Props = {
   secciones?: Partial<Record<SeccionVivo, ReactNode>>
 }
 
-export type SeccionVivo = 'documento' | 'finanzas' | 'personal' | 'accesos' | 'rentabilidad'
+export type SeccionVivo = 'documento' | 'informe' | 'finanzas' | 'personal' | 'accesos' | 'rentabilidad'
 
 // Una persona del equipo, con los mismos números que la sección Personal.
 type MiembroEquipo = { id: number; nombre: string; rol: string | null; pagado: number; falta: number; adelanto: number; faltaValor: boolean }
@@ -272,6 +272,7 @@ export default function ResumenObra({ obraId, estado, avance, avances, cargandoA
       <div className="oeSecciones">
         {([
           ['documento', '📄', 'Documento y pagos', 'Comprobantes, formas de pago, cómo lo ve el cliente', false],
+          ['informe', '📝', 'Generar informe', 'Fotos con su texto, ordenado con IA, en PDF para el cliente', false],
           ['finanzas', '💰', 'Cobros', !tienePresupuesto ? 'Sin presupuesto' : !cuenta ? 'Cargando…' : `Cobrado ${dinero(cuenta.cobrado)}`, avisoDe('finanzas')],
           ['personal', '👷', 'Gasto por ayudantes', !datos ? 'Cargando…' : datos.pagadoAyudantes > 0.5 ? `Pagado ${dinero(datos.pagadoAyudantes)}` : 'Sin pagos todavía', false],
           ['accesos', '🔐', 'Accesos y claves', !datos ? 'Cargando…' : datos.accesos === null ? '—' : datos.accesos === 0 ? 'Sin cargar' : `${datos.accesos} cargados`, avisoDe('accesos')],

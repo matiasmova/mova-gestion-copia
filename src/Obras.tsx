@@ -15,6 +15,7 @@ import { CompraRapida, MenuRegistrar, type OpcionRegistrar } from './RegistrarOb
 import AdicionalesObra from './AdicionalesObra'
 import PersonalObra from './PersonalObra'
 import RentabilidadObra from './RentabilidadObra'
+import InformeFotos from './InformeFotos'
 import AccesosObra from './AccesosObra'
 import { LineaAvances, PanelAvance, PresupuestoVivoObra, type AvanceItems } from './ObraEnVivo'
 import ResumenObra, { DonaAvance, PresupuestoDocumento, TITULO_SECCION, type TabSeguimiento } from './ResumenObra'
@@ -1235,6 +1236,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
               secciones={{
                 ...(presupuestoAceptado ? { documento: <PanelPresupuestoObra modo="ajustes" obra={obraSeguimiento} cliente={obtenerCliente(obraSeguimiento.cliente_id)} version={docVersion + actualizacion} onVerDocumento={() => setInformeObra(obraSeguimiento)} onRegistrarCobro={() => elegirRegistro('cobro')} /> } : {}),
                 ...(presupuestoAceptado ? { finanzas: <EconomiaObra key={obraSeguimiento.id} cuenta={cuenta} presupuestoId={presupuestoAceptado.id} obraId={obraSeguimiento.id} onGenerarPdf={() => setInformeObra(obraSeguimiento)} onCambio={() => setActualizacion((v) => v + 1)} /> } : {}),
+                informe: <InformeFotos key={obraSeguimiento.id} obraId={obraSeguimiento.id} obra={obraSeguimiento.nombre_obra} cliente={obtenerCliente(obraSeguimiento.cliente_id)} avance={avanceEfectivo(obraSeguimiento.estado, obraSeguimiento.porcentaje_avance)} />,
                 personal: <PersonalObra key={obraSeguimiento.id} onCambio={() => setActualizacion((v) => v + 1)} obraId={obraSeguimiento.id} avance={avanceEfectivo(obraSeguimiento.estado, obraSeguimiento.porcentaje_avance)} />,
                 accesos: <AccesosObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} cliente={obtenerCliente(obraSeguimiento.cliente_id)} obra={obraSeguimiento.nombre_obra} ubicacion={[obraSeguimiento.direccion, obraSeguimiento.localidad].filter(Boolean).join(', ') || null} />,
                 rentabilidad: <RentabilidadObra key={`${obraSeguimiento.id}-${actualizacion}`} obraId={obraSeguimiento.id} avance={avanceEfectivo(obraSeguimiento.estado, obraSeguimiento.porcentaje_avance)} estado={obraSeguimiento.estado ?? undefined} />,
