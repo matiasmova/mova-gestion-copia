@@ -1,0 +1,22 @@
+# Configuración para publicar las funciones con la CLI de Supabase (la usa
+# GitHub Actions: .github/workflows/publicar-funciones.yml).
+project_id = "aceukzftfkjhmponaktd"
+
+# Todas las funciones validan al usuario por dentro: "Verify JWT" apagado.
+[functions.asistente-ia]
+verify_jwt = false
+
+[functions.comprobante]
+verify_jwt = false
+
+[functions.enviar-recordatorios]
+verify_jwt = false
+
+[functions.gestionar-usuarios]
+verify_jwt = false
+
+[functions.respaldo-semanal]
+verify_jwt = false
+
+[functions.tiendanube]
+verify_jwt = false
