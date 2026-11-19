@@ -4280,3 +4280,36 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .etConfirm small{font-size:13px;color:#5c6470;line-height:1.4}
 .etConfirmAcc{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
 .etConfirmAcc button{flex:1}
+/* ===== Generar informe con fotos ===== */
+.ifWrap{display:flex;flex-direction:column;gap:12px}
+.ifCampo{display:flex;flex-direction:column;gap:5px;font-size:12.5px;font-weight:800;color:#5c6470;text-transform:uppercase;letter-spacing:.04em}
+.ifCampo input,.ifCampo textarea{font:inherit;font-size:15px;font-weight:500;text-transform:none;letter-spacing:0;color:#14171c;padding:10px 12px;border:1.5px solid #e3e8ef;border-radius:12px;background:#fff;resize:vertical;width:100%;box-sizing:border-box}
+.ifFotos{display:flex;flex-direction:column;gap:10px}
+.ifFoto{display:grid;grid-template-columns:120px minmax(0,1fr);gap:12px;background:#f6f7f9;border-radius:14px;padding:10px}
+.ifFoto img{width:120px;height:120px;object-fit:cover;border-radius:10px;background:#e3e8ef}
+.ifFotoTx{display:flex;flex-direction:column;gap:6px;min-width:0}
+.ifNum{font-size:12px;font-weight:800;color:#5c6470;text-transform:uppercase;letter-spacing:.05em}
+.ifNum em{font-style:normal;color:#13915f;text-transform:none;letter-spacing:0}
+.ifFotoTx textarea{font:inherit;font-size:14.5px;padding:8px 10px;border:1.5px solid #e3e8ef;border-radius:10px;background:#fff;resize:vertical;min-height:64px}
+.ifFotoAcc{display:flex;gap:6px}
+.ifFotoAcc button{border:1px solid #e3e8ef;background:#fff;border-radius:9px;padding:5px 10px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.ifFotoAcc button:disabled{opacity:.4;cursor:default}
+.ifFotoAcc .quitar{margin-left:auto;color:#c43b2a}
+.ifAgregar{display:flex;gap:8px;flex-wrap:wrap}
+.ifAgregar button{flex:1 1 160px;border:1.5px dashed #c9ced6;background:#fff;border-radius:14px;padding:14px;font:inherit;font-weight:800;font-size:15px;cursor:pointer;color:#14171c}
+.ifElegir{border:1px solid #e3e8ef;border-radius:14px;padding:10px;background:#fff}
+.ifElegirCab{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.ifElegirCab button{border:0;background:#14171c;color:#fff;border-radius:10px;padding:6px 12px;font:inherit;font-weight:800;cursor:pointer}
+.ifElegirGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px}
+.ifElegirGrid button{position:relative;border:2px solid transparent;border-radius:10px;padding:0;overflow:hidden;cursor:pointer;aspect-ratio:1;background:#eef0f4}
+.ifElegirGrid img{width:100%;height:100%;object-fit:cover;display:block}
+.ifElegirGrid button.usada{border-color:#13915f}
+.ifElegirGrid i{position:absolute;top:4px;right:4px;background:#13915f;color:#fff;border-radius:50%;width:22px;height:22px;display:grid;place-items:center;font-style:normal;font-size:13px;font-weight:800}
+.ifAviso{margin:0;background:#ecf7f0;color:#1f4d36;border-radius:12px;padding:9px 12px;font-size:13.5px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.ifAviso button{border:0;background:none;color:#13724b;font:inherit;font-weight:800;cursor:pointer;margin-left:auto}
+.ifCheck{display:flex;gap:8px;align-items:center;font-size:13.5px;color:#4d5562}
+.ifAcc{display:flex;gap:8px;flex-wrap:wrap}
+.ifAcc>button{flex:1 1 160px}
+.ifIA{border:0;border-radius:12px;background:linear-gradient(135deg,#6a4fd8,#8b6cf0);color:#fff;font:inherit;font-weight:800;padding:11px 14px;cursor:pointer}
+.ifIA:disabled{opacity:.55;cursor:default}
+@media (max-width:480px){.ifFoto{grid-template-columns:90px minmax(0,1fr)}.ifFoto img{width:90px;height:90px}}

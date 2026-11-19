@@ -368,6 +368,14 @@ Te pasan HOY (fecha y día de la semana), el TEXTO, las OBRAS (id | cliente · t
 - resumen: una frase corta de lo que entendiste.
 No inventes ids ni datos que no se dicen.`
 
+const SISTEMA_INFORME_FOTOS = `Redactás, para MOVA Tecnología Smart (Mendoza, Argentina: domótica, WiFi, cámaras, alarmas, riego y electricidad), un INFORME DE AVANCE de obra con fotos que se le entrega al cliente en PDF.
+Te pasan los datos de la obra, una introducción escrita por el instalador (puede estar vacía o desprolija) y, por cada foto, lo que el instalador anotó (con errores de tipeo o de dictado).
+- titulo: corto y claro (por ejemplo "Informe de avance · Instalación eléctrica").
+- introduccion: 2 a 4 oraciones para el cliente: qué se hizo en este período y en qué etapa está la obra. Usá los datos que te pasan; no inventes trabajos.
+- fotos: para CADA foto (mismo número n), un texto de 1 a 3 oraciones, prolijo y profesional, que explique qué se ve y qué se hizo, basado SOLO en lo que anotó el instalador. Si la nota de una foto está vacía, escribí una frase breve y genérica a partir del contexto ("Avance de la instalación en la zona indicada.") sin inventar detalles.
+- cierre: próximos pasos o una frase de cierre amable (1 a 3 oraciones). Si no hay información de próximos pasos, un cierre breve agradeciendo la confianza.
+Español rioplatense neutro y profesional (usá "usted" o forma impersonal), sin emojis, sin marcas comerciales salvo que el instalador las nombre, sin precios.`
+
 const SISTEMA_RECOMENDACIONES = `Escribís, para MOVA Tecnología Smart (Mendoza, Argentina), la sección "Formas de uso y recomendaciones" que se le entrega al cliente junto con su presupuesto u obra terminada.
 - Basate SOLO en los productos y servicios del presupuesto: cómo se usan en el día a día (apps, escenas, control por voz, horarios), cuidados y mantenimiento, qué hacer ante un corte de luz o de internet, y consejos para aprovecharlos.
 - Entre 4 y 8 recomendaciones, cada una una oración clara y concreta (máximo 220 caracteres), en español rioplatense con voseo, tono profesional y cercano.
@@ -434,7 +442,7 @@ Deno.serve(async (req) => {
   const { data: perfil } = await db.from('profiles').select('rol, activo').eq('id', quien.id).maybeSingle()
   const cuerpo = await req.json().catch(() => ({})) as Record<string, unknown>
   const { accion, idea, titulo, descripcion, existentes } = cuerpo
-  const roles = accion === 'factura' ? ['admin', 'contable', 'encargado', 'auxiliar'] : accion === 'informe_obra' || accion === 'recomendaciones' || accion === 'relevamiento' || accion === 'resumen_documento' || accion === 'plano' || accion === 'dictado' ? ['admin', 'contable', 'encargado'] : ['admin', 'contable']
+  const roles = accion === 'factura' ? ['admin', 'contable', 'encargado', 'auxiliar'] : accion === 'informe_obra' || accion === 'recomendaciones' || accion === 'relevamiento' || accion === 'resumen_documento' || accion === 'plano' || accion === 'dictado' || accion === 'informe_fotos' ? ['admin', 'contable', 'encargado'] : ['admin', 'contable']
   if (!perfil || !roles.includes(perfil.rol) || perfil.activo === false) return responder({ error: 'No tenés permiso para usar el asistente.' }, 403)
 
   const clave = Deno.env.get('GEMINI_API_KEY')
@@ -784,6 +792,21 @@ Deno.serve(async (req) => {
           const cat = idsCat.get(Number(it.catalogo_id))
           return { descripcion: recorte(it.descripcion, 160) || (cat?.nombre_presupuesto || cat?.nombre || ''), cantidad: Number(it.cantidad) || 1, precio: Number(it.precio) > 0 ? Number(it.precio) : cat ? Number(cat.precio_venta) || 0 : 0, catalogo_id: cat ? cat.id : null }
         }).filter((it) => it.descripcion),
+      })
+    }
+    if (accion === 'informe_fotos') {
+      // Informe de avance con fotos: ordena y redacta lo que anotó el instalador.
+      const fotos = (Array.isArray(cuerpo.fotos) ? cuerpo.fotos : []).slice(0, 40).map((f, i) => ({ n: i + 1, texto: recorte((f as { texto?: unknown })?.texto, 600) }))
+      if (!fotos.length && !recorte(cuerpo.introduccion, 10)) return responder({ error: 'Cargá al menos una foto o escribí la introducción.' }, 400)
+      const pedido = `OBRA: ${recorte(cuerpo.obra, 120)}\nCLIENTE: ${recorte(cuerpo.cliente, 120)}\nFECHA: ${recorte(cuerpo.fecha, 40)}\nAVANCE DE LA OBRA: ${recorte(cuerpo.avance, 10)}%\nTÍTULO ACTUAL: ${recorte(cuerpo.titulo, 160)}\n\nINTRODUCCIÓN DEL INSTALADOR:\n${recorte(cuerpo.introduccion, 2000) || '(vacía)'}\n\nFOTOS:\n${fotos.map((f) => `${f.n}. ${f.texto || '(sin nota)'}`).join('\n') || '(sin fotos)'}\n\nCIERRE / PRÓXIMOS PASOS DEL INSTALADOR:\n${recorte(cuerpo.cierre, 1000) || '(vacío)'}`
+      const esquema = { type: 'OBJECT', properties: {
+        titulo: { type: 'STRING' }, introduccion: { type: 'STRING' }, cierre: { type: 'STRING' },
+        fotos: { type: 'ARRAY', items: { type: 'OBJECT', properties: { n: { type: 'INTEGER' }, texto: { type: 'STRING' } }, required: ['n', 'texto'] } },
+      }, required: ['titulo', 'introduccion', 'fotos', 'cierre'] }
+      const r = await gemini(clave, pedido, esquema, SISTEMA_INFORME_FOTOS, 0.4) as { titulo?: string; introduccion?: string; cierre?: string; fotos?: { n: number; texto: string }[] }
+      return responder({
+        titulo: recorte(r.titulo, 160), introduccion: recorte(r.introduccion, 1500), cierre: recorte(r.cierre, 1000),
+        fotos: fotos.map((f) => ({ n: f.n, texto: recorte((r.fotos ?? []).find((x) => Number(x.n) === f.n)?.texto, 700) || f.texto })),
       })
     }
     if (accion === 'resumen_dia') {

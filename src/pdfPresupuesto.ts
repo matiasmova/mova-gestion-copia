@@ -133,7 +133,7 @@ const conSigno = (n: number) => (n < 0 ? `- ${moneda(Math.abs(n))}` : `+ ${moned
 
 // Foto de un comprobante → JPEG liviano y derecho (el navegador aplica la
 // rotación de la cámara al dibujarla). Sirve también para HEIC en el iPhone.
-async function imagenAJpeg(blob: Blob): Promise<{ bytes: ArrayBuffer; w: number; h: number }> {
+export async function imagenAJpeg(blob: Blob): Promise<{ bytes: ArrayBuffer; w: number; h: number }> {
   const url = URL.createObjectURL(blob)
   try {
     const img = document.createElement('img')
