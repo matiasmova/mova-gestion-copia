@@ -13,6 +13,7 @@ import { PCT_ANTICIPO as PCT_SENA } from './estadoObra'
 import type { CambioTipo } from './presupuestoModificaciones'
 import { ETIQUETA_ADICIONAL, etiquetaModificacion } from './presupuestoModificaciones'
 import { textoUsd } from './catalogoMoneda'
+import MejorarTextoIA from './MejorarTextoIA'
 
 // La obra en vivo: la línea de avances que se toca para cargar o corregir, y el
 // presupuesto aceptado que se edita directo. El presupuesto nunca se pisa: cada
@@ -532,6 +533,7 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
         onCreado={(p) => { setCatalogo((c) => [...(c ?? []), p]); setEdicion((e) => (e ? { ...e, catalogoId: p.id, descripcion: p.nombre_presupuesto || p.nombre, precio: String(p.precio_venta || ''), costo: Number(p.costo_unitario) > 0 ? String(p.costo_unitario) : '' } : e)) }}
         onEditado={(p) => setCatalogo((c) => (c ?? []).map((x) => (x.id === p.id ? { ...x, ...p } : x)))} />}
       <Texto className="pvDesc" value={edicion.descripcion} onChange={(v) => setEdicion({ ...edicion, descripcion: v })} placeholder="Descripción" />
+      <MejorarTextoIA texto={edicion.descripcion} tipo={itemEd?.tipo} onCambiar={(t) => setEdicion((e) => (e ? { ...e, descripcion: t } : e))} />
       <div className="pvCtrl">
         <label>Cantidad</label>
         <div className="pvPaso">

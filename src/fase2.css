@@ -4313,3 +4313,15 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .ifIA{border:0;border-radius:12px;background:linear-gradient(135deg,#6a4fd8,#8b6cf0);color:#fff;font:inherit;font-weight:800;padding:11px 14px;cursor:pointer}
 .ifIA:disabled{opacity:.55;cursor:default}
 @media (max-width:480px){.ifFoto{grid-template-columns:90px minmax(0,1fr)}.ifFoto img{width:90px;height:90px}}
+/* ✨ Corregir con IA (descripción de un ítem) */
+.mtIA{display:flex;flex-direction:column;gap:6px;margin:-2px 0 4px}
+.mtIAFila{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.mtIABoton{border:0;border-radius:999px;background:linear-gradient(135deg,#6a4fd8,#8b6cf0);color:#fff;font:inherit;font-size:13px;font-weight:800;padding:6px 14px;cursor:pointer}
+.mtIABoton:disabled{opacity:.6;cursor:default}
+.mtIADeshacer{border:0;background:none;color:#6a4fd8;font:inherit;font-size:13px;font-weight:800;cursor:pointer}
+.mtIAOpc{display:flex;flex-direction:column;gap:6px}
+.mtIAOpc button{display:flex;flex-direction:column;gap:2px;text-align:left;border:1.5px solid #e3e1f5;background:#fbfaff;border-radius:12px;padding:8px 12px;font:inherit;cursor:pointer;color:#14171c}
+.mtIAOpc button b{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#6a4fd8}
+.mtIAOpc button span{font-size:14px;line-height:1.35;white-space:pre-line}
+.mtIAOpc button.on{border-color:#6a4fd8;background:#f1edff}
+.mtIAError{margin:0;font-size:13px;color:#b42318}
