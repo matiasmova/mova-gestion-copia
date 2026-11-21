@@ -376,6 +376,14 @@ Te pasan los datos de la obra, una introducción escrita por el instalador (pued
 - cierre: próximos pasos o una frase de cierre amable (1 a 3 oraciones). Si no hay información de próximos pasos, un cierre breve agradeciendo la confianza.
 Español rioplatense neutro y profesional (usá "usted" o forma impersonal), sin emojis, sin marcas comerciales salvo que el instalador las nombre, sin precios.`
 
+const SISTEMA_MEJORAR_DESCRIPCION = `Corregís la descripción de un ítem de presupuesto u obra de MOVA Tecnología Smart (Mendoza, Argentina: domótica, WiFi, cámaras, alarmas, riego y electricidad). La lee el cliente.
+Te pasan el TEXTO tal como lo escribió o dictó el instalador (con errores de tipeo, sin mayúsculas, abreviado) y si es producto o servicio.
+Devolvé 3 versiones en "opciones", de la más fiel a la más pulida:
+1) Corregida: mismo contenido, solo ortografía, mayúsculas, acentos y puntuación.
+2) Clara: redactada prolija y profesional, fácil de entender para el cliente.
+3) Breve: lo esencial en pocas palabras.
+Reglas: no inventes datos, medidas, cantidades, marcas ni lugares que no estén en el texto; conservá los que sí están. Sin precios, sin emojis, sin comillas. Si el texto tiene un salto de línea, la primera línea es el título y lo que sigue es el detalle: respetá ese formato.`
+
 const SISTEMA_RECOMENDACIONES = `Escribís, para MOVA Tecnología Smart (Mendoza, Argentina), la sección "Formas de uso y recomendaciones" que se le entrega al cliente junto con su presupuesto u obra terminada.
 - Basate SOLO en los productos y servicios del presupuesto: cómo se usan en el día a día (apps, escenas, control por voz, horarios), cuidados y mantenimiento, qué hacer ante un corte de luz o de internet, y consejos para aprovecharlos.
 - Entre 4 y 8 recomendaciones, cada una una oración clara y concreta (máximo 220 caracteres), en español rioplatense con voseo, tono profesional y cercano.
@@ -442,7 +450,7 @@ Deno.serve(async (req) => {
   const { data: perfil } = await db.from('profiles').select('rol, activo').eq('id', quien.id).maybeSingle()
   const cuerpo = await req.json().catch(() => ({})) as Record<string, unknown>
   const { accion, idea, titulo, descripcion, existentes } = cuerpo
-  const roles = accion === 'factura' ? ['admin', 'contable', 'encargado', 'auxiliar'] : accion === 'informe_obra' || accion === 'recomendaciones' || accion === 'relevamiento' || accion === 'resumen_documento' || accion === 'plano' || accion === 'dictado' || accion === 'informe_fotos' ? ['admin', 'contable', 'encargado'] : ['admin', 'contable']
+  const roles = accion === 'factura' ? ['admin', 'contable', 'encargado', 'auxiliar'] : accion === 'informe_obra' || accion === 'recomendaciones' || accion === 'relevamiento' || accion === 'resumen_documento' || accion === 'plano' || accion === 'dictado' || accion === 'informe_fotos' || accion === 'mejorar_descripcion' ? ['admin', 'contable', 'encargado'] : ['admin', 'contable']
   if (!perfil || !roles.includes(perfil.rol) || perfil.activo === false) return responder({ error: 'No tenés permiso para usar el asistente.' }, 403)
 
   const clave = Deno.env.get('GEMINI_API_KEY')
@@ -793,6 +801,12 @@ Deno.serve(async (req) => {
           return { descripcion: recorte(it.descripcion, 160) || (cat?.nombre_presupuesto || cat?.nombre || ''), cantidad: Number(it.cantidad) || 1, precio: Number(it.precio) > 0 ? Number(it.precio) : cat ? Number(cat.precio_venta) || 0 : 0, catalogo_id: cat ? cat.id : null }
         }).filter((it) => it.descripcion),
       })
+    }
+    if (accion === 'mejorar_descripcion') {
+      const texto = recorte(cuerpo.texto, 1200)
+      if (!texto) return responder({ error: 'Escribí primero la descripción.' }, 400)
+      const r = await gemini(clave, `TIPO: ${cuerpo.tipo === 'servicio' ? 'servicio' : 'producto'}${cuerpo.contexto ? `\nCONTEXTO: ${recorte(cuerpo.contexto, 200)}` : ''}\n\nTEXTO:\n${texto}`, lista({ texto: { type: 'STRING' } }), SISTEMA_MEJORAR_DESCRIPCION, 0.3) as { opciones?: { texto: string }[] }
+      return responder({ opciones: (r.opciones ?? []).map((o) => recorte(o.texto, 1200)).filter(Boolean).slice(0, 3) })
     }
     if (accion === 'informe_fotos') {
       // Informe de avance con fotos: ordena y redacta lo que anotó el instalador.

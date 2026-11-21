@@ -15,6 +15,7 @@ import { codigoPresupuesto } from './codigoPresupuesto'
 import logo from './assets/mova-logo.jpg'
 import GananciaTrabajo from './GananciaTrabajo'
 import { textoUsd } from './catalogoMoneda'
+import MejorarTextoIA from './MejorarTextoIA'
 
 // Presupuesto "en vivo": se arma sobre el mismo documento que recibe el cliente.
 // Se toca un ítem y se cambia ahí (cantidad, precio, descuento); el total se
@@ -400,6 +401,7 @@ export default function PresupuestoEnVivo({ presupuesto, cliente, obra, onCerrar
               onCreado={(p) => { const prod = { ...p, costo_unitario: p.costo_unitario } as Producto; setCatalogo((c) => [...c, prod]); elegirProducto(it._k, String(p.id), prod) }}
               onEditado={(p) => setCatalogo((c) => c.map((x) => (x.id === p.id ? { ...x, ...p } as Producto : x)))} />
             <Texto className="pvDesc" value={it.descripcion} onChange={(v) => cambiarItem(it._k, { descripcion: v })} placeholder="Descripción que lee el cliente" />
+            <MejorarTextoIA texto={it.descripcion} tipo={it.tipo} onCambiar={(t) => cambiarItem(it._k, { descripcion: t })} />
             <div className="pvCtrl">
               <label>Cantidad</label>
               <div className="pvPaso">
