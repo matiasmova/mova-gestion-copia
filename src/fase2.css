@@ -4384,3 +4384,29 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .tfPlegado small{color:#6a7382;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 .tfPlegado:focus-visible{outline:2px solid #18a058;outline-offset:2px}
 @media (max-width:420px){.tfHoy b{font-size:16px}.tfHoy{gap:6px}.tfHoy button{padding:10px}}
+
+/* Para hacer (nueva vista): resumen en una línea, tarjetas y lista agrupada por tipo como Trabajos */
+.g-atr{--c:#c2410c;--s:#fdece4}
+.g-agenda{--c:#0e8fb5;--s:#e2f4f9}
+.ph3Resumen{display:flex;flex-direction:column;gap:8px}
+.ph3Resumen p{margin:0;font-size:15px;color:#5c6470;line-height:1.4}
+.ph3Resumen p b{color:#14171c}
+.ph3Prog{display:flex;align-items:center;gap:10px;font-size:12.5px;color:#69707d;font-weight:700}
+.ph3Prog b{color:#14171c;font-variant-numeric:tabular-nums}
+.ph3Prog span{flex:1;height:6px;border-radius:99px;background:#e9ecf0;overflow:hidden}
+.ph3Prog span i{display:block;height:100%;background:#18a058;border-radius:99px}
+.ph3Grupo .ph2Desl{border-radius:0;border-top:1px solid #eef0f3}
+.ph3Grupo .ph2Desl:first-child{border-top:0}
+.ph3Fila{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"tx monto" "tx acc";gap:4px 12px;align-items:center;background:#fff;padding:11px 14px}
+.ph3Tx{all:unset;box-sizing:border-box;grid-area:tx;cursor:pointer;min-width:0;display:flex;flex-direction:column;gap:2px}
+.ph3Tx:focus-visible{outline:2px solid var(--c);outline-offset:2px;border-radius:6px}
+.ph3Tx b{font-size:15px;color:#14171c;display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;line-height:1.25}
+.ph3Tx b i{font-style:normal;font-size:11px;font-weight:800;border-radius:999px;padding:1px 7px;background:#eef1f5;color:#4a5466}
+.ph3Tx b i.r{background:#fdece4;color:#c2410c}
+.ph3Tx b i.h{background:#fff0e0;color:#ee7a12}
+.ph3Tx small{font-size:12.5px;color:#69707d;line-height:1.3;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.ph3Monto{grid-area:monto;justify-self:end;font-weight:800;font-size:14.5px;font-variant-numeric:tabular-nums;white-space:nowrap;color:#14171c}
+.ph3Acc{grid-area:acc;justify-self:end;border:0;cursor:pointer;font:inherit;font-size:12.5px;font-weight:800;border-radius:999px;padding:6px 12px;background:var(--s);color:var(--c);white-space:nowrap}
+.ph3Fila.cobrar .ph3Acc{background:var(--c);color:#fff}
+.ph3Acc:focus-visible{outline:2px solid var(--c);outline-offset:2px}
+.ph3Fila:not(:has(.ph3Monto:not(:empty))){grid-template-areas:"tx acc"}
