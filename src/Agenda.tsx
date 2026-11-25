@@ -6,7 +6,7 @@ import { linkWhatsApp } from './whatsapp'
 import { isoLocal } from './agendaFrase'
 import { estadoPush, activarPush, desactivarPush, type EstadoPush } from './push'
 import { confirmarEliminacion } from './confirmar'
-import { GRUPOS_PH, TIPOS_PH, claveDeNota, leerOcultas, marcaPH, mostrarDeNuevo, notaSinMarca, ocultarPorHoy, type GrupoPH, type TareaPH, type TipoPH } from './paraHacer'
+import { TIPOS_PH, claveDeNota, leerOcultas, marcaPH, mostrarDeNuevo, notaSinMarca, ocultarPorHoy, type GrupoPH, type TareaPH, type TipoPH } from './paraHacer'
 import AvisosDiarios from './AvisosDiarios'
 import { crearEvento, momentoAviso } from './agendaEventos'
 import DictadoRapido, { RevisarDictados } from './DictadoRapido'
@@ -75,19 +75,19 @@ type ItemPH = { clave: string; tipo: TipoPH; grupo: GrupoPH; icono: string; titu
 // Cuadrados de Para hacer: qué tipo de pendiente es, dicho como lo pensás.
 const suma = (l: { monto?: number }[]) => l.reduce((t, x) => t + (x.monto ?? 0), 0)
 const plataCorta = (n: number) => n >= 1e6 ? `$ ${(n / 1e6).toLocaleString('es-AR', { maximumFractionDigits: 1 })} M` : n >= 1e3 ? `$ ${Math.round(n / 1e3).toLocaleString('es-AR')} mil` : `$ ${Math.round(n).toLocaleString('es-AR')}`
-type Clase = { k: string; nombre: string; icono: string; pie: (l: ItemPH[]) => string }
+type Clase = { k: string; nombre: string; icono: string; pie: (l: ItemPH[]) => string; corto?: string; acc?: string; c?: string; s?: string }
 const CLASES: Clase[] = [
-  { k: 'saldo', nombre: 'Obras con saldo para cobrar', icono: '💵', pie: (l) => `${plataCorta(suma(l))} según el avance` },
-  { k: 'comprobantes', nombre: 'Comprobantes de pago para revisar', icono: '🧾', pie: (l) => `${l.length} sin confirmar` },
-  { k: 'borrador', nombre: 'Presupuestos en borrador', icono: '📤', pie: (l) => `${plataCorta(suma(l))} sin enviar` },
-  { k: 'sinResp', nombre: 'Enviados sin respuesta', icono: '💬', pie: (l) => `${plataCorta(suma(l))} esperando` },
-  { k: 'sinObra', nombre: 'Aceptados sin obra creada', icono: '✅', pie: () => 'falta crear la obra' },
-  { k: 'plazo', nombre: 'Obras con plazo vencido', icono: '⏰', pie: (l) => { const d = Math.max(0, ...l.map((x) => x.sugerencia?.dias ?? 0)); return d > 0 ? `la más atrasada: ${d} días` : 'vencen esta semana' } },
-  { k: 'informes', nombre: 'Obras para informar o revisar', icono: '📝', pie: (l) => `${l.length} sin novedades` },
-  { k: 'seguro', nombre: 'Seguros / ART por vencer', icono: '🦺', pie: (l) => l[0]?.detalle ?? '' },
-  { k: 'personal', nombre: 'Pagos al personal', icono: '👷', pie: (l) => plataCorta(suma(l)) },
-  { k: 'agenda', nombre: 'Recordatorios y visitas', icono: '🔔', pie: (l) => `el próximo: ${(l[0]?.detalle ?? '').split(' · ')[0]}` },
-  { k: 'otros', nombre: 'Stock, gastos y otros', icono: '📦', pie: (l) => `${l.length} para ver` },
+  { k: 'saldo', nombre: 'Obras con saldo para cobrar', corto: 'Cobrar saldo', acc: 'Cobrar', c: '#ee7a12', s: '#fff0e0', icono: '💵', pie: (l) => `${plataCorta(suma(l))} según el avance` },
+  { k: 'comprobantes', nombre: 'Comprobantes de pago para revisar', corto: 'Comprobantes', acc: 'Revisar', c: '#18a058', s: '#e3f6ec', icono: '🧾', pie: (l) => `${l.length} sin confirmar` },
+  { k: 'borrador', nombre: 'Presupuestos en borrador', corto: 'Armar y enviar', acc: 'Enviar', c: '#7c5cff', s: '#efeaff', icono: '📤', pie: (l) => `${plataCorta(suma(l))} sin enviar` },
+  { k: 'sinResp', nombre: 'Enviados sin respuesta', corto: 'Seguir presupuestos', acc: 'Recordar', c: '#0e8fb5', s: '#e2f4f9', icono: '💬', pie: (l) => `${plataCorta(suma(l))} esperando` },
+  { k: 'sinObra', nombre: 'Aceptados sin obra creada', corto: 'Crear la obra', acc: 'Crear obra', c: '#18a058', s: '#e3f6ec', icono: '✅', pie: () => 'falta crear la obra' },
+  { k: 'plazo', nombre: 'Obras con plazo vencido', corto: 'Plazo vencido', acc: 'Revisar', c: '#c2410c', s: '#fdece4', icono: '⏰', pie: (l) => { const d = Math.max(0, ...l.map((x) => x.sugerencia?.dias ?? 0)); return d > 0 ? `la más atrasada: ${d} días` : 'vencen esta semana' } },
+  { k: 'informes', nombre: 'Obras para informar o revisar', corto: 'Obras para informar', acc: 'Informar', c: '#4a5466', s: '#eef1f5', icono: '📝', pie: (l) => `${l.length} sin novedades` },
+  { k: 'seguro', nombre: 'Seguros / ART por vencer', corto: 'Seguros / ART', acc: 'Ver', c: '#c2410c', s: '#fdece4', icono: '🦺', pie: (l) => l[0]?.detalle ?? '' },
+  { k: 'personal', nombre: 'Pagos al personal', corto: 'Pagos al personal', acc: 'Pagar', c: '#7c5cff', s: '#efeaff', icono: '👷', pie: (l) => plataCorta(suma(l)) },
+  { k: 'agenda', nombre: 'Recordatorios y visitas', corto: 'Agenda', acc: 'Ver', c: '#0e8fb5', s: '#e2f4f9', icono: '🔔', pie: (l) => `el próximo: ${(l[0]?.detalle ?? '').split(' · ')[0]}` },
+  { k: 'otros', nombre: 'Stock, gastos y otros', corto: 'Otros', acc: 'Ver', c: '#4a5466', s: '#eef1f5', icono: '📦', pie: (l) => `${l.length} para ver` },
 ]
 function claseDe(x: ItemPH): string {
   const k = x.clave
@@ -263,15 +263,14 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
   ].filter((x) => !ocultas.has(x.clave) && !agendadas.has(x.clave))
   const orden: GrupoPH[] = ['atr', 'hoy', 'sem', 'luego']
   const ordenados = [...items].sort((a, b) => orden.indexOf(a.grupo) - orden.indexOf(b.grupo))
-  const visibles = ordenados.filter((x) => !clase || claseDe(x) === clase)
+  // Filtro: un tipo (clase) o uno rápido de arriba: atrasados / agenda de hoy.
+  const pasaFiltro = (x: ItemPH) => !clase || (clase === '_atr' ? x.grupo === 'atr' : clase === '_hoy' ? !!x.evento && x.evento.fecha === hoyStr : claseDe(x) === clase)
+  const visibles = ordenados.filter(pasaFiltro)
   // Para cobrar hoy: lo que corresponde según el avance de cada obra (y el saldo de las terminadas).
   // "porCobrar" es todo lo que falta cobrar de las obras, incluido el trabajo que todavía no se hizo.
   const paraCobrar = suma(items.filter((x) => claseDe(x) === 'saldo'))
   const hechosHoy = ocultas.size + eventos.filter((e) => e.completado && e.fecha === hoyStr).length
   const totalDia = hechosHoy + items.length
-  // Lo primero: lo atrasado (o de hoy) con más plata en juego; cobrar va primero.
-  const primero = items.filter((x) => x.grupo === 'atr' || x.grupo === 'hoy')
-    .sort((a, b) => (a.grupo === 'atr' ? 0 : 1) - (b.grupo === 'atr' ? 0 : 1) || Number(claseDe(b) === 'saldo') - Number(claseDe(a) === 'saldo') || (b.monto ?? 0) - (a.monto ?? 0))[0]
   const manana = sumarDias(hoyStr, 1)
   const lunesProx = sumarDias(lunesDe(hoyStr), 7)
 
@@ -349,13 +348,17 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
   const renglon = (x: ItemPH) => {
     const meta = claseMeta(x)
     const e = x.evento
+    const ir = irDe(x)
+    const deHoy = x.grupo === 'hoy' || (!!e && e.fecha === hoyStr)
     return <Deslizable key={x.clave} onDerecha={() => hecho(x)} onIzquierda={() => posponer(x, x.evento && x.evento.fecha >= manana ? sumarDias(x.evento.fecha, 1) : manana)}>
-      <button type="button" className={`ph2Card t-${x.tipo}${x.grupo === 'atr' ? ' atr' : ''}`} onClick={() => setHoja(x.clave)}>
-        <span className="ph2Ico" aria-hidden>{e ? tipoDe(e.tipo).icono : meta.icono}</span>
-        <span className="ph2Tx"><b>{x.titulo}</b><small>{x.detalle}</small>
-          {(e || x.grupo === 'atr') && <span className="ph2Chips">{x.grupo === 'atr' && <i className="r">atrasado</i>}{e && <i>{claveOrigen(e) ? 'agendado de la lista' : 'agendado'}</i>}</span>}</span>
-        <span className="ph2Der">{x.monto ? <em>{plataCorta(x.monto)}</em> : null}<i aria-hidden>›</i></span>
-      </button>
+      <div className={`ph3Fila${claseDe(x) === 'saldo' ? ' cobrar' : ''}`}>
+        <button type="button" className="ph3Tx" onClick={() => setHoja(x.clave)}>
+          <b>{x.titulo}{x.grupo === 'atr' ? <i className="r">atrasado</i> : deHoy ? <i className="h">hoy</i> : null}{e && claveOrigen(e) ? <i>agendado</i> : null}</b>
+          <small>{x.detalle}</small>
+        </button>
+        {x.monto ? <span className="ph3Monto">{moneda(x.monto)}</span> : <span />}
+        <button type="button" className="ph3Acc" onClick={() => (ir ? recorrer(x) : setHoja(x.clave))}>{ir && ir.t !== 'Abrir' && ir.t !== 'Ver' && !meta.acc ? ir.t : meta.acc ?? 'Ver'}</button>
+      </div>
     </Deslizable>
   }
 
@@ -389,7 +392,6 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
 
   const hojaItem = hoja ? items.find((x) => x.clave === hoja) ?? null : null
   const conItems = CLASES.map((c) => ({ c, l: items.filter((x) => claseDe(x) === c.k) })).filter((x) => x.l.length)
-  const claseSel = clase ? CLASES.find((c) => c.k === clase) : null
 
   return (
     <div className="gestionPage agenda agNueva ph2">
@@ -402,39 +404,31 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
       </div>
 
       <div className="agCols"><div className="agColIzq">
-      {/* ---- Resumen del día ---- */}
-      <div className="ph2Resumen">
-        <h1>{cargando || cargandoTareas ? 'Juntando tus pendientes…' : items.length ? <>Tenés <em>{items.length} pendiente{items.length === 1 ? '' : 's'}</em>{paraCobrar > 0.5 ? <><br />y {plataCorta(paraCobrar)} para cobrar</> : null}</> : <>Todo al día <em>✓</em></>}</h1>
-        {porCobrar != null && porCobrar > paraCobrar + 0.5 && !cargando && !cargandoTareas && <p className="ph2Deuda">Según el avance de cada obra. En total te faltan cobrar <b>{plataCorta(porCobrar)}</b> de las obras en curso, contando lo que todavía no se hizo.</p>}
-        {totalDia > 0 && <div className="ph2Progreso" aria-label="Avance del día"><b>{hechosHoy}/{totalDia}</b><span className="ph2Barra"><i style={{ width: `${(hechosHoy / totalDia) * 100}%` }} /></span><small>hechos hoy</small></div>}
+      {/* ---- Resumen del día: una línea y la barrita de hechos hoy ---- */}
+      <div className="ph3Resumen">
+        <p>{cargando || cargandoTareas ? 'Juntando tus pendientes…' : items.length ? <><b>{items.length} pendiente{items.length === 1 ? '' : 's'}</b>{(porCobrar ?? paraCobrar) > 0.5 ? <> · te faltan cobrar <b>{plataCorta(Math.max(porCobrar ?? 0, paraCobrar))}</b>{porCobrar != null && porCobrar > paraCobrar + 0.5 ? ' de las obras en curso' : ' según el avance'}</> : null}</> : <b>Todo al día ✓</b>}</p>
+        {totalDia > 0 && <div className="ph3Prog" aria-label="Avance del día"><b>{hechosHoy}/{totalDia}</b><span><i style={{ width: `${(hechosHoy / totalDia) * 100}%` }} /></span><small>hechos hoy</small></div>}
       </div>
       {error && <p className="loginError">{error}</p>}
       {aviso && <p className="agAvisoTxt ok" role="status">{aviso}</p>}
 
-      {/* ---- Lo primero ---- */}
-      {primero && !clase && (() => {
-        const ir = irDe(primero)
-        return <div className={`ph2Primero t-${primero.tipo}`}>
-          <span className="ph2Eti">Lo primero · {claseMeta(primero).nombre}</span>
-          <h3>{primero.titulo}</h3>
-          {primero.monto ? <b className="ph2Monto">{moneda(primero.monto)}</b> : null}
-          <small>{primero.detalle}</small>
-          <div className="ph2PrimAcc">
-            {ir ? <button type="button" className="lleno" onClick={() => recorrer(primero)}>{ir.t} ›</button> : <button type="button" className="lleno" onClick={() => setHoja(primero.clave)}>Ver ›</button>}
-            <button type="button" className="claro" onClick={() => posponer(primero, manana)}>Mañana</button>
-          </div>
+      {/* ---- Lo que toca hoy: tres tarjetas que filtran ---- */}
+      {items.length > 0 && (() => {
+        const cob = items.filter((x) => claseDe(x) === 'saldo'), atr = items.filter((x) => x.grupo === 'atr'), ag = items.filter((x) => x.evento && x.evento.fecha === hoyStr)
+        const proximo = ag.map((x) => x.evento!).filter((ev) => ev.hora).sort((a, b) => (a.hora ?? '').localeCompare(b.hora ?? ''))[0]
+        const tarjeta = (k: string, cls: string, t: string, v: string, pie: string) => <button type="button" className={`${cls}${clase === k ? ' on' : ''}`} aria-pressed={clase === k} onClick={() => setClase((x) => (x === k ? null : k))}><small>{t}</small><b>{v}</b><span>{pie}</span></button>
+        return <div className="tfHoy" role="group" aria-label="Lo que toca hoy">
+          {tarjeta('saldo', 'g-cobrar', 'Para cobrar', plataCorta(paraCobrar), `${cob.length} obra${cob.length === 1 ? '' : 's'}`)}
+          {tarjeta('_atr', 'g-atr', 'Atrasados', String(atr.length), atr.length ? 'pasó la fecha' : 'nada atrasado')}
+          {tarjeta('_hoy', 'g-agenda', 'Agenda hoy', String(ag.length), proximo ? `próx. ${proximo.hora!.slice(0, 5)}` : ag.length ? 'para hoy' : 'día libre')}
         </div>
       })()}
 
-      {/* ---- Cuadrados: qué tipo de pendiente es ---- */}
-      {conItems.length > 0 && <div className="ph2Cuadros">
-        {conItems.map(({ c, l }) => <button key={c.k} type="button" className={`ph2Cuadro${clase === c.k ? ' on' : ''}`} aria-pressed={clase === c.k} onClick={() => setClase((v) => (v === c.k ? null : c.k))}>
-          <span className="ph2CuadroArr"><span className="ph2Ico">{c.icono}</span><b>{l.length}</b></span>
-          <span className="ph2CuadroNom">{c.nombre}</span>
-          <small>{c.pie(l)}</small>
-        </button>)}
+      {/* ---- Tipos de pendiente como filtros chicos ---- */}
+      {conItems.length > 0 && <div className="tfChips" role="group" aria-label="Filtrar por tipo">
+        <button type="button" className={!clase ? 'on' : ''} aria-pressed={!clase} onClick={() => setClase(null)}>Todo<em>{items.length}</em></button>
+        {conItems.map(({ c, l }) => <button key={c.k} type="button" className={clase === c.k ? 'on' : ''} aria-pressed={clase === c.k} title={c.nombre} style={{ ['--c' as string]: c.c }} onClick={() => setClase((v) => (v === c.k ? null : c.k))}><i aria-hidden />{c.corto ?? c.nombre}<em>{l.length}</em></button>)}
       </div>}
-      {claseSel && <div className="ph2Filtro"><span>Mostrando: {claseSel.nombre.toLowerCase()}</span><button type="button" onClick={() => setClase(null)}>Ver todo</button></div>}
 
       {/* ---- Lo dictado que falta cargar ---- */}
       <RevisarDictados lista={revisar} onEditar={(d) => setDictando(d)} onCambio={() => { setVueltaRev((v) => v + 1); setTick((t) => t + 1) }}
@@ -444,10 +438,14 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
       {cargando || cargandoTareas ? <p className="phVacio">Juntando lo que tenés para hacer…</p>
         : visibles.length === 0 ? <p className="phVacio">✓ {items.length ? 'Nada de este tipo.' : 'Todo al día. Tocá 🎤 Dictar rápido para anotar algo.'}</p>
           : <div className="ph2Lista">
-            {GRUPOS_PH.map(([g, t]) => {
-              const del = visibles.filter((x) => x.grupo === g)
+            {CLASES.map((c) => {
+              const del = visibles.filter((x) => claseDe(x) === c.k)
               if (!del.length) return null
-              return <section key={g} className={`ph2Grupo g-${g}`}><h3>{t.replace('⚠ ', '')} <span>{del.length}</span></h3>{del.map(renglon)}</section>
+              const plata = suma(del)
+              return <section key={c.k} className="tfGrupo ph3Grupo" style={{ ['--c' as string]: c.c, ['--s' as string]: c.s }}>
+                <div className="tfGrupoCab"><h3><i aria-hidden />{c.corto ?? c.nombre}<small>· {del.length}</small></h3>{plata > 0.5 && <span>{plataCorta(plata)}</span>}</div>
+                <div className="tfGrupoLista">{del.map(renglon)}</div>
+              </section>
             })}
             <p className="ph2Ayuda">Deslizá a la derecha → <b>hecho</b> · a la izquierda → <b>para mañana</b> · tocá para ver más</p>
           </div>}
