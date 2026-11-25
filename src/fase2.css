@@ -4417,3 +4417,7 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .ph3Btns.dos{grid-area:btns;margin-top:4px}
 .ph3Obra{border:1px solid #e3e8ef;background:#fff;color:#3d4552;cursor:pointer;font:inherit;font-size:12.5px;font-weight:800;border-radius:999px;padding:5px 12px;white-space:nowrap}
 .ph3Obra:focus-visible{outline:2px solid var(--c);outline-offset:2px}
+/* Obra: modificaciones de ítems (+ / −) en la misma lista que los extras */
+.pvN.menos{background:#e6f4ec;color:#1f7a4d}
+.pvImp.menos{color:#1f7a4d}
+.oeModNota{margin:2px 0 6px;font-size:12.5px;color:#69707d;line-height:1.4}

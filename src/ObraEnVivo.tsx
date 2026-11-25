@@ -586,8 +586,21 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
     </div>
   }
 
-  const marca = (e: { pendiente: boolean; quitado: boolean; modificado: boolean }) =>
-    e.pendiente ? <span className="oeMod pe">⏳ por aprobar</span> : e.quitado ? <span className="oeMod no">quitado</span> : e.modificado ? <span className="oeMod ap">modificado</span> : null
+  // Ítems del presupuesto con cambios: se muestran como modificación (+ / −), sin tocar el original.
+  const cambiosItems = items.map((it) => {
+    const e = estadoDe(it, adicionales)
+    if (!e.modificado) return null
+    const orig = it.cantidad * precioNeto(it)
+    const nuevo = e.quitado ? 0 : e.cantidad * e.precio
+    const dif = Math.round((nuevo - orig) * 100) / 100
+    const n = (x: number) => Number(x).toLocaleString('es-AR')
+    const mismoPrecio = Math.abs(e.precio - precioNeto(it)) < 0.005 && e.descripcion.trim() === it.descripcion.trim()
+    const texto = e.quitado ? `Se quita · eran ${n(it.cantidad)} × ${plata(precioNeto(it))}`
+      : mismoPrecio ? `${e.cantidad - it.cantidad > 0 ? '+' : '−'}${n(Math.abs(e.cantidad - it.cantidad))} × ${plata(e.precio)} · eran ${n(it.cantidad)}, ahora ${n(e.cantidad)}`
+      : `Ahora ${n(e.cantidad)} × ${plata(e.precio)} · antes ${n(it.cantidad)} × ${plata(precioNeto(it))}`
+    return { it, e, dif, texto }
+  }).filter((x): x is NonNullable<typeof x> => !!x && (Math.abs(x.dif) > 0.5 || x.e.descripcion.trim() !== x.it.descripcion.trim() || x.e.quitado))
+
 
   return <section className="oeDoc" aria-label="Presupuesto de la obra">
     <div className="oeTit"><span>PRESUPUESTO</span><span className="oeTitBtns">
@@ -645,13 +658,13 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
           return <div key={it.id} className={`oeItem${abierto ? ' abierto' : ''}${e.quitado ? ' quitado' : ''}`}>
             <button type="button" className="oeFila" aria-expanded={abierto} onClick={() => abrirItem(it)}>
               <span className="pvN">{String(i + 1).padStart(2, '0')}</span>
-              <span className="oeTx"><b>{e.descripcion}{marca(e)}</b><small>{vigente.quitado ? 'Se quita' : !vigente.modificado && Number(it.descuento_pct) > 0
+              {/* El ítem se ve como se aceptó; el cambio va abajo, en "Modificaciones en la obra". */}
+              <span className="oeTx"><b>{it.descripcion}{e.modificado && <span className={`oeMod ${e.pendiente ? 'pe' : e.quitado ? 'no' : 'ap'}`}>{e.pendiente ? '⏳ cambio por aprobar' : e.quitado ? 'se quita' : 'con cambios'} ↓</span>}</b><small>{Number(it.descuento_pct) > 0
                   ? <>{Number(it.cantidad).toLocaleString('es-AR')} × {plata(it.precio_unitario)}<span className="pvPct">{Number(it.descuento_pct)}% dto.</span><span className="pvCU">= {plata(precioNeto(it))} c/u</span></>
-                  : `${Number(vigente.cantidad).toLocaleString('es-AR')} × ${plata(vigente.precio)}`}</small>
-                {e.pendiente && <small className="oePropuesto">Propuesto: {e.quitado ? 'quitarlo' : `${Number(e.cantidad).toLocaleString('es-AR')} × ${plata(e.precio)} = ${plata(e.cantidad * e.precio)}`}</small>}
+                  : `${Number(it.cantidad).toLocaleString('es-AR')} × ${plata(precioNeto(it))}`}</small>
                 {avances && !vigente.quitado && (() => { const av = avances[it.id] ?? 0; return <span className={`oeAvFila${av >= 100 ? ' fin' : ''}`}><span className="oeAvMini"><i style={{ width: `${av}%` }} /></span><small>{av >= 100 ? '✓ ' : ''}{Math.round(av)}% · {textoAvance(av, Number(vigente.cantidad) || 0)}</small></span> })()}
                 {!vigente.quitado && ahora > 0 && <small className="oeGan">💰 Ganás {plata(ahora - costoIt)} ({Math.round(((ahora - costoIt) / ahora) * 100)}%){esDeLista(it) && !(Number(it.costo_unitario) > 0) ? ' · falta el costo' : ''}</small>}</span>
-              <span className="pvImp">{plata(ahora)}{vigente.modificado && Math.abs(ahora - original) > 0.5 && <s>{plata(original)}</s>}</span>
+              <span className="pvImp">{plata(original)}</span>
             </button>
             {abierto && !pregunta && controlAvance(it)}
             {abierto && panel()}
@@ -660,8 +673,23 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
       </div>
     })}
 
-    {(agregados.length > 0 || extras.length > 0) && <div className="oeLista">
-      <div className="oeSubTit">Agregado en la obra</div>
+    {(agregados.length > 0 || extras.length > 0 || cambiosItems.length > 0) && <div className="oeLista">
+      <div className="oeSubTit">Modificaciones en la obra</div>
+      <p className="oeModNota">El presupuesto de arriba queda como se aceptó. Acá van los cambios: lo que se agregó y lo que se hizo de más o de menos.</p>
+      {cambiosItems.map(({ it, e, dif, texto }) => {
+        const abierto = edicion?.clave === `i${it.id}`
+        return <div key={`m${it.id}`} className={`oeItem${abierto ? ' abierto' : ''}`}>
+          <button type="button" className="oeFila" aria-expanded={abierto} onClick={() => abrirItem(it)}>
+            <span className={`pvN${dif < 0 ? ' menos' : ''}`}>{dif < 0 ? '−' : '＋'}</span>
+            <span className="oeTx"><b>{e.quitado ? it.descripcion : e.descripcion}{e.pendiente ? <span className="oeMod pe">⏳ por aprobar</span> : <span className="oeMod ap">aprobado</span>}</b><small>{texto}</small></span>
+            <span className={`pvImp${dif < 0 ? ' menos' : ''}`}>{conSigno(dif)}</span>
+          </button>
+          {!abierto && e.pendiente && e.cambio && <div className="oePanel"><div className="oeDecidir">
+            <button type="button" className="si" disabled={guardando} onClick={() => void decidir(e.cambio!, 'aprobado')}>✅ Aprobó</button>
+            <button type="button" className="no" disabled={guardando} onClick={() => void decidir(e.cambio!, 'rechazado')}>❌ No aprobó</button>
+          </div></div>}
+        </div>
+      })}
       {faltaSqlDto && <p className="oeError" role="status">El descuento no se guardó: falta correr en Supabase el SQL «fase 45» (descuento de los extras). El precio final sí quedó bien.</p>}
       {[...agregados, ...extras].map((a) => {
         const pend = a.estado === 'pendiente'
