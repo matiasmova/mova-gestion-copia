@@ -146,6 +146,7 @@ type Adicional = {
   presupuesto_id: number | null; item_id: number | null; cambio_tipo: CambioTipo | null
   cantidad_anterior: number | null; precio_anterior: number | null; cantidad_nueva: number | null; precio_nuevo: number | null
   costo_unitario?: number | null // costo interno de un extra (fase 43)
+  descuento_pct?: number | null // % de descuento de un extra (fase 45)
 }
 type Presu = { id: number; titulo: string; total: number }
 type EstadoItem = { descripcion: string; cantidad: number; precio: number; quitado: boolean; modificado: boolean; pendiente: boolean; cambio: Adicional | null }
@@ -189,6 +190,7 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
   const [edicion, setEdicion] = useState<Edicion | null>(null)
   const [pregunta, setPregunta] = useState<Pregunta | null>(null)
   const [guardando, setGuardando] = useState(false)
+  const [faltaSqlDto, setFaltaSqlDto] = useState(false)
   const [errorEd, setErrorEd] = useState('')
   const [catalogo, setCatalogo] = useState<Producto[] | null>(null)
   const [verCambios, setVerCambios] = useState(false)
@@ -226,7 +228,7 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
       setItems(filas)
       setAdicionales((rAdic.data ?? []).map((a) => ({
         ...a, importe: Number(a.importe), presupuesto_id: num(a.presupuesto_id), item_id: num(a.item_id), cambio_tipo: a.cambio_tipo ?? null,
-        cantidad_anterior: num(a.cantidad_anterior), precio_anterior: num(a.precio_anterior), cantidad_nueva: num(a.cantidad_nueva), precio_nuevo: num(a.precio_nuevo), costo_unitario: num(a.costo_unitario),
+        cantidad_anterior: num(a.cantidad_anterior), precio_anterior: num(a.precio_anterior), cantidad_nueva: num(a.cantidad_nueva), precio_nuevo: num(a.precio_nuevo), costo_unitario: num(a.costo_unitario), descuento_pct: num(a.descuento_pct),
       })) as Adicional[])
       setCargando(false)
     })()
@@ -357,7 +359,12 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
     setErrorEd('')
     setPregunta(null)
     setEdicion({ clave: `a${a.id}`, itemId: null, extraId: a.id, presupuestoId: a.presupuesto_id ?? presus[0].id, descripcion: a.descripcion, cantidad: Number(a.cantidad_nueva ?? 1) || 1,
-      precio: String(redondear(a.precio_nuevo ?? a.importe)), descuento: '', costo: Number(a.costo_unitario) > 0 ? String(a.costo_unitario) : '', motivo: a.motivo ?? '', catalogoId: null })
+      ...(() => {
+        // Se muestra el precio de lista y el descuento con que se guardó (fase 45).
+        const neto = Number(a.precio_nuevo ?? a.importe) || 0
+        const d = Number(a.descuento_pct) || 0
+        return d > 0 && d < 100 ? { precio: String(redondear(neto / (1 - d / 100))), descuento: String(d) } : { precio: String(redondear(neto)), descuento: '' }
+      })(), costo: Number(a.costo_unitario) > 0 ? String(a.costo_unitario) : '', motivo: a.motivo ?? '', catalogoId: null })
   }
 
   // Guardar un extra editado: se actualiza en el lugar y el total se recalcula.
@@ -367,7 +374,11 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
     const precio = netoEd(edicion)
     const datos: Record<string, unknown> = { descripcion: edicion.descripcion.trim(), motivo: edicion.motivo.trim() || null, cantidad_nueva: cant, precio_nuevo: precio, importe: redondear(cant * precio) }
     setGuardando(true)
-    let { error: fallo } = await supabase.from('adicionales').update({ ...datos, costo_unitario: Number(edicion.costo) || 0 }).eq('id', edicion.extraId)
+    let { error: fallo } = await supabase.from('adicionales').update({ ...datos, costo_unitario: Number(edicion.costo) || 0, descuento_pct: pctDto(edicion) }).eq('id', edicion.extraId)
+    if (fallo && /descuento_pct/.test(fallo.message)) {
+      setFaltaSqlDto(true)
+      ;({ error: fallo } = await supabase.from('adicionales').update({ ...datos, costo_unitario: Number(edicion.costo) || 0 }).eq('id', edicion.extraId))
+    }
     if (fallo && /costo_unitario/.test(fallo.message)) ({ error: fallo } = await supabase.from('adicionales').update(datos).eq('id', edicion.extraId))
     setGuardando(false)
     if (fallo) { console.error(fallo); setErrorEd(`No se pudo guardar: ${fallo.message || 'volvé a intentar.'}`); return }
@@ -430,7 +441,10 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
       precio_nuevo: pregunta.quitar ? null : precio,
     }
     // El costo interno va solo en un extra nuevo (si falta la columna, se guarda sin él).
-    let { error: fallo } = await supabase.from('adicionales').insert(!estEd && Number(edicion.costo) > 0 ? { ...fila, costo_unitario: Number(edicion.costo) } : fila)
+    const extraNuevo: Record<string, unknown> = { ...fila, ...(!estEd && Number(edicion.costo) > 0 ? { costo_unitario: Number(edicion.costo) } : {}) }
+    const dto = !estEd && !pregunta.quitar ? pctDto(edicion) : 0
+    let { error: fallo } = await supabase.from('adicionales').insert(dto > 0 ? { ...extraNuevo, descuento_pct: dto } : extraNuevo)
+    if (fallo && /descuento_pct/.test(fallo.message)) { setFaltaSqlDto(true); ({ error: fallo } = await supabase.from('adicionales').insert(extraNuevo)) }
     if (fallo && /costo_unitario/.test(fallo.message)) ({ error: fallo } = await supabase.from('adicionales').insert(fila))
     setGuardando(false)
     if (fallo) { console.error(fallo); setErrorEd(`No se pudo guardar: ${fallo.message || 'volvé a intentar.'}`); return }
@@ -648,6 +662,7 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
 
     {(agregados.length > 0 || extras.length > 0) && <div className="oeLista">
       <div className="oeSubTit">Agregado en la obra</div>
+      {faltaSqlDto && <p className="oeError" role="status">El descuento no se guardó: falta correr en Supabase el SQL «fase 45» (descuento de los extras). El precio final sí quedó bien.</p>}
       {[...agregados, ...extras].map((a) => {
         const pend = a.estado === 'pendiente'
         const reintegro = a.tipo === 'gasto_extra'
@@ -658,7 +673,10 @@ export function PresupuestoVivoObra({ obraId, onCambio, onVerHistorial, onGananc
         const cabeza = <>
             <span className="pvN">＋</span>
             <span className="oeTx"><b>{a.descripcion}{pend ? <span className="oeMod pe">⏳ por aprobar</span> : <span className="oeMod ap">{reintegro ? 'reintegro' : 'aprobado'}</span>}</b>
-              <small>{a.tipo === 'cambio' ? `${cantA.toLocaleString('es-AR')} × ${plata(a.precio_nuevo ?? a.importe)}` : ETIQUETA_ADICIONAL[a.tipo] ?? a.tipo}</small>
+              <small>{a.tipo !== 'cambio' ? ETIQUETA_ADICIONAL[a.tipo] ?? a.tipo
+                : Number(a.descuento_pct) > 0 && Number(a.descuento_pct) < 100
+                  ? <>{cantA.toLocaleString('es-AR')} × {plata(redondear((Number(a.precio_nuevo ?? a.importe) || 0) / (1 - Number(a.descuento_pct) / 100)))}<span className="pvPct">{Number(a.descuento_pct).toLocaleString('es-AR')}% dto.</span><span className="pvCU">= {plata(a.precio_nuevo ?? a.importe)} c/u</span></>
+                  : `${cantA.toLocaleString('es-AR')} × ${plata(a.precio_nuevo ?? a.importe)}`}</small>
               {editable && a.importe > 0 && <small className="oeGan">💰 Ganás {plata(ganaA)} ({Math.round((ganaA / a.importe) * 100)}%){Number(a.costo_unitario) > 0 ? '' : ' · sin costo cargado'}</small>}</span>
             <span className="pvImp">{conSigno(a.importe)}</span>
         </>
