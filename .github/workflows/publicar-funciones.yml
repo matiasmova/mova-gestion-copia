@@ -39,5 +39,5 @@ jobs:
             nombre=$(basename "$dir")
             [ -f "$dir/index.ts" ] || continue
             echo "▶ Publicando $nombre"
-            supabase functions deploy "$nombre" --project-ref "$PROYECTO" --no-verify-jwt --use-api
+            supabase functions deploy "$nombre" --project-ref "$PROYECTO" --no-verify-jwt --use-api --yes
           done
