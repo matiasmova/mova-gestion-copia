@@ -638,6 +638,22 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
     }).catch((e) => console.error(e))
   }
 
+  // Obra sin presupuesto aceptado: el presupuesto que tiene en curso (borrador o
+  // enviado) y el aviso que explica por qué no hay cobros ni ítems.
+  const presEnCurso = obraSeguimiento
+    ? presupuestosObra.find((p) => Number(p.obra_id) === Number(obraSeguimiento.id) && p.activo !== false && (p.estado === 'borrador' || p.estado === 'enviado')) ?? null
+    : null
+  function avisoSinAceptar(): { texto: string; abrir: () => void } | null {
+    const obra = obraSeguimiento
+    if (!obra || presupuestoAceptado) return null
+    if (presEnCurso && onVerPresupuesto) {
+      const id = presEnCurso.id
+      return { texto: `El presupuesto de esta obra está ${presEnCurso.estado === 'borrador' ? 'en armado (borrador)' : 'enviado'}, todavía no aceptado: por eso no ves cobros ni ítems. Tocá para abrirlo y marcar «✅ Aceptó».`, abrir: () => { cerrarSeguimiento(); onVerPresupuesto(id) } }
+    }
+    if (onNuevoPresupuesto) return { texto: 'La obra todavía no tiene presupuesto. Tocá para armarlo.', abrir: () => { cerrarSeguimiento(); onNuevoPresupuesto({ id: obra.id, cliente_id: obra.cliente_id }) } }
+    return null
+  }
+
   // ---------- Cambiar la etapa tocando Armando / Enviado / En obra / Terminado ----------
   // (con confirmación). Atrás de "En obra" el presupuesto vuelve a enviado o borrador.
   const [etapaPedida, setEtapaPedida] = useState<number | null>(null)
@@ -1163,9 +1179,10 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                 </div>
                 <div className="pvPasos" role="group" aria-label="Etapa de la obra (tocá para cambiarla)">
                   {[['Armando', 0], ['Enviado', 1], ['En obra', 2], ['Terminado', 3]].map(([t, i]) => {
-                    const actual = fin ? 3 : 2
+                    // Sin presupuesto aceptado, la etapa es la del presupuesto (armando o enviado).
+                    const actual = !presupuestoAceptado && presEnCurso ? (presEnCurso.estado === 'enviado' ? 1 : 0) : fin ? 3 : 2
                     const n = Number(i)
-                    const puede = n !== actual && (n >= 2 || !!presupuestoAceptado)
+                    const puede = !!presupuestoAceptado && n !== actual
                     return <button key={t} type="button" className={`pvPaso ${n < actual ? 'ok' : n === actual ? 'on' : ''}`} disabled={!puede} aria-current={n === actual ? 'step' : undefined}
                       onClick={() => { setErrorEtapa(''); setEtapaPedida(n) }}>{n < actual ? '✓ ' : ''}{t}</button>
                   })}
@@ -1198,6 +1215,11 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                   {pestanas.map(([v, t]) => <button key={v} type="button" role="tab" aria-selected={seguTab === v} className={seguTab === v ? 'on' : ''} onClick={() => setSeguTab(v)}>{t}</button>)}
                 </div>
               </div>
+            })()}
+
+            {!presupuestoAceptado && seguTab !== 'resumen' && (() => {
+              const aviso = avisoSinAceptar()
+              return aviso && <button type="button" className="oeSinAceptar" onClick={aviso.abrir}><span aria-hidden>⚠️</span><span>{aviso.texto}</span><b>›</b></button>
             })()}
 
             {!['resumen', 'finanzas', 'personal', 'timeline'].includes(seguTab) && (
@@ -1254,15 +1276,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                 onInforme={puedeInformeIA ? () => setInformeIA(obraSeguimiento) : undefined}
                 onVerTodo={() => setSeguTab('timeline')}
               />}
-              presupuestoSinAceptar={(() => {
-                if (presupuestoAceptado) return null
-                const obra = obraSeguimiento
-                // Si ya hay uno en borrador o enviado, se sigue ese; si no, se arma uno nuevo.
-                const enCurso = presupuestosObra.find((p) => Number(p.obra_id) === Number(obra.id) && p.activo !== false && (p.estado === 'borrador' || p.estado === 'enviado'))
-                if (enCurso && onVerPresupuesto) return { texto: `Tiene un presupuesto ${enCurso.estado === 'borrador' ? 'en borrador' : 'enviado'} ("${enCurso.titulo}"). Tocá para seguirlo.`, abrir: () => { cerrarSeguimiento(); onVerPresupuesto(enCurso.id) } }
-                if (onNuevoPresupuesto) return { texto: 'La obra todavía no tiene presupuesto. Tocá para armarlo.', abrir: () => { cerrarSeguimiento(); onNuevoPresupuesto({ id: obra.id, cliente_id: obra.cliente_id }) } }
-                return null
-              })()}
+              presupuestoSinAceptar={avisoSinAceptar()}
             >
               {presupuestoAceptado && <PresupuestoVivoObra key={`${obraSeguimiento.id}-${vueltaItems}`} obraId={obraSeguimiento.id} onCambio={() => setActualizacion((v) => v + 1)} onVerHistorial={() => setSeguTab('adicionales')} onGanancia={setGananciaObra}
                 avanceObra={Number(obraSeguimiento.porcentaje_avance) || 0} onAvanceItems={setAvanceItems} onAvanceCambiado={(a) => void guardarAvanceItems(a)} />}
