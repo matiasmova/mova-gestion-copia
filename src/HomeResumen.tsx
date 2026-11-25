@@ -1,4 +1,5 @@
 import InicioSimple, { type Tarea, type Balance } from './InicioSimple'
+import { pedirAccionObra } from './accionObra'
 import Agenda from './Agenda'
 import type { Pedido } from './BuscadorGlobal'
 import type { TareaPH } from './paraHacer'
@@ -318,7 +319,7 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
       detalle: `${nombreCli(dd.obra.cliente_id)} · ${dd.situacion === 'rojo' ? `terminada, debe ${moneda(dd.saldo)}` : `corresponde ${moneda(dd.faltaAvance + dd.extras)}`}`,
       cliente: nombreCli(dd.obra.cliente_id), sub: `${dd.obra.nombre_obra} · ${dd.situacion === 'rojo' ? 'terminada, falta cobrar el saldo' : `${Math.round(num(dd.obra.porcentaje_avance))}% hecho, corresponde cobrar`}`,
       explica: dd.situacion === 'rojo' ? `La obra está terminada y todavía te deben ${moneda(dd.saldo)}. Cobrá el saldo.` : `La obra va ${Math.round(num(dd.obra.porcentaje_avance))}% de avance y, según eso, corresponde cobrar ${moneda(dd.faltaAvance + dd.extras)} más de lo que ya te pagaron${dd.extras > 0.5 ? ` (incluye ${moneda(dd.extras)} de gastos extra para reintegrar)` : ''}. En total te deben ${moneda(dd.saldo)}.`,
-      boton: 'Cobrar', accion: () => onAbrirObra(dd.obra.id), agendar: `Cobrar ${dd.obra.nombre_obra}`, obra_id: dd.obra.id,
+      boton: 'Cobrar', accion: () => { pedirAccionObra(dd.obra.id, 'cobro'); onAbrirObra(dd.obra.id) }, agendar: `Cobrar ${dd.obra.nombre_obra}`, obra_id: dd.obra.id,
     })) : []),
     ...(verPresupuestos ? presupuestos.filter((pr) => pr.estado === 'aceptado' && pr.obra_id == null && (diasDesde(pr.fecha) ?? 999) <= 60).map((pr): TareaPH => ({ clave: `sin-obra-${pr.id}`, tipo: 'pres', grupo: 'hoy', titulo: `Crear la obra de ${pr.titulo}`, detalle: `${nombreCli(pr.cliente_id)} · presupuesto aceptado`, cliente: nombreCli(pr.cliente_id), sub: `${pr.titulo} · aceptado, falta crear la obra`, explica: 'El cliente aceptó el presupuesto, pero todavía no creaste la obra. Creala para cargar avances, personal y cobros.', boton: 'Abrir', accion: () => (onAbrirPresupuesto ? onAbrirPresupuesto(pr.id) : onNavegar('presupuestos')) })) : []),
     ...(verPresupuestos ? borradores.map((pr): TareaPH => {
