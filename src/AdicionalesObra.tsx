@@ -40,6 +40,7 @@ type Adicional = {
   precio_anterior: number | null
   cantidad_nueva: number | null
   precio_nuevo: number | null
+  descuento_pct?: number | null
 }
 
 type PresupuestoAceptado = { id: number; titulo: string; total: number }
@@ -187,6 +188,7 @@ function AdicionalesObra({ obraId, puedeEditar = true, onCambio, abrir }: Props)
           precio_anterior: numONull(a.precio_anterior),
           cantidad_nueva: numONull(a.cantidad_nueva),
           precio_nuevo: numONull(a.precio_nuevo),
+          descuento_pct: numONull(a.descuento_pct),
         })) as Adicional[],
       )
       setCargando(false)

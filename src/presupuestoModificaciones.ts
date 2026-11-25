@@ -23,6 +23,7 @@ export type Modificacion = {
   precio_anterior: number | null
   cantidad_nueva: number | null
   precio_nuevo: number | null
+  descuento_pct?: number | null // % de descuento del precio nuevo (fase 45)
   importe: number
   estado?: string
 }
@@ -77,13 +78,20 @@ export function antesYAhora(m: Modificacion, formatoMoneda: (n: number) => strin
   if (m.tipo !== 'cambio' || !m.cambio_tipo) return { antes: null, ahora: null }
   const linea = (desc: string | null, c: number | null, p: number | null) =>
     `${desc ?? ''}${c != null ? ` · ${cant(c)} × ${formatoMoneda(p ?? 0)}` : ''}`
+  // Precio nuevo con descuento: "1 × $ 180.000 (15% dto.) = $ 153.000 c/u".
+  const d = Number(m.descuento_pct) || 0
+  const nuevo = (c: number | null, p: number | null) => d > 0 && d < 100 && p != null
+    ? `${cant(c)} × ${formatoMoneda(Math.round((p / (1 - d / 100)) * 100) / 100)} (${Number(d.toFixed(2)).toLocaleString('es-AR')}% dto.) = ${formatoMoneda(p)} c/u`
+    : `${cant(c)} × ${formatoMoneda(p ?? 0)}`
+  const lineaNueva = (desc: string | null, c: number | null, p: number | null) => `${desc ?? ''}${c != null ? ` · ${nuevo(c, p)}` : ''}`
   switch (m.cambio_tipo) {
     case 'reemplazo':
-      return { antes: linea(m.descripcion_anterior, m.cantidad_anterior, m.precio_anterior), ahora: linea(m.descripcion, m.cantidad_nueva, m.precio_nuevo) }
+      return { antes: linea(m.descripcion_anterior, m.cantidad_anterior, m.precio_anterior), ahora: lineaNueva(m.descripcion, m.cantidad_nueva, m.precio_nuevo) }
     case 'cantidad':
-      return { antes: `${cant(m.cantidad_anterior)} × ${formatoMoneda(m.precio_anterior ?? 0)}`, ahora: `${cant(m.cantidad_nueva)} × ${formatoMoneda(m.precio_nuevo ?? 0)}` }
+      return { antes: `${cant(m.cantidad_anterior)} × ${formatoMoneda(m.precio_anterior ?? 0)}`, ahora: nuevo(m.cantidad_nueva, m.precio_nuevo) }
     case 'agregado':
-      return { antes: null, ahora: linea(m.descripcion, m.cantidad_nueva, m.precio_nuevo) }
+      // El nombre ya va en el título: acá solo cantidad, precio y descuento.
+      return { antes: null, ahora: m.cantidad_nueva != null ? nuevo(m.cantidad_nueva, m.precio_nuevo) : m.descripcion }
     case 'quitado':
       return { antes: linea(m.descripcion_anterior ?? m.descripcion, m.cantidad_anterior, m.precio_anterior), ahora: 'Se quita' }
   }
@@ -119,7 +127,7 @@ export async function cargarResumenModificaciones(presupuestoId: number, _totalO
     id: a.id, fecha: a.fecha, tipo: a.tipo, estado: a.estado, cambio_tipo: (a.cambio_tipo ?? null) as CambioTipo | null,
     descripcion: a.descripcion ?? '', motivo: a.motivo ?? null, descripcion_anterior: a.descripcion_anterior ?? null,
     cantidad_anterior: num(a.cantidad_anterior), precio_anterior: num(a.precio_anterior),
-    cantidad_nueva: num(a.cantidad_nueva), precio_nuevo: num(a.precio_nuevo), importe: Number(a.importe) || 0,
+    cantidad_nueva: num(a.cantidad_nueva), precio_nuevo: num(a.precio_nuevo), descuento_pct: num(a.descuento_pct), importe: Number(a.importe) || 0,
   })
   const modificaciones = adicionales.filter(a => a.estado === 'aprobado' && a.tipo !== 'gasto_extra').map(convertir)
   const gastos = adicionales.filter(a => a.tipo === 'gasto_extra' && ['aprobado', 'pagado'].includes(a.estado)).map(convertir)
