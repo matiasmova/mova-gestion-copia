@@ -5,7 +5,7 @@ import { configActual, lineaContacto, textoCondicion } from './config'
 import { textoMedios } from './formasPago'
 import { COLOR_MARCA_HEX, agruparPorTipo, completarDatosDocumento, lineasRecomendaciones, type DatosPdf } from './pdfPresupuesto'
 import { formatoPct, importeBruto, importeNeto, partirDescripcion, pctItem } from './presupuestoCalculos'
-import { antesYAhora, descuentoAgregado, etiquetaModificacion } from './presupuestoModificaciones'
+import { ahorroModificaciones, antesYAhora, descuentoAgregado, etiquetaModificacion } from './presupuestoModificaciones'
 import { mensajeEstado, PCT_ANTICIPO, totalAPagarHoy, type EstadoPresupuesto } from './estadoObra'
 import { codigoPresupuesto } from './codigoPresupuesto'
 import { incluyeDe, partesConItems, totalItems } from './resumenDocumento'
@@ -491,7 +491,16 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
             )
           })}
           <div style={{ marginLeft: 'auto', width: 'min(360px, 100%)', marginTop: '12px' }}>
-            <CajaNegra filas={[{ t: 'Total original aceptado', v: moneda(e.totalOriginal) }, { t: 'Modificaciones', v: conSigno(e.totalCambios), verde: e.totalCambios < 0 }]} etiqueta="TOTAL ACTUALIZADO" total={moneda(e.totalActualizado)} />
+            {(() => {
+              const ahorroMods = ahorroModificaciones(e.modificaciones)
+              return <>
+                <CajaNegra filas={[{ t: 'Total original aceptado', v: moneda(e.totalOriginal) },
+                  ...(ahorroMods > 0.5
+                    ? [{ t: 'Modificaciones', v: conSigno(e.totalCambios + ahorroMods) }, { t: 'Te ahorrás (descuentos)', v: `− ${moneda(ahorroMods)}`, verde: true }]
+                    : [{ t: 'Modificaciones', v: conSigno(e.totalCambios), verde: e.totalCambios < 0 }])]} etiqueta="TOTAL ACTUALIZADO" total={moneda(e.totalActualizado)} />
+                {ahorroMods > 0.5 && ahorro > 0.5 && <p style={{ textAlign: 'right', color: VERDE, fontWeight: 700, fontSize: '12.5px', margin: '6px 2px 0' }}>En total te ahorrás {moneda(ahorro + ahorroMods)} con descuentos</p>}
+              </>
+            })()}
           </div>
         </Seccion>
       )}
