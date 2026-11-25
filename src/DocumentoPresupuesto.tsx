@@ -5,7 +5,7 @@ import { configActual, lineaContacto, textoCondicion } from './config'
 import { textoMedios } from './formasPago'
 import { COLOR_MARCA_HEX, agruparPorTipo, completarDatosDocumento, lineasRecomendaciones, type DatosPdf } from './pdfPresupuesto'
 import { formatoPct, importeBruto, importeNeto, partirDescripcion, pctItem } from './presupuestoCalculos'
-import { antesYAhora, etiquetaModificacion } from './presupuestoModificaciones'
+import { antesYAhora, descuentoAgregado, etiquetaModificacion } from './presupuestoModificaciones'
 import { mensajeEstado, PCT_ANTICIPO, totalAPagarHoy, type EstadoPresupuesto } from './estadoObra'
 import { codigoPresupuesto } from './codigoPresupuesto'
 import { incluyeDe, partesConItems, totalItems } from './resumenDocumento'
@@ -468,6 +468,7 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
           <p style={{ ...s.chico, margin: '0 0 4px' }}>El presupuesto de arriba se mantiene tal como fue aceptado. Estos son los cambios registrados después:</p>
           {e.modificaciones.map((m) => {
             const { antes, ahora } = antesYAhora(m, moneda)
+            const dto = descuentoAgregado(m)
             return (
               <div key={m.id} style={s.fila}>
                 <span style={{ flex: '0 0 24px', width: '24px', height: '24px', borderRadius: '7px', background: m.importe < 0 ? VERDE_SUAVE : NARANJA_SUAVE, color: m.importe < 0 ? VERDE : NARANJA_OSC, fontWeight: 800, display: 'grid', placeItems: 'center' }}>{m.importe < 0 ? '−' : '+'}</span>
@@ -475,10 +476,17 @@ export default function DocumentoPresupuesto({ datos, embebido = false }: Props)
                   <strong style={{ color: OSCURO, overflowWrap: 'anywhere' }}>{m.descripcion}</strong>
                   <div style={s.chico}>{fechaCorta(m.fecha)} · {etiquetaModificacion(m)}</div>
                   {antes && <div style={{ ...s.chico, overflowWrap: 'anywhere' }}>Antes: {antes}</div>}
-                  {ahora && <div style={{ fontSize: '12px', overflowWrap: 'anywhere' }}>Ahora: {ahora}</div>}
+                  {dto ? <div style={{ ...s.chico, marginTop: '2px' }}>
+                      {dto.cantidad.toLocaleString('es-AR')} × {moneda(dto.lista)}
+                      {dto.pct > 0 && <span style={{ display: 'inline-block', marginLeft: '5px', background: NARANJA_SUAVE, color: NARANJA_OSC, fontWeight: 700, borderRadius: '999px', padding: '0 7px', fontSize: '11px' }}>{formatoPct(dto.pct)}% de descuento</span>}
+                    </div>
+                    : ahora && <div style={{ fontSize: '12px', overflowWrap: 'anywhere' }}>Ahora: {ahora}</div>}
                   {m.motivo && <div style={s.chico}>Motivo: {m.motivo}</div>}
                 </div>
-                <strong style={{ color: m.importe < 0 ? VERDE : OSCURO, whiteSpace: 'nowrap' }}>{m.importe === 0 ? moneda(0) : conSigno(m.importe)}</strong>
+                <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <strong style={{ color: m.importe < 0 ? VERDE : OSCURO }}>{m.importe === 0 ? moneda(0) : conSigno(m.importe)}</strong>
+                  {dto && dto.pct > 0 && <div style={{ ...s.chico, fontSize: '11.5px', textDecoration: 'line-through' }}>{moneda(dto.bruto)}</div>}
+                </div>
               </div>
             )
           })}

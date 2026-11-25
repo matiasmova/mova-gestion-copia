@@ -3,7 +3,7 @@ import logoUrl from './assets/mova-logo.png'
 import { moneda, fechaCorta } from './gestionFormat'
 import type { ItemPresupuesto } from './NuevoPresupuesto'
 import { importeBruto, importeNeto, partirDescripcion, pctItem, formatoPct } from './presupuestoCalculos'
-import { antesYAhora, etiquetaModificacion } from './presupuestoModificaciones'
+import { antesYAhora, descuentoAgregado, etiquetaModificacion } from './presupuestoModificaciones'
 import { cargarSolucionesPresupuesto, type SolucionPresupuesto } from './presupuestoSoluciones'
 import { configActual, lineaContacto, textoCondicion } from './config'
 import { cargarEstadoPresupuesto, mensajeEstado, PCT_ANTICIPO, totalAPagarHoy, type EstadoPresupuesto } from './estadoObra'
@@ -623,7 +623,9 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
       y -= 6
       const anchoConc = CW - 30 - 120
       estado.modificaciones.forEach((m, iMod) => {
-        const { antes, ahora } = antesYAhora(m, moneda)
+        const { antes, ahora: ahoraTxt } = antesYAhora(m, moneda)
+        const dto = descuentoAgregado(m)
+        const ahora = dto ? null : ahoraTxt
         const renglones: { t: string; size: number; f: PDFFont; color: RGB }[] = [
           ...partir(m.descripcion, F_TIT, anchoConc, bold).map((t) => ({ t, size: F_TIT, f: bold, color: OSCURO })),
           { t: `${fechaCorta(m.fecha)} · ${etiquetaModificacion(m)}`, size: F_CHICO, f: font, color: GRIS },
@@ -631,7 +633,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
           ...(ahora ? partir(`Ahora: ${ahora}`, F_TXT - 0.5, anchoConc).map((t) => ({ t, size: F_TXT - 0.5, f: font, color: TEXTO })) : []),
           ...(m.motivo ? partir(`Motivo: ${m.motivo}`, F_TXT - 0.5, anchoConc).map((t) => ({ t, size: F_TXT - 0.5, f: font, color: GRIS })) : []),
         ]
-        const alto = renglones.reduce((s, r) => s + r.size + 3, 0) + 12
+        const alto = renglones.reduce((s, r) => s + r.size + 3, 0) + 12 + (dto ? 12 : 0)
         // el último cambio va en la misma página que su caja de total
         lugar(alto + (iMod === estado.modificaciones.length - 1 ? 92 : 0))
         caja(M + 2, y + 9, 17, 17, { fondo: m.importe < 0 ? VERDE_SUAVE : NARANJA_SUAVE, r: 4.5 })
@@ -640,6 +642,23 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
         derecha(m.importe === 0 ? moneda(0) : conSigno(m.importe), xImp, y, F_NORMAL + 0.5, bold, m.importe < 0 ? VERDE : OSCURO)
         let yy = y
         for (const r of renglones) { texto(r.t, xDescr, yy, r.size, r.f, r.color); yy -= r.size + 3 }
+        if (dto) {
+          // Igual que los ítems: "1 × $ lista" + pastilla de descuento, y el bruto tachado.
+          yy -= 1
+          const cuenta = `${dto.cantidad.toLocaleString('es-AR')} × ${moneda(dto.lista)}`
+          texto(cuenta, xDescr, yy, F_CHICO, font, GRIS)
+          const xPill = xDescr + ancho(cuenta, F_CHICO) + 5
+          if (dto.pct > 0) {
+          const pTxt = `${formatoPct(dto.pct)}% de descuento`
+          const wPill = ancho(pTxt, F_MINI, bold) + 9
+          caja(xPill, yy + 7.3, wPill, 9.6, { fondo: NARANJA_SUAVE, r: 4.8 })
+          texto(pTxt, xPill + 4.5, yy - 0.2, F_MINI, bold, NARANJA_OSC)
+          const tachado = moneda(dto.bruto)
+          derecha(tachado, xImp, y - 13, F_CHICO, font, GRIS)
+          const wT = ancho(tachado, F_CHICO)
+          linea(xImp - wT, y - 10.5, xImp, 0.6, GRIS)
+          }
+        }
         y -= alto
         linea(M, y + 11, M + CW, 0.6, LINEA_SUAVE)
       })
