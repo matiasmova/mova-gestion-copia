@@ -3,7 +3,7 @@ import logoUrl from './assets/mova-logo.png'
 import { moneda, fechaCorta } from './gestionFormat'
 import type { ItemPresupuesto } from './NuevoPresupuesto'
 import { importeBruto, importeNeto, partirDescripcion, pctItem, formatoPct } from './presupuestoCalculos'
-import { antesYAhora, descuentoAgregado, etiquetaModificacion } from './presupuestoModificaciones'
+import { ahorroModificaciones, antesYAhora, descuentoAgregado, etiquetaModificacion } from './presupuestoModificaciones'
 import { cargarSolucionesPresupuesto, type SolucionPresupuesto } from './presupuestoSoluciones'
 import { configActual, lineaContacto, textoCondicion } from './config'
 import { cargarEstadoPresupuesto, mensajeEstado, PCT_ANTICIPO, totalAPagarHoy, type EstadoPresupuesto } from './estadoObra'
@@ -663,10 +663,18 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
         linea(M, y + 11, M + CW, 0.6, LINEA_SUAVE)
       })
       y -= 8
+      const ahorroMods = ahorroModificaciones(estado.modificaciones)
       cajaNegra([
         { t: 'Total original aceptado', v: moneda(estado.totalOriginal) },
-        { t: 'Modificaciones', v: conSigno(estado.totalCambios), verde: estado.totalCambios < 0 },
+        ...(ahorroMods > 0.5
+          ? [{ t: 'Modificaciones', v: conSigno(estado.totalCambios + ahorroMods) }, { t: 'Te ahorrás (descuentos)', v: `- ${moneda(ahorroMods)}`, verde: true }]
+          : [{ t: 'Modificaciones', v: conSigno(estado.totalCambios), verde: estado.totalCambios < 0 }]),
       ], 'TOTAL ACTUALIZADO', moneda(estado.totalActualizado))
+      // Ahorro de todo: el del presupuesto aceptado más el de los extras.
+      if (ahorroMods > 0.5 && ahorro > 0.5) {
+        derecha(`En total te ahorrás ${moneda(ahorro + ahorroMods)} con descuentos`, M + CW, y - 2, F_TXT - 0.5, bold, VERDE)
+        y -= 20
+      }
       y -= 6
     }
 

@@ -82,6 +82,13 @@ export function descuentoAgregado(m: Modificacion): { pct: number; cantidad: num
   return { pct, cantidad: Number(m.cantidad_nueva), lista, bruto: Math.round(lista * Number(m.cantidad_nueva) * 100) / 100 }
 }
 
+// Cuánto se ahorra el cliente con los descuentos de los ítems agregados en la obra.
+export function ahorroModificaciones(mods: Modificacion[]): number {
+  let total = 0
+  for (const m of mods) { const d = descuentoAgregado(m); if (d && d.pct > 0) total += Math.max(0, d.bruto - m.importe) }
+  return Math.round(total * 100) / 100
+}
+
 // Texto "antes" y "ahora" para mostrar un cambio de ítem.
 export function antesYAhora(m: Modificacion, formatoMoneda: (n: number) => string): { antes: string | null; ahora: string | null } {
   if (m.tipo !== 'cambio' || !m.cambio_tipo) return { antes: null, ahora: null }
