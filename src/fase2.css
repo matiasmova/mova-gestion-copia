@@ -4325,3 +4325,8 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .mtIAOpc button span{font-size:14px;line-height:1.35;white-space:pre-line}
 .mtIAOpc button.on{border-color:#6a4fd8;background:#f1edff}
 .mtIAError{margin:0;font-size:13px;color:#b42318}
+
+/* Obra sin presupuesto aceptado: aviso arriba de cada pestaña */
+.oeSinAceptar{display:flex;align-items:center;gap:10px;width:100%;margin:0 0 14px;padding:12px 14px;border:1px solid #f5c77e;background:#fff7e8;color:#7a4300;border-radius:12px;font:inherit;font-size:14px;text-align:left;cursor:pointer}
+.oeSinAceptar b{margin-left:auto;font-size:20px}
+.oeSinAceptar:hover{background:#ffefd2}
