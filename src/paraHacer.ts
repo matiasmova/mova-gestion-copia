@@ -12,6 +12,9 @@ export type TareaPH = {
   icono?: string
   titulo: string
   detalle: string
+  // Para la lista: el cliente como título y abajo la obra y qué pasa (si no, titulo/detalle).
+  cliente?: string
+  sub?: string
   boton?: string
   accion?: () => void
   monto?: number
