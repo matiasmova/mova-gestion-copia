@@ -4330,3 +4330,57 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .oeSinAceptar{display:flex;align-items:center;gap:10px;width:100%;margin:0 0 14px;padding:12px 14px;border:1px solid #f5c77e;background:#fff7e8;color:#7a4300;border-radius:12px;font:inherit;font-size:14px;text-align:left;cursor:pointer}
 .oeSinAceptar b{margin-left:auto;font-size:20px}
 .oeSinAceptar:hover{background:#ffefd2}
+
+/* Trabajos (nueva vista): lo que toca hoy, etapas como filtros y lista agrupada por acción */
+.g-cobrar{--c:#ee7a12;--s:#fff0e0}
+.g-seguir{--c:#0e8fb5;--s:#e2f4f9}
+.g-enviar{--c:#7c5cff;--s:#efeaff}
+.g-obra{--c:#ee7a12;--s:#fff0e0}
+.g-cobrado{--c:#18a058;--s:#e3f6ec}
+.tf{gap:12px}
+.tfHoy{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr) minmax(0,1fr);gap:8px}
+.tfHoy button{all:unset;box-sizing:border-box;cursor:pointer;background:#fff;border-radius:16px;padding:11px 12px;display:flex;flex-direction:column;gap:2px;min-width:0;border:2px solid transparent;box-shadow:0 1px 2px rgba(19,23,29,.05),0 6px 18px -14px rgba(19,23,29,.35)}
+.tfHoy button:focus-visible{outline:2px solid var(--c);outline-offset:2px}
+.tfHoy button.on{border-color:var(--c);background:var(--s)}
+.tfHoy small{font-size:11.5px;font-weight:800;color:#6a7382}
+.tfHoy b{font-size:18px;color:var(--c);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tfHoy span{font-size:11.5px;color:#6a7382;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tfEtapas{display:flex;flex-direction:column;gap:5px}
+.tfEtapas .tfCinta{height:7px}
+.tfEtapasCab{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;color:#6a7382}
+.tfEtapasCab b{color:#141a24;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tfChips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:1px}
+.tfChips::-webkit-scrollbar{display:none}
+.tfChips button{all:unset;box-sizing:border-box;cursor:pointer;flex:none;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:800;padding:7px 12px;border-radius:999px;background:#fff;border:1px solid #e3e8ef;color:#4a5466;white-space:nowrap}
+.tfChips button i{width:8px;height:8px;border-radius:50%;background:var(--c)}
+.tfChips button em{font-style:normal;font-size:11px;background:#eef1f5;color:#141a24;border-radius:999px;padding:1px 7px}
+.tfChips button.on{background:#141a24;color:#fff;border-color:#141a24}
+.tfChips button.on em{background:#fff;color:#141a24}
+.tfChips button:focus-visible{outline:2px solid #e47b00;outline-offset:2px}
+.tfGrupo{display:flex;flex-direction:column;gap:7px}
+.tfGrupoCab{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:0 4px}
+.tfGrupoCab h3{margin:0;font-size:15.5px;display:flex;align-items:center;gap:7px}
+.tfGrupoCab h3 i{width:9px;height:9px;border-radius:50%;background:var(--c);flex:none}
+.tfGrupoCab h3 small{color:#6a7382;font-weight:700;font-size:13px}
+.tfGrupoCab>span{font-size:12.5px;color:#6a7382;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tfGrupoLista{background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 1px 2px rgba(19,23,29,.05),0 8px 24px -18px rgba(19,23,29,.35)}
+.tfFila2{all:unset;box-sizing:border-box;cursor:pointer;width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 12px;padding:12px 14px;border-top:1px solid #eef0f3;align-items:center}
+.tfFila2:first-child{border-top:0}
+.tfFila2:hover{background:#fafbfc}
+.tfFila2:focus-visible{outline:2px solid var(--c);outline-offset:-2px}
+.tfFila2 .tfInfo b{font-size:15.5px}
+.tfFila2 .tfPie{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:3px;min-width:0}
+.tfFila2 .tfQue,.tfFila2 .tfAvance,.tfFila2 .tfDias{font-size:12.5px;font-weight:700;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tfFila2 .tfQue{color:var(--c)}
+.tfFila2.g-cobrado .tfQue{color:#18a058}
+.tfDias{border-radius:999px;padding:2px 9px;background:#e2f4f9;color:#0e8fb5}
+.tfDias.tarde{background:#fdece4;color:#c2410c}
+.tfAvance{display:flex;align-items:center;gap:8px;color:#5c6470;flex:1}
+.tfAvance>i{flex:1;max-width:120px;height:5px;border-radius:99px;background:#eef0f3;overflow:hidden}
+.tfAvance>i>i{display:block;height:100%;background:var(--c)}
+.tfFila2 .tfAcc{display:inline-block;flex:none;font-size:12.5px;font-weight:800;border-radius:999px;padding:6px 12px;background:var(--s);color:var(--c)}
+.tfFila2.g-cobrar .tfAcc{background:var(--c);color:#fff}
+.tfPlegado{all:unset;box-sizing:border-box;cursor:pointer;display:flex;justify-content:space-between;gap:8px;width:100%;background:#fff;border-radius:16px;padding:13px 14px;font-weight:800;font-size:14px;color:#18a058;box-shadow:0 1px 2px rgba(19,23,29,.05)}
+.tfPlegado small{color:#6a7382;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tfPlegado:focus-visible{outline:2px solid #18a058;outline-offset:2px}
+@media (max-width:420px){.tfHoy b{font-size:16px}.tfHoy{gap:6px}.tfHoy button{padding:10px}}
