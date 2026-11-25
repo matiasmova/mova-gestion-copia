@@ -235,21 +235,34 @@ async function geminiBuscar(clave: string, pedido: string, sistema: string): Pro
   throw new Error(errores.join(' | ') || 'sin respuesta')
 }
 
+// Saca el JSON de una respuesta: tolera bloques ```json, texto alrededor y comas de más.
+function extraerJSON(texto: string): unknown | null {
+  const t = (texto ?? '').replace(/```(?:json)?/gi, '')
+  const desde = t.indexOf('{'), hasta = t.lastIndexOf('}')
+  if (desde < 0 || hasta <= desde) return null
+  const trozo = t.slice(desde, hasta + 1)
+  for (const intento of [trozo, trozo.replace(/,\s*([}\]])/g, '$1')]) {
+    try { return JSON.parse(intento) } catch { /* se prueba el siguiente */ }
+  }
+  return null
+}
+
 // Búsqueda con Claude (API de Anthropic, se paga aparte del plan Pro). Solo se
 // usa para comparar precios. Secret ANTHROPIC_API_KEY; opcional CLAUDE_MODEL.
 async function claudeBuscar(clave: string, pedido: string, sistema: string, busquedasMax = 6): Promise<{ datos: unknown; fuentes: Fuente[]; busquedas: string[] }> {
   type Bloque = { type: string; text?: string; input?: { query?: string }; content?: { type?: string; url?: string; title?: string }[] }
   const mensajes: { role: string; content: string | Bloque[] }[] = [{ role: 'user', content: pedido }]
   const fuentes: Fuente[] = [], busquedas: string[] = []
-  let textoFinal = ''
+  let textoFinal = '', textoTodo = ''
+  const herramientas = [{ type: 'web_search_20250305', name: 'web_search', max_uses: busquedasMax, user_location: { type: 'approximate', country: 'AR', region: 'Mendoza', city: 'Mendoza', timezone: 'America/Argentina/Mendoza' } }]
+  let ultimosBloques: Bloque[] = []
   for (let vuelta = 0; vuelta < 4; vuelta++) {
     const r = await traer('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': clave, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: Deno.env.get('CLAUDE_MODEL') || 'claude-haiku-4-5-20251001',
-        max_tokens: 4000, system: sistema, messages: mensajes,
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: busquedasMax, user_location: { type: 'approximate', country: 'AR', region: 'Mendoza', city: 'Mendoza', timezone: 'America/Argentina/Mendoza' } }],
+        max_tokens: 8000, system: sistema, messages: mensajes, tools: herramientas,
       }),
     }, 45_000)
     const cuerpo = await r.json().catch(() => ({})) as { error?: { message?: string }; content?: Bloque[]; stop_reason?: string }
@@ -268,12 +281,31 @@ async function claudeBuscar(clave: string, pedido: string, sistema: string, busq
     // El JSON está en el texto que viene después de la última búsqueda.
     const ultima = bloques.map((b) => b.type).lastIndexOf('web_search_tool_result')
     textoFinal = bloques.slice(ultima + 1).filter((b) => b.type === 'text').map((b) => b.text ?? '').join('')
+    textoTodo = bloques.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n')
+    ultimosBloques = bloques
     if (cuerpo.stop_reason !== 'pause_turn') break
     mensajes.push({ role: 'assistant', content: bloques })
   }
-  const desde = textoFinal.indexOf('{'), hasta = textoFinal.lastIndexOf('}')
-  let datos: unknown
-  try { datos = JSON.parse(textoFinal.slice(desde, hasta + 1)) } catch { throw new Error('claude|Claude no devolvió el resultado en el formato esperado. Probá de nuevo.') }
+  let datos = extraerJSON(textoFinal) ?? extraerJSON(textoTodo)
+  if (datos == null) {
+    // A veces responde con texto o se corta: se le pide una vez más SOLO el JSON
+    // con lo que ya encontró (sin volver a buscar).
+    try {
+      const r = await traer('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': clave, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({
+          model: Deno.env.get('CLAUDE_MODEL') || 'claude-haiku-4-5-20251001',
+          max_tokens: 8000, system: sistema, tools: herramientas, tool_choice: { type: 'none' },
+          messages: [...mensajes, ...(ultimosBloques.length ? [{ role: 'assistant', content: ultimosBloques }] : []),
+            { role: 'user', content: 'Con lo que ya encontraste, respondé AHORA solo con el JSON pedido (sin texto antes ni después, sin buscar más). Si de algún renglón no encontraste nada, dejá sus ofertas vacías.' }],
+        }),
+      }, 30_000)
+      const cuerpo = await r.json().catch(() => ({})) as { content?: Bloque[] }
+      datos = extraerJSON((cuerpo.content ?? []).filter((b) => b.type === 'text').map((b) => b.text ?? '').join(''))
+    } catch (e) { if (String((e as Error).message).startsWith('tiempo|')) throw e }
+  }
+  if (datos == null) throw new Error('claude|Claude no devolvió el resultado en el formato esperado. Probá de nuevo.')
   return { datos, fuentes, busquedas: Array.from(new Set(busquedas)).slice(0, 8) }
 }
 
