@@ -73,6 +73,15 @@ export function etiquetaModificacion(m: Pick<Modificacion, 'tipo' | 'cambio_tipo
 const num = (x: unknown) => (x == null || x === '' ? null : Number(x))
 const cant = (n: number | null) => (n == null ? '' : `${Number(n.toFixed(3))}`)
 
+// Ítem agregado (con o sin descuento): se muestra igual que los ítems del presupuesto
+// ("1 × $ lista" + "20% de descuento" y el precio sin descuento tachado).
+export function descuentoAgregado(m: Modificacion): { pct: number; cantidad: number; lista: number; bruto: number } | null {
+  const pct = Number(m.descuento_pct) || 0
+  if (m.tipo !== 'cambio' || m.cambio_tipo !== 'agregado' || !(pct >= 0 && pct < 100) || m.precio_nuevo == null || m.cantidad_nueva == null) return null
+  const lista = pct > 0 ? Math.round((Number(m.precio_nuevo) / (1 - pct / 100)) * 100) / 100 : Number(m.precio_nuevo)
+  return { pct, cantidad: Number(m.cantidad_nueva), lista, bruto: Math.round(lista * Number(m.cantidad_nueva) * 100) / 100 }
+}
+
 // Texto "antes" y "ahora" para mostrar un cambio de ítem.
 export function antesYAhora(m: Modificacion, formatoMoneda: (n: number) => string): { antes: string | null; ahora: string | null } {
   if (m.tipo !== 'cambio' || !m.cambio_tipo) return { antes: null, ahora: null }
