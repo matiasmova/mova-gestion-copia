@@ -108,7 +108,7 @@ export async function cargarEstadoPresupuesto(presupuestoId: number, totalOrigin
       descripcion: String(a.descripcion ?? ''), motivo: (a.motivo as string) ?? null,
       descripcion_anterior: (a.descripcion_anterior as string) ?? null,
       cantidad_anterior: num(a.cantidad_anterior), precio_anterior: num(a.precio_anterior),
-      cantidad_nueva: num(a.cantidad_nueva), precio_nuevo: num(a.precio_nuevo),
+      cantidad_nueva: num(a.cantidad_nueva), precio_nuevo: num(a.precio_nuevo), descuento_pct: num(a.descuento_pct),
       importe: Number(a.importe) || 0,
     }) as Modificacion)
   const gastosExtra: GastoExtraEstado[] = adicionales
