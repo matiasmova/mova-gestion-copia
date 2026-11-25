@@ -70,7 +70,7 @@ const textoAviso = (e: Evento) =>
   e.aviso_min == null ? 'Sin aviso' : AVISOS.find(([v]) => v === String(e.aviso_min))?.[1] ?? `${e.aviso_min} min antes`
 
 // Un renglón de la lista: una tarea automática, una sugerencia para agendar o un evento de la agenda.
-type ItemPH = { clave: string; tipo: TipoPH; grupo: GrupoPH; icono: string; titulo: string; detalle: string; explica?: string; monto?: number; tarea?: TareaPH; sugerencia?: Sugerencia; evento?: Evento }
+type ItemPH = { clave: string; tipo: TipoPH; grupo: GrupoPH; icono: string; titulo: string; detalle: string; cliente?: string; sub?: string; explica?: string; monto?: number; tarea?: TareaPH; sugerencia?: Sugerencia; evento?: Evento }
 
 // Cuadrados de Para hacer: qué tipo de pendiente es, dicho como lo pensás.
 const suma = (l: { monto?: number }[]) => l.reduce((t, x) => t + (x.monto ?? 0), 0)
@@ -253,8 +253,8 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
   // Tareas automáticas que ya pasaste a la agenda (no se repiten mientras sigan pendientes).
   const agendadas = new Set(eventos.filter((e) => !e.completado).map((e) => claveDeNota(e.detalle)).filter((k): k is string => !!k))
   const items: ItemPH[] = [
-    ...tareas.map((t): ItemPH => ({ clave: t.clave, tipo: t.tipo, grupo: t.grupo, icono: t.icono ?? TIPOS_PH[t.tipo].icono, titulo: t.titulo, detalle: t.detalle, explica: t.explica, monto: t.monto, tarea: t })),
-    ...sugerencias.map((x): ItemPH => ({ clave: `sug-${x.clave}`, tipo: x.clave.startsWith('p') ? 'pres' : x.clave.startsWith('s') ? 'personal' : 'obra', grupo: x.tono === 'r' || x.clave.startsWith('p') ? 'atr' : 'sem', icono: x.icono, titulo: x.titulo, detalle: x.detalle, explica: x.explica, monto: x.monto || undefined, sugerencia: x })),
+    ...tareas.map((t): ItemPH => ({ clave: t.clave, tipo: t.tipo, grupo: t.grupo, icono: t.icono ?? TIPOS_PH[t.tipo].icono, titulo: t.titulo, detalle: t.detalle, cliente: t.cliente, sub: t.sub, explica: t.explica, monto: t.monto, tarea: t })),
+    ...sugerencias.map((x): ItemPH => ({ clave: `sug-${x.clave}`, tipo: x.clave.startsWith('p') ? 'pres' : x.clave.startsWith('s') ? 'personal' : 'obra', grupo: x.tono === 'r' || x.clave.startsWith('p') ? 'atr' : 'sem', icono: x.icono, titulo: x.titulo, detalle: x.detalle, cliente: x.cliente, sub: x.sub, explica: x.explica, monto: x.monto || undefined, sugerencia: x })),
     ...eventos.filter((e) => !e.completado && e.fecha <= enSemana).map((e): ItemPH => {
       const c = cliente(e.cliente_id)
       const cuando = e.fecha === hoyStr ? (e.hora ? `Hoy ${e.hora.slice(0, 5)}` : 'Hoy') : `${capital(diaSemana(e.fecha))}${e.hora ? ` · ${e.hora.slice(0, 5)}` : ''}`
@@ -353,8 +353,8 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
     return <Deslizable key={x.clave} onDerecha={() => hecho(x)} onIzquierda={() => posponer(x, x.evento && x.evento.fecha >= manana ? sumarDias(x.evento.fecha, 1) : manana)}>
       <div className={`ph3Fila${claseDe(x) === 'saldo' ? ' cobrar' : ''}`}>
         <button type="button" className="ph3Tx" onClick={() => setHoja(x.clave)}>
-          <b>{x.titulo}{x.grupo === 'atr' ? <i className="r">atrasado</i> : deHoy ? <i className="h">hoy</i> : null}{e && claveOrigen(e) ? <i>agendado</i> : null}</b>
-          <small>{x.detalle}</small>
+          <b>{x.cliente || x.titulo}{x.grupo === 'atr' ? <i className="r">atrasado</i> : deHoy ? <i className="h">hoy</i> : null}{e && claveOrigen(e) ? <i>agendado</i> : null}</b>
+          <small>{x.cliente ? x.sub ?? x.detalle : x.detalle}</small>
         </button>
         {x.monto ? <span className="ph3Monto">{moneda(x.monto)}</span> : <span />}
         <button type="button" className="ph3Acc" onClick={() => (ir ? recorrer(x) : setHoja(x.clave))}>{ir && ir.t !== 'Abrir' && ir.t !== 'Ver' && !meta.acc ? ir.t : meta.acc ?? 'Ver'}</button>
@@ -570,7 +570,7 @@ const sumarMeses = (f: string, n: number) => { const d = new Date(`${f.slice(0, 
 // Crea un evento (con su aviso programado). Devuelve el error o null.
 
 // "Para agendar": se arman solas con plazos de obra, seguros del personal y presupuestos sin respuesta.
-type Sugerencia = { clave: string; icono: string; tono: 'r' | 'n' | 'a'; titulo: string; detalle: string; agendar: string; tipo: string; obra_id?: number; explica?: string; agendarViejo?: string; monto?: number; dias?: number }
+type Sugerencia = { clave: string; icono: string; tono: 'r' | 'n' | 'a'; titulo: string; detalle: string; cliente?: string; sub?: string; agendar: string; tipo: string; obra_id?: number; explica?: string; agendarViejo?: string; monto?: number; dias?: number }
 function useSugerencias(tick: number): Sugerencia[] {
   const [lista, setLista] = useState<Sugerencia[]>([])
   useEffect(() => {
@@ -600,7 +600,7 @@ function useSugerencias(tick: number): Sugerencia[] {
         const dias = Math.round((new Date(`${hoyStr}T12:00:00`).getTime() - new Date(`${ob.fecha_fin_estimada}T12:00:00`).getTime()) / 86400000)
         const cuando = vencido ? `venció el ${fechaCorta(ob.fecha_fin_estimada)} (hace ${dias} día${dias === 1 ? '' : 's'})` : `vence el ${fechaCorta(ob.fecha_fin_estimada)}`
         const av = Math.round(Number(ob.porcentaje_avance) || 0)
-        out.push({ clave: `o${ob.id}`, icono: '⏰', dias, tono: vencido ? 'r' : 'n', titulo: `${vencido ? 'Plazo vencido' : 'Vence pronto'} · ${quien}`, detalle: `${trabajo} · ${cuando} · ${av}% hecho`, agendar: `Revisar plazo de ${quien} · ${trabajo}`, agendarViejo: `Revisar plazo de ${ob.nombre_obra}`, tipo: 'recordatorio', obra_id: ob.id, explica: vencido ? `La obra tenía que terminar el ${fechaCorta(ob.fecha_fin_estimada)} y sigue en proceso. Actualizá el avance, cambiá la fecha estimada o marcala terminada.` : `La obra tiene fin estimado el ${fechaCorta(ob.fecha_fin_estimada)}. Revisá si llegás o avisale al cliente.` })
+        out.push({ clave: `o${ob.id}`, icono: '⏰', dias, tono: vencido ? 'r' : 'n', titulo: `${vencido ? 'Plazo vencido' : 'Vence pronto'} · ${quien}`, detalle: `${trabajo} · ${cuando} · ${av}% hecho`, ...(et?.cliente ? { cliente: et.cliente, sub: `${trabajo} · ${vencido ? 'plazo ' : ''}${cuando} · ${av}% hecho` } : {}), agendar: `Revisar plazo de ${quien} · ${trabajo}`, agendarViejo: `Revisar plazo de ${ob.nombre_obra}`, tipo: 'recordatorio', obra_id: ob.id, explica: vencido ? `La obra tenía que terminar el ${fechaCorta(ob.fecha_fin_estimada)} y sigue en proceso. Actualizá el avance, cambiá la fecha estimada o marcala terminada.` : `La obra tiene fin estimado el ${fechaCorta(ob.fecha_fin_estimada)}. Revisá si llegás o avisale al cliente.` })
       }
       if (!s.error) for (const pe of (s.data ?? []) as { id: number; nombre: string; apellido: string | null; seguro: string | null; seguro_vencimiento: string | null }[]) {
         if (!pe.seguro_vencimiento || pe.seguro_vencimiento > sumarDias(hoyStr, 15)) continue
@@ -612,7 +612,7 @@ function useSugerencias(tick: number): Sugerencia[] {
         if (!desde || desde > sumarDias(hoyStr, -5)) continue
         const dias = Math.round((Date.parse(hoyStr) - Date.parse(desde)) / 86400000)
         const cli = nombreCliSug(pr.cliente_id)
-        out.push({ clave: `p${pr.id}`, icono: '💬', tono: 'a', monto: Number(pr.total) || 0, dias, titulo: cli ? `Seguir presupuesto · ${cli}` : `Seguir presupuesto ${pr.titulo}`, detalle: `${cli ? `${pr.titulo} · ` : ''}enviado hace ${dias} días · sin respuesta`, agendar: `Seguimiento presupuesto ${pr.titulo}`, tipo: 'llamada', explica: `Le mandaste el presupuesto hace ${dias} días y el cliente no respondió. Conviene escribirle para saber si tiene dudas o quiere ajustar algo.` })
+        out.push({ clave: `p${pr.id}`, icono: '💬', tono: 'a', monto: Number(pr.total) || 0, dias, titulo: cli ? `Seguir presupuesto · ${cli}` : `Seguir presupuesto ${pr.titulo}`, detalle: `${cli ? `${pr.titulo} · ` : ''}enviado hace ${dias} días · sin respuesta`, ...(cli ? { cliente: cli, sub: `${pr.titulo} · enviado hace ${dias} días, sin respuesta` } : {}), agendar: `Seguimiento presupuesto ${pr.titulo}`, tipo: 'llamada', explica: `Le mandaste el presupuesto hace ${dias} días y el cliente no respondió. Conviene escribirle para saber si tiene dudas o quiere ajustar algo.` })
       }
       setLista(out.filter((x) => !yaAgendado.has(x.agendar) && !(x.agendarViejo && yaAgendado.has(x.agendarViejo))).slice(0, 40))
     })()

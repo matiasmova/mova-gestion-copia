@@ -4410,3 +4410,5 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .ph3Fila.cobrar .ph3Acc{background:var(--c);color:#fff}
 .ph3Acc:focus-visible{outline:2px solid var(--c);outline-offset:2px}
 .ph3Fila:not(:has(.ph3Monto:not(:empty))){grid-template-areas:"tx acc"}
+.ph3Grupo .tfGrupoCab h3{text-transform:uppercase;letter-spacing:.07em;font-size:13px;font-weight:800;color:#3d4552}
+.ph3Grupo .tfGrupoCab h3 small{text-transform:none;letter-spacing:0}
