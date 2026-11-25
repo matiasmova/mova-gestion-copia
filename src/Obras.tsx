@@ -1,4 +1,5 @@
 import { cargarExtrasPendientes, repartirMonto, aplicarCobroAExtras, type ExtraPendiente } from './cobroExtras'
+import { tomarAccionObra } from './accionObra'
 import {
   useEffect,
   useRef,
@@ -281,7 +282,12 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
   useEffect(() => {
     if (obraAbrirId == null || obras.length === 0) return
     const obra = obras.find((o) => o.id === obraAbrirId)
-    if (obra) { abrirSeguimiento(obra); onObraAbierta?.() }
+    if (obra) {
+      abrirSeguimiento(obra); onObraAbierta?.()
+      // Si se pidió algo puntual (ej. cobrar), se abre directo ese formulario.
+      const op = tomarAccionObra(obra.id)
+      if (op) elegirRegistro(op)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [obraAbrirId, obras])
 

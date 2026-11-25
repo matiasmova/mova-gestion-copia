@@ -4412,3 +4412,8 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .ph3Fila:not(:has(.ph3Monto:not(:empty))){grid-template-areas:"tx acc"}
 .ph3Grupo .tfGrupoCab h3{text-transform:uppercase;letter-spacing:.07em;font-size:13px;font-weight:800;color:#3d4552}
 .ph3Grupo .tfGrupoCab h3 small{text-transform:none;letter-spacing:0}
+.ph3Btns{grid-area:acc;justify-self:end;display:flex;gap:6px;align-items:center}
+.ph3Fila:has(.ph3Btns.dos){grid-template-areas:"tx monto" "btns btns"}
+.ph3Btns.dos{grid-area:btns;margin-top:4px}
+.ph3Obra{border:1px solid #e3e8ef;background:#fff;color:#3d4552;cursor:pointer;font:inherit;font-size:12.5px;font-weight:800;border-radius:999px;padding:5px 12px;white-space:nowrap}
+.ph3Obra:focus-visible{outline:2px solid var(--c);outline-offset:2px}

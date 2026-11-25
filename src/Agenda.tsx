@@ -350,6 +350,8 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
     const e = x.evento
     const ir = irDe(x)
     const deHoy = x.grupo === 'hoy' || (!!e && e.fecha === hoyStr)
+    // "Ir a la obra" al lado de Cobrar (el botón Cobrar abre directo el cobro).
+    const obraDe = onAbrirObra && claseDe(x) === 'saldo' ? x.tarea?.obra_id ?? null : null
     return <Deslizable key={x.clave} onDerecha={() => hecho(x)} onIzquierda={() => posponer(x, x.evento && x.evento.fecha >= manana ? sumarDias(x.evento.fecha, 1) : manana)}>
       <div className={`ph3Fila${claseDe(x) === 'saldo' ? ' cobrar' : ''}`}>
         <button type="button" className="ph3Tx" onClick={() => setHoja(x.clave)}>
@@ -357,7 +359,10 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
           <small>{x.cliente ? x.sub ?? x.detalle : x.detalle}</small>
         </button>
         {x.monto ? <span className="ph3Monto">{moneda(x.monto)}</span> : <span />}
-        <button type="button" className="ph3Acc" onClick={() => (ir ? recorrer(x) : setHoja(x.clave))}>{ir && ir.t !== 'Abrir' && ir.t !== 'Ver' && !meta.acc ? ir.t : meta.acc ?? 'Ver'}</button>
+        <span className={`ph3Btns${obraDe ? " dos" : ""}`}>
+          {obraDe && <button type="button" className="ph3Obra" onClick={() => onAbrirObra!(obraDe)}>Ir a la obra</button>}
+          <button type="button" className="ph3Acc" onClick={() => (ir ? recorrer(x) : setHoja(x.clave))}>{ir && ir.t !== 'Abrir' && ir.t !== 'Ver' && !meta.acc ? ir.t : meta.acc ?? 'Ver'}</button>
+        </span>
       </div>
     </Deslizable>
   }
