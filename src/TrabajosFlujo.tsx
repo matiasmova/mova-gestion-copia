@@ -4,18 +4,30 @@ import { cuentasPorObra } from './cuentaObra'
 import { obrasSinPresupuesto } from './estadoTrabajo'
 import { cuentaTrabajo, empleadosDeObra, esExtraDeObra, esPagoEmpleado, totalEmpleados, type ItemCuenta } from './gananciaTrabajo'
 
-// "¿Qué hago ahora?": todos los trabajos en una sola lista, ordenada por lo que
-// necesita algo tuyo. Arriba, una cinta con la plata en cada etapa del negocio
-// (Armando → Enviado → En obra → Terminado); tocando una etapa se filtra.
+// "¿Qué hago ahora?": todos los trabajos agrupados por lo que hay que hacer
+// (cobrar, seguir, armar y enviar, en obra). Arriba, lo que toca hoy y una cinta
+// con la plata en cada etapa; las etapas y las tarjetas de arriba filtran.
 // Cada fila dice qué pasa, cuánto ganás y su próximo paso.
 
 export type EtapaFlujo = 'arm' | 'env' | 'obr' | 'ter'
 export type Abrir = { tipo: 'presupuesto'; id: number } | { tipo: 'obra'; id: number } | { tipo: 'nuevo'; obraId: number; clienteId: number }
 
+// Grupo de la lista según lo que hay que hacer (no según la etapa).
+export type GrupoFlujo = 'cobrar' | 'seguir' | 'enviar' | 'obra' | 'cobrado'
 type Fila = {
   clave: string; etapa: EtapaFlujo; titulo: string; cliente: string; total: number; ganancia: number | null
   que: string; accion: string; urgencia: number; abrir: Abrir; buscar: string
+  grupo: GrupoFlujo; cobrar: number; dias: number | null; avance: number | null
 }
+
+const GRUPOS: { k: GrupoFlujo; t: string; suma: (f: Fila) => number; sumaTxt: string; orden: (a: Fila, b: Fila) => number }[] = [
+  { k: 'cobrar', t: 'Cobrar', suma: (f) => f.cobrar, sumaTxt: 'a cobrar', orden: (a, b) => b.cobrar - a.cobrar },
+  { k: 'seguir', t: 'Seguir: sin respuesta', suma: (f) => f.total, sumaTxt: 'en juego', orden: (a, b) => (b.dias ?? 0) - (a.dias ?? 0) || b.total - a.total },
+  { k: 'enviar', t: 'Armar y enviar', suma: (f) => f.total, sumaTxt: 'por enviar', orden: (a, b) => b.urgencia - a.urgencia || (b.dias ?? 0) - (a.dias ?? 0) },
+  { k: 'obra', t: 'En obra, al día', suma: (f) => f.total, sumaTxt: '', orden: (a, b) => (b.avance ?? 0) - (a.avance ?? 0) },
+]
+// Un presupuesto enviado hace más de esto se marca en rojo.
+const DIAS_TARDE = 14
 
 export const ETAPAS: Record<EtapaFlujo, { t: string; i: string; ayuda: string }> = {
   arm: { t: 'Armando', i: '✏️', ayuda: 'borradores y obras sin presupuesto' },
@@ -24,6 +36,7 @@ export const ETAPAS: Record<EtapaFlujo, { t: string; i: string; ayuda: string }>
   ter: { t: 'Terminado', i: '✅', ayuda: 'listos' },
 }
 const ORDEN: EtapaFlujo[] = ['arm', 'env', 'obr', 'ter']
+const esEtapa = (f: string): f is EtapaFlujo => (ORDEN as string[]).includes(f)
 const num = (x: unknown) => Number(x) || 0
 const pesos = (n: number) => `$ ${Math.round(n).toLocaleString('es-AR')}`
 // Montos siempre con el número completo (sin abreviar en k o M).
@@ -38,7 +51,8 @@ type Obra = { id: number; cliente_id: number; nombre_obra: string; estado: strin
 export default function TrabajosFlujo({ verPlata, busqueda, revision, onAbrir, onNuevo }: { verPlata: boolean; busqueda: string; revision: number; onAbrir: (a: Abrir) => void; onNuevo?: () => void }) {
   const [filas, setFilas] = useState<Fila[] | null>(null)
   const [error, setError] = useState('')
-  const [filtro, setFiltro] = useState<EtapaFlujo | null>(null)
+  const [filtro, setFiltro] = useState<EtapaFlujo | GrupoFlujo | null>(null)
+  const [verCobrados, setVerCobrados] = useState(false)
 
   useEffect(() => {
     let vigente = true
@@ -99,12 +113,12 @@ export default function TrabajosFlujo({ verPlata, busqueda, revision, onAbrir, o
         const base = { cliente: cli, total: p.total, ganancia: ganancia([p], null), buscar: `${p.titulo} ${cli} ${obra?.nombre_obra ?? ''}`.toLowerCase() }
         if (p.estado === 'borrador') {
           const d = diasDesde(p.created_at ?? p.fecha)
-          out.push({ ...base, clave: `p${p.id}`, etapa: 'arm', titulo: p.titulo, que: `Falta enviarlo · creado ${haceDias(d)}`, accion: 'Enviar', urgencia: d >= 2 ? 2 : 1, abrir: { tipo: 'presupuesto', id: p.id } })
+          out.push({ ...base, clave: `p${p.id}`, etapa: 'arm', titulo: p.titulo, que: `Falta enviarlo · creado ${haceDias(d)}`, accion: 'Enviar', urgencia: d >= 2 ? 2 : 1, abrir: { tipo: 'presupuesto', id: p.id }, grupo: 'enviar', cobrar: 0, dias: d, avance: null })
         } else if (p.estado === 'enviado') {
           const d = diasDesde(p.enviado_at ?? p.fecha)
-          out.push({ ...base, clave: `p${p.id}`, etapa: 'env', titulo: p.titulo, que: `Enviado ${haceDias(d)} · sin respuesta`, accion: 'Recordar', urgencia: d >= 3 ? 2 : 0, abrir: { tipo: 'presupuesto', id: p.id } })
+          out.push({ ...base, clave: `p${p.id}`, etapa: 'env', titulo: p.titulo, que: `Enviado ${haceDias(d)} · sin respuesta`, accion: 'Recordar', urgencia: d >= 3 ? 2 : 0, abrir: { tipo: 'presupuesto', id: p.id }, grupo: 'seguir', cobrar: 0, dias: d, avance: null })
         } else if (p.estado === 'aceptado' && (p.obra_id == null || !obra)) {
-          out.push({ ...base, clave: `p${p.id}`, etapa: 'arm', titulo: p.titulo, que: 'Aceptado · falta crear la obra', accion: 'Crear obra', urgencia: 3, abrir: { tipo: 'presupuesto', id: p.id } })
+          out.push({ ...base, clave: `p${p.id}`, etapa: 'arm', titulo: p.titulo, que: 'Aceptado · falta crear la obra', accion: 'Crear obra', urgencia: 3, abrir: { tipo: 'presupuesto', id: p.id }, grupo: 'enviar', cobrar: 0, dias: null, avance: null })
         }
       }
       // Obras con presupuesto aceptado (un trabajo por obra).
@@ -122,13 +136,15 @@ export default function TrabajosFlujo({ verPlata, busqueda, revision, onAbrir, o
           que: fin ? (c.saldo > 0.5 ? `Terminada · falta cobrar ${pesos(c.saldo)}` : 'Cobrado completo') : cobrar > 0.5 ? `${av}% hecho · cobrar ${pesos(cobrar)}` : `${av}% hecho · al día`,
           accion: (fin ? c.saldo : cobrar) > 0.5 ? 'Cobrar' : fin ? 'Ver' : 'Avance',
           urgencia: (fin ? c.saldo : cobrar) > 0.5 ? 3 : 0,
+          grupo: (fin ? c.saldo : cobrar) > 0.5 ? 'cobrar' : fin ? 'cobrado' : 'obra',
+          cobrar: Math.max(0, fin ? c.saldo : cobrar), dias: null, avance: av,
         }
         out.push(fila)
       }
       // Obras activas sin presupuesto todavía.
       for (const o of obrasSinPresupuesto(obras, pres)) {
         const cli = nombreCli(o.cliente_id)
-        out.push({ clave: `n${o.id}`, etapa: 'arm', titulo: o.nombre_obra, cliente: cli, total: 0, ganancia: null, que: 'Obra sin presupuesto todavía', accion: 'Armar', urgencia: 2, abrir: { tipo: 'nuevo', obraId: o.id, clienteId: o.cliente_id }, buscar: `${o.nombre_obra} ${cli}`.toLowerCase() })
+        out.push({ clave: `n${o.id}`, etapa: 'arm', titulo: o.nombre_obra, cliente: cli, total: 0, ganancia: null, que: 'Obra sin presupuesto todavía', accion: 'Armar', urgencia: 2, abrir: { tipo: 'nuevo', obraId: o.id, clienteId: o.cliente_id }, buscar: `${o.nombre_obra} ${cli}`.toLowerCase(), grupo: 'enviar', cobrar: 0, dias: null, avance: null })
       }
       setFilas(verPlata ? out : out.filter((f) => f.etapa === 'obr' || f.etapa === 'ter'))
     })()
@@ -138,46 +154,65 @@ export default function TrabajosFlujo({ verPlata, busqueda, revision, onAbrir, o
   const texto = busqueda.trim().toLowerCase()
   const visibles = useMemo(() => (filas ?? []).filter((f) => !texto || f.buscar.includes(texto)), [filas, texto])
   const porEtapa = (e: EtapaFlujo) => visibles.filter((f) => f.etapa === e)
-  const lista = visibles.filter((f) => !filtro || f.etapa === filtro)
-  const ahora = lista.filter((f) => f.urgencia > 0).sort((a, b) => b.urgencia - a.urgencia || b.total - a.total)
-  const resto = lista.filter((f) => f.urgencia === 0).sort((a, b) => ORDEN.indexOf(a.etapa) - ORDEN.indexOf(b.etapa) || b.total - a.total)
+  const deGrupo = (g: GrupoFlujo) => visibles.filter((f) => f.grupo === g)
+  const lista = visibles.filter((f) => !filtro || (esEtapa(filtro) ? f.etapa === filtro : f.grupo === filtro))
   const totalCinta = visibles.reduce((s, f) => s + f.total, 0)
+  const cambiarFiltro = (f: EtapaFlujo | GrupoFlujo | null) => setFiltro((x) => (x === f ? null : f))
 
-  const fila = (f: Fila) => (
-    <button key={f.clave} type="button" className={`tfFila et-${f.etapa}`} onClick={() => onAbrir(f.abrir)}>
-      <span className="tfIco" aria-hidden>{ETAPAS[f.etapa].i}</span>
+  const fila = (f: Fila) => {
+    const tarde = f.dias != null && f.dias > DIAS_TARDE
+    const estado = f.grupo === 'seguir' ? <span className={`tfDias${tarde ? ' tarde' : ''}`}>Enviado {haceDias(f.dias ?? 0)}</span>
+      : f.grupo === 'obra' && f.avance != null ? <span className="tfAvance">{f.avance}% hecho<i aria-hidden><i style={{ width: `${Math.min(100, f.avance)}%` }} /></i></span>
+      : <span className="tfQue">{f.que}</span>
+    return <button key={f.clave} type="button" className={`tfFila2 g-${f.grupo} et-${f.etapa}`} onClick={() => onAbrir(f.abrir)}>
       <span className="tfInfo"><b>{f.cliente || f.titulo}</b>{f.cliente && <small className="tfObra">{f.titulo}</small>}</span>
-      {verPlata && f.total > 0 && <span className="tfPlata"><b>{pesos(f.total)}</b>{f.ganancia != null && <small className={f.ganancia < 0 ? 'neg' : ''}>ganás {corto(f.ganancia)}</small>}</span>}
-      <span className="tfAcc">{f.accion} ›</span>
-      <small className="tfQue tfEstado">{f.que}</small>
+      {verPlata && f.total > 0 ? <span className="tfPlata"><b>{pesos(f.total)}</b>{f.ganancia != null && <small className={f.ganancia < 0 ? 'neg' : ''}>ganás {corto(f.ganancia)}</small>}</span> : <span />}
+      <span className="tfPie">{estado}<span className="tfAcc">{f.accion}</span></span>
     </button>
-  )
+  }
 
   if (error) return <p className="loginError">{error}</p>
   if (!filas) return <p className="tfCargando">Cargando trabajos…</p>
 
+  const cob = deGrupo('cobrar'), seg = deGrupo('seguir'), env = deGrupo('enviar')
+  const cobrados = lista.filter((f) => f.grupo === 'cobrado').sort((a, b) => b.total - a.total)
   return <div className="tf">
-    {verPlata && <section className="tfFlujo" aria-label="Plata en cada etapa">
-      <div className="tfFlujoCab"><b>Plata en cada etapa</b><span>{corto(totalCinta)} en total</span></div>
+    {verPlata && <div className="tfHoy" role="group" aria-label="Lo que toca hoy">
+      <button type="button" className={`g-cobrar${filtro === 'cobrar' ? ' on' : ''}`} aria-pressed={filtro === 'cobrar'} onClick={() => cambiarFiltro('cobrar')}>
+        <small>Para cobrar</small><b>{pesos(cob.reduce((s, f) => s + f.cobrar, 0))}</b><span>{cob.length} trabajo{cob.length === 1 ? '' : 's'}</span></button>
+      <button type="button" className={`g-seguir${filtro === 'seguir' ? ' on' : ''}`} aria-pressed={filtro === 'seguir'} onClick={() => cambiarFiltro('seguir')}>
+        <small>Sin respuesta</small><b>{seg.length}</b><span>{(() => { const n = seg.filter((f) => (f.dias ?? 0) > DIAS_TARDE).length; return n ? `${n} atrasado${n === 1 ? "" : "s"}` : "al día" })()}</span></button>
+      <button type="button" className={`g-enviar${filtro === 'enviar' ? ' on' : ''}`} aria-pressed={filtro === 'enviar'} onClick={() => cambiarFiltro('enviar')}>
+        <small>Falta enviar</small><b>{env.length}</b><span>{env.length ? pesos(env.reduce((s, f) => s + f.total, 0)) : 'nada pendiente'}</span></button>
+    </div>}
+
+    {verPlata && totalCinta > 0 && <div className="tfEtapas">
       <div className="tfCinta" aria-hidden>
         {ORDEN.map((e) => { const v = porEtapa(e).reduce((s, f) => s + f.total, 0); return v > 0 ? <i key={e} className={`et-${e}`} style={{ flex: v / (totalCinta || 1) }} /> : null })}
       </div>
-      <div className="tfPasos">
-        {ORDEN.map((e) => {
-          const l = porEtapa(e)
-          const gan = l.reduce((s, f) => s + (f.ganancia ?? 0), 0)
-          return <button key={e} type="button" className={`tfPaso et-${e}${filtro === e ? ' on' : ''}`} aria-pressed={filtro === e} onClick={() => setFiltro(filtro === e ? null : e)}>
-            <span className="t"><span className="ic" aria-hidden>{ETAPAS[e].i}</span>{ETAPAS[e].t}<em>{l.length}</em></span>
-            <b>{corto(l.reduce((s, f) => s + f.total, 0))}</b>
-            <small className={gan ? 'gan' : ''}>{gan ? `ganás ${corto(gan)}` : ETAPAS[e].ayuda}</small>
-          </button>
-        })}
-      </div>
-    </section>}
-    {filtro && <button type="button" className="tfQuitar" onClick={() => setFiltro(null)}>Mostrando solo {ETAPAS[filtro].t} · ver todo ✕</button>}
+      <div className="tfEtapasCab"><span>Plata en cada etapa</span><b>{corto(totalCinta)} en total</b></div>
+    </div>}
+    <div className="tfChips" role="group" aria-label="Filtrar por etapa">
+      <button type="button" className={!filtro ? 'on' : ''} aria-pressed={!filtro} onClick={() => setFiltro(null)}>Todo</button>
+      {ORDEN.map((e) => { const l = porEtapa(e); return <button key={e} type="button" className={`et-${e}${filtro === e ? ' on' : ''}`} aria-pressed={filtro === e} onClick={() => cambiarFiltro(e)}
+        title={verPlata ? `${ETAPAS[e].t}: ${corto(l.reduce((s, f) => s + f.total, 0))}` : ETAPAS[e].t}><i aria-hidden />{ETAPAS[e].t}<em>{l.length}</em></button> })}
+    </div>
+    {filtro && !esEtapa(filtro) && <button type="button" className="tfQuitar" onClick={() => setFiltro(null)}>Mostrando solo «{GRUPOS.find((g) => g.k === filtro)?.t}» · ver todo ✕</button>}
 
-    {ahora.length > 0 && <section className="tfBloque"><div className="tfBloqueCab"><b>🔥 Para hacer ahora</b><span>{ahora.length}</span></div>{ahora.map(fila)}</section>}
-    {resto.length > 0 && <section className="tfBloque"><div className="tfBloqueCab"><b>Todo en orden</b></div>{resto.map(fila)}</section>}
-    {lista.length === 0 && <div className="tfVacio">{texto ? 'No hay trabajos con esa búsqueda.' : <>No hay trabajos {filtro ? `en ${ETAPAS[filtro].t.toLowerCase()}` : 'todavía'}. {onNuevo && <button type="button" onClick={onNuevo}>＋ Armar un presupuesto</button>}</>}</div>}
+    {GRUPOS.map((g) => {
+      const l = lista.filter((f) => f.grupo === g.k).sort(g.orden)
+      if (!l.length) return null
+      const suma = l.reduce((s, f) => s + g.suma(f), 0)
+      return <section key={g.k} className={`tfGrupo g-${g.k}`}>
+        <div className="tfGrupoCab"><h3><i aria-hidden />{g.t}<small>· {l.length}</small></h3>{verPlata && g.sumaTxt && suma > 0 && <span>{pesos(suma)} {g.sumaTxt}</span>}</div>
+        <div className="tfGrupoLista">{l.map(fila)}</div>
+      </section>
+    })}
+    {cobrados.length > 0 && <section className="tfGrupo g-cobrado">
+      <button type="button" className="tfPlegado" aria-expanded={verCobrados} onClick={() => setVerCobrados((v) => !v)}>
+        <span>✓ Cobradas completas · {cobrados.length}</span><small>{verPlata ? pesos(cobrados.reduce((s, f) => s + f.total, 0)) : ''} {verCobrados ? '▴' : '▾'}</small></button>
+      {verCobrados && <div className="tfGrupoLista">{cobrados.map(fila)}</div>}
+    </section>}
+    {lista.length === 0 && <div className="tfVacio">{texto ? 'No hay trabajos con esa búsqueda.' : <>No hay trabajos {filtro && esEtapa(filtro) ? `en ${ETAPAS[filtro].t.toLowerCase()}` : filtro ? 'en este grupo' : 'todavía'}. {onNuevo && !filtro && <button type="button" onClick={onNuevo}>＋ Armar un presupuesto</button>}</>}</div>}
   </div>
 }
