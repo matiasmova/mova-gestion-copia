@@ -173,9 +173,11 @@ async function linksComprobantes(ids: number[]): Promise<Record<number, string> 
   } catch { return null }
 }
 
-export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { comprobantes?: ModoComprobantes; onAviso?: (msg: string) => void; linkPago?: string | null } = {}): Promise<Blob> {
+// soloPagos: informe de pagos (mismo formato, sin el detalle del presupuesto ni las condiciones).
+export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { comprobantes?: ModoComprobantes; onAviso?: (msg: string) => void; linkPago?: string | null; soloPagos?: boolean } = {}): Promise<Blob> {
   const d = await completarDatosDocumento(entrada)
   const estado = d.estado ?? null
+  const soloPagos = !!opciones.soloPagos && !!estado
   const soluciones = d.soluciones ?? []
   const contacto = d.contacto ?? null
 
@@ -252,7 +254,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
   }
   const nuevaPagina = () => {
     page = pdf.addPage([W, H]); y = H - M
-    texto(`Presupuesto ${codigo} · ${d.cliente}`, M, y, F_CHICO, font, GRIS)
+    texto(`${soloPagos ? "Informe de pagos" : "Presupuesto"} ${codigo} · ${d.cliente}`, M, y, F_CHICO, font, GRIS)
     derecha('continuación', M + CW, y, F_CHICO, font, GRIS)
     y -= 26
   }
@@ -334,7 +336,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
     const lh = 34, lw = lh * (logo.width / logo.height)
     page.drawImage(logo, { x: M, y: y - lh + 4, width: lw, height: lh })
   }
-  espaciadoDer(estado ? 'PRESUPUESTO Y ESTADO DE OBRA' : 'PRESUPUESTO', M + CW, y - 2, F_MINI, NARANJA); y -= 20
+  espaciadoDer(soloPagos ? 'INFORME DE PAGOS' : estado ? 'PRESUPUESTO Y ESTADO DE OBRA' : 'PRESUPUESTO', M + CW, y - 2, F_MINI, NARANJA); y -= 20
   derecha(codigo, M + CW, y, 17, bold, OSCURO); y -= 12
   derecha(estado ? `Emitido ${fechaCorta(d.fecha)} · Actualizado ${fechaCorta(estado.ultimaActualizacion)}` : `Emitido ${fechaCorta(d.fecha)} · Válido hasta ${venceEl}`, M + CW, y, F_CHICO, font, GRIS)
   y -= 14
@@ -378,8 +380,8 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
   y -= altoPartes + 24
 
   // ---------- Título y descripción ----------
-  for (const r of partir(d.titulo, F_GRANDE, CW, bold)) { lugar(22); texto(r, M, y, F_GRANDE, bold, OSCURO); y -= 20 }
-  if (d.descripcion) { y += 3; for (const r of partir(d.descripcion, F_TIT, CW)) { lugar(16); texto(r, M, y, F_TIT, font, GRIS); y -= 16 } }
+  for (const r of partir(soloPagos ? `Informe de pagos · ${d.titulo}` : d.titulo, F_GRANDE, CW, bold)) { lugar(22); texto(r, M, y, F_GRANDE, bold, OSCURO); y -= 20 }
+  if (d.descripcion && !soloPagos) { y += 3; for (const r of partir(d.descripcion, F_TIT, CW)) { lugar(16); texto(r, M, y, F_TIT, font, GRIS); y -= 16 } }
   y -= 8
 
   // ---------- Cifras principales ----------
@@ -490,6 +492,8 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
   // ---------- Detalle de ítems ----------
   const xImp = M + CW - 4
   const xDescr = M + 30
+  let ahorro = 0
+  if (!soloPagos) {
   const anchoDescr = CW - 30 - 120
   const resumido = d.resumenDoc?.modo === 'resumido' ? d.resumenDoc : null
   // El título va con el comienzo del detalle (en el resumido, con su primer texto).
@@ -593,7 +597,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
   y -= 6
 
   // ---------- Totales (caja negra) ----------
-  const ahorro = Math.round((sumaBruta - d.total) * 100) / 100
+  ahorro = Math.round((sumaBruta - d.total) * 100) / 100
   const totalCaja = cajaNegra(
     ahorro > 0.5 ? [{ t: 'Subtotal', v: moneda(sumaBruta) }, { t: 'Te ahorrás (descuentos)', v: `- ${moneda(ahorro)}`, verde: true }]
       : Math.abs(sumaNeta - d.total) > 0.5 ? [{ t: 'Subtotal', v: moneda(sumaNeta) }, { t: 'Ajuste', v: conSigno(d.total - sumaNeta) }] : [],
@@ -614,15 +618,17 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
   }
   y -= 6
 
+  }
+
   if (estado) {
     // ---------- Modificaciones durante la obra ----------
     if (estado.modificaciones.length > 0) {
       lugar(90)
-      titulo('Modificaciones durante la obra')
-      for (const r of partir('El presupuesto de arriba se mantiene tal como fue aceptado. Estos son los cambios registrados después:', F_TXT, CW)) { texto(r, M, y, F_TXT, font, GRIS); y -= 14 }
+      titulo(soloPagos ? 'Total de la obra' : 'Modificaciones durante la obra')
+      if (!soloPagos) for (const r of partir('El presupuesto de arriba se mantiene tal como fue aceptado. Estos son los cambios registrados después:', F_TXT, CW)) { texto(r, M, y, F_TXT, font, GRIS); y -= 14 }
       y -= 6
       const anchoConc = CW - 30 - 120
-      estado.modificaciones.forEach((m, iMod) => {
+      if (!soloPagos) estado.modificaciones.forEach((m, iMod) => {
         const { antes, ahora: ahoraTxt } = antesYAhora(m, moneda)
         const dto = descuentoAgregado(m)
         const ahora = dto ? null : ahoraTxt
@@ -844,7 +850,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
   }
 
   // ---------- Formas de uso y recomendaciones (opcional, por presupuesto) ----------
-  const recos = lineasRecomendaciones(d.recomendaciones)
+  const recos = soloPagos ? [] : lineasRecomendaciones(d.recomendaciones)
   if (recos.length) {
     lugar(70)
     titulo('Formas de uso y recomendaciones')
@@ -859,7 +865,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
   }
 
   // ---------- Notas ----------
-  const notas = d.notas?.trim() ?? ''
+  const notas = soloPagos ? '' : d.notas?.trim() ?? ''
   if (notas) {
     const rn = partir(notas, F_TIT, CW - 24)
     const altoN = 26 + rn.length * 15.5
@@ -872,7 +878,7 @@ export async function generarPdfPresupuesto(entrada: DatosPdf, opciones: { compr
   }
 
   // ---------- Condiciones generales (en dos columnas) ----------
-  const condiciones = configActual().presupuestos.condiciones.filter((c) => c.titulo.trim() || c.texto.trim())
+  const condiciones = soloPagos ? [] : configActual().presupuestos.condiciones.filter((c) => c.titulo.trim() || c.texto.trim())
   if (condiciones.length) {
     lugar(70)
     titulo('Condiciones generales')
