@@ -1,4 +1,8 @@
 import { cargarExtrasPendientes, repartirMonto, aplicarCobroAExtras, type ExtraPendiente } from './cobroExtras'
+import VistaPreviaPdf from './VistaPreviaPdf'
+import { generarPdfPresupuesto, leerModoComprobantes } from './pdfPresupuesto'
+import { cargarDocumentoObra } from './documentoObra'
+import { asegurarLinkPago } from './pagoLink'
 import { tomarAccionObra } from './accionObra'
 import {
   useEffect,
@@ -114,6 +118,8 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
   const [obras, setObras] = useState<Obra[]>([])
   const [presupuestosObra, setPresupuestosObra] = useState<{ id: number; obra_id: number | null; total: number | string; estado: string; activo: boolean; titulo: string }[]>([])
   const [informeObra, setInformeObra] = useState<Obra | null>(null)
+  // Informe de pagos (PDF solo con los pagos, mismo formato que el presupuesto).
+  const [informePagos, setInformePagos] = useState<Obra | null>(null)
   // Editor del presupuesto abierto desde la obra; docVersion rearma el documento al guardar.
   const [editarPresupuestoId, setEditarPresupuestoId] = useState<number | null>(null)
   const [docVersion, setDocVersion] = useState(0)
@@ -1235,7 +1241,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
               </div>
             )}
 
-            {seguTab === 'finanzas' && <EconomiaObra key={obraSeguimiento.id} cuenta={cuenta} presupuestoId={presupuestoAceptado?.id ?? null} abrirCobro={abrirCobro} obraId={obraSeguimiento.id} onGenerarPdf={() => setInformeObra(obraSeguimiento)} onCambio={() => setActualizacion(v => v + 1)} />}
+            {seguTab === 'finanzas' && <EconomiaObra key={obraSeguimiento.id} cuenta={cuenta} presupuestoId={presupuestoAceptado?.id ?? null} abrirCobro={abrirCobro} obraId={obraSeguimiento.id} onGenerarPdf={() => setInformeObra(obraSeguimiento)} onInformePagos={() => setInformePagos(obraSeguimiento)} onCambio={() => setActualizacion(v => v + 1)} />}
 
             {seguTab === 'adicionales' && <AdicionalesObra key={obraSeguimiento.id} abrir={abrirAdic} obraId={obraSeguimiento.id} onCambio={() => setActualizacion(v => v + 1)} />}
 
@@ -1263,7 +1269,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
               revision={actualizacion}
               secciones={{
                 ...(presupuestoAceptado ? { documento: <PanelPresupuestoObra modo="ajustes" obra={obraSeguimiento} cliente={obtenerCliente(obraSeguimiento.cliente_id)} version={docVersion + actualizacion} onVerDocumento={() => setInformeObra(obraSeguimiento)} onRegistrarCobro={() => elegirRegistro('cobro')} /> } : {}),
-                ...(presupuestoAceptado ? { finanzas: <EconomiaObra key={obraSeguimiento.id} cuenta={cuenta} presupuestoId={presupuestoAceptado.id} obraId={obraSeguimiento.id} onGenerarPdf={() => setInformeObra(obraSeguimiento)} onCambio={() => setActualizacion((v) => v + 1)} /> } : {}),
+                ...(presupuestoAceptado ? { finanzas: <EconomiaObra key={obraSeguimiento.id} cuenta={cuenta} presupuestoId={presupuestoAceptado.id} obraId={obraSeguimiento.id} onGenerarPdf={() => setInformeObra(obraSeguimiento)} onInformePagos={() => setInformePagos(obraSeguimiento)} onCambio={() => setActualizacion((v) => v + 1)} /> } : {}),
                 informe: <InformeFotos key={obraSeguimiento.id} obraId={obraSeguimiento.id} obra={obraSeguimiento.nombre_obra} cliente={obtenerCliente(obraSeguimiento.cliente_id)} avance={avanceEfectivo(obraSeguimiento.estado, obraSeguimiento.porcentaje_avance)} />,
                 personal: <PersonalObra key={obraSeguimiento.id} onCambio={() => setActualizacion((v) => v + 1)} obraId={obraSeguimiento.id} avance={avanceEfectivo(obraSeguimiento.estado, obraSeguimiento.porcentaje_avance)} />,
                 accesos: <AccesosObra key={obraSeguimiento.id} obraId={obraSeguimiento.id} cliente={obtenerCliente(obraSeguimiento.cliente_id)} obra={obraSeguimiento.nombre_obra} ubicacion={[obraSeguimiento.direccion, obraSeguimiento.localidad].filter(Boolean).join(', ') || null} />,
@@ -1486,6 +1492,17 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
 
       {informeIA && <InformeObraIA obraId={informeIA.id} obra={informeIA.nombre_obra} onCerrar={() => setInformeIA(null)} />}
 
+      {informePagos && (
+        <VistaPreviaPdf titulo={`Informe de pagos · ${informePagos.nombre_obra}`} onCerrar={() => setInformePagos(null)}
+          generar={async () => {
+            const cli = obtenerCliente(informePagos.cliente_id)
+            const datos = await cargarDocumentoObra(informePagos, cli)
+            const linkPago = await asegurarLinkPago(datos).catch(() => null)
+            const blob = await generarPdfPresupuesto(datos, { soloPagos: true, comprobantes: leerModoComprobantes(), linkPago })
+            const limpio = (t: string) => t.normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
+            return { blob, nombre: `Informe_de_pagos_${limpio(cli) || 'Cliente'}_${new Date().toISOString().slice(0, 10)}.pdf` }
+          }} />
+      )}
       {informeObra && (
         <EstadoObraPDF
           key={`${informeObra.id}-${docVersion}`}
@@ -1581,7 +1598,7 @@ const ESTADO_ADIC_LABEL: Record<string, string> = {
 // Pestaña Finanzas, simplificada: solo registrar los cobros del cliente y ver
 // los movimientos de Adicionales (se editan en esa pestaña). El documento con
 // todo (presupuesto, pagos y estado de la obra) se abre con el botón de arriba.
-function EconomiaObra({ obraId, cuenta, presupuestoId, onGenerarPdf, onCambio, abrirCobro = 0 }: { obraId: number; cuenta: EstadoPresupuesto | null; presupuestoId: number | null; onGenerarPdf: () => void; onCambio: () => void; abrirCobro?: number }) {
+function EconomiaObra({ obraId, cuenta, presupuestoId, onGenerarPdf, onInformePagos, onCambio, abrirCobro = 0 }: { obraId: number; cuenta: EstadoPresupuesto | null; presupuestoId: number | null; onGenerarPdf: () => void; onInformePagos?: () => void; onCambio: () => void; abrirCobro?: number }) {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
@@ -1700,6 +1717,7 @@ function EconomiaObra({ obraId, cuenta, presupuestoId, onGenerarPdf, onCambio, a
       <div className="adicAcciones">
         <button type="button" className="newButton" onClick={() => (mostrarCobro ? cerrarCobro() : setMostrarCobro(true))}>{mostrarCobro ? 'Cancelar' : '💵 Registrar cobro'}</button>
         <button type="button" className="editButton" onClick={onGenerarPdf}>📄 Presupuesto y estado de obra</button>
+        {onInformePagos && <button type="button" className="editButton" onClick={onInformePagos}>🧾 Informe de pagos (PDF)</button>}
         <button type="button" className="editButton" disabled={cargando} onClick={() => setRevision((valor) => valor + 1)}>Actualizar</button>
       </div>
     </div>
