@@ -312,7 +312,7 @@ export default function HomeResumen({ nombre, rol, onNavegar, onSalir, onAbrirOb
 
   // ---- "Para hacer": lo mismo, con tipo y grupo (atrasado / hoy / esta semana / cuando puedas) ----
   const tareasPH: TareaPH[] = cargando ? [] : [
-    ...compNuevos.map((c): TareaPH => ({ clave: `cp-${c.id}`, tipo: 'cobro', grupo: 'hoy', icono: '🧾', titulo: 'Revisar comprobante de pago', detalle: `${c.cliente ?? 'Cliente'}${c.titulo ? ` · ${c.titulo}` : ''}`, cliente: c.cliente ?? undefined, sub: `${c.titulo ? `${c.titulo} · ` : ''}mandó un comprobante de pago`, explica: 'El cliente mandó un comprobante de pago desde su link. Revisalo y confirmalo para que el cobro quede registrado.', boton: 'Ver', accion: () => (c.obra_id ? onAbrirObra(c.obra_id) : onNavegar('presupuestos')) })),
+    ...compNuevos.map((c): TareaPH => ({ clave: `cp-${c.id}`, tipo: 'cobro', grupo: 'hoy', icono: '🧾', titulo: 'Revisar comprobante de pago', detalle: `${c.cliente ?? 'Cliente'}${c.titulo ? ` · ${c.titulo}` : ''}`, cliente: c.cliente ?? undefined, obra_id: c.obra_id ?? undefined, sub: `${c.titulo ? `${c.titulo} · ` : ''}mandó un comprobante de pago`, explica: 'El cliente mandó un comprobante de pago desde su link. Revisalo y confirmalo para que el cobro quede registrado.', boton: 'Ver', accion: () => (c.obra_id ? onAbrirObra(c.obra_id) : onNavegar('presupuestos')) })),
     ...(verFinanzas ? obrasInfo.deudas.filter((dd) => dd.situacion === 'rojo' || dd.faltaAvance + dd.extras > 0.5).map((dd): TareaPH => ({
       clave: `co-${dd.obra.id}`, tipo: 'cobro', grupo: dd.situacion === 'rojo' ? 'atr' : 'hoy',
       titulo: `Cobrar ${dd.obra.nombre_obra}`, monto: dd.situacion === 'rojo' ? dd.saldo : dd.faltaAvance + dd.extras,
