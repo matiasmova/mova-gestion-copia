@@ -345,13 +345,24 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
     if (e) setForm({ evento: e })
     else setForm({ evento: { id: 0, titulo: x.tarea?.agendar ?? x.sugerencia?.agendar ?? x.titulo, detalle: notaDe(x), fecha: manana, hora: '10:00', tipo: x.sugerencia?.tipo ?? 'recordatorio', lugar: null, obra_id: x.tarea?.obra_id ?? x.sugerencia?.obra_id ?? null, cliente_id: null, completado: false, aviso_min: 60 } })
   }
+  // A dónde lleva "Ir a la obra": la obra del pendiente o, si es un presupuesto sin obra, el presupuesto.
+  const destinoDe = (x: ItemPH): { t: string; f: () => void } | null => {
+    const k = x.clave
+    const obraId = x.tarea?.obra_id ?? x.sugerencia?.obra_id ?? x.evento?.obra_id ?? null
+    if (obraId != null && onAbrirObra) return { t: 'Ir a la obra', f: () => onAbrirObra(obraId) }
+    const m = /^(?:b-|sin-obra-|sug-p)(\d+)$/.exec(k)
+    if (m && onAbrirPresupuesto) { const id = Number(m[1]); return { t: 'Ir al presupuesto', f: () => onAbrirPresupuesto(id) } }
+    return null
+  }
+
   const renglon = (x: ItemPH) => {
     const meta = claseMeta(x)
     const e = x.evento
     const ir = irDe(x)
     const deHoy = x.grupo === 'hoy' || (!!e && e.fecha === hoyStr)
-    // "Ir a la obra" al lado de Cobrar (el botón Cobrar abre directo el cobro).
-    const obraDe = onAbrirObra && claseDe(x) === 'saldo' ? x.tarea?.obra_id ?? null : null
+    // "Ir a la obra" (o al presupuesto, si todavía no hay obra) en todos los que tienen uno.
+    const ir2 = destinoDe(x)
+    const obraDe = ir2
     return <Deslizable key={x.clave} onDerecha={() => hecho(x)} onIzquierda={() => posponer(x, x.evento && x.evento.fecha >= manana ? sumarDias(x.evento.fecha, 1) : manana)}>
       <div className={`ph3Fila${claseDe(x) === 'saldo' ? ' cobrar' : ''}`}>
         <button type="button" className="ph3Tx" onClick={() => setHoja(x.clave)}>
@@ -360,7 +371,7 @@ export default function Agenda({ pedido, onPedidoAtendido, tareas = [], cargando
         </button>
         {x.monto ? <span className="ph3Monto">{moneda(x.monto)}</span> : <span />}
         <span className={`ph3Btns${obraDe ? " dos" : ""}`}>
-          {obraDe && <button type="button" className="ph3Obra" onClick={() => onAbrirObra!(obraDe)}>Ir a la obra</button>}
+          {ir2 && <button type="button" className="ph3Obra" onClick={ir2.f}>{ir2.t}</button>}
           <button type="button" className="ph3Acc" onClick={() => (ir ? recorrer(x) : setHoja(x.clave))}>{ir && ir.t !== 'Abrir' && ir.t !== 'Ver' && !meta.acc ? ir.t : meta.acc ?? 'Ver'}</button>
         </span>
       </div>
