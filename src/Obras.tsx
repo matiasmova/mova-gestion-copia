@@ -1590,6 +1590,16 @@ function EconomiaObra({ obraId, cuenta, presupuestoId, onGenerarPdf, onCambio, a
   const [mostrarCobro, setMostrarCobro] = useState(false)
   const [cobroForm, setCobroForm] = useState({ monto: '', fecha: new Date().toISOString().slice(0, 10), medio_pago: 'transferencia', referencia: '' })
   const [guardandoCobro, setGuardandoCobro] = useState(false)
+  // Cobro que se está corrigiendo (null = cobro nuevo).
+  const [editandoCobro, setEditandoCobro] = useState<number | null>(null)
+  const cobroVacio = () => ({ monto: '', fecha: new Date().toISOString().slice(0, 10), medio_pago: 'transferencia', referencia: '' })
+  function editarCobro(c: { id: number; monto: number; fecha: string; medio_pago: string | null; referencia: string | null }) {
+    setEditandoCobro(c.id); setDestinoCobro('obra')
+    setCobroForm({ monto: String(c.monto), fecha: (c.fecha ?? '').slice(0, 10) || new Date().toISOString().slice(0, 10), medio_pago: c.medio_pago || 'transferencia', referencia: c.referencia ?? '' })
+    setMostrarCobro(true)
+    setTimeout(() => document.querySelector('[data-registrar]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+  }
+  function cerrarCobro() { setMostrarCobro(false); setEditandoCobro(null); setCobroForm(cobroVacio()) }
   // A qué se aplica el cobro: al trabajo o a los gastos extra pendientes.
   const [destinoCobro, setDestinoCobro] = useState<'obra' | 'extras'>('obra')
   const [extrasPend, setExtrasPend] = useState<ExtraPendiente[]>([])
@@ -1614,6 +1624,19 @@ function EconomiaObra({ obraId, cuenta, presupuestoId, onGenerarPdf, onCambio, a
     e.preventDefault()
     const monto = Number(cobroForm.monto)
     if (!(monto > 0)) return
+    if (editandoCobro != null) {
+      setGuardandoCobro(true)
+      const { error: fallo } = await supabase.from('pagos').update({
+        monto, fecha: cobroForm.fecha, medio_pago: cobroForm.medio_pago, referencia: cobroForm.referencia.trim() || null,
+      }).eq('id', editandoCobro)
+      setGuardandoCobro(false)
+      if (fallo) { console.error(fallo); window.alert('No se pudo guardar el cambio del cobro.'); return }
+      cerrarCobro()
+      avisoGuardado('Cobro corregido')
+      setRevision((v) => v + 1)
+      onCambio()
+      return
+    }
     if (destinoCobro === 'extras' && extrasElegidos.length) {
       setGuardandoCobro(true)
       const r = await aplicarCobroAExtras(obraId, monto, extrasElegidos, cobroForm)
@@ -1675,7 +1698,7 @@ function EconomiaObra({ obraId, cuenta, presupuestoId, onGenerarPdf, onCambio, a
     <div className="seguimientoAcciones">
       <div><h3>Finanzas de la obra</h3><p>Registrá aquí los pagos del cliente. Si el pago es para devolverte gastos extra, en Registrar cobro elegí “A gastos extra”: quedan pagados (o en parte) sin contarse como ingreso.</p></div>
       <div className="adicAcciones">
-        <button type="button" className="newButton" onClick={() => setMostrarCobro((v) => !v)}>{mostrarCobro ? 'Cancelar' : '💵 Registrar cobro'}</button>
+        <button type="button" className="newButton" onClick={() => (mostrarCobro ? cerrarCobro() : setMostrarCobro(true))}>{mostrarCobro ? 'Cancelar' : '💵 Registrar cobro'}</button>
         <button type="button" className="editButton" onClick={onGenerarPdf}>📄 Presupuesto y estado de obra</button>
         <button type="button" className="editButton" disabled={cargando} onClick={() => setRevision((valor) => valor + 1)}>Actualizar</button>
       </div>
@@ -1683,8 +1706,9 @@ function EconomiaObra({ obraId, cuenta, presupuestoId, onGenerarPdf, onCambio, a
 
     {mostrarCobro && (
       <form className="clienteForm adicForm" data-registrar onSubmit={guardarCobro}>
+        {editandoCobro != null && <p className="cobroEditando">✏️ Corrigiendo un cobro ya registrado</p>}
         {/* Atajos: se completa el monto con lo que debe (igual se puede escribir otro). */}
-        {cuenta && destinoCobro === 'obra' && (cuenta.pendienteHoy > 0.5 || cuenta.saldoTotal > 0.5) && <div className="cobroRapido">
+        {cuenta && destinoCobro === 'obra' && editandoCobro == null && (cuenta.pendienteHoy > 0.5 || cuenta.saldoTotal > 0.5) && <div className="cobroRapido">
           <span>Cobro rápido</span>
           {cuenta.pendienteHoy > 0.5 && <button type="button" className={Math.abs(Number(cobroForm.monto) - cuenta.pendienteHoy) < 0.005 ? 'on' : ''} onClick={() => setCobroForm((f) => ({ ...f, monto: String(Math.round(cuenta.pendienteHoy * 100) / 100) }))}>
             <b>✓ Pagó lo de hoy</b><small>{dineroFicha(cuenta.pendienteHoy)}</small></button>}
@@ -1698,7 +1722,7 @@ function EconomiaObra({ obraId, cuenta, presupuestoId, onGenerarPdf, onCambio, a
           <label>Medio<select value={cobroForm.medio_pago} onChange={(e) => setCobroForm((f) => ({ ...f, medio_pago: e.target.value }))}><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option><option value="tarjeta">Tarjeta</option><option value="cheque">Cheque</option><option value="otro">Otro</option></select></label>
           <label>Referencia<input value={cobroForm.referencia} onChange={(e) => setCobroForm((f) => ({ ...f, referencia: e.target.value }))} /></label>
         </div>
-        {extrasPend.length > 0 && (
+        {extrasPend.length > 0 && editandoCobro == null && (
           <div className="cobroDestino">
             <span className="cobroDestinoTit">¿A qué lo aplicás?</span>
             <div className="cobroDestinoOps">
@@ -1727,7 +1751,7 @@ function EconomiaObra({ obraId, cuenta, presupuestoId, onGenerarPdf, onCambio, a
             </>}
           </div>
         )}
-        <div className="formActions"><button type="button" className="cancelButton" onClick={() => setMostrarCobro(false)}>Cancelar</button><button className="newButton" disabled={guardandoCobro}>{guardandoCobro ? 'Guardando...' : destinoCobro === 'extras' && extrasElegidos.length ? 'Aplicar a gastos extra' : 'Guardar cobro'}</button></div>
+        <div className="formActions"><button type="button" className="cancelButton" onClick={cerrarCobro}>Cancelar</button><button className="newButton" disabled={guardandoCobro}>{guardandoCobro ? 'Guardando...' : editandoCobro != null ? 'Guardar cambios' : destinoCobro === 'extras' && extrasElegidos.length ? 'Aplicar a gastos extra' : 'Guardar cobro'}</button></div>
       </form>
     )}
 
@@ -1750,7 +1774,7 @@ function EconomiaObra({ obraId, cuenta, presupuestoId, onGenerarPdf, onCambio, a
           <thead><tr><th>Fecha</th><th>Medio</th><th>Referencia</th><th>Monto</th><th>Acción</th></tr></thead>
           <tbody>{cobros.map((c) => <tr key={c.id}>
             <td>{fechaFicha(c.fecha)}</td><td>{(c.medio_pago || '').replace('_', ' ')}</td><td>{c.referencia || '—'}</td><td><strong>{dineroFicha(c.monto)}</strong></td>
-            <td><button type="button" className="adicNo" onClick={() => eliminarCobro(c.id)}>Eliminar</button></td>
+            <td><span className="cobroAcc"><button type="button" className="editButton" onClick={() => editarCobro(c)}>Editar</button><button type="button" className="adicNo" onClick={() => eliminarCobro(c.id)}>Eliminar</button></span></td>
           </tr>)}</tbody>
         </table></div>
       )}
