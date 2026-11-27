@@ -1,4 +1,5 @@
 import { cargarExtrasPendientes, repartirMonto, aplicarCobroAExtras, type ExtraPendiente } from './cobroExtras'
+import DetalleGanancia from './DetalleGanancia'
 import VistaPreviaPdf from './VistaPreviaPdf'
 import { generarPdfPresupuesto, leerModoComprobantes } from './pdfPresupuesto'
 import { cargarDocumentoObra } from './documentoObra'
@@ -120,6 +121,8 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
   const [informeObra, setInformeObra] = useState<Obra | null>(null)
   // Informe de pagos (PDF solo con los pagos, mismo formato que el presupuesto).
   const [informePagos, setInformePagos] = useState<Obra | null>(null)
+  // Detalle de "Vas a ganar" (lo que suma y lo que resta).
+  const [verGanancia, setVerGanancia] = useState(false)
   // Editor del presupuesto abierto desde la obra; docVersion rearma el documento al guardar.
   const [editarPresupuestoId, setEditarPresupuestoId] = useState<number | null>(null)
   const [docVersion, setDocVersion] = useState(0)
@@ -1220,7 +1223,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
                 })()}
                 {presupuestoAceptado && c && <div className="pvNums">
                   <div><small>VALOR OBRA</small><b>{dineroFicha(c.valor + c.extras)}</b></div>
-                  <button type="button" onClick={() => setSeguTab('resumen')}><small>VAS A GANAR</small><b>{gananciaObra == null ? '…' : dineroFicha(gananciaObra)}</b></button>
+                  <button type="button" title="Ver el detalle: lo que suma y lo que resta" onClick={() => setVerGanancia(true)}><small>VAS A GANAR ›</small><b>{gananciaObra == null ? '…' : dineroFicha(gananciaObra)}</b></button>
                   <button type="button" onClick={() => setSeguTab('finanzas')}><small>{c.pendienteHoy > 0.5 ? 'COBRAR HOY' : 'TE DEBE'}</small><b>{dineroFicha(c.pendienteHoy > 0.5 ? c.pendienteHoy : c.saldo)}</b></button>
                 </div>}
                 <div className="pvTabs" role="tablist">
@@ -1492,6 +1495,7 @@ function Obras({ obraAbrirId, onObraAbierta, onVerPresupuesto, conIA = false, gr
 
       {informeIA && <InformeObraIA obraId={informeIA.id} obra={informeIA.nombre_obra} onCerrar={() => setInformeIA(null)} />}
 
+      {verGanancia && obraSeguimiento && <DetalleGanancia obraId={obraSeguimiento.id} obra={obraSeguimiento.nombre_obra} onCerrar={() => setVerGanancia(false)} />}
       {informePagos && (
         <VistaPreviaPdf titulo={`Informe de pagos · ${informePagos.nombre_obra}`} onCerrar={() => setInformePagos(null)}
           generar={async () => {
