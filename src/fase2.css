@@ -4423,3 +4423,24 @@ html[data-tema="oscuro"] .is2{--is-panel:#181e28;--is-panel2:#1e2531;--is-linea:
 .oeModNota{margin:2px 0 6px;font-size:12.5px;color:#69707d;line-height:1.4}
 .cobroAcc{display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
 .cobroEditando{margin:0 0 10px;font-size:13px;font-weight:800;color:#a85008;background:#fff3e6;border-radius:10px;padding:8px 12px}
+/* Detalle de "Vas a ganar" */
+.dgCard{max-width:560px;width:100%;max-height:88vh;overflow:auto;display:flex;flex-direction:column;gap:14px}
+.dgCab{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.dgCab small{display:block;font-size:11px;font-weight:800;letter-spacing:.08em;color:#69707d}
+.dgCab b{display:block;font-size:28px;font-variant-numeric:tabular-nums;margin:2px 0}
+.dgCab span{font-size:12.5px;color:#69707d}
+.dgCard .v{color:#1f7a4d}.dgCard .r{color:#c2410c}
+.dgGrupo{display:flex;flex-direction:column;border:1px solid #e3e8ef;border-radius:14px;overflow:hidden}
+.dgGrupo h3{margin:0;display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:10px 14px;background:#f6f7f9;font-size:13px;text-transform:uppercase;letter-spacing:.06em}
+.dgGrupo h3 em{font-style:normal;font-variant-numeric:tabular-nums;letter-spacing:0;font-size:14px}
+.dgFila{display:flex;justify-content:space-between;gap:12px;padding:10px 14px;border-top:1px solid #eef0f3;align-items:flex-start}
+.dgFila span{min-width:0;display:flex;flex-direction:column;gap:2px}
+.dgFila b{font-size:14px;color:#14171c;overflow-wrap:anywhere}
+.dgFila small{font-size:12px;color:#69707d}
+.dgFila em{font-style:normal;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.dgVacio{margin:0;padding:12px 14px;color:#69707d;font-size:13px}
+.dgTotal{display:flex;justify-content:space-between;align-items:baseline;padding:12px 14px;border-radius:14px;background:#14171c;color:#fff}
+.dgTotal b{font-size:20px;font-variant-numeric:tabular-nums}
+.dgTotal b.v{color:#7ee2a8}.dgTotal b.r{color:#ffb08a}
+.dgNota{margin:0;font-size:12px;color:#69707d;line-height:1.4}
+.dgCard>*{flex-shrink:0}
